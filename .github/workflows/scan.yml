@@ -57,6 +57,7 @@ jobs:
 
       - uses: github/codeql-action/upload-sarif@v3
         if: always() && steps.target.outputs.skip != 'true'
+        continue-on-error: true   # optional: don't fail the run if code scanning is off
         with:
           sarif_file: reports/staging-scan.sarif
 

@@ -387,6 +387,23 @@ const SARIF_SEV_MAP = {
 };
 
 /**
+ * Convert a finding location (target URL or path) into a SARIF-safe relative
+ * URI. GitHub Code Scanning rejects absolute http(s) URIs ("scheme http did
+ * not match checkout scheme file"), so strip the scheme and port and keep a
+ * host/path string. The full original URL is preserved in properties.url.
+ */
+function toSarifUri(location) {
+  if (!location) return undefined;
+  try {
+    const u = new URL(location);
+    const path = `${u.hostname}${u.pathname}`.replace(/\/+$/, "").replace(/^\/+/, "");
+    return path || u.hostname;
+  } catch {
+    return String(location).replace(/^[a-z][a-z0-9+.-]*:\/\//i, "").replace(/^\/+/, "");
+  }
+}
+
+/**
  * Generate SARIF 2.1.0 report from scan results.
  * SARIF = Static Analysis Results Interchange Format
  * Uploads to GitHub via: gh api repos/{owner}/{repo}/code-scanning/sarifs
@@ -423,14 +440,14 @@ export function writeSarifReport(result, filePath) {
       locations: f.url ? [{
         physicalLocation: {
           artifactLocation: {
-            uri: f.url,
-            uriBaseId: "%SRCROOT%",
+            uri: toSarifUri(f.url),
           },
         },
       }] : [],
       properties: {
         severity: f.severity,
         source: f.source,
+        url: f.url,
         httpStatus: f.status,
         wstg: f.wstg || resolveWstgTags(f),
       },
