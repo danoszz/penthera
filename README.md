@@ -358,6 +358,19 @@ current with new attack patterns. Thank you.
 
 ---
 
+## Privacy
+
+Penthera has no telemetry. It does not collect, store, or transmit any usage data, analytics, or personal information to the author or any third party. It does not phone home.
+
+- **Scan traffic goes only to the target you specify.** Auth tokens passed via `--auth-bearer`, `--auth-cookie`, or `PENTHERA_*` env vars are sent only to that target.
+- **Reports stay local.** Output is written to `reports/` (gitignored) on your machine.
+- **JS vulnerability checks** download a public database (Retire.js) from GitHub to compare your app's libraries against known CVEs locally. No details about your target are sent.
+- **Recon mode** (`--recon`) queries public OSINT sources (crt.sh, web.archive.org, AlienVault OTX) with the target domain to find subdomains and historical URLs. This shares the target domain with those third-party services. Omit `--recon` to avoid it.
+
+You are responsible for ensuring you are authorized to scan any target. See [Ethical use](#ethical-use--authorization).
+
+---
+
 ## License & disclosure
 
 MIT. See [LICENSE](LICENSE). Report vulnerabilities in Penthera itself via
