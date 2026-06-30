@@ -81,12 +81,10 @@ jobs:
       - name: Validate JSON report
         run: node skills/penthera/scripts/validate-report.mjs reports/ci-scan.json
 
-      - name: Upload SARIF to GitHub Security
-        uses: github/codeql-action/upload-sarif@v4
-        if: always()
-        continue-on-error: true   # optional: don't fail CI if code scanning is off (e.g. on forks)
-        with:
-          sarif_file: reports/ci-scan.sarif
+      # Note: the SARIF is kept as a build artifact below, but NOT uploaded to this
+      # repo's Code Scanning. These are findings against the deliberately-vulnerable
+      # CI mock server (tests/fixtures/mock-server.js), not issues in this repo.
+      # End users uploading their own scan SARIF is handled by scan.yml.
 
       - name: Upload scan artifacts
         uses: actions/upload-artifact@v7

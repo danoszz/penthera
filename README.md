@@ -260,6 +260,13 @@ cp -r skills/penthera .cursor/skills/penthera     # Cursor
 cp -r skills/penthera .claude/skills/penthera     # Claude Code
 ```
 
+Or as a Claude Code plugin (installs the skill):
+
+```bash
+/plugin marketplace add danoszz/penthera
+/plugin install penthera@penthera
+```
+
 For Claude.ai (web), zip and upload the skill:
 
 ```bash

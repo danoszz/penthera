@@ -1,0 +1,20 @@
+{
+  "name": "penthera",
+  "owner": {
+    "name": "Daan van der Zwaag",
+    "url": "https://github.com/danoszz"
+  },
+  "metadata": {
+    "description": "Penthera security scanner for vibecoded apps",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "penthera",
+      "description": "Security scanner for web apps: scan a live URL or repo for TLS, headers, auth, secrets, IDOR/OAuth, and injection issues, mapped to OWASP with SARIF output. Runs as a skill or CLI. Authorized testing only.",
+      "source": "./",
+      "strict": false,
+      "skills": ["./skills/penthera"]
+    }
+  ]
+}
