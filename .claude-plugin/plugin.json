@@ -1,7 +1,7 @@
 {
   "name": "penthera",
   "version": "1.0.0",
-  "description": "Lightweight security scanner for vibecoded apps. Scan a live URL, a local repo, or your macOS machine for TLS, headers, auth, secrets, IDOR/OAuth, and injection issues, mapped to OWASP with SARIF output. Runs as a skill or CLI. Authorized testing only.",
+  "description": "Find and fix security issues in vibecoded apps. Scan a live URL, a local repo, or your macOS machine for TLS, headers, auth, secrets, IDOR/OAuth, and injection issues, then apply framework-aware fixes and re-scan to verify. Mapped to OWASP with SARIF output. Runs as a skill or CLI. Authorized testing only.",
   "author": {
     "name": "Daan van der Zwaag",
     "url": "https://github.com/danoszz"

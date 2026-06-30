@@ -292,6 +292,20 @@ Skill source and workflows live in [`skills/penthera/SKILL.md`](skills/penthera/
 
 ---
 
+## Scan and fix
+
+Penthera does not just report problems. It closes the loop: ask your agent to fix what it finds, and it detects the issue, applies a framework-aware fix to your code (shown as a diff for you to approve), and re-scans to prove it is resolved.
+
+```
+"Scan my app and fix what you find"
+"Fix the security headers on my Next.js app and re-scan to confirm"
+"Find and fix hardcoded secrets in this repo"
+```
+
+Fixes come from a [remediation playbook](skills/penthera/references/remediation.md) covering Next.js, Express, Fastify, Hono, and FastAPI. They are always shown as diffs for your approval and verified by a re-scan; nothing is applied blindly, and nothing touches production. To build secure-by-default in the first place, see [secure defaults](skills/penthera/references/secure-defaults.md).
+
+---
+
 ## CI integration
 
 ```yaml

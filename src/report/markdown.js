@@ -177,6 +177,8 @@ function buildRecommendations(findings) {
   if (/cors/i.test(blob)) actions.add("Restrict CORS to explicit allowed origins.");
   if (actions.size === 0) actions.add("Review each finding and re-scan after remediation.");
 
+  actions.add("For step-by-step, framework-specific fixes, see the Penthera remediation playbook (skills/penthera/references/remediation.md), then re-scan to verify.");
+
   return [...actions];
 }
 
