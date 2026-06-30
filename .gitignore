@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+
+# Scan reports & artifacts — never commit scan output
+reports/
+report*.json
+report*.md
+report*.sarif
+*.report.json
+.security-results/
+
+# Local pentest config — copy from pentest.config.example.js
+pentest.config.js
+
+# Build output
+dist/
+coverage/
+
+# Environment & secrets
+.env
+.env.*
+*.pem
+*.key
+
+# OS / editor cruft
+.DS_Store
+*.log

@@ -1,0 +1,44 @@
+# Scan example — staging URL (manual workflow)
+
+# Penthera CI already scans the mock server and uploads SARIF on every push.
+# Copy this file to `.github/workflows/scan.yml` when you have a staging URL secret.
+
+name: Security Scan
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * 1"  # weekly Monday 06:00 UTC
+
+jobs:
+  penthera:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Scan staging URL
+        env:
+          PENTEST_URL: ${{ secrets.PENTEST_STAGING_URL }}
+        run: |
+          node bin/penthera.js "$PENTEST_URL" \
+            --profile standard \
+            -o reports/scan.json \
+            --sarif reports/scan.sarif
+
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: reports/scan.sarif
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: penthera-reports
+          path: reports/

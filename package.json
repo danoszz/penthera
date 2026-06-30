@@ -1,0 +1,76 @@
+{
+  "name": "penthera",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Lightweight security scanner for web apps — scan URLs or repos from the CLI",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/danoszz/penthera.git"
+  },
+  "homepage": "https://github.com/danoszz/penthera#readme",
+  "bugs": {
+    "url": "https://github.com/danoszz/penthera/issues"
+  },
+  "bin": {
+    "penthera": "./bin/penthera.js",
+    "penthera-scan": "./bin/scan.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "lib",
+    "skills",
+    "docs",
+    "scripts/package-skill.sh",
+    "pentest.config.example.js",
+    "CHANGELOG.md",
+    "LICENSE",
+    "README.md",
+    "SECURITY.md"
+  ],
+  "exports": {
+    "./plugins": "./lib/plugins.js",
+    "./adaptive": "./lib/blackbox/adaptive-scan.js",
+    "./wstg": "./lib/owasp-wstg.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "vitest run --reporter=verbose",
+    "scan": "node bin/penthera.js",
+    "scan:full": "node bin/scan.js",
+    "pentest": "vitest run --reporter=verbose",
+    "pentest:watch": "vitest --reporter=verbose",
+    "pentest:static": "vitest run tests/pentest-static.test.js --reporter=verbose",
+    "pentest:live": "vitest run tests/pentest-live.test.js --reporter=verbose",
+    "pentest:adaptive": "vitest run tests/pentest-adaptive.test.js --reporter=verbose",
+    "pentest:recon": "vitest run tests/pentest-recon.test.js --reporter=verbose",
+    "pentest:mock": "vitest run tests/pentest-mock.test.js --reporter=verbose",
+    "pentest:wstg": "vitest run tests/owasp-wstg.test.js --reporter=verbose",
+    "validate:report": "node skills/penthera/scripts/validate-report.mjs",
+    "package:skill": "bash scripts/package-skill.sh",
+    "prepack": "npm test",
+    "mock-server": "node tests/fixtures/mock-server.js"
+  },
+  "keywords": [
+    "security",
+    "scanner",
+    "pentest",
+    "vulnerability",
+    "recon",
+    "cli",
+    "agent-skills",
+    "cursor",
+    "claude-code",
+    "owasp",
+    "sarif"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "vitest": "^3.1.1"
+  },
+  "dependencies": {
+    "yaml": "^2.8.3"
+  }
+}

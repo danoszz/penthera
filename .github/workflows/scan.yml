@@ -1,0 +1,67 @@
+# Staging security scan — runs when PENTEST_STAGING_URL secret is configured.
+
+name: Staging Security Scan
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * 1"
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Resolve staging URL
+        id: target
+        env:
+          PENTEST_URL: ${{ secrets.PENTEST_STAGING_URL }}
+        run: |
+          if [ -z "$PENTEST_URL" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "PENTEST_STAGING_URL secret not set — skipping staging scan"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "url=$PENTEST_URL" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Scan staging URL
+        if: steps.target.outputs.skip != 'true'
+        env:
+          PENTEST_URL: ${{ steps.target.outputs.url }}
+        run: |
+          set +e
+          node bin/penthera.js "$PENTEST_URL" \
+            --profile standard \
+            -o reports/staging-scan.json \
+            --sarif reports/staging-scan.sarif
+          code=$?
+          set -e
+          if [ "$code" -eq 2 ]; then exit 2; fi
+
+      - name: Validate report
+        if: steps.target.outputs.skip != 'true'
+        run: node skills/penthera/scripts/validate-report.mjs reports/staging-scan.json
+
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always() && steps.target.outputs.skip != 'true'
+        with:
+          sarif_file: reports/staging-scan.sarif
+
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.target.outputs.skip != 'true'
+        with:
+          name: penthera-staging-reports
+          path: reports/

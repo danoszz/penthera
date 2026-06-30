@@ -1,0 +1,95 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [18, 20, 22]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Static security tests
+        run: npm run pentest:static
+
+      - name: Adaptive probe tests
+        run: npm run pentest:adaptive
+
+      - name: Mock server integration tests
+        run: npm run pentest:mock
+
+      - name: OWASP WSTG mapping tests
+        run: npm run pentest:wstg
+
+      - name: CLI smoke test
+        run: node bin/penthera.js --version
+
+      - name: Skill preflight
+        run: bash skills/penthera/scripts/preflight.sh http://127.0.0.1:8765
+
+  scan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Start mock server
+        run: |
+          node tests/fixtures/mock-server.js &
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:8765/api/health && break
+            sleep 1
+          done
+
+      - name: Scan mock API (standard profile)
+        run: |
+          set +e
+          node bin/penthera.js http://127.0.0.1:8765 \
+            --profile standard \
+            -o reports/ci-scan.json \
+            --sarif reports/ci-scan.sarif
+          code=$?
+          set -e
+          # Exit 1 = findings detected (expected on mock server)
+          if [ "$code" -eq 2 ]; then exit 2; fi
+
+      - name: Validate JSON report
+        run: node skills/penthera/scripts/validate-report.mjs reports/ci-scan.json
+
+      - name: Upload SARIF to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: reports/ci-scan.sarif
+
+      - name: Upload scan artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: penthera-ci-reports
+          path: reports/
