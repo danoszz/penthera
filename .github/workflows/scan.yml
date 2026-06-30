@@ -15,9 +15,9 @@ jobs:
       security-events: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 20
           cache: npm
@@ -55,13 +55,13 @@ jobs:
         if: steps.target.outputs.skip != 'true'
         run: node skills/penthera/scripts/validate-report.mjs reports/staging-scan.json
 
-      - uses: github/codeql-action/upload-sarif@v3
+      - uses: github/codeql-action/upload-sarif@v4
         if: always() && steps.target.outputs.skip != 'true'
         continue-on-error: true   # optional: don't fail the run if code scanning is off
         with:
           sarif_file: reports/staging-scan.sarif
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always() && steps.target.outputs.skip != 'true'
         with:
           name: penthera-staging-reports
