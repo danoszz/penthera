@@ -1,7 +1,8 @@
 /**
  * Human-readable Markdown security report.
  */
-import { writeFileSync } from "node:fs";
+import { writeFileSync, mkdirSync } from "node:fs";
+import { dirname } from "node:path";
 import { buildWstgCoverage, formatWstgMarkdown } from "../../lib/owasp-wstg.js";
 
 const SEV_ORDER = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
@@ -180,6 +181,7 @@ function buildRecommendations(findings) {
 }
 
 export function writeMarkdownReport(result, filePath, opts = {}) {
+  mkdirSync(dirname(filePath), { recursive: true });
   writeFileSync(filePath, formatMarkdownReport(result, opts));
 }
 

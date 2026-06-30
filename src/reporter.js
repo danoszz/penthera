@@ -3,7 +3,8 @@
  *
  * Terminal output with ANSI colors, JSON export, SARIF export.
  */
-import { writeFileSync, readFileSync } from "node:fs";
+import { writeFileSync, readFileSync, mkdirSync } from "node:fs";
+import { dirname } from "node:path";
 import { resolveWstgTags } from "../lib/owasp-wstg.js";
 
 const PKG_VERSION = JSON.parse(
@@ -371,6 +372,7 @@ export function printFindings(findings) {
 // ── JSON export ──────────────────────────────────────────────────────────
 
 export function writeJsonReport(result, filePath) {
+  mkdirSync(dirname(filePath), { recursive: true });
   writeFileSync(filePath, JSON.stringify(result, null, 2) + "\n");
 }
 
@@ -456,6 +458,7 @@ export function writeSarifReport(result, filePath) {
     }],
   };
 
+  mkdirSync(dirname(filePath), { recursive: true });
   writeFileSync(filePath, JSON.stringify(sarif, null, 2) + "\n");
 }
 
