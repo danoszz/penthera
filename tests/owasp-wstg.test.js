@@ -41,4 +41,29 @@ describe("OWASP WSTG mapping", () => {
   it("exports probe catalog", () => {
     expect(PROBE_WSTG.length).toBeGreaterThan(20);
   });
+
+  it("coverage reflects the probes that actually ran (executedProbes)", () => {
+    const coverage = buildWstgCoverage(
+      { mode: "url", executedProbes: ["tls", "security-headers"], findings: [] },
+      "deep",
+    );
+    expect(coverage.probesRun).toBe(2);
+    expect(coverage.wstgExercised).toContain("WSTG-CRYP-01");
+    // Injection was NOT run — it must not be claimed, even on a deep profile.
+    expect(coverage.wstgExercised).not.toContain("WSTG-INPV-05");
+  });
+
+  it("does not claim injection when a deep scan found no endpoints to probe", () => {
+    const probes = getProbesForScan(
+      { mode: "url", executedProbes: ["reachability", "openapi"] },
+      "deep",
+    ).map((p) => p.id);
+    expect(probes).toContain("reachability");
+    expect(probes).not.toContain("sqli");
+  });
+
+  it("falls back to the profile catalog when no execution record is present", () => {
+    const probes = getProbesForScan({ mode: "url" }, "deep").map((p) => p.id);
+    expect(probes).toContain("sqli"); // deep profile catalog still advertises it
+  });
 });

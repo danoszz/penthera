@@ -8,7 +8,7 @@
  *     2. TLS/SSL certificate & cipher audit
  *     3. Tech fingerprinting (httpx-style)
  *     4. Endpoint brute-force with auto-calibration (ffuf-style)
- *     5. Nuclei-style template scanning (17 built-in templates)
+ *     5. Nuclei-style template scanning (15 built-in templates)
  *     6. Supplementary sensitive file checks
  *     7. CORS validation
  *     8. Framework-specific checks (CVEs)
@@ -91,6 +91,7 @@ export async function scanUrl(rawTarget, opts = {}) {
     cookies: null,
     jsLibraries: null,
     paramDiscovery: null,
+    executedProbes: [],
     findings: [],
   };
 
@@ -197,7 +198,7 @@ export async function scanUrl(rawTarget, opts = {}) {
   result.findings.push(...await probeOAuthMisconfig(target, { timeout }));
 
   // ── Phase 5: Template scanning ─────────────────────────────────────────
-  progress("Running template scan (17 templates)...");
+  progress("Running template scan (built-in templates)...");
   const templateFindings = await runBuiltInTemplates(target);
   for (const f of templateFindings) {
     result.findings.push({
@@ -515,6 +516,24 @@ export async function scanUrl(rawTarget, opts = {}) {
       });
     }
   }
+
+  // ── Record which probes actually executed ──────────────────────────────
+  // Drives an honest WSTG coverage report: we only claim a probe ran when it
+  // truly did. (Unreachable targets return early above with executedProbes: [].)
+  const hadEndpoints = filtered.length > 0;
+  result.executedProbes = [
+    "reachability", "endpoint-discovery", "openapi", "auth-hardening",
+    "client-auth", "idor", "oauth", "sensitive-files", "cors", "cookie",
+    ...(result.tls ? ["tls"] : []),
+    ...(result.fingerprint?.headers ? ["security-headers"] : []),
+    ...(auth.bearer ? ["jwt"] : []),
+    ...(!opts.skipRetireJs ? ["retirejs"] : []),
+    ...(!opts.skipParamDiscovery && hadEndpoints ? ["param-discovery"] : []),
+    ...(opts.recon && !local ? ["recon"] : []),
+    ...(opts.deep && hadEndpoints ? ["sqli", "ssti", "ssrf", "xss", "cmdi", "open-redirect"] : []),
+    ...(opts.fuzz && filtered.some((ep) => ep.path.includes("/api/") || ep.path.includes("/graphql")) ? ["api-fuzzing"] : []),
+    ...(opts.adaptive ? ["adaptive"] : []),
+  ];
 
   // ── Deduplicate findings ───────────────────────────────────────────────
   result.findings = dedupeFindings(result.findings);

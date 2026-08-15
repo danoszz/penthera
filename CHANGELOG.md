@@ -2,6 +2,38 @@
 
 All notable changes to Penthera are documented here. Versioning follows [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+Open-source-core credibility pass.
+
+### Added
+
+- NIS2 / cyberwetgeving compliance section in the README: Article 21(2)(a–j)
+  mapped to what Penthera actually tests, with a coverage key and a clear
+  "not legal advice / not a certification" disclaimer
+- Code of Conduct (Contributor Covenant 2.1), issue templates, and PR template
+- `tests/detection-hardening.test.js` covering the secret-scan and SSTI fixes
+
+### Fixed
+
+- Secret scanner no longer flags dummy/probe credentials (e.g. the
+  `invalid-password-12345` payload Penthera flagged on its own repo); rule
+  renamed so the title no longer reads "Password in source in source"
+- SSTI probe uses a randomized arithmetic canary instead of `7*7=49`, removing
+  the critical false positive on any page containing "49"
+- Endpoint calibration compares body length to body length (was body vs
+  Content-Length), so the noise filter actually filters default/404 pages
+- WSTG coverage now reflects the probes that actually ran, instead of asserting
+  every profile probe was exercised; dropped two WSTG IDs that were mapped but
+  never tested (CRYP-02 padding oracle, CONF-13 path confusion)
+
+### Changed
+
+- Interactive wizard's remote-host permission prompt now defaults to **no**
+- README shows the live CI status badge instead of a hand-written test count;
+  live integration tests report as skipped (not passed) without a running target
+- Corrected the built-in template count (15, not 17) in docs and progress output
+
 ## [1.0.0] — 2026-06-30
 
 First production-ready release.

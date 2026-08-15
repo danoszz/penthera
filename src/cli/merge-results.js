@@ -28,6 +28,7 @@ export function mergeResults(results) {
       boundaries: results.find((r) => r.boundaries && Object.keys(r.boundaries).length)?.boundaries || null,
       apiRoot: results.find((r) => r.apiRoot)?.apiRoot || null,
       machine: results.find((r) => r.machine)?.machine || null,
+      executedProbes: results.flatMap((r) => r.executedProbes || []),
       findings: dedupeFindings(results.flatMap((r) => r.findings || [])),
     };
   }

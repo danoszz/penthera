@@ -7,7 +7,7 @@
 ![version](https://img.shields.io/badge/version-1.0.0-0000ed)
 ![node](https://img.shields.io/badge/node-%E2%89%A518-0000ed)
 ![license](https://img.shields.io/badge/license-MIT-0000ed)
-![tests](https://img.shields.io/badge/tests-124%20passing-32a852)
+[![CI](https://github.com/danoszz/penthera/actions/workflows/ci.yml/badge.svg)](https://github.com/danoszz/penthera/actions/workflows/ci.yml)
 
 <br/>
 
@@ -70,8 +70,8 @@ Then talk to your agent:
 
 Prefer the terminal? Run `penthera` with no arguments for a guided wizard.
 
-> The skill enforces an authorization gate: agents refuse to scan a target you
-> do not own or are not authorized to test.
+> The skill adds an authorization gate: it instructs your agent to refuse targets
+> you do not own or are not authorized to test.
 
 ---
 
@@ -120,6 +120,56 @@ flowchart LR
 Findings map to the [OWASP Web Security Testing Guide](docs/owasp-wstg-coverage.md)
 (WSTG v4.2). The default scan is non-destructive. Payload-based testing is opt-in
 (`--deep`, `--fuzz`, `--all`) and gated behind explicit confirmation.
+
+---
+
+## Compliance: NIS2 and the cyberwetgeving
+
+The EU **NIS2 directive** and its national transpositions — in the Netherlands
+the **Cyberbeveiligingswet**, in Belgium the **NIS2-wet** — place a *duty of care*
+(zorgplicht) on in-scope organisations: the risk-management measures listed in
+**Article 21(2)** of the directive. Most of those measures are organisational.
+Some are technical, testable, and repeatable — and that is where Penthera helps.
+
+Penthera does **not** make you compliant and does **not** certify anything. What
+it gives you is automated, re-runnable **technical evidence** for the measures a
+scanner can honestly verify — the kind of artefact you can attach to a risk file,
+show an auditor, or drop into CI so a regression surfaces before it ships.
+
+| Art. 21(2) measure | What Penthera does | Coverage |
+|--------------------|--------------------|----------|
+| **(a)** Risk analysis & information-security policy | Findings, severity, and baseline history feed your risk analysis | Evidence |
+| **(b)** Incident handling | — (report scaffolding on the roadmap) | Planned |
+| **(c)** Business continuity, backup, crisis management | Organisational — outside a scanner's reach | Out of scope |
+| **(d)** Supply-chain security | Known-CVE checks on JS dependencies (Retire.js); leaked third-party credentials (secret scan) | Partial |
+| **(e)** Security in acquisition, development & maintenance; **vulnerability handling** | The core: black- + white-box scanning mapped to OWASP WSTG, SARIF → GitHub, baseline regression, scan-and-fix loop | **Strong** |
+| **(f)** Assessing the effectiveness of measures | Baseline diff + re-scan-to-verify is a repeatable effectiveness check | Partial |
+| **(g)** Cyber hygiene & training | Remediation playbook + secure-defaults guidance (guidance, not a training programme) | Partial |
+| **(h)** Cryptography & encryption | TLS protocol/cipher/certificate audit, HSTS, cookie `Secure` (transport layer only) | Partial |
+| **(i)** HR security, **access control**, asset management | Access control tested: JWT, IDOR/BOLA, OAuth redirect, client-side-auth, trust-boundary mapping | Partial |
+| **(j)** Multi-factor authentication & secure communications | — (MFA probe on the roadmap) | Planned |
+
+**Coverage key:** *Strong* = automated technical testing · *Partial* = part of the
+measure · *Evidence* = output feeds the measure, no direct test · *Planned* = on the
+roadmap · *Out of scope* = organisational or physical.
+
+In practice, Penthera today gives you solid automated evidence for the
+**secure-development and vulnerability-handling duty (e)** — the technical heart of
+the zorgplicht — plus meaningful coverage of supply chain (d), cryptography in
+transit (h), access control (i), and effectiveness testing (f). That is not the
+whole duty of care, but it is a real, defensible start you can run today and re-run
+on every deploy.
+
+> **Not legal advice, not a certification, not a guarantee of compliance.**
+> Penthera automates the *technical testing* part of the duty of care. The
+> directive's organisational duties — governance, risk-management policy,
+> incident-notification processes, supply-chain contracts, staff training — need
+> human process and, where it matters, review by a qualified advisor. For an
+> authoritative reading, consult your national authority (the NCSC in the
+> Netherlands, the CCB and its CyFun framework in Belgium) or a specialised jurist.
+
+Because the mapping targets the NIS2 directive itself, it applies across the
+national transpositions; jurisdiction-specific profiles (NL, BE) are on the roadmap.
 
 ---
 
@@ -281,8 +331,11 @@ npm run package:skill   # produces penthera-skill.zip; upload in Settings > Capa
 - "Compare today's scan to last week's baseline and show only new findings"
 - "Generate a SARIF report for GitHub code scanning"
 
-The skill includes a mandatory authorization gate. It refuses targets you do not
-own or are not authorized to test. Run preflight before the first scan:
+The skill adds an authorization gate: it instructs the agent to refuse targets you
+do not own or are not authorized to test, and the wizard asks you to confirm before
+scanning a remote host. It is an agent-level and interactive safeguard, not something
+the raw CLI enforces — you are responsible for every target you pass it. Run preflight
+before the first scan:
 
 ```bash
 bash skills/penthera/scripts/preflight.sh http://localhost:3000
@@ -338,7 +391,7 @@ point at staging without editing the file.
 ## Testing & contributing
 
 ```bash
-npm test                 # full suite (124 tests)
+npm test                 # full suite (live integration tests skip without a running target)
 npm run pentest:mock     # offline tests against a local mock vuln API
 npm run mock-server      # start the mock API on port 8765
 ```

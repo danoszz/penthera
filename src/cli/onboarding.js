@@ -113,7 +113,9 @@ export async function runOnboarding() {
   if (!isPrivateHost(url)) {
     process.stdout.write(`\n  ${yellow("Note")}  ${dim("We'll send safe checks to")} ${cyan(url)}\n`);
     process.stdout.write(`  ${dim("No attack payloads in the default scan.")}\n\n`);
-    const ok = await confirm(`  ${cyan(">")} You have permission to scan this URL`, true);
+    // Default to "no": for a security tool the safe default is to not scan a
+    // remote host unless the user explicitly affirms authorization.
+    const ok = await confirm(`  ${cyan(">")} You have permission to scan this URL`, false);
     if (!ok) {
       process.stdout.write(`\n  ${dim("Aborted.")}\n\n`);
       closePrompt();
