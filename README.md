@@ -176,6 +176,28 @@ by the probes that ran — to the terminal, Markdown, and JSON reports:
 penthera https://myapp.com --framework nis2 -o reports/scan.json
 ```
 
+### Readiness report (clone → report in two commands)
+
+Go further than the mapping: combine the scan with a short **offline
+self-assessment** (the organisational measures a scanner can't test — policies,
+backups, training, MFA) into a full **NIS2 readiness report** — every Article 21
+measure marked `met / partial / gap / n-a`, with proportionality notes, your
+incident-reporting deadlines, and provenance on every piece of evidence.
+
+```bash
+# 1. Create your self-assessment (offline, one-time). Fill in yes | partial | no | na.
+penthera --assessment-init assessment.json
+
+# 2. Scan + self-assessment → readiness report (writes reports/scan-readiness.md)
+penthera https://myapp.com --repo . --readiness --assessment assessment.json -o reports/scan.json
+```
+
+The readiness report is **evidence and self-assessment tooling, not a
+certification**. It is provenance-linked (`source, method, collected_at,
+confidence`) and reproducible, and it lists exactly what only you can attest to.
+Jurisdiction specifics live in `lib/jurisdictions/nl.json` (NL today; BE and
+others are just added config).
+
 Because the mapping targets the NIS2 directive itself, it applies across the
 national transpositions; jurisdiction-specific profiles (NL, BE) are on the roadmap.
 

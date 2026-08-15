@@ -8,6 +8,13 @@ Open-source-core credibility pass.
 
 ### Added
 
+- **NIS2 readiness report** (`--readiness`): combines scan evidence with an
+  offline **self-assessment** (`--assessment-init` to scaffold, `--assessment` to
+  supply) into a per-measure `met / partial / gap / n-a` report across all ten
+  Article 21 measures — with proportionality notes, the jurisdiction's
+  incident-reporting deadlines, and **provenance** (`source, method, collected_at,
+  confidence`) on every piece of evidence. Writes `<output>-readiness.md`. Works
+  offline; jurisdiction data is config (`lib/jurisdictions/nl.json`, NL today)
 - Remediation action plan: the report (terminal-adjacent Markdown + JSON
   `actionPlan`) now includes a prioritised, owner-actionable plan — what, why,
   how to fix, rough effort, and whether it's a code change or an owner action

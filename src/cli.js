@@ -5,7 +5,7 @@
  */
 import { parseArgs } from "node:util";
 import { resolve } from "node:path";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { scanUrl } from "./scan-url.js";
 import { scanRepo } from "./scan-repo.js";
 import { mergeResults } from "./cli/merge-results.js";
@@ -17,6 +17,8 @@ import { writeMarkdownReport, markdownPathFromJson } from "./report/markdown.js"
 import { parseTemplatePaths } from "../lib/plugins.js";
 import { buildComplianceCoverage, listFrameworks } from "../lib/compliance/index.js";
 import { buildActionPlan } from "../lib/remediation/index.js";
+import { buildReadiness, formatReadinessMarkdown } from "../lib/compliance/readiness.js";
+import { blankAssessment } from "../lib/compliance/self-assessment.js";
 
 const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf-8"));
 
@@ -57,6 +59,9 @@ const HELP = `
         --sarif <file>      Write SARIF report (GitHub Security tab)
         --baseline <file>   Compare against previous JSON report
         --framework <name>  Add a compliance mapping to reports (nis2)
+        --readiness         NIS2 readiness report (scan + self-assessment)
+        --assessment <file> Self-assessment answers JSON (used by --readiness)
+        --assessment-init <file>  Write a blank self-assessment template and exit
         --auth-cookie <v>   Cookie header for authenticated scans
         --auth-bearer <v>   Bearer token for authenticated scans
         --json              Output JSON to stdout
@@ -101,6 +106,9 @@ export async function run() {
         sarif:       { type: "string" },
         baseline:    { type: "string" },
         framework:   { type: "string" },
+        readiness:   { type: "boolean", default: false },
+        assessment:  { type: "string" },
+        "assessment-init": { type: "string" },
         profile:     { type: "string" },
         "auth-cookie": { type: "string" },
         "auth-bearer": { type: "string" },
@@ -137,6 +145,15 @@ export async function run() {
     process.exit(0);
   }
 
+  if (opts["assessment-init"]) {
+    const path = resolve(opts["assessment-init"]);
+    writeFileSync(path, JSON.stringify(blankAssessment(), null, 2) + "\n");
+    console.log(`Wrote a blank NIS2 self-assessment to ${path}`);
+    console.log(`Fill each answer (yes | partial | no | na), then run:`);
+    console.log(`  penthera <url> --repo . --readiness --assessment ${opts["assessment-init"]}`);
+    process.exit(0);
+  }
+
   if (shouldRunOnboarding(positionals, opts)) {
     const { runOnboarding } = await import("./cli/onboarding.js");
     await runOnboarding();
@@ -146,8 +163,8 @@ export async function run() {
   const url = positionals[0] ? normalizeBaseUrl(positionals[0]) : null;
   const repo = opts.repo || null;
 
-  if (!url && !repo && !opts.machine) {
-    printError("No target specified. Provide a URL, --repo, --machine, or combine them.");
+  if (!url && !repo && !opts.machine && !opts.readiness) {
+    printError("No target specified. Provide a URL, --repo, --machine, --readiness, or combine them.");
     console.log(HELP);
     process.exit(2);
   }
@@ -253,6 +270,28 @@ export async function run() {
   // Skill to draft questionnaire answers and remediation documents).
   merged.actionPlan = buildActionPlan(merged.findings);
 
+  // NIS2 readiness report (scan evidence + local self-assessment, provenance-linked)
+  if (opts.readiness) {
+    let answers = {};
+    if (opts.assessment) {
+      try {
+        answers = JSON.parse(readFileSync(resolve(opts.assessment), "utf-8"));
+      } catch (e) {
+        printError(`Could not read --assessment file: ${e.message}`);
+        process.exit(2);
+      }
+    }
+    const jurisdiction = JSON.parse(
+      readFileSync(new URL("../lib/jurisdictions/nl.json", import.meta.url), "utf-8"),
+    );
+    merged.readiness = buildReadiness(merged, {
+      answers,
+      jurisdiction,
+      generatedAt: new Date().toISOString(),
+      assessedAt: answers?._assessedAt || null,
+    });
+  }
+
   // Baseline comparison
   let baselineStats = null;
   if (opts.baseline) {
@@ -303,7 +342,23 @@ export async function run() {
     }
   }
 
-  if ((opts.output || opts.markdown || opts.sarif) && !opts.quiet && !opts.json) {
+  if (merged.readiness) {
+    const rdPath = opts.output
+      ? opts.output.replace(/\.json$/i, "") + "-readiness.md"
+      : opts.markdown
+        ? opts.markdown.replace(/\.md$/i, "") + "-readiness.md"
+        : "nis2-readiness.md";
+    writeFileSync(resolve(rdPath), formatReadinessMarkdown(merged.readiness));
+    if (!opts.quiet && !opts.json) {
+      const s = merged.readiness.summary;
+      process.stderr.write(
+        `  NIS2 readiness  ${s.met} met · ${s.partial} partial · ${s.gap} gap · ${s["n/a"]} n/a\n`,
+      );
+      process.stderr.write(`  Readiness report ${rdPath}\n`);
+    }
+  }
+
+  if ((opts.output || opts.markdown || opts.sarif || opts.readiness) && !opts.quiet && !opts.json) {
     process.stderr.write("\n");
   }
 

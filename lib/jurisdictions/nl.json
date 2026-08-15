@@ -1,0 +1,42 @@
+{
+  "id": "nl",
+  "name": "Netherlands",
+  "law": "Cyberbeveiligingswet (NIS2 transposition)",
+  "framework": "nis2",
+  "language": "en",
+  "authorities": {
+    "supervisor": "RDI — Rijksinspectie Digitale Infrastructuur",
+    "csirt": "NCSC-NL (or your sectoral CSIRT)",
+    "note": "The competent authority and CSIRT depend on your sector. Confirm which one applies to you before relying on this."
+  },
+  "incidentDeadlines": [
+    {
+      "id": "early-warning",
+      "within": "24 hours",
+      "of": "becoming aware of a significant incident",
+      "to": "your CSIRT / competent authority",
+      "content": "Early warning: whether the incident is suspected to be unlawful/malicious and whether it could have cross-border impact."
+    },
+    {
+      "id": "notification",
+      "within": "72 hours",
+      "of": "becoming aware of a significant incident",
+      "to": "your CSIRT / competent authority",
+      "content": "Incident notification: initial assessment, severity and impact, and any indicators of compromise."
+    },
+    {
+      "id": "final-report",
+      "within": "1 month",
+      "of": "the incident notification",
+      "to": "your CSIRT / competent authority",
+      "content": "Final report: detailed description, root cause, applied and ongoing mitigations, and any cross-border impact."
+    }
+  ],
+  "penalties": "Up to €10M or 2% of global annual turnover. Management can be held personally accountable.",
+  "pointers": [
+    "Determine whether you are an essential or important entity, and your sector's competent authority.",
+    "Register with your competent authority if in scope.",
+    "Keep evidence of your risk-management measures ready to produce if audited."
+  ],
+  "disclaimer": "Penthera provides readiness, evidence, and self-assessment tooling only. It is not legal advice and does not certify or guarantee compliance. Confirm your obligations with your competent authority (RDI) or a qualified advisor."
+}
