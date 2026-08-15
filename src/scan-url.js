@@ -8,7 +8,7 @@
  *     2. TLS/SSL certificate & cipher audit
  *     3. Tech fingerprinting (httpx-style)
  *     4. Endpoint brute-force with auto-calibration (ffuf-style)
- *     5. Nuclei-style template scanning (15 built-in templates)
+ *     5. Nuclei-style template scanning (14 built-in templates)
  *     6. Supplementary sensitive file checks
  *     7. CORS validation
  *     8. Framework-specific checks (CVEs)
@@ -53,6 +53,7 @@ import { probeOAuthMisconfig } from "../lib/blackbox/oauth.js";
 import { auditSecurityHeaders } from "../lib/blackbox/headers.js";
 import { probeClientSideAuth } from "../lib/blackbox/client-auth.js";
 import { probeJwt } from "../lib/blackbox/jwt.js";
+import { probeEmailDns } from "../lib/blackbox/email-dns.js";
 import { resolveAuth } from "./utils/auth.js";
 import { normalizeBaseUrl, isPrivateHost, joinUrl } from "./utils/url.js";
 import { safeFetch } from "./utils/http.js";
@@ -75,6 +76,8 @@ export async function scanUrl(rawTarget, opts = {}) {
   const startTime = Date.now();
 
   const local = isPrivateHost(target);
+  const hostname = new URL(target).hostname;
+  const isIpHost = /^\d{1,3}(\.\d{1,3}){3}$/.test(hostname) || hostname.includes(":");
 
   const result = {
     target,
@@ -91,6 +94,7 @@ export async function scanUrl(rawTarget, opts = {}) {
     cookies: null,
     jsLibraries: null,
     paramDiscovery: null,
+    emailAuth: null,
     executedProbes: [],
     findings: [],
   };
@@ -361,6 +365,21 @@ export async function scanUrl(rawTarget, opts = {}) {
     }
   } catch { /* non-critical */ }
 
+  // ── Phase 9b: Email authentication posture (SPF/DMARC via DNS) ─────────
+  if (!local && !isIpHost) {
+    progress("Checking email authentication (SPF, DMARC)...");
+    try {
+      const emailResult = await probeEmailDns(extractDomain(target));
+      result.emailAuth = {
+        spf: emailResult.spf,
+        dmarc: emailResult.dmarc,
+        dmarcPolicy: emailResult.dmarcPolicy,
+        mxCount: emailResult.mxCount,
+      };
+      result.findings.push(...emailResult.findings);
+    } catch { /* DNS failure — non-critical */ }
+  }
+
   // ── Phase 10: Retire.js — Vulnerable JS Libraries ─────────────────────
   if (!opts.skipRetireJs) {
     progress("Scanning for vulnerable JS libraries (Retire.js)...");
@@ -524,6 +543,7 @@ export async function scanUrl(rawTarget, opts = {}) {
   result.executedProbes = [
     "reachability", "endpoint-discovery", "openapi", "auth-hardening",
     "client-auth", "idor", "oauth", "sensitive-files", "cors", "cookie",
+    ...(!local && !isIpHost ? ["email-dns"] : []),
     ...(result.tls ? ["tls"] : []),
     ...(result.fingerprint?.headers ? ["security-headers"] : []),
     ...(auth.bearer ? ["jwt"] : []),
