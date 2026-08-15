@@ -43,6 +43,34 @@ background to use it.
 Penthera is for hardening systems you own. It is powerful, so please use it
 carefully. See [Ethical use](#ethical-use--authorization) and the [Disclaimer](#disclaimer).
 
+Shipping in the EU? Penthera also generates your
+[NIS2 readiness report, policy pack, incident-report drafts, SBOM, and prefilled
+customer security questionnaires](#compliance-nis2-and-the-cyberwetgeving).
+Offline, no accounts. Readiness tooling, not a certification.
+
+### What you get
+
+```
+  Findings
+
+  HIGH  IDOR/BOLA: GET /api/users/{user_id}
+         http://localhost:3000/api/users/1 → 200
+  HIGH  OAuth open redirect
+         http://localhost:3000/api/oauth/callback?redirect_uri=... → 302
+  MED   Missing Content-Security-Policy
+  MED   No login rate limiting detected
+         http://localhost:3000/api/login → 401
+  LOW   Missing X-Frame-Options
+  INFO  Missing Referrer-Policy
+
+  ──────────────────────────────────────────────────────────
+  2 high · 5 medium · 2 low · 2 info
+```
+
+Every finding carries a confidence label (`confirmed`, `likely`, `potential`,
+`needs-human-review`), so a heuristic never poses as a certainty. Reports come
+out as Markdown, JSON, and SARIF, with the fixes in priority order.
+
 ---
 
 ## Run it
