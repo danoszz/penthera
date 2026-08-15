@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Find and fix security issues in vibecoded apps",
-    "version": "1.1.0"
+    "version": "1.1.1"
   },
   "plugins": [
     {

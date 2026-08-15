@@ -4,6 +4,52 @@ All notable changes to Penthera are documented here. Versioning follows [SemVer]
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-08-16
+
+A correctness release. One of these was a live outage: if you are on 1.1.0,
+upgrade.
+
+### Fixed
+
+- **JS dependency scanning was silently dead.** The Retire.js vulnerability
+  database URL pointed at a fork that now returns 404, so every scan reported
+  "no vulnerable JS libraries" without ever running the check. It now reads from
+  upstream RetireJS with a mirror, validates the payload, and when no source is
+  reachable it says the check did not run instead of returning a clean result.
+  The probe is also excluded from coverage in that case, so a compliance report
+  cannot claim supply-chain evidence that was never collected
+- **Command injection in the machine audit.** Binary paths read from
+  attacker-writable plists were interpolated into a shell string, so a malicious
+  persistence entry could execute code inside the scanner. Paths are now argv
+  entries and signature checks use the exit status, failing closed
+- Two built-in templates fired on any single-page app with catch-all routing:
+  the `.env.local` matcher accepted a bare `=` (present in every HTML attribute)
+  and the Firebase one accepted any 200 without the word "error", so an
+  `index.html` served at those paths was reported as critical
+- Time-based SQL and command injection no longer report on a single slow
+  response. A candidate delay is re-sampled and only reported when the median
+  holds, which a garbage-collection pause or cold start does not survive
+- Community template regexes ran unbounded against whole response bodies. A
+  catastrophically-backtracking pattern would hang the scanner; patterns with
+  nested quantifiers are now refused and input is capped
+- Dedupe and baseline comparison used different keys that included severity, so
+  re-rating a finding reported it as one resolved plus one new. Both now share
+  the audit loop's fingerprint
+- A measure with nothing scanned and nothing attested was scored as a gap,
+  telling an entity that had not yet filled in the self-assessment that it had
+  failed. That state is now reported as not assessed
+- The XSS canary was a fixed, fingerprintable string; it is now randomised per
+  probe
+- XProtect staleness was computed and discarded; it is now reported
+
+### Changed
+
+- The Nuclei loader documents the subset it actually implements and reports per
+  template which unsupported features it needs, instead of letting a template
+  that cannot match look like a clean pass
+- Provenance (confidence, method, collection time) now travels into SARIF, and
+  the terminal marks findings a scanner cannot adjudicate
+
 ## [1.1.0] - 2026-08-16
 
 NIS2 / Cyberbeveiligingswet readiness work: a hardening pass over the
@@ -164,5 +210,6 @@ First production-ready release.
 - Initial CLI: URL, repo, and machine scan modes
 - Built-in templates, TLS, CORS, SARIF export
 
+[1.1.1]: https://github.com/danoszz/penthera/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/danoszz/penthera/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/danoszz/penthera/compare/v0.2.0...v1.0.0
