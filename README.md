@@ -4,7 +4,7 @@
 
 <br/><br/>
 
-![version](https://img.shields.io/badge/version-1.1.0-0000ed)
+[![npm](https://img.shields.io/npm/v/penthera?color=0000ed)](https://www.npmjs.com/package/penthera)
 ![node](https://img.shields.io/badge/node-%E2%89%A518-0000ed)
 ![license](https://img.shields.io/badge/license-MIT-0000ed)
 [![CI](https://github.com/danoszz/penthera/actions/workflows/ci.yml/badge.svg)](https://github.com/danoszz/penthera/actions/workflows/ci.yml)
@@ -66,6 +66,12 @@ Then talk to your agent:
 "Scan my localhost:3000 for security issues"
 "Run a pre-deploy security audit on staging.myapp.com"
 "Find hardcoded secrets in this repo before I push"
+```
+
+**Or try it with no install at all:**
+
+```bash
+npx penthera https://your-app.example
 ```
 
 Prefer the terminal? Run `penthera` with no arguments for a guided wizard.

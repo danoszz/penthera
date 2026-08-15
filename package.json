@@ -12,8 +12,8 @@
     "url": "https://github.com/danoszz/penthera/issues"
   },
   "bin": {
-    "penthera": "./bin/penthera.js",
-    "penthera-scan": "./bin/scan.js"
+    "penthera": "bin/penthera.js",
+    "penthera-scan": "bin/scan.js"
   },
   "files": [
     "bin",
