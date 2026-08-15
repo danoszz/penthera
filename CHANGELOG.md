@@ -8,6 +8,10 @@ Open-source-core credibility pass.
 
 ### Added
 
+- Email authentication probe (SPF, DMARC, MX via DNS) — new `lib/blackbox/email-dns.js`,
+  runs in the standard profile for public domains. Flags missing/permissive SPF,
+  missing or monitoring-only (`p=none`) DMARC, and nudges DKIM verification. A
+  questionnaire staple that was previously uncovered
 - `--framework nis2` compliance report mode: a per-scan NIS2 Article 21 coverage
   table (which measures this scan actually exercised, driven by the probes that
   ran) added to the terminal, Markdown, and JSON reports. Frameworks are
@@ -38,13 +42,22 @@ Open-source-core credibility pass.
   APIs that echo a payload are no longer flagged as XSS
 - Removed the fuzzer's prototype-pollution false positive (it fired on any
   object payload returning 200, because `payload.__proto__` is always truthy)
+- Open-redirect false positives (found scanning a real Vercel-hosted site): the
+  OAuth and injection open-redirect probes now confirm the `Location` actually
+  resolves to the attacker's host, instead of substring-matching. A same-site
+  apex→www canonicalization that preserves the payload in the query is no longer
+  reported as an open redirect. Also removed the redundant, FP-prone
+  "open redirect via callback" built-in template
+- Login hardening probe no longer runs against a path that returns a redirect
+  (3xx), 404, or 405 — not a real login handler — removing a false "no login
+  rate limiting detected" on redirected paths
 
 ### Changed
 
 - Interactive wizard's remote-host permission prompt now defaults to **no**
 - README shows the live CI status badge instead of a hand-written test count;
   live integration tests report as skipped (not passed) without a running target
-- Corrected the built-in template count (15, not 17) in docs and progress output
+- Corrected the built-in template count (14, not 17) in docs and progress output
 
 ## [1.0.0] — 2026-06-30
 
