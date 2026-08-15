@@ -16,6 +16,7 @@ import { printReport, printFindings, writeJsonReport, writeSarifReport, createPr
 import { writeMarkdownReport, markdownPathFromJson } from "./report/markdown.js";
 import { parseTemplatePaths } from "../lib/plugins.js";
 import { buildComplianceCoverage, listFrameworks } from "../lib/compliance/index.js";
+import { buildActionPlan } from "../lib/remediation/index.js";
 
 const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf-8"));
 
@@ -247,6 +248,10 @@ export async function run() {
     }
     merged.compliance = coverage;
   }
+
+  // Prioritised, owner-actionable remediation plan (also consumed by the Agent
+  // Skill to draft questionnaire answers and remediation documents).
+  merged.actionPlan = buildActionPlan(merged.findings);
 
   // Baseline comparison
   let baselineStats = null;

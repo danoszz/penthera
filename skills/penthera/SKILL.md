@@ -168,6 +168,24 @@ Applying fixes **modifies the user's code**. Before editing:
 - Never apply fixes against a production system; work in the repo or a branch.
 - Rotating an exposed secret and renewing a TLS certificate are **user actions**, not code edits — flag them clearly rather than attempting them.
 
+## Workflow 5: Owner reports & questionnaire responses
+
+**Triggers:** "answer this security questionnaire", "turn the scan into a report", "draft a remediation plan", "NIS2 evidence", "prefill the vendor questionnaire"
+
+Turn a scan into documents the owner can act on and send. Full method and templates: [references/reporting.md](references/reporting.md).
+
+1. Confirm authorization, then scan with JSON + framework mapping:
+
+```bash
+mkdir -p reports
+penthera <url> --repo . --framework nis2 -o reports/scan.json
+```
+
+2. Read `reports/scan.json` — use `actionPlan`, `compliance`, `emailAuth`, `findings`, and `executedProbes`.
+3. Generate the requested document(s): a remediation plan, a security-questionnaire response, or a NIS2 duty-of-care evidence summary.
+4. **Ground every answer in scan evidence.** Mark anything the scan can't support as `NEEDS HUMAN INPUT` — all organisational controls (incident process, backups, training). Never invent a control or imply certification.
+5. Write drafts to `reports/` and end by listing every `NEEDS HUMAN INPUT` item so the owner knows what only they can answer.
+
 ## Authenticated scans
 
 Only after authorization gate passes:
@@ -250,4 +268,5 @@ Actions:
 - Troubleshooting: [references/troubleshooting.md](references/troubleshooting.md)
 - Authorization policy: [references/authorization.md](references/authorization.md)
 - Remediation playbook (apply fixes): [references/remediation.md](references/remediation.md)
+- Owner reports & questionnaire responses: [references/reporting.md](references/reporting.md)
 - Secure defaults (build it right): [references/secure-defaults.md](references/secure-defaults.md)

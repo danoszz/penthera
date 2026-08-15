@@ -8,6 +8,15 @@ Open-source-core credibility pass.
 
 ### Added
 
+- Remediation action plan: the report (terminal-adjacent Markdown + JSON
+  `actionPlan`) now includes a prioritised, owner-actionable plan — what, why,
+  how to fix, rough effort, and whether it's a code change or an owner action
+  (rotate a secret, renew a cert, change DNS) — replacing the old generic
+  recommendations list. Built from a remediation knowledge base (`lib/remediation`)
+- Agent Skill Workflow 5 + `references/reporting.md`: generate owner-facing
+  documents from a scan — a remediation plan, a prefilled security-questionnaire
+  response, and a NIS2 duty-of-care evidence summary — grounded in scan evidence,
+  with unbacked/organisational items marked `NEEDS HUMAN INPUT` (never fabricated)
 - Email authentication probe (SPF, DMARC, MX via DNS) — new `lib/blackbox/email-dns.js`,
   runs in the standard profile for public domains. Flags missing/permissive SPF,
   missing or monitoring-only (`p=none`) DMARC, and nudges DKIM verification. A

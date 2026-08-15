@@ -5,6 +5,7 @@ import { writeFileSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { buildWstgCoverage, formatWstgMarkdown } from "../../lib/owasp-wstg.js";
 import { formatComplianceMarkdown } from "../../lib/compliance/index.js";
+import { buildActionPlan, formatActionPlanMarkdown } from "../../lib/remediation/index.js";
 
 const SEV_ORDER = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
 const SEV_TAG = {
@@ -153,11 +154,9 @@ export function formatMarkdownReport(result, opts = {}) {
     }
   }
 
-  if (total > 0) {
-    lines.push("## Recommended actions");
-    lines.push("");
-    buildRecommendations(findings).forEach((a, i) => lines.push(`${i + 1}. ${a}`));
-    lines.push("");
+  const actionPlan = result.actionPlan || buildActionPlan(findings);
+  if (actionPlan.length > 0) {
+    lines.push(formatActionPlanMarkdown(actionPlan));
   }
 
   lines.push("---");
@@ -166,25 +165,6 @@ export function formatMarkdownReport(result, opts = {}) {
   lines.push("");
 
   return lines.join("\n");
-}
-
-function buildRecommendations(findings) {
-  const actions = new Set();
-  const blob = findings.map((f) => `${f.title} ${f.category} ${f.source}`).join(" ").toLowerCase();
-
-  if (/https|cleartext|transport/i.test(blob)) actions.add("Enable HTTPS/TLS for all production traffic.");
-  if (/openapi|swagger|redoc|docs exposed/i.test(blob)) actions.add("Disable public API documentation in production.");
-  if (/rate limit|login/i.test(blob)) actions.add("Add rate limiting on authentication endpoints.");
-  if (/client-side-only|unauthenticated endpoint/i.test(blob)) actions.add("Enforce server-side authentication on sensitive API routes.");
-  if (/content-security-policy|x-frame-options|security header/i.test(blob)) actions.add("Add security headers (CSP, X-Frame-Options, X-Content-Type-Options).");
-  if (/secret|api_key|password|hardcoded/i.test(blob)) actions.add("Rotate exposed secrets; use environment variables.");
-  if (/sql|injection/i.test(blob)) actions.add("Use parameterized queries and strict input validation.");
-  if (/cors/i.test(blob)) actions.add("Restrict CORS to explicit allowed origins.");
-  if (actions.size === 0) actions.add("Review each finding and re-scan after remediation.");
-
-  actions.add("For step-by-step, framework-specific fixes, see the Penthera remediation playbook (skills/penthera/references/remediation.md), then re-scan to verify.");
-
-  return [...actions];
 }
 
 export function writeMarkdownReport(result, filePath, opts = {}) {
