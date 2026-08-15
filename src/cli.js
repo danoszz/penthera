@@ -6,6 +6,7 @@
 import { parseArgs } from "node:util";
 import { resolve } from "node:path";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { scanUrl } from "./scan-url.js";
 import { scanRepo } from "./scan-repo.js";
 import { mergeResults } from "./cli/merge-results.js";
@@ -21,6 +22,7 @@ import { buildReadiness, formatReadinessMarkdown } from "../lib/compliance/readi
 import { blankAssessment } from "../lib/compliance/self-assessment.js";
 import { buildPolicyPack, policyPackIndex } from "../lib/compliance/policy-pack.js";
 import { buildIncidentReports, formatIncidentMarkdown, incidentTemplate } from "../lib/compliance/incident.js";
+import { buildSbom } from "../lib/whitebox/sbom.js";
 
 const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf-8"));
 
@@ -68,6 +70,7 @@ const HELP = `
         --org <name>        Organisation name for readiness/policy documents
         --incident <file>   Generate NIS2 incident-report drafts + timeline
         --incident-init <file>  Write a blank incident template and exit
+        --sbom <file>       Write a CycloneDX software bill of materials (from --repo)
         --auth-cookie <v>   Cookie header for authenticated scans
         --auth-bearer <v>   Bearer token for authenticated scans
         --json              Output JSON to stdout
@@ -119,6 +122,7 @@ export async function run() {
         org:         { type: "string" },
         incident:    { type: "string" },
         "incident-init": { type: "string" },
+        sbom:        { type: "string" },
         profile:     { type: "string" },
         "auth-cookie": { type: "string" },
         "auth-bearer": { type: "string" },
@@ -204,8 +208,8 @@ export async function run() {
   const url = positionals[0] ? normalizeBaseUrl(positionals[0]) : null;
   const repo = opts.repo || null;
 
-  if (!url && !repo && !opts.machine && !opts.readiness && !opts["policy-pack"]) {
-    printError("No target specified. Provide a URL, --repo, --machine, --readiness, --policy-pack, or combine them.");
+  if (!url && !repo && !opts.machine && !opts.readiness && !opts["policy-pack"] && !opts.sbom) {
+    printError("No target specified. Provide a URL, --repo, --machine, --readiness, --policy-pack, --sbom, or combine them.");
     console.log(HELP);
     process.exit(2);
   }
@@ -399,6 +403,22 @@ export async function run() {
     }
   }
 
+  if (opts.sbom) {
+    const sbomRepo = resolve(opts.repo || ".");
+    const sbom = buildSbom(sbomRepo, {
+      serialNumber: `urn:uuid:${randomUUID()}`,
+      timestamp: new Date().toISOString(),
+    });
+    if (!sbom) {
+      printError(`No dependency manifest found in ${sbomRepo} (looked for package-lock.json, package.json, requirements.txt).`);
+    } else {
+      writeFileSync(resolve(opts.sbom), JSON.stringify(sbom, null, 2) + "\n");
+      if (!opts.quiet && !opts.json) {
+        process.stderr.write(`  SBOM (CycloneDX) ${sbom.components.length} components → ${opts.sbom}\n`);
+      }
+    }
+  }
+
   if (opts["policy-pack"]) {
     const dir = resolve(opts["policy-pack"]);
     mkdirSync(dir, { recursive: true });
@@ -419,7 +439,7 @@ export async function run() {
     }
   }
 
-  if ((opts.output || opts.markdown || opts.sarif || opts.readiness || opts["policy-pack"]) && !opts.quiet && !opts.json) {
+  if ((opts.output || opts.markdown || opts.sarif || opts.readiness || opts["policy-pack"] || opts.sbom) && !opts.quiet && !opts.json) {
     process.stderr.write("\n");
   }
 

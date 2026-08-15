@@ -228,6 +228,19 @@ the required content — with `NEEDS INPUT` where you still have to fill in fact
 **Drafts to help you meet the deadlines, not a substitute for your authority's
 official form.**
 
+### Software bill of materials (SBOM)
+
+Emit a standard CycloneDX SBOM of your dependencies — what enterprises
+increasingly require of suppliers, and direct evidence for supply-chain security
+(measure d):
+
+```bash
+penthera --repo . --sbom sbom.cdx.json
+```
+
+Parses `package-lock.json` / `package.json` / `requirements.txt` offline (no
+network), with resolved versions and package URLs (purls).
+
 Because the mapping targets the NIS2 directive itself, it applies across the
 national transpositions; jurisdiction-specific profiles (NL, BE) are on the roadmap.
 

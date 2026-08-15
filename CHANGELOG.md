@@ -8,6 +8,10 @@ Open-source-core credibility pass.
 
 ### Added
 
+- **SBOM output** (`--sbom <file>`): generates a CycloneDX 1.5 software bill of
+  materials from `package-lock.json` / `package.json` / `requirements.txt`,
+  offline, with resolved versions and purls. Supply-chain evidence (measure d)
+  and the artifact enterprises increasingly require of suppliers
 - **Incident-report helper** (`--incident <file>`, `--incident-init` to scaffold):
   computes the NIS2 reporting deadlines (24h early warning / 72h notification /
   1-month final report) from when you became aware, flags overdue ones, and
