@@ -54,9 +54,9 @@ export function formatMarkdownReport(result, opts = {}) {
   lines.push(`| | |`);
   lines.push(`|---|---|`);
   lines.push(`| **Target** | \`${result.target || "unknown"}\` |`);
-  lines.push(`| **Scan time** | ${result.timestamp?.replace("T", " ").slice(0, 19) || "—"} UTC |`);
-  lines.push(`| **Duration** | ${result.duration ? `${(result.duration / 1000).toFixed(1)}s` : "—"} |`);
-  lines.push(`| **Mode** | ${result.modes?.join(", ") || result.mode || "—"} |`);
+  lines.push(`| **Scan time** | ${result.timestamp?.replace("T", " ").slice(0, 19) || "-"} UTC |`);
+  lines.push(`| **Duration** | ${result.duration ? `${(result.duration / 1000).toFixed(1)}s` : ", "} |`);
+  lines.push(`| **Mode** | ${result.modes?.join(", ") || result.mode || "-"} |`);
   lines.push(`| **Reachable** | ${result.reachable ? "Yes" : "No"} |`);
   if (result.profile) lines.push(`| **Profile** | ${result.profile} |`);
   lines.push("");
@@ -74,7 +74,7 @@ export function formatMarkdownReport(result, opts = {}) {
     lines.push("");
 
     if (counts.critical > 0 || counts.high > 0) {
-      lines.push("> **Action required** — critical or high severity issues should be fixed before production deployment.");
+      lines.push("> **Action required**, critical or high severity issues should be fixed before production deployment.");
       lines.push("");
     }
   }
@@ -113,8 +113,8 @@ export function formatMarkdownReport(result, opts = {}) {
     lines.push("## API surface");
     lines.push("");
     lines.push(`- **OpenAPI spec:** ${result.openapi.specUrl}`);
-    lines.push(`- **Paths documented:** ${result.openapi.pathCount || "—"}`);
-    lines.push(`- **Unprotected routes (spec):** ${result.openapi.unprotectedRoutes || "—"}`);
+    lines.push(`- **Paths documented:** ${result.openapi.pathCount || "-"}`);
+    lines.push(`- **Unprotected routes (spec):** ${result.openapi.unprotectedRoutes || "-"}`);
     lines.push("");
   }
 
@@ -135,11 +135,11 @@ export function formatMarkdownReport(result, opts = {}) {
 
       lines.push(`### ${SEV_TAG[sev]} ${sev.charAt(0).toUpperCase() + sev.slice(1)} (${group.length})`);
       lines.push("");
-      lines.push("| Finding | URL | Source |");
-      lines.push("|---------|-----|--------|");
+      lines.push("| Finding | URL | Confidence | Source |");
+      lines.push("|---------|-----|-----------|--------|");
 
       for (const f of group) {
-        lines.push(`| **${mdEscape(f.title)}** | ${f.url ? `[link](${f.url})` : "—"} | ${mdEscape(f.source || "—")} |`);
+        lines.push(`| **${mdEscape(f.title)}** | ${f.url ? `[link](${f.url})` : "-"} | ${f.confidence || "-"} | ${mdEscape(f.source || "-")} |`);
       }
       lines.push("");
 

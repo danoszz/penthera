@@ -2,6 +2,7 @@
  * Merge multi-target scan results into one report.
  */
 import { enrichFindingsWithWstg } from "../../lib/owasp-wstg.js";
+import { stampProvenance } from "../../lib/provenance.js";
 
 export function mergeResults(results) {
   let merged;
@@ -34,6 +35,9 @@ export function mergeResults(results) {
   }
 
   merged.findings = enrichFindingsWithWstg(merged.findings);
+  // Provenance + honest-confidence on every finding (source, method,
+  // collected_at, confidence). Additive: consumers that don't use it ignore it.
+  merged.findings = stampProvenance(merged.findings, merged.timestamp);
   return merged;
 }
 

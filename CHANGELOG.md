@@ -4,20 +4,28 @@ All notable changes to Penthera are documented here. Versioning follows [SemVer]
 
 ## [Unreleased]
 
-Open-source-core credibility pass.
+NIS2 / Cyberbeveiligingswet readiness work: a hardening pass over the
+open-source core, a full offline NIS2 readiness toolkit, and a humanizing pass
+that removed AI-writing tells (em dashes and so on) from all public-facing text
+and generated documents.
 
 ### Added
 
+- **Provenance + honest confidence on every finding**: each finding carries
+  `{ source, method, collected_at, confidence }`, with confidence labelled
+  `confirmed` / `likely` / `potential` / `needs-human-review` so a heuristic
+  isn't presented as a certainty. Shown in the report's Confidence column and in
+  JSON (`lib/provenance.js`)
 - **Supplier passive rating** (`--suppliers <file>`): point Penthera's passive
   checks (homepage security headers, TLS certificate, SPF/DMARC/MX via DNS) at
   your own suppliers' public domains and get a red/amber/green posture per
-  supplier — supply-chain risk screening (measure d). Strictly passive,
+  supplier, supply-chain risk screening (measure d). Strictly passive,
   public-data-only, non-intrusive, and documented as such; not a pentest of the
   supplier
 - **Remediation / audit-loop tracking** (`--history <file>`): folds each scan's
   findings into a persistent history keyed by a stable fingerprint (severity-
   and count-independent), and reports open vs resolved, median time-to-fix,
-  ageing buckets, and drift since last scan — the effectiveness evidence for
+  ageing buckets, and drift since last scan, the effectiveness evidence for
   measure f, and a "close the loop" counter to noisy discovery-only scanning
 - **SBOM output** (`--sbom <file>`): generates a CycloneDX 1.5 software bill of
   materials from `package-lock.json` / `package.json` / `requirements.txt`,
@@ -26,7 +34,7 @@ Open-source-core credibility pass.
 - **Incident-report helper** (`--incident <file>`, `--incident-init` to scaffold):
   computes the NIS2 reporting deadlines (24h early warning / 72h notification /
   1-month final report) from when you became aware, flags overdue ones, and
-  drafts each report against the jurisdiction's required content — with
+  drafts each report against the jurisdiction's required content, with
   `NEEDS INPUT` markers for facts you still have to supply. Offline; drafts to
   help meet the deadlines, not a substitute for the authority's official form
 - **Policy-pack generator** (`--policy-pack <dir>`): writes proportionate,
@@ -38,20 +46,20 @@ Open-source-core credibility pass.
 - **NIS2 readiness report** (`--readiness`): combines scan evidence with an
   offline **self-assessment** (`--assessment-init` to scaffold, `--assessment` to
   supply) into a per-measure `met / partial / gap / n-a` report across all ten
-  Article 21 measures — with proportionality notes, the jurisdiction's
+  Article 21 measures, with proportionality notes, the jurisdiction's
   incident-reporting deadlines, and **provenance** (`source, method, collected_at,
   confidence`) on every piece of evidence. Writes `<output>-readiness.md`. Works
   offline; jurisdiction data is config (`lib/jurisdictions/nl.json`, NL today)
 - Remediation action plan: the report (terminal-adjacent Markdown + JSON
-  `actionPlan`) now includes a prioritised, owner-actionable plan — what, why,
+  `actionPlan`) now includes a prioritised, owner-actionable plan, what, why,
   how to fix, rough effort, and whether it's a code change or an owner action
-  (rotate a secret, renew a cert, change DNS) — replacing the old generic
+  (rotate a secret, renew a cert, change DNS), replacing the old generic
   recommendations list. Built from a remediation knowledge base (`lib/remediation`)
 - Agent Skill Workflow 5 + `references/reporting.md`: generate owner-facing
-  documents from a scan — a remediation plan, a prefilled security-questionnaire
-  response, and a NIS2 duty-of-care evidence summary — grounded in scan evidence,
+  documents from a scan, a remediation plan, a prefilled security-questionnaire
+  response, and a NIS2 duty-of-care evidence summary, grounded in scan evidence,
   with unbacked/organisational items marked `NEEDS HUMAN INPUT` (never fabricated)
-- Email authentication probe (SPF, DMARC, MX via DNS) — new `lib/blackbox/email-dns.js`,
+- Email authentication probe (SPF, DMARC, MX via DNS), new `lib/blackbox/email-dns.js`,
   runs in the standard profile for public domains. Flags missing/permissive SPF,
   missing or monitoring-only (`p=none`) DMARC, and nudges DKIM verification. A
   questionnaire staple that was previously uncovered
@@ -59,7 +67,7 @@ Open-source-core credibility pass.
   table (which measures this scan actually exercised, driven by the probes that
   ran) added to the terminal, Markdown, and JSON reports. Frameworks are
   declarative so national transpositions and other regimes can be added as data
-- NIS2 / cyberwetgeving compliance section in the README: Article 21(2)(a–j)
+- NIS2 / cyberwetgeving compliance section in the README: Article 21(2)(a-j)
   mapped to what Penthera actually tests, with a coverage key and a clear
   "not legal advice / not a certification" disclaimer
 - Code of Conduct (Contributor Covenant 2.1), issue templates, and PR template
@@ -92,7 +100,7 @@ Open-source-core credibility pass.
   reported as an open redirect. Also removed the redundant, FP-prone
   "open redirect via callback" built-in template
 - Login hardening probe no longer runs against a path that returns a redirect
-  (3xx), 404, or 405 — not a real login handler — removing a false "no login
+  (3xx), 404, or 405, not a real login handler, removing a false "no login
   rate limiting detected" on redirected paths
 
 ### Changed
@@ -102,7 +110,7 @@ Open-source-core credibility pass.
   live integration tests report as skipped (not passed) without a running target
 - Corrected the built-in template count (14, not 17) in docs and progress output
 
-## [1.0.0] — 2026-06-30
+## [1.0.0], 2026-06-30
 
 First production-ready release.
 
@@ -127,11 +135,11 @@ First production-ready release.
 
 - URL trailing-slash normalization (double-slash 404 bug)
 
-## [0.2.0] — 2026-04
+## [0.2.0], 2026-04
 
 - Markdown reports, scan profiles, auth tooling, expanded API discovery
 
-## [0.1.x] — 2026-04
+## [0.1.x], 2026-04
 
 - Initial CLI: URL, repo, and machine scan modes
 - Built-in templates, TLS, CORS, SARIF export
