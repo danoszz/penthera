@@ -505,6 +505,22 @@ export async function scanUrl(rawTarget, opts = {}) {
         severity: ["critical", "high", "medium"],
       });
       progress(`Loaded ${templates.length} templates, scanning...`);
+      // Templates needing Nuclei features this loader doesn't implement won't
+      // match even against a vulnerable target. Say so rather than letting the
+      // silence read as a clean result.
+      const limited = templates.filter((t) => t.unsupported?.length);
+      if (limited.length > 0) {
+        const reasons = [...new Set(limited.flatMap((t) => t.unsupported))];
+        progress(`${limited.length} template(s) use unsupported features and cannot match: ${reasons.join("; ")}`);
+        result.findings.push({
+          severity: "info",
+          title: `${limited.length} community template(s) could not run fully`,
+          description: `These templates rely on Nuclei features Penthera does not implement (${reasons.join("; ")}), so they cannot produce a match. Their silence is not a clean result. Templates affected: ${limited.slice(0, 5).map((t) => t.id).join(", ")}${limited.length > 5 ? ", ..." : ""}.`,
+          category: "config",
+          source: "plugin-loader",
+          confidence: "confirmed",
+        });
+      }
       const pluginFindings = await runTemplateScan(target, templates, { onPhase: progress });
       result.findings.push(...pluginFindings);
     } catch (e) {
