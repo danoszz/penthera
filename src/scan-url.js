@@ -76,6 +76,8 @@ export async function scanUrl(rawTarget, opts = {}) {
   const startTime = Date.now();
 
   const local = isPrivateHost(target);
+  // Set false when the Retire.js database can't load, so we don't claim the probe ran.
+  let retireJsRan = false;
   const hostname = new URL(target).hostname;
   const isIpHost = /^\d{1,3}(\.\d{1,3}){3}$/.test(hostname) || hostname.includes(":");
 
@@ -385,6 +387,9 @@ export async function scanUrl(rawTarget, opts = {}) {
     progress("Scanning for vulnerable JS libraries (Retire.js)...");
     try {
       const jsResult = await scanJsLibraries(target, { onPhase: progress });
+      // Only count the probe as run when its database actually loaded, so the
+      // WSTG and compliance coverage can't claim a check that was skipped.
+      retireJsRan = jsResult.dbLoaded !== false;
       if (jsResult.libraries.length > 0) {
         result.jsLibraries = jsResult.libraries;
       }
@@ -547,7 +552,7 @@ export async function scanUrl(rawTarget, opts = {}) {
     ...(result.tls ? ["tls"] : []),
     ...(result.fingerprint?.headers ? ["security-headers"] : []),
     ...(auth.bearer ? ["jwt"] : []),
-    ...(!opts.skipRetireJs ? ["retirejs"] : []),
+    ...(!opts.skipRetireJs && retireJsRan ? ["retirejs"] : []),
     ...(!opts.skipParamDiscovery && hadEndpoints ? ["param-discovery"] : []),
     ...(opts.recon && !local ? ["recon"] : []),
     ...(opts.deep && hadEndpoints ? ["sqli", "ssti", "ssrf", "xss", "cmdi", "open-redirect"] : []),
