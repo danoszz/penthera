@@ -330,6 +330,17 @@ export function printReport(result, opts = {}) {
     w("");
   }
 
+  // Compliance summary
+  if (result.compliance) {
+    const s = result.compliance.summary;
+    w(`  ${c.dim(line())}`);
+    w(`  ${c.bold("Compliance")} ${c.dim(result.compliance.name)}`);
+    w("");
+    w(`  Coverage   ${c.bold(`${s.coveredThisScan}/${s.testable}`)} testable Article 21 measures exercised this scan`);
+    w(`  ${c.dim("Technical evidence toward the duty of care — not a certification. Full mapping in the Markdown report.")}`);
+    w("");
+  }
+
   // Summary
   w(`  ${c.dim(line())}`);
   printSummaryLine(result, w);

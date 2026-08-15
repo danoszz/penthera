@@ -8,6 +8,10 @@ Open-source-core credibility pass.
 
 ### Added
 
+- `--framework nis2` compliance report mode: a per-scan NIS2 Article 21 coverage
+  table (which measures this scan actually exercised, driven by the probes that
+  ran) added to the terminal, Markdown, and JSON reports. Frameworks are
+  declarative so national transpositions and other regimes can be added as data
 - NIS2 / cyberwetgeving compliance section in the README: Article 21(2)(a–j)
   mapped to what Penthera actually tests, with a coverage key and a clear
   "not legal advice / not a certification" disclaimer

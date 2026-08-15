@@ -4,6 +4,7 @@
 import { writeFileSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { buildWstgCoverage, formatWstgMarkdown } from "../../lib/owasp-wstg.js";
+import { formatComplianceMarkdown } from "../../lib/compliance/index.js";
 
 const SEV_ORDER = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
 const SEV_TAG = {
@@ -90,6 +91,10 @@ export function formatMarkdownReport(result, opts = {}) {
   }
 
   lines.push(formatWstgMarkdown(buildWstgCoverage(result, result.profile || opts.profile || "standard")));
+
+  if (result.compliance) {
+    lines.push(formatComplianceMarkdown(result.compliance));
+  }
 
   if (result.fingerprint) {
     lines.push("## Technology fingerprint");

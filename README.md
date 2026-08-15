@@ -168,6 +168,14 @@ on every deploy.
 > authoritative reading, consult your national authority (the NCSC in the
 > Netherlands, the CCB and its CyFun framework in Belgium) or a specialised jurist.
 
+Generate this mapping for your own scan with `--framework nis2`. It adds a
+per-run coverage table — which measures *this* scan actually exercised, driven
+by the probes that ran — to the terminal, Markdown, and JSON reports:
+
+```bash
+penthera https://myapp.com --framework nis2 -o reports/scan.json
+```
+
 Because the mapping targets the NIS2 directive itself, it applies across the
 national transpositions; jurisdiction-specific profiles (NL, BE) are on the roadmap.
 

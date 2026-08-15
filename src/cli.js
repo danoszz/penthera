@@ -15,6 +15,7 @@ import { normalizeBaseUrl } from "./utils/url.js";
 import { printReport, printFindings, writeJsonReport, writeSarifReport, createProgress, printError } from "./reporter.js";
 import { writeMarkdownReport, markdownPathFromJson } from "./report/markdown.js";
 import { parseTemplatePaths } from "../lib/plugins.js";
+import { buildComplianceCoverage, listFrameworks } from "../lib/compliance/index.js";
 
 const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf-8"));
 
@@ -54,6 +55,7 @@ const HELP = `
         --markdown <file>   Write Markdown report (human-readable)
         --sarif <file>      Write SARIF report (GitHub Security tab)
         --baseline <file>   Compare against previous JSON report
+        --framework <name>  Add a compliance mapping to reports (nis2)
         --auth-cookie <v>   Cookie header for authenticated scans
         --auth-bearer <v>   Bearer token for authenticated scans
         --json              Output JSON to stdout
@@ -97,6 +99,7 @@ export async function run() {
         markdown:    { type: "string" },
         sarif:       { type: "string" },
         baseline:    { type: "string" },
+        framework:   { type: "string" },
         profile:     { type: "string" },
         "auth-cookie": { type: "string" },
         "auth-bearer": { type: "string" },
@@ -234,6 +237,16 @@ export async function run() {
 
   const merged = mergeResults(results);
   merged.profile = profileOpts.profile;
+
+  // Compliance framework mapping (e.g. --framework nis2)
+  if (opts.framework) {
+    const coverage = buildComplianceCoverage(merged, opts.framework);
+    if (!coverage) {
+      printError(`Unknown --framework "${opts.framework}". Supported: ${listFrameworks().join(", ")}.`);
+      process.exit(2);
+    }
+    merged.compliance = coverage;
+  }
 
   // Baseline comparison
   let baselineStats = null;
