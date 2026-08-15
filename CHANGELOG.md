@@ -8,6 +8,11 @@ Open-source-core credibility pass.
 
 ### Added
 
+- **Remediation / audit-loop tracking** (`--history <file>`): folds each scan's
+  findings into a persistent history keyed by a stable fingerprint (severity-
+  and count-independent), and reports open vs resolved, median time-to-fix,
+  ageing buckets, and drift since last scan — the effectiveness evidence for
+  measure f, and a "close the loop" counter to noisy discovery-only scanning
 - **SBOM output** (`--sbom <file>`): generates a CycloneDX 1.5 software bill of
   materials from `package-lock.json` / `package.json` / `requirements.txt`,
   offline, with resolved versions and purls. Supply-chain evidence (measure d)

@@ -4,7 +4,7 @@
  * Argument parsing, dispatch to scanners, report output.
  */
 import { parseArgs } from "node:util";
-import { resolve } from "node:path";
+import { resolve, dirname } from "node:path";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { scanUrl } from "./scan-url.js";
@@ -23,6 +23,7 @@ import { blankAssessment } from "../lib/compliance/self-assessment.js";
 import { buildPolicyPack, policyPackIndex } from "../lib/compliance/policy-pack.js";
 import { buildIncidentReports, formatIncidentMarkdown, incidentTemplate } from "../lib/compliance/incident.js";
 import { buildSbom } from "../lib/whitebox/sbom.js";
+import { emptyHistory, updateHistory, buildAuditLoop } from "../lib/audit-loop.js";
 
 const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf-8"));
 
@@ -71,6 +72,7 @@ const HELP = `
         --incident <file>   Generate NIS2 incident-report drafts + timeline
         --incident-init <file>  Write a blank incident template and exit
         --sbom <file>       Write a CycloneDX software bill of materials (from --repo)
+        --history <file>    Track findings over time (time-to-fix, ageing, drift)
         --auth-cookie <v>   Cookie header for authenticated scans
         --auth-bearer <v>   Bearer token for authenticated scans
         --json              Output JSON to stdout
@@ -123,6 +125,7 @@ export async function run() {
         incident:    { type: "string" },
         "incident-init": { type: "string" },
         sbom:        { type: "string" },
+        history:     { type: "string" },
         profile:     { type: "string" },
         "auth-cookie": { type: "string" },
         "auth-bearer": { type: "string" },
@@ -337,6 +340,22 @@ export async function run() {
     });
   }
 
+  // Remediation / audit-loop tracking over time (measure f)
+  if (opts.history) {
+    const histPath = resolve(opts.history);
+    let history;
+    try {
+      history = JSON.parse(readFileSync(histPath, "utf-8"));
+    } catch {
+      history = emptyHistory();
+    }
+    const now = new Date().toISOString();
+    history = updateHistory(history, merged.findings, now);
+    mkdirSync(dirname(histPath), { recursive: true });
+    writeFileSync(histPath, JSON.stringify(history, null, 2) + "\n");
+    merged.auditLoop = buildAuditLoop(history, now);
+  }
+
   // Baseline comparison
   let baselineStats = null;
   if (opts.baseline) {
@@ -439,7 +458,15 @@ export async function run() {
     }
   }
 
-  if ((opts.output || opts.markdown || opts.sarif || opts.readiness || opts["policy-pack"] || opts.sbom) && !opts.quiet && !opts.json) {
+  if (merged.auditLoop && !opts.quiet && !opts.json) {
+    const a = merged.auditLoop;
+    process.stderr.write(
+      `  Audit loop      ${a.openCount} open · ${a.resolvedCount} resolved` +
+      `${a.medianTimeToFixDays != null ? ` · median fix ${a.medianTimeToFixDays}d` : ""}\n`,
+    );
+  }
+
+  if ((opts.output || opts.markdown || opts.sarif || opts.readiness || opts["policy-pack"] || opts.sbom || opts.history) && !opts.quiet && !opts.json) {
     process.stderr.write("\n");
   }
 

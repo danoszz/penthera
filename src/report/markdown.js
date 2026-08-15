@@ -6,6 +6,7 @@ import { dirname } from "node:path";
 import { buildWstgCoverage, formatWstgMarkdown } from "../../lib/owasp-wstg.js";
 import { formatComplianceMarkdown } from "../../lib/compliance/index.js";
 import { buildActionPlan, formatActionPlanMarkdown } from "../../lib/remediation/index.js";
+import { formatAuditLoopMarkdown } from "../../lib/audit-loop.js";
 
 const SEV_ORDER = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
 const SEV_TAG = {
@@ -157,6 +158,10 @@ export function formatMarkdownReport(result, opts = {}) {
   const actionPlan = result.actionPlan || buildActionPlan(findings);
   if (actionPlan.length > 0) {
     lines.push(formatActionPlanMarkdown(actionPlan));
+  }
+
+  if (result.auditLoop) {
+    lines.push(formatAuditLoopMarkdown(result.auditLoop));
   }
 
   lines.push("---");

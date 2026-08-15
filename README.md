@@ -241,6 +241,21 @@ penthera --repo . --sbom sbom.cdx.json
 Parses `package-lock.json` / `package.json` / `requirements.txt` offline (no
 network), with resolved versions and package URLs (purls).
 
+### Remediation tracking (the audit loop)
+
+Closing findings matters more than finding them. Track them over time —
+time-to-fix, ageing of open items, and what changed since last scan (evidence
+for measure f, effectiveness):
+
+```bash
+penthera https://myapp.com --history reports/history.json -o reports/scan.json
+```
+
+Each run folds the current findings into a small history keyed by a **stable
+fingerprint** (so a re-worded or re-counted finding isn't mistaken for a new
+one), then reports open vs resolved, median time-to-fix, and ageing buckets.
+Re-run on a cadence to watch the trend.
+
 Because the mapping targets the NIS2 directive itself, it applies across the
 national transpositions; jurisdiction-specific profiles (NL, BE) are on the roadmap.
 
