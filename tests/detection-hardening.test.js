@@ -11,7 +11,8 @@ import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { scanSecrets } from "../lib/whitebox/secrets.js";
-import { buildSstiProbes, sstiEvaluated } from "../lib/injections.js";
+import { buildSstiProbes, sstiEvaluated, isHtmlResponse } from "../lib/injections.js";
+import { looksAuthenticated } from "../lib/blackbox/openapi.js";
 
 // Scan a single throwaway file in an isolated temp dir.
 function scanOne(name, content) {
@@ -77,5 +78,29 @@ describe("SSTI canary — randomized, no coincidental-number false positive", ()
   it("fires only when the evaluated product appears", () => {
     const { probes, expr, product } = buildSstiProbes();
     expect(sstiEvaluated(`result: ${product}`, probes[0].payload, expr, product)).toBe(true);
+  });
+});
+
+describe("login probe — no 'accepts arbitrary credentials' false positive", () => {
+  it("does not flag a 200 that is actually a failure response", () => {
+    expect(looksAuthenticated({ status: 200, body: '{"success":false,"error":"invalid credentials"}', headers: {} })).toBe(false);
+    expect(looksAuthenticated({ status: 200, body: "Login failed", headers: {} })).toBe(false);
+  });
+  it("does not flag non-200 responses", () => {
+    expect(looksAuthenticated({ status: 401, body: "", headers: {} })).toBe(false);
+  });
+  it("flags a 200 that sets an auth cookie or returns a token", () => {
+    expect(looksAuthenticated({ status: 200, body: "{}", headers: { "set-cookie": "session=abc123; HttpOnly" } })).toBe(true);
+    expect(looksAuthenticated({ status: 200, body: '{"access_token":"eyJ..."}', headers: {} })).toBe(true);
+  });
+});
+
+describe("XSS — content-type gate", () => {
+  it("treats HTML responses as XSS-capable", () => {
+    expect(isHtmlResponse({ headers: { "content-type": "text/html; charset=utf-8" } })).toBe(true);
+  });
+  it("does not treat JSON/text responses as XSS-capable", () => {
+    expect(isHtmlResponse({ headers: { "content-type": "application/json" } })).toBe(false);
+    expect(isHtmlResponse({ headers: {} })).toBe(false);
   });
 });

@@ -30,6 +30,14 @@ Open-source-core credibility pass.
 - WSTG coverage now reflects the probes that actually ran, instead of asserting
   every profile probe was exercised; dropped two WSTG IDs that were mapped but
   never tested (CRYP-02 padding oracle, CONF-13 path confusion)
+- Login "accepts arbitrary credentials" no longer fires on a bare HTTP 200; it
+  requires an actual authenticated response (auth cookie or token) for the
+  invalid-credential attempt, so SPA logins that return 200 `{success:false}`
+  are no longer false-flagged
+- Reflected XSS is only reported when the response is served as HTML; JSON/text
+  APIs that echo a payload are no longer flagged as XSS
+- Removed the fuzzer's prototype-pollution false positive (it fired on any
+  object payload returning 200, because `payload.__proto__` is always truthy)
 
 ### Changed
 
