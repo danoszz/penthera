@@ -21,6 +21,7 @@ import { buildActionPlan } from "../lib/remediation/index.js";
 import { buildReadiness, formatReadinessMarkdown } from "../lib/compliance/readiness.js";
 import { blankAssessment } from "../lib/compliance/self-assessment.js";
 import { buildPolicyPack, policyPackIndex } from "../lib/compliance/policy-pack.js";
+import { parseQuestionnaire, answerQuestionnaire, formatQuestionnaireMarkdown } from "../lib/compliance/questionnaire.js";
 import { buildIncidentReports, formatIncidentMarkdown, incidentTemplate } from "../lib/compliance/incident.js";
 import { buildSbom } from "../lib/whitebox/sbom.js";
 import { emptyHistory, updateHistory, buildAuditLoop } from "../lib/audit-loop.js";
@@ -67,6 +68,7 @@ const HELP = `
         --framework <name>  Add a compliance mapping to reports (nis2)
         --readiness         NIS2 readiness report (scan + self-assessment)
         --assessment <file> Self-assessment answers JSON (used by --readiness)
+        --questionnaire <file>  Draft answers to a customer security questionnaire
         --assessment-init <file>  Write a blank self-assessment template and exit
         --policy-pack <dir> Generate proportionate NIS2 policy templates into <dir>
         --org <name>        Organisation name for readiness/policy documents
@@ -121,6 +123,7 @@ export async function run() {
         framework:   { type: "string" },
         readiness:   { type: "boolean", default: false },
         assessment:  { type: "string" },
+        questionnaire: { type: "string" },
         "assessment-init": { type: "string" },
         "policy-pack": { type: "string" },
         org:         { type: "string" },
@@ -237,8 +240,8 @@ export async function run() {
   const url = positionals[0] ? normalizeBaseUrl(positionals[0]) : null;
   const repo = opts.repo || null;
 
-  if (!url && !repo && !opts.machine && !opts.readiness && !opts["policy-pack"] && !opts.sbom) {
-    printError("No target specified. Provide a URL, --repo, --machine, --readiness, --policy-pack, --sbom, or combine them.");
+  if (!url && !repo && !opts.machine && !opts.readiness && !opts["policy-pack"] && !opts.sbom && !opts.questionnaire) {
+    printError("No target specified. Provide a URL, --repo, --machine, --readiness, --policy-pack, --sbom, --questionnaire, or combine them.");
     console.log(HELP);
     process.exit(2);
   }
@@ -344,8 +347,9 @@ export async function run() {
   // Skill to draft questionnaire answers and remediation documents).
   merged.actionPlan = buildActionPlan(merged.findings);
 
-  // NIS2 readiness report (scan evidence + local self-assessment, provenance-linked)
-  if (opts.readiness) {
+  // NIS2 readiness report (scan evidence + local self-assessment, provenance-linked).
+  // Also built when --questionnaire is set, since the answerer maps to it.
+  if (opts.readiness || opts.questionnaire) {
     let answers = {};
     if (opts.assessment) {
       try {
@@ -484,6 +488,27 @@ export async function run() {
     }
   }
 
+  if (opts.questionnaire) {
+    let qtext;
+    try {
+      qtext = readFileSync(resolve(opts.questionnaire), "utf-8");
+    } catch (e) {
+      printError(`Could not read --questionnaire file: ${e.message}`);
+      process.exit(2);
+    }
+    const answered = answerQuestionnaire(parseQuestionnaire(qtext), merged.readiness || { measures: [] });
+    const qPath = opts.output
+      ? opts.output.replace(/\.json$/i, "") + "-questionnaire.md"
+      : "questionnaire-response.md";
+    writeFileSync(resolve(qPath), formatQuestionnaireMarkdown(answered));
+    if (!opts.quiet && !opts.json) {
+      process.stderr.write(
+        `  Questionnaire   ${answered.summary.answered}/${answered.total} drafted` +
+        ` (${answered.summary.needsHuman} need human input) → ${qPath}\n`,
+      );
+    }
+  }
+
   if (merged.auditLoop && !opts.quiet && !opts.json) {
     const a = merged.auditLoop;
     process.stderr.write(
@@ -492,7 +517,7 @@ export async function run() {
     );
   }
 
-  if ((opts.output || opts.markdown || opts.sarif || opts.readiness || opts["policy-pack"] || opts.sbom || opts.history) && !opts.quiet && !opts.json) {
+  if ((opts.output || opts.markdown || opts.sarif || opts.readiness || opts["policy-pack"] || opts.sbom || opts.history || opts.questionnaire) && !opts.quiet && !opts.json) {
     process.stderr.write("\n");
   }
 
