@@ -547,6 +547,8 @@ npm run pentest:mock     # offline tests against a local mock vuln API
 npm run mock-server      # start the mock API on port 8765
 ```
 
+See the [roadmap](ROADMAP.md) for what is next and what is deliberately not planned.
+
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the project layout, how to add a probe
 or template, the test matrix, and the release and publishing checklist.
 
