@@ -5,7 +5,7 @@
  */
 import { parseArgs } from "node:util";
 import { resolve } from "node:path";
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { scanUrl } from "./scan-url.js";
 import { scanRepo } from "./scan-repo.js";
 import { mergeResults } from "./cli/merge-results.js";
@@ -19,6 +19,7 @@ import { buildComplianceCoverage, listFrameworks } from "../lib/compliance/index
 import { buildActionPlan } from "../lib/remediation/index.js";
 import { buildReadiness, formatReadinessMarkdown } from "../lib/compliance/readiness.js";
 import { blankAssessment } from "../lib/compliance/self-assessment.js";
+import { buildPolicyPack, policyPackIndex } from "../lib/compliance/policy-pack.js";
 
 const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf-8"));
 
@@ -62,6 +63,8 @@ const HELP = `
         --readiness         NIS2 readiness report (scan + self-assessment)
         --assessment <file> Self-assessment answers JSON (used by --readiness)
         --assessment-init <file>  Write a blank self-assessment template and exit
+        --policy-pack <dir> Generate proportionate NIS2 policy templates into <dir>
+        --org <name>        Organisation name for readiness/policy documents
         --auth-cookie <v>   Cookie header for authenticated scans
         --auth-bearer <v>   Bearer token for authenticated scans
         --json              Output JSON to stdout
@@ -109,6 +112,8 @@ export async function run() {
         readiness:   { type: "boolean", default: false },
         assessment:  { type: "string" },
         "assessment-init": { type: "string" },
+        "policy-pack": { type: "string" },
+        org:         { type: "string" },
         profile:     { type: "string" },
         "auth-cookie": { type: "string" },
         "auth-bearer": { type: "string" },
@@ -163,8 +168,8 @@ export async function run() {
   const url = positionals[0] ? normalizeBaseUrl(positionals[0]) : null;
   const repo = opts.repo || null;
 
-  if (!url && !repo && !opts.machine && !opts.readiness) {
-    printError("No target specified. Provide a URL, --repo, --machine, --readiness, or combine them.");
+  if (!url && !repo && !opts.machine && !opts.readiness && !opts["policy-pack"]) {
+    printError("No target specified. Provide a URL, --repo, --machine, --readiness, --policy-pack, or combine them.");
     console.log(HELP);
     process.exit(2);
   }
@@ -358,7 +363,27 @@ export async function run() {
     }
   }
 
-  if ((opts.output || opts.markdown || opts.sarif || opts.readiness) && !opts.quiet && !opts.json) {
+  if (opts["policy-pack"]) {
+    const dir = resolve(opts["policy-pack"]);
+    mkdirSync(dir, { recursive: true });
+    const jurisdiction = JSON.parse(
+      readFileSync(new URL("../lib/jurisdictions/nl.json", import.meta.url), "utf-8"),
+    );
+    const ctx = {
+      org: opts.org || (url ? new URL(url).hostname : "Your organisation"),
+      date: new Date().toISOString().slice(0, 10),
+      jurisdiction,
+      readiness: merged.readiness || null,
+    };
+    const pack = buildPolicyPack(ctx);
+    for (const p of pack) writeFileSync(resolve(dir, p.filename), p.content);
+    writeFileSync(resolve(dir, "README.md"), policyPackIndex(pack, ctx));
+    if (!opts.quiet && !opts.json) {
+      process.stderr.write(`  Policy pack     ${pack.length} templates → ${dir}/\n`);
+    }
+  }
+
+  if ((opts.output || opts.markdown || opts.sarif || opts.readiness || opts["policy-pack"]) && !opts.quiet && !opts.json) {
     process.stderr.write("\n");
   }
 

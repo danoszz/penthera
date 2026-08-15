@@ -198,6 +198,20 @@ confidence`) and reproducible, and it lists exactly what only you can attest to.
 Jurisdiction specifics live in `lib/jurisdictions/nl.json` (NL today; BE and
 others are just added config).
 
+### Policy pack
+
+Generate the proportionate written policies NIS2 expects — pre-filled from your
+readiness gaps and the NL incident deadlines:
+
+```bash
+penthera --policy-pack ./policies --org "Your Company" --readiness --assessment assessment.json
+```
+
+Writes editable Markdown starting points: information security, access control,
+incident response, backup/continuity, acceptable use, supplier security, and
+vulnerability management. **Templates, not legal advice** — keep them short and
+used. A two-page policy that genuinely exists is what "proportionate" means.
+
 Because the mapping targets the NIS2 directive itself, it applies across the
 national transpositions; jurisdiction-specific profiles (NL, BE) are on the roadmap.
 

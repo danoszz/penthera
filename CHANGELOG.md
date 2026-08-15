@@ -8,6 +8,12 @@ Open-source-core credibility pass.
 
 ### Added
 
+- **Policy-pack generator** (`--policy-pack <dir>`): writes proportionate,
+  editable Markdown starting points for the core policies NIS2 expects
+  (information security, access control, incident response, backup/continuity,
+  acceptable use, supplier security, vulnerability management). Pre-filled from
+  the jurisdiction's incident deadlines and the readiness gaps; clearly labelled
+  as templates, not legal advice
 - **NIS2 readiness report** (`--readiness`): combines scan evidence with an
   offline **self-assessment** (`--assessment-init` to scaffold, `--assessment` to
   supply) into a per-measure `met / partial / gap / n-a` report across all ten
