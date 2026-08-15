@@ -29,6 +29,17 @@ import { rateSuppliers, parseSupplierList, formatSuppliersMarkdown } from "../li
 
 const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf-8"));
 
+// Jurisdiction data (NL today), loaded once. Add BE/others as more JSON files.
+let _jurisdiction = null;
+function loadJurisdiction() {
+  if (!_jurisdiction) {
+    _jurisdiction = JSON.parse(
+      readFileSync(new URL("../lib/jurisdictions/nl.json", import.meta.url), "utf-8"),
+    );
+  }
+  return _jurisdiction;
+}
+
 function shouldRunOnboarding(positionals, opts) {
   if (process.env.PENTHERA_NO_ONBOARDING) return false;
   if (positionals.length > 0) return false;
@@ -193,9 +204,7 @@ export async function run() {
       printError(`Could not read --incident file: ${e.message}`);
       process.exit(2);
     }
-    const jurisdiction = JSON.parse(
-      readFileSync(new URL("../lib/jurisdictions/nl.json", import.meta.url), "utf-8"),
-    );
+    const jurisdiction = loadJurisdiction();
     const result = buildIncidentReports(incident, jurisdiction);
     const nowIso = new Date().toISOString();
     result.generated_at = nowIso;
@@ -359,9 +368,7 @@ export async function run() {
         process.exit(2);
       }
     }
-    const jurisdiction = JSON.parse(
-      readFileSync(new URL("../lib/jurisdictions/nl.json", import.meta.url), "utf-8"),
-    );
+    const jurisdiction = loadJurisdiction();
     merged.readiness = buildReadiness(merged, {
       answers,
       jurisdiction,
@@ -471,9 +478,7 @@ export async function run() {
   if (opts["policy-pack"]) {
     const dir = resolve(opts["policy-pack"]);
     mkdirSync(dir, { recursive: true });
-    const jurisdiction = JSON.parse(
-      readFileSync(new URL("../lib/jurisdictions/nl.json", import.meta.url), "utf-8"),
-    );
+    const jurisdiction = loadJurisdiction();
     const ctx = {
       org: opts.org || (url ? new URL(url).hostname : "Your organisation"),
       date: new Date().toISOString().slice(0, 10),

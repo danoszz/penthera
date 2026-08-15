@@ -13,6 +13,15 @@ and generated documents.
 
 ### Added
 
+- **Customer security-questionnaire answerer** (`--questionnaire <file>`): reads a
+  questionnaire (one question per line) and drafts an answer for each from the
+  readiness evidence, citing the Article 21 measure and what backs it (scan
+  probe or attestation). Anything it can't map is marked NEEDS HUMAN INPUT
+  rather than guessed. Writes `questionnaire-response.md`
+- **Attack chains surfaced in reports**: the adaptive engine's knowledge graph
+  already correlated findings (for example an auth bypass that combines with an
+  IDOR into cross-user access) but the result was computed nowhere. Chains now
+  appear as findings with their path
 - **Provenance + honest confidence on every finding**: each finding carries
   `{ source, method, collected_at, confidence }`, with confidence labelled
   `confirmed` / `likely` / `potential` / `needs-human-review` so a heuristic
@@ -77,6 +86,15 @@ and generated documents.
 
 ### Fixed
 
+- Interactive onboarding now attaches the remediation action plan to its report,
+  matching the main CLI path (the two had drifted)
+- Audit-loop fingerprint no longer merges genuinely distinct findings. Collapsing
+  every digit run made different ciphers, TLS versions, library versions, API
+  versions, and per-CVE findings look like one item, which distorted the
+  measure-f numbers. It now collapses only numeric URL path segments and
+  separates dependency CVEs by description
+- `updateHistory` no longer mutates the history object passed to it
+- Jurisdiction data is loaded once instead of re-read per document
 - Secret scanner no longer flags dummy/probe credentials (e.g. the
   `invalid-password-12345` payload Penthera flagged on its own repo); rule
   renamed so the title no longer reads "Password in source in source"
