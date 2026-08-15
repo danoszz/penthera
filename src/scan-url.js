@@ -8,7 +8,7 @@
  *     2. TLS/SSL certificate & cipher audit
  *     3. Tech fingerprinting (httpx-style)
  *     4. Endpoint brute-force with auto-calibration (ffuf-style)
- *     5. Nuclei-style template scanning (17 built-in templates)
+ *     5. Nuclei-style template scanning (15 built-in templates)
  *     6. Supplementary sensitive file checks
  *     7. CORS validation
  *     8. Framework-specific checks (CVEs)
