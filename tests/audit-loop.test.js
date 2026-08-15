@@ -10,15 +10,31 @@ import {
 const f = (o) => ({ severity: "high", title: "t", category: "c", source: "s", url: "/x", ...o });
 
 describe("stable fingerprint", () => {
-  it("collapses ids/counts so re-counted findings match", () => {
-    expect(fingerprintFinding(f({ title: "5 active params on /a", url: "/api/users/1" })))
-      .toBe(fingerprintFinding(f({ title: "7 active params on /a", url: "/api/users/2" })));
+  const fp = (o) => fingerprintFinding(f(o));
+
+  it("collapses numeric object ids in the URL so re-scanned ids match (IDOR)", () => {
+    expect(fp({ title: "IDOR/BOLA on users", url: "/api/users/1" }))
+      .toBe(fp({ title: "IDOR/BOLA on users", url: "/api/users/2" }));
   });
+
+  it("does NOT merge genuinely distinct digit-bearing findings", () => {
+    expect(fp({ title: "Weak cipher: AES128-GCM" })).not.toBe(fp({ title: "Weak cipher: AES256-GCM" }));
+    expect(fp({ title: "Weak TLS protocol: TLSv1.0" })).not.toBe(fp({ title: "Weak TLS protocol: TLSv1.1" }));
+    expect(fp({ title: "Vulnerable JS library: jquery 1.12.4" })).not.toBe(fp({ title: "Vulnerable JS library: jquery 3.4.0" }));
+    expect(fp({ url: "/api/v1/users", title: "Unauthenticated endpoint" })).not.toBe(fp({ url: "/api/v2/users", title: "Unauthenticated endpoint" }));
+  });
+
+  it("separates distinct CVEs on the same library via description", () => {
+    expect(fp({ category: "cve", title: "Vulnerable JS library: lodash 4.17.4", description: "CVE-2019-1111" }))
+      .not.toBe(fp({ category: "cve", title: "Vulnerable JS library: lodash 4.17.4", description: "CVE-2020-2222" }));
+  });
+
   it("distinguishes genuinely different findings", () => {
-    expect(fingerprintFinding(f({ title: "CSP missing" }))).not.toBe(fingerprintFinding(f({ title: "HSTS missing" })));
+    expect(fp({ title: "CSP missing" })).not.toBe(fp({ title: "HSTS missing" }));
   });
+
   it("ignores severity (a severity change is not new+resolved churn)", () => {
-    expect(fingerprintFinding(f({ severity: "low" }))).toBe(fingerprintFinding(f({ severity: "high" })));
+    expect(fp({ severity: "low" })).toBe(fp({ severity: "high" }));
   });
 });
 
