@@ -7,7 +7,7 @@
 ![version](https://img.shields.io/badge/version-1.0.0-0000ed)
 ![node](https://img.shields.io/badge/node-%E2%89%A518-0000ed)
 ![license](https://img.shields.io/badge/license-MIT-0000ed)
-![tests](https://img.shields.io/badge/tests-124%20passing-32a852)
+[![CI](https://github.com/danoszz/penthera/actions/workflows/ci.yml/badge.svg)](https://github.com/danoszz/penthera/actions/workflows/ci.yml)
 
 <br/>
 
@@ -391,7 +391,7 @@ point at staging without editing the file.
 ## Testing & contributing
 
 ```bash
-npm test                 # full suite (124 tests)
+npm test                 # full suite (live integration tests skip without a running target)
 npm run pentest:mock     # offline tests against a local mock vuln API
 npm run mock-server      # start the mock API on port 8765
 ```
