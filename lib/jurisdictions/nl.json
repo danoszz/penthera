@@ -13,6 +13,8 @@
     {
       "id": "early-warning",
       "within": "24 hours",
+      "from": "awareness",
+      "offsetHours": 24,
       "of": "becoming aware of a significant incident",
       "to": "your CSIRT / competent authority",
       "content": "Early warning: whether the incident is suspected to be unlawful/malicious and whether it could have cross-border impact."
@@ -20,6 +22,8 @@
     {
       "id": "notification",
       "within": "72 hours",
+      "from": "awareness",
+      "offsetHours": 72,
       "of": "becoming aware of a significant incident",
       "to": "your CSIRT / competent authority",
       "content": "Incident notification: initial assessment, severity and impact, and any indicators of compromise."
@@ -27,6 +31,8 @@
     {
       "id": "final-report",
       "within": "1 month",
+      "from": "notification",
+      "offsetMonths": 1,
       "of": "the incident notification",
       "to": "your CSIRT / competent authority",
       "content": "Final report: detailed description, root cause, applied and ongoing mitigations, and any cross-border impact."

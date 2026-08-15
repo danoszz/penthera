@@ -10,6 +10,7 @@ reports/
 /report*.sarif
 *.report.json
 /nis2-readiness.md
+/incident-reports.md
 .security-results/
 
 # Local pentest config — copy from pentest.config.example.js

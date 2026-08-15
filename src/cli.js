@@ -20,6 +20,7 @@ import { buildActionPlan } from "../lib/remediation/index.js";
 import { buildReadiness, formatReadinessMarkdown } from "../lib/compliance/readiness.js";
 import { blankAssessment } from "../lib/compliance/self-assessment.js";
 import { buildPolicyPack, policyPackIndex } from "../lib/compliance/policy-pack.js";
+import { buildIncidentReports, formatIncidentMarkdown, incidentTemplate } from "../lib/compliance/incident.js";
 
 const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf-8"));
 
@@ -65,6 +66,8 @@ const HELP = `
         --assessment-init <file>  Write a blank self-assessment template and exit
         --policy-pack <dir> Generate proportionate NIS2 policy templates into <dir>
         --org <name>        Organisation name for readiness/policy documents
+        --incident <file>   Generate NIS2 incident-report drafts + timeline
+        --incident-init <file>  Write a blank incident template and exit
         --auth-cookie <v>   Cookie header for authenticated scans
         --auth-bearer <v>   Bearer token for authenticated scans
         --json              Output JSON to stdout
@@ -114,6 +117,8 @@ export async function run() {
         "assessment-init": { type: "string" },
         "policy-pack": { type: "string" },
         org:         { type: "string" },
+        incident:    { type: "string" },
+        "incident-init": { type: "string" },
         profile:     { type: "string" },
         "auth-cookie": { type: "string" },
         "auth-bearer": { type: "string" },
@@ -156,6 +161,37 @@ export async function run() {
     console.log(`Wrote a blank NIS2 self-assessment to ${path}`);
     console.log(`Fill each answer (yes | partial | no | na), then run:`);
     console.log(`  penthera <url> --repo . --readiness --assessment ${opts["assessment-init"]}`);
+    process.exit(0);
+  }
+
+  if (opts["incident-init"]) {
+    const path = resolve(opts["incident-init"]);
+    writeFileSync(path, JSON.stringify(incidentTemplate(), null, 2) + "\n");
+    console.log(`Wrote a blank incident template to ${path}`);
+    console.log(`Fill it in (set aware_at, ISO 8601), then run:  penthera --incident ${opts["incident-init"]}`);
+    process.exit(0);
+  }
+
+  if (opts.incident) {
+    let incident;
+    try {
+      incident = JSON.parse(readFileSync(resolve(opts.incident), "utf-8"));
+    } catch (e) {
+      printError(`Could not read --incident file: ${e.message}`);
+      process.exit(2);
+    }
+    const jurisdiction = JSON.parse(
+      readFileSync(new URL("../lib/jurisdictions/nl.json", import.meta.url), "utf-8"),
+    );
+    const result = buildIncidentReports(incident, jurisdiction);
+    const nowIso = new Date().toISOString();
+    result.generated_at = nowIso;
+    const outPath = resolve("incident-reports.md");
+    writeFileSync(outPath, formatIncidentMarkdown(result, { now: nowIso }));
+    console.log(`Incident report drafts written to ${outPath}`);
+    for (const t of result.timeline) {
+      console.log(`  ${t.within} (${t.id}): due ${t.dueBy || "set aware_at"}`);
+    }
     process.exit(0);
   }
 

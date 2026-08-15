@@ -8,6 +8,12 @@ Open-source-core credibility pass.
 
 ### Added
 
+- **Incident-report helper** (`--incident <file>`, `--incident-init` to scaffold):
+  computes the NIS2 reporting deadlines (24h early warning / 72h notification /
+  1-month final report) from when you became aware, flags overdue ones, and
+  drafts each report against the jurisdiction's required content — with
+  `NEEDS INPUT` markers for facts you still have to supply. Offline; drafts to
+  help meet the deadlines, not a substitute for the authority's official form
 - **Policy-pack generator** (`--policy-pack <dir>`): writes proportionate,
   editable Markdown starting points for the core policies NIS2 expects
   (information security, access control, incident response, backup/continuity,

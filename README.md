@@ -212,6 +212,22 @@ incident response, backup/continuity, acceptable use, supplier security, and
 vulnerability management. **Templates, not legal advice** — keep them short and
 used. A two-page policy that genuinely exists is what "proportionate" means.
 
+### Incident-report helper
+
+NIS2 has hard reporting deadlines (24h early warning, 72h notification, 1-month
+final report). If something happens, get the timeline and draft reports:
+
+```bash
+penthera --incident-init incident.json   # fill in what happened (set aware_at)
+penthera --incident incident.json        # writes incident-reports.md
+```
+
+It computes your three deadlines from when you became aware, flags anything
+overdue, and drafts the early-warning, notification, and final report against
+the required content — with `NEEDS INPUT` where you still have to fill in facts.
+**Drafts to help you meet the deadlines, not a substitute for your authority's
+official form.**
+
 Because the mapping targets the NIS2 directive itself, it applies across the
 national transpositions; jurisdiction-specific profiles (NL, BE) are on the roadmap.
 
