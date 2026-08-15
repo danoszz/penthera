@@ -198,6 +198,20 @@ confidence`) and reproducible, and it lists exactly what only you can attest to.
 Jurisdiction specifics live in `lib/jurisdictions/nl.json` (NL today; BE and
 others are just added config).
 
+### Answer a customer's security questionnaire
+
+The questionnaire blocking your deal, drafted from evidence you already have:
+
+```bash
+# one question per line, pasted from the customer's form
+penthera https://myapp.com --readiness --assessment assessment.json --questionnaire questions.txt
+```
+
+Each question is mapped to the Article 21 measure it belongs to and answered
+from the scan and your self-assessment, with the backing evidence cited.
+Anything Penthera can't map is marked `NEEDS HUMAN INPUT` instead of guessed.
+Review every answer before you send it.
+
 ### Policy pack
 
 Generate the proportionate written policies NIS2 expects, pre-filled from your

@@ -17,6 +17,7 @@ import {
   createProgress,
 } from "../reporter.js";
 import { writeMarkdownReport, markdownPathFromJson } from "../report/markdown.js";
+import { buildActionPlan } from "../../lib/remediation/index.js";
 
 export async function executeScan(config) {
   const {
@@ -94,6 +95,8 @@ export async function executeScan(config) {
 
   const merged = mergeResults(results);
   merged.profile = profileOpts.profile;
+  // Parity with the main CLI path so onboarding reports carry the action plan.
+  merged.actionPlan = buildActionPlan(merged.findings);
 
   let baselineStats = null;
   if (baseline) {
