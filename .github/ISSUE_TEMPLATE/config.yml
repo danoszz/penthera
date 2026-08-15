@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability in Penthera itself
+    url: https://github.com/danoszz/penthera/security/advisories/new
+    about: Report privately via a GitHub Security Advisory — please do not open a public issue.
+  - name: Authorization & ethical use
+    url: https://github.com/danoszz/penthera#ethical-use--authorization
+    about: Only scan systems you own or are authorized to test. Read the policy first.
