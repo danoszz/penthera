@@ -1,5 +1,5 @@
 /**
- * Penthera — Repo Scanner (white-box)
+ * Penthera, Repo Scanner (white-box)
  *
  * Analyzes source code for security patterns:
  *   1. Auto-detect API route directory (Next.js App/Pages Router)
@@ -76,7 +76,7 @@ export async function scanRepo(repoPath, opts = {}) {
       result.findings.push({
         severity: "info",
         title: `Found ${fwRoutes.length} API routes (Express/Hono/Fastify)`,
-        description: "Discovered via route pattern matching — not Next.js app/api.",
+        description: "Discovered via route pattern matching, not Next.js app/api.",
         category: "config",
         source: "framework-scan",
       });

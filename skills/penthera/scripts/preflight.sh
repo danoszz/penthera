@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Penthera preflight — run before first scan in a session.
+# Penthera preflight, run before first scan in a session.
 # Usage: bash skills/penthera/scripts/preflight.sh [URL]
 
 set -euo pipefail
@@ -55,7 +55,7 @@ ok "reports/ directory ready"
 if [ -n "$TARGET_URL" ]; then
   case "$TARGET_URL" in
     http://localhost*|https://localhost*|http://127.0.0.1*|https://127.0.0.1*|http://[::1]*|https://[::1]*)
-      ok "Target is localhost — authorization satisfied for local testing"
+      ok "Target is localhost, authorization satisfied for local testing"
       ;;
     *)
       warn "Target is not localhost ($TARGET_URL). Confirm user owns this system or has written authorization before scanning."

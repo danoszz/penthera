@@ -25,6 +25,25 @@ export function isPrivateHost(url) {
   }
 }
 
+/**
+ * True only when a redirect actually SENDS the browser to `attackerHost`, i.e.
+ * the Location header resolves to that host's origin. A Location that merely
+ * contains the attacker string in its path or query (e.g. an apex→www
+ * canonicalization redirect that preserves the query string) is NOT an open
+ * redirect, and must not be flagged as one.
+ */
+export function redirectsToHost(locationHeader, requestUrl, attackerHost) {
+  if (!locationHeader) return false;
+  try {
+    const dest = new URL(locationHeader, requestUrl); // resolve relative/protocol-relative
+    const host = dest.hostname.toLowerCase();
+    const attacker = String(attackerHost).toLowerCase();
+    return host === attacker || host.endsWith(`.${attacker}`);
+  } catch {
+    return false;
+  }
+}
+
 /** Convert a URL into a safe filename fragment. */
 export function urlToFilename(url) {
   return url

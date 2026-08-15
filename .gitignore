@@ -2,11 +2,16 @@
 node_modules/
 
 # Scan reports & artifacts — never commit scan output
+# (anchored to repo root so they catch stray outputs but not source files like
+# skills/penthera/references/reporting.md)
 reports/
-report*.json
-report*.md
-report*.sarif
+/report*.json
+/report*.md
+/report*.sarif
 *.report.json
+/nis2-readiness.md
+/incident-reports.md
+/supplier-ratings.md
 .security-results/
 
 # Local pentest config — copy from pentest.config.example.js

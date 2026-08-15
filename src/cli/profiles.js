@@ -5,7 +5,7 @@
 export const PROFILES = {
   quick: {
     label: "Quick",
-    description: "Headers, OpenAPI, auth smoke tests — skips Retire.js and param discovery",
+    description: "Headers, OpenAPI, auth smoke tests, skips Retire.js and param discovery",
     recon: false,
     deep: false,
     fuzz: false,

@@ -1,5 +1,5 @@
 /**
- * ANSI helpers + brand styling — respects NO_COLOR and terminal width.
+ * ANSI helpers + brand styling, respects NO_COLOR and terminal width.
  */
 const off = !!process.env.NO_COLOR;
 
@@ -17,7 +17,7 @@ const BRAND = "\x1b[1m\x1b[38;2;0;0;237m";
 const RESET = "\x1b[0m";
 export const brand = (s) => off ? s : `${BRAND}${s}${RESET}`;
 
-// "PENTHERA" — ANSI Shadow block letters (~67 cols wide).
+// "PENTHERA", ANSI Shadow block letters (~67 cols wide).
 const LOGO_BIG = [
   "██████╗ ███████╗███╗   ██╗████████╗██╗  ██╗███████╗██████╗  █████╗ ",
   "██╔══██╗██╔════╝████╗  ██║╚══██╔══╝██║  ██║██╔════╝██╔══██╗██╔══██╗",
@@ -50,7 +50,7 @@ export function logo(tagline = "security check for your vibecoded app") {
   return lines.join("\n");
 }
 
-// Back-compat alias — older callers import `banner`.
+// Back-compat alias, older callers import `banner`.
 export function banner() {
   return logo();
 }

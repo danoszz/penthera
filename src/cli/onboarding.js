@@ -1,5 +1,5 @@
 /**
- * PostHog-style interactive onboarding — simple defaults, advanced hidden.
+ * PostHog-style interactive onboarding, simple defaults, advanced hidden.
  */
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
@@ -25,7 +25,7 @@ function summarize(findings) {
   if (c.high) parts.push(`${c.high} high`);
   if (c.medium) parts.push(`${c.medium} medium`);
   if (c.low) parts.push(`${c.low} low`);
-  if (parts.length === 0) return green("No issues found — looking good!");
+  if (parts.length === 0) return green("No issues found, looking good!");
   return yellow(parts.join(" · "));
 }
 
@@ -76,7 +76,7 @@ export async function runOnboarding() {
   process.stdout.write(banner());
   process.stdout.write(box("Welcome", [
     "Shipped something you vibecoded? Pressure-test it before attackers do.",
-    "Penthera checks your live app + repo for the gaps that get apps owned —",
+    "Penthera checks your live app + repo for the gaps that get apps owned, ",
     "exposed APIs, missing headers, weak auth, leaked secrets.",
     "",
     dim("Only scan apps you own or have permission to test."),
@@ -106,7 +106,7 @@ export async function runOnboarding() {
     const scanRepo = await confirm(`  ${cyan(">")} Scan ./`, true);
     if (scanRepo) repo = ".";
   } else {
-    process.stdout.write(`\n  ${dim("Step 2 skipped — no package.json in current folder.")}\n`);
+    process.stdout.write(`\n  ${dim("Step 2 skipped, no package.json in current folder.")}\n`);
   }
 
   // ── Permission check for remote targets ────────────────────────────────
@@ -148,8 +148,8 @@ export async function runOnboarding() {
   await initPrompt();
 
   const next = await choose("What next?", [
-    { id: "done", label: "Looks good — I'm done" },
-    { id: "deeper", label: "Run a deeper scan (sends test payloads — needs permission)" },
+    { id: "done", label: "Looks good, I'm done" },
+    { id: "deeper", label: "Run a deeper scan (sends test payloads, needs permission)" },
     { id: "custom", label: "Custom setup (profiles, auth tokens, advanced flags)" },
   ]);
 

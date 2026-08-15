@@ -1,5 +1,5 @@
 /**
- * Shared scan execution — used by CLI and interactive onboarding.
+ * Shared scan execution, used by CLI and interactive onboarding.
  */
 import { resolve, join } from "node:path";
 import { existsSync, mkdirSync } from "node:fs";

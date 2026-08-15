@@ -1,11 +1,12 @@
 /**
- * Penthera — CLI
+ * Penthera, CLI
  *
  * Argument parsing, dispatch to scanners, report output.
  */
 import { parseArgs } from "node:util";
-import { resolve } from "node:path";
-import { readFileSync } from "node:fs";
+import { resolve, dirname } from "node:path";
+import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { scanUrl } from "./scan-url.js";
 import { scanRepo } from "./scan-repo.js";
 import { mergeResults } from "./cli/merge-results.js";
@@ -15,6 +16,15 @@ import { normalizeBaseUrl } from "./utils/url.js";
 import { printReport, printFindings, writeJsonReport, writeSarifReport, createProgress, printError } from "./reporter.js";
 import { writeMarkdownReport, markdownPathFromJson } from "./report/markdown.js";
 import { parseTemplatePaths } from "../lib/plugins.js";
+import { buildComplianceCoverage, listFrameworks } from "../lib/compliance/index.js";
+import { buildActionPlan } from "../lib/remediation/index.js";
+import { buildReadiness, formatReadinessMarkdown } from "../lib/compliance/readiness.js";
+import { blankAssessment } from "../lib/compliance/self-assessment.js";
+import { buildPolicyPack, policyPackIndex } from "../lib/compliance/policy-pack.js";
+import { buildIncidentReports, formatIncidentMarkdown, incidentTemplate } from "../lib/compliance/incident.js";
+import { buildSbom } from "../lib/whitebox/sbom.js";
+import { emptyHistory, updateHistory, buildAuditLoop } from "../lib/audit-loop.js";
+import { rateSuppliers, parseSupplierList, formatSuppliersMarkdown } from "../lib/supply-chain.js";
 
 const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf-8"));
 
@@ -29,7 +39,7 @@ const HELP = `
   ${bold("penthera")} v${pkg.version} \u2014 lightweight security scanner
 
   ${dim("Usage")}
-    $ penthera                        Interactive setup (TTY — no args needed)
+    $ penthera                        Interactive setup (TTY, no args needed)
     $ penthera <url>                 Scan a live URL (black-box)
     $ penthera --repo <path>         Scan a local repo (white-box)
     $ penthera <url> --repo <path>   Full scan (both)
@@ -54,6 +64,17 @@ const HELP = `
         --markdown <file>   Write Markdown report (human-readable)
         --sarif <file>      Write SARIF report (GitHub Security tab)
         --baseline <file>   Compare against previous JSON report
+        --framework <name>  Add a compliance mapping to reports (nis2)
+        --readiness         NIS2 readiness report (scan + self-assessment)
+        --assessment <file> Self-assessment answers JSON (used by --readiness)
+        --assessment-init <file>  Write a blank self-assessment template and exit
+        --policy-pack <dir> Generate proportionate NIS2 policy templates into <dir>
+        --org <name>        Organisation name for readiness/policy documents
+        --incident <file>   Generate NIS2 incident-report drafts + timeline
+        --incident-init <file>  Write a blank incident template and exit
+        --sbom <file>       Write a CycloneDX software bill of materials (from --repo)
+        --history <file>    Track findings over time (time-to-fix, ageing, drift)
+        --suppliers <file>  Passively rate suppliers' public domains (RAG, measure d)
         --auth-cookie <v>   Cookie header for authenticated scans
         --auth-bearer <v>   Bearer token for authenticated scans
         --json              Output JSON to stdout
@@ -97,6 +118,17 @@ export async function run() {
         markdown:    { type: "string" },
         sarif:       { type: "string" },
         baseline:    { type: "string" },
+        framework:   { type: "string" },
+        readiness:   { type: "boolean", default: false },
+        assessment:  { type: "string" },
+        "assessment-init": { type: "string" },
+        "policy-pack": { type: "string" },
+        org:         { type: "string" },
+        incident:    { type: "string" },
+        "incident-init": { type: "string" },
+        sbom:        { type: "string" },
+        history:     { type: "string" },
+        suppliers:   { type: "string" },
         profile:     { type: "string" },
         "auth-cookie": { type: "string" },
         "auth-bearer": { type: "string" },
@@ -133,6 +165,69 @@ export async function run() {
     process.exit(0);
   }
 
+  if (opts["assessment-init"]) {
+    const path = resolve(opts["assessment-init"]);
+    writeFileSync(path, JSON.stringify(blankAssessment(), null, 2) + "\n");
+    console.log(`Wrote a blank NIS2 self-assessment to ${path}`);
+    console.log(`Fill each answer (yes | partial | no | na), then run:`);
+    console.log(`  penthera <url> --repo . --readiness --assessment ${opts["assessment-init"]}`);
+    process.exit(0);
+  }
+
+  if (opts["incident-init"]) {
+    const path = resolve(opts["incident-init"]);
+    writeFileSync(path, JSON.stringify(incidentTemplate(), null, 2) + "\n");
+    console.log(`Wrote a blank incident template to ${path}`);
+    console.log(`Fill it in (set aware_at, ISO 8601), then run:  penthera --incident ${opts["incident-init"]}`);
+    process.exit(0);
+  }
+
+  if (opts.incident) {
+    let incident;
+    try {
+      incident = JSON.parse(readFileSync(resolve(opts.incident), "utf-8"));
+    } catch (e) {
+      printError(`Could not read --incident file: ${e.message}`);
+      process.exit(2);
+    }
+    const jurisdiction = JSON.parse(
+      readFileSync(new URL("../lib/jurisdictions/nl.json", import.meta.url), "utf-8"),
+    );
+    const result = buildIncidentReports(incident, jurisdiction);
+    const nowIso = new Date().toISOString();
+    result.generated_at = nowIso;
+    const outPath = resolve("incident-reports.md");
+    writeFileSync(outPath, formatIncidentMarkdown(result, { now: nowIso }));
+    console.log(`Incident report drafts written to ${outPath}`);
+    for (const t of result.timeline) {
+      console.log(`  ${t.within} (${t.id}): due ${t.dueBy || "set aware_at"}`);
+    }
+    process.exit(0);
+  }
+
+  if (opts.suppliers) {
+    let text;
+    try {
+      text = readFileSync(resolve(opts.suppliers), "utf-8");
+    } catch {
+      text = opts.suppliers; // treat the value itself as an inline list
+    }
+    const domains = parseSupplierList(text);
+    if (domains.length === 0) {
+      printError("No supplier domains found in --suppliers input.");
+      process.exit(2);
+    }
+    process.stderr.write(`  Rating ${domains.length} supplier domain(s), passive, public-data-only...\n`);
+    const report = await rateSuppliers(domains, { generatedAt: new Date().toISOString() });
+    const outPath = resolve("supplier-ratings.md");
+    writeFileSync(outPath, formatSuppliersMarkdown(report));
+    console.log(`Supplier ratings written to ${outPath}`);
+    for (const r of report.suppliers) {
+      console.log(`  ${String(r.rating).padEnd(7)} ${r.domain}${r.score != null ? ` (${r.score})` : ""}`);
+    }
+    process.exit(0);
+  }
+
   if (shouldRunOnboarding(positionals, opts)) {
     const { runOnboarding } = await import("./cli/onboarding.js");
     await runOnboarding();
@@ -142,8 +237,8 @@ export async function run() {
   const url = positionals[0] ? normalizeBaseUrl(positionals[0]) : null;
   const repo = opts.repo || null;
 
-  if (!url && !repo && !opts.machine) {
-    printError("No target specified. Provide a URL, --repo, --machine, or combine them.");
+  if (!url && !repo && !opts.machine && !opts.readiness && !opts["policy-pack"] && !opts.sbom) {
+    printError("No target specified. Provide a URL, --repo, --machine, --readiness, --policy-pack, --sbom, or combine them.");
     console.log(HELP);
     process.exit(2);
   }
@@ -235,6 +330,58 @@ export async function run() {
   const merged = mergeResults(results);
   merged.profile = profileOpts.profile;
 
+  // Compliance framework mapping (e.g. --framework nis2)
+  if (opts.framework) {
+    const coverage = buildComplianceCoverage(merged, opts.framework);
+    if (!coverage) {
+      printError(`Unknown --framework "${opts.framework}". Supported: ${listFrameworks().join(", ")}.`);
+      process.exit(2);
+    }
+    merged.compliance = coverage;
+  }
+
+  // Prioritised, owner-actionable remediation plan (also consumed by the Agent
+  // Skill to draft questionnaire answers and remediation documents).
+  merged.actionPlan = buildActionPlan(merged.findings);
+
+  // NIS2 readiness report (scan evidence + local self-assessment, provenance-linked)
+  if (opts.readiness) {
+    let answers = {};
+    if (opts.assessment) {
+      try {
+        answers = JSON.parse(readFileSync(resolve(opts.assessment), "utf-8"));
+      } catch (e) {
+        printError(`Could not read --assessment file: ${e.message}`);
+        process.exit(2);
+      }
+    }
+    const jurisdiction = JSON.parse(
+      readFileSync(new URL("../lib/jurisdictions/nl.json", import.meta.url), "utf-8"),
+    );
+    merged.readiness = buildReadiness(merged, {
+      answers,
+      jurisdiction,
+      generatedAt: new Date().toISOString(),
+      assessedAt: answers?._assessedAt || null,
+    });
+  }
+
+  // Remediation / audit-loop tracking over time (measure f)
+  if (opts.history) {
+    const histPath = resolve(opts.history);
+    let history;
+    try {
+      history = JSON.parse(readFileSync(histPath, "utf-8"));
+    } catch {
+      history = emptyHistory();
+    }
+    const now = new Date().toISOString();
+    history = updateHistory(history, merged.findings, now);
+    mkdirSync(dirname(histPath), { recursive: true });
+    writeFileSync(histPath, JSON.stringify(history, null, 2) + "\n");
+    merged.auditLoop = buildAuditLoop(history, now);
+  }
+
   // Baseline comparison
   let baselineStats = null;
   if (opts.baseline) {
@@ -285,7 +432,67 @@ export async function run() {
     }
   }
 
-  if ((opts.output || opts.markdown || opts.sarif) && !opts.quiet && !opts.json) {
+  if (merged.readiness) {
+    const rdPath = opts.output
+      ? opts.output.replace(/\.json$/i, "") + "-readiness.md"
+      : opts.markdown
+        ? opts.markdown.replace(/\.md$/i, "") + "-readiness.md"
+        : "nis2-readiness.md";
+    writeFileSync(resolve(rdPath), formatReadinessMarkdown(merged.readiness));
+    if (!opts.quiet && !opts.json) {
+      const s = merged.readiness.summary;
+      process.stderr.write(
+        `  NIS2 readiness  ${s.met} met · ${s.partial} partial · ${s.gap} gap · ${s["n/a"]} n/a\n`,
+      );
+      process.stderr.write(`  Readiness report ${rdPath}\n`);
+    }
+  }
+
+  if (opts.sbom) {
+    const sbomRepo = resolve(opts.repo || ".");
+    const sbom = buildSbom(sbomRepo, {
+      serialNumber: `urn:uuid:${randomUUID()}`,
+      timestamp: new Date().toISOString(),
+    });
+    if (!sbom) {
+      printError(`No dependency manifest found in ${sbomRepo} (looked for package-lock.json, package.json, requirements.txt).`);
+    } else {
+      writeFileSync(resolve(opts.sbom), JSON.stringify(sbom, null, 2) + "\n");
+      if (!opts.quiet && !opts.json) {
+        process.stderr.write(`  SBOM (CycloneDX) ${sbom.components.length} components → ${opts.sbom}\n`);
+      }
+    }
+  }
+
+  if (opts["policy-pack"]) {
+    const dir = resolve(opts["policy-pack"]);
+    mkdirSync(dir, { recursive: true });
+    const jurisdiction = JSON.parse(
+      readFileSync(new URL("../lib/jurisdictions/nl.json", import.meta.url), "utf-8"),
+    );
+    const ctx = {
+      org: opts.org || (url ? new URL(url).hostname : "Your organisation"),
+      date: new Date().toISOString().slice(0, 10),
+      jurisdiction,
+      readiness: merged.readiness || null,
+    };
+    const pack = buildPolicyPack(ctx);
+    for (const p of pack) writeFileSync(resolve(dir, p.filename), p.content);
+    writeFileSync(resolve(dir, "README.md"), policyPackIndex(pack, ctx));
+    if (!opts.quiet && !opts.json) {
+      process.stderr.write(`  Policy pack     ${pack.length} templates → ${dir}/\n`);
+    }
+  }
+
+  if (merged.auditLoop && !opts.quiet && !opts.json) {
+    const a = merged.auditLoop;
+    process.stderr.write(
+      `  Audit loop      ${a.openCount} open · ${a.resolvedCount} resolved` +
+      `${a.medianTimeToFixDays != null ? ` · median fix ${a.medianTimeToFixDays}d` : ""}\n`,
+    );
+  }
+
+  if ((opts.output || opts.markdown || opts.sarif || opts.readiness || opts["policy-pack"] || opts.sbom || opts.history) && !opts.quiet && !opts.json) {
     process.stderr.write("\n");
   }
 

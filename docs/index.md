@@ -1,6 +1,6 @@
 # Penthera documentation
 
-Lightweight security scanner for developers — scan live URLs, local repos, or macOS machines from the CLI.
+Lightweight security scanner for developers, scan live URLs, local repos, or macOS machines from the CLI.
 
 ## Getting started
 
@@ -14,10 +14,10 @@ Lightweight security scanner for developers — scan live URLs, local repos, or 
 
 | Topic | Link |
 |-------|------|
-| Scan profiles | `quick` · `standard` · `deep` — see `--profile` in `penthera --help` |
+| Scan profiles | `quick` · `standard` · `deep`, see `--profile` in `penthera --help` |
 | Authenticated scans | `--auth-cookie`, `--auth-bearer`, `PENTHERA_BEARER` env |
-| Adaptive probes | `--adaptive` — knowledge-graph-driven escalation on live routes |
-| Custom templates | `--templates ./my-templates` — Nuclei-compatible YAML dirs |
+| Adaptive probes | `--adaptive`, knowledge-graph-driven escalation on live routes |
+| Custom templates | `--templates ./my-templates`, Nuclei-compatible YAML dirs |
 | Baseline diff | `--baseline reports/previous.json` |
 
 ## Reports
@@ -26,7 +26,7 @@ Lightweight security scanner for developers — scan live URLs, local repos, or 
 |--------|------|
 | Markdown | `-o report.json` (auto `.md`) or `--markdown report.md` |
 | JSON | `-o report.json` or `--json` |
-| SARIF | `--sarif results.sarif` — GitHub Security tab |
+| SARIF | `--sarif results.sarif`, GitHub Security tab |
 
 ## Standards & CI
 
@@ -34,7 +34,7 @@ Lightweight security scanner for developers — scan live URLs, local repos, or 
 |-------|------|
 | OWASP WSTG mapping | [owasp-wstg-coverage.md](./owasp-wstg-coverage.md) |
 | GitHub Actions CI | `.github/workflows/ci.yml` (mock scan + SARIF) |
-| Staging scans | `.github/workflows/scan.yml` — set `PENTEST_STAGING_URL` secret |
+| Staging scans | `.github/workflows/scan.yml`, set `PENTEST_STAGING_URL` secret |
 | Docker | `docker build -t penthera . && docker run penthera https://localhost:3000` |
 
 ## Agent skill
