@@ -53,12 +53,14 @@ export async function scanRepo(repoPath, opts = {}) {
     apiRoot: null,
     attackSurface: [],
     boundaries: {},
+    executedProbes: [],
     findings: [],
   };
 
   // ── Phase 1: Secret scanning (whole repo) ─────────────────────────────
   progress("Scanning for hardcoded secrets...");
   result.findings.push(...scanSecrets(repoPath));
+  result.executedProbes.push("secret-scanning");
 
   // ── Phase 2: Locate API root ───────────────────────────────────────────
   progress("Locating API routes directory...");
@@ -193,6 +195,10 @@ export async function scanRepo(repoPath, opts = {}) {
       source: "trust-boundary",
     });
   }
+
+  // Route analysis and risky-pattern detection ran (this point is only reached
+  // when an API surface was found; the no-routes paths return earlier).
+  result.executedProbes.push("trust-boundary", "risky-patterns");
 
   result.duration = Date.now() - startTime;
   return result;
