@@ -173,11 +173,11 @@ auditor, or run in CI so a regression shows up before it ships.
 | Art. 21(2) measure | What Penthera does | Coverage |
 |--------------------|--------------------|----------|
 | **(a)** Risk analysis & information-security policy | Findings, severity, and baseline history feed your risk analysis | Evidence |
-| **(b)** Incident handling | Report scaffolding (on the roadmap) | Planned |
+| **(b)** Incident handling | `--incident` drafts the 24h / 72h / 1-month reports against your authority's required content | Partial |
 | **(c)** Business continuity, backup, crisis management | Organisational; outside a scanner's reach | Out of scope |
-| **(d)** Supply-chain security | Known-CVE checks on JS dependencies (Retire.js); leaked third-party credentials (secret scan) | Partial |
+| **(d)** Supply-chain security | Known-CVE checks on JS dependencies, leaked credentials, a CycloneDX SBOM (`--sbom`), and passive supplier rating (`--suppliers`) | Partial |
 | **(e)** Security in acquisition, development & maintenance; **vulnerability handling** | The core: black- + white-box scanning mapped to OWASP WSTG, SARIF → GitHub, baseline regression, scan-and-fix loop | **Strong** |
-| **(f)** Assessing the effectiveness of measures | Baseline diff + re-scan-to-verify is a repeatable effectiveness check | Partial |
+| **(f)** Assessing the effectiveness of measures | Baseline diff, re-scan-to-verify, and `--history` tracking of time-to-fix, ageing, and drift | Partial |
 | **(g)** Cyber hygiene & training | Remediation playbook + secure-defaults guidance (guidance, not a training programme) | Partial |
 | **(h)** Cryptography & encryption | TLS protocol/cipher/certificate audit, HSTS, cookie `Secure` (transport layer only) | Partial |
 | **(i)** HR security, **access control**, asset management | Access control tested: JWT, IDOR/BOLA, OAuth redirect, client-side-auth, trust-boundary mapping | Partial |
@@ -548,6 +548,9 @@ npm run mock-server      # start the mock API on port 8765
 ```
 
 See the [roadmap](ROADMAP.md) for what is next and what is deliberately not planned.
+
+See the [roadmap](ROADMAP.md) for what is next and what is deliberately not
+planned.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the project layout, how to add a probe
 or template, the test matrix, and the release and publishing checklist.
