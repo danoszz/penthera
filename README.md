@@ -4,7 +4,7 @@
 
 <br/><br/>
 
-![version](https://img.shields.io/badge/version-1.0.0-0000ed)
+![version](https://img.shields.io/badge/version-1.1.0-0000ed)
 ![node](https://img.shields.io/badge/node-%E2%89%A518-0000ed)
 ![license](https://img.shields.io/badge/license-MIT-0000ed)
 [![CI](https://github.com/danoszz/penthera/actions/workflows/ci.yml/badge.svg)](https://github.com/danoszz/penthera/actions/workflows/ci.yml)

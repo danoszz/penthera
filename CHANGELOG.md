@@ -4,6 +4,8 @@ All notable changes to Penthera are documented here. Versioning follows [SemVer]
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-08-16
+
 NIS2 / Cyberbeveiligingswet readiness work: a hardening pass over the
 open-source core, a full offline NIS2 readiness toolkit, and a humanizing pass
 that removed AI-writing tells (em dashes and so on) from all public-facing text
@@ -144,4 +146,5 @@ First production-ready release.
 - Initial CLI: URL, repo, and machine scan modes
 - Built-in templates, TLS, CORS, SARIF export
 
+[1.1.0]: https://github.com/danoszz/penthera/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/danoszz/penthera/compare/v0.2.0...v1.0.0
