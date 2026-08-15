@@ -31,3 +31,6 @@ coverage/
 # OS / editor cruft
 .DS_Store
 *.log
+
+# npm pack artifacts
+*.tgz
