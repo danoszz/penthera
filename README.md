@@ -256,6 +256,21 @@ fingerprint** (so a re-worded or re-counted finding isn't mistaken for a new
 one), then reports open vs resolved, median time-to-fix, and ageing buckets.
 Re-run on a cadence to watch the trend.
 
+### Supplier rating (passive)
+
+Assess your suppliers' public security posture for supply-chain risk (measure d):
+
+```bash
+printf 'supplier1.com\nsupplier2.com\n' > suppliers.txt
+penthera --suppliers suppliers.txt
+```
+
+**Strictly passive and public-data-only** — one homepage GET (security headers),
+a TLS handshake (certificate), and public DNS lookups (SPF/DMARC/MX) per domain.
+No endpoint discovery, no auth probes, no intrusive testing. You get a
+red/amber/green rating per supplier. It's a screening aid for your own vendor
+risk assessment, **not** an authorised penetration test of the supplier.
+
 Because the mapping targets the NIS2 directive itself, it applies across the
 national transpositions; jurisdiction-specific profiles (NL, BE) are on the roadmap.
 

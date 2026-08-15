@@ -24,6 +24,7 @@ import { buildPolicyPack, policyPackIndex } from "../lib/compliance/policy-pack.
 import { buildIncidentReports, formatIncidentMarkdown, incidentTemplate } from "../lib/compliance/incident.js";
 import { buildSbom } from "../lib/whitebox/sbom.js";
 import { emptyHistory, updateHistory, buildAuditLoop } from "../lib/audit-loop.js";
+import { rateSuppliers, parseSupplierList, formatSuppliersMarkdown } from "../lib/supply-chain.js";
 
 const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf-8"));
 
@@ -73,6 +74,7 @@ const HELP = `
         --incident-init <file>  Write a blank incident template and exit
         --sbom <file>       Write a CycloneDX software bill of materials (from --repo)
         --history <file>    Track findings over time (time-to-fix, ageing, drift)
+        --suppliers <file>  Passively rate suppliers' public domains (RAG, measure d)
         --auth-cookie <v>   Cookie header for authenticated scans
         --auth-bearer <v>   Bearer token for authenticated scans
         --json              Output JSON to stdout
@@ -126,6 +128,7 @@ export async function run() {
         "incident-init": { type: "string" },
         sbom:        { type: "string" },
         history:     { type: "string" },
+        suppliers:   { type: "string" },
         profile:     { type: "string" },
         "auth-cookie": { type: "string" },
         "auth-bearer": { type: "string" },
@@ -198,6 +201,29 @@ export async function run() {
     console.log(`Incident report drafts written to ${outPath}`);
     for (const t of result.timeline) {
       console.log(`  ${t.within} (${t.id}): due ${t.dueBy || "set aware_at"}`);
+    }
+    process.exit(0);
+  }
+
+  if (opts.suppliers) {
+    let text;
+    try {
+      text = readFileSync(resolve(opts.suppliers), "utf-8");
+    } catch {
+      text = opts.suppliers; // treat the value itself as an inline list
+    }
+    const domains = parseSupplierList(text);
+    if (domains.length === 0) {
+      printError("No supplier domains found in --suppliers input.");
+      process.exit(2);
+    }
+    process.stderr.write(`  Rating ${domains.length} supplier domain(s) — passive, public-data-only...\n`);
+    const report = await rateSuppliers(domains, { generatedAt: new Date().toISOString() });
+    const outPath = resolve("supplier-ratings.md");
+    writeFileSync(outPath, formatSuppliersMarkdown(report));
+    console.log(`Supplier ratings written to ${outPath}`);
+    for (const r of report.suppliers) {
+      console.log(`  ${String(r.rating).padEnd(7)} ${r.domain}${r.score != null ? ` (${r.score})` : ""}`);
     }
     process.exit(0);
   }

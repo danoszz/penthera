@@ -8,6 +8,12 @@ Open-source-core credibility pass.
 
 ### Added
 
+- **Supplier passive rating** (`--suppliers <file>`): point Penthera's passive
+  checks (homepage security headers, TLS certificate, SPF/DMARC/MX via DNS) at
+  your own suppliers' public domains and get a red/amber/green posture per
+  supplier — supply-chain risk screening (measure d). Strictly passive,
+  public-data-only, non-intrusive, and documented as such; not a pentest of the
+  supplier
 - **Remediation / audit-loop tracking** (`--history <file>`): folds each scan's
   findings into a persistent history keyed by a stable fingerprint (severity-
   and count-independent), and reports open vs resolved, median time-to-fix,
