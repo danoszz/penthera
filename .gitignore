@@ -2,10 +2,12 @@
 node_modules/
 
 # Scan reports & artifacts — never commit scan output
+# (anchored to repo root so they catch stray outputs but not source files like
+# skills/penthera/references/reporting.md)
 reports/
-report*.json
-report*.md
-report*.sarif
+/report*.json
+/report*.md
+/report*.sarif
 *.report.json
 .security-results/
 
