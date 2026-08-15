@@ -125,52 +125,52 @@ Findings map to the [OWASP Web Security Testing Guide](docs/owasp-wstg-coverage.
 
 ## Compliance: NIS2 and the cyberwetgeving
 
-The EU **NIS2 directive** and its national transpositions — in the Netherlands
-the **Cyberbeveiligingswet**, in Belgium the **NIS2-wet** — place a *duty of care*
-(zorgplicht) on in-scope organisations: the risk-management measures listed in
-**Article 21(2)** of the directive. Most of those measures are organisational.
-Some are technical, testable, and repeatable — and that is where Penthera helps.
+The EU NIS2 directive and its national transpositions (the Cyberbeveiligingswet
+in the Netherlands, the NIS2-wet in Belgium) put a duty of care, the *zorgplicht*,
+on in-scope organisations. That duty is the set of risk-management measures in
+Article 21(2) of the directive. Most of them are organisational. Some are
+technical and testable, and that is the part Penthera helps with.
 
-Penthera does **not** make you compliant and does **not** certify anything. What
-it gives you is automated, re-runnable **technical evidence** for the measures a
-scanner can honestly verify — the kind of artefact you can attach to a risk file,
-show an auditor, or drop into CI so a regression surfaces before it ships.
+Penthera does not make you compliant and does not certify anything. What it gives
+you is automated, repeatable technical evidence for the measures a scanner can
+honestly verify: the kind of artefact you can attach to a risk file, show an
+auditor, or run in CI so a regression shows up before it ships.
 
 | Art. 21(2) measure | What Penthera does | Coverage |
 |--------------------|--------------------|----------|
 | **(a)** Risk analysis & information-security policy | Findings, severity, and baseline history feed your risk analysis | Evidence |
-| **(b)** Incident handling | — (report scaffolding on the roadmap) | Planned |
-| **(c)** Business continuity, backup, crisis management | Organisational — outside a scanner's reach | Out of scope |
+| **(b)** Incident handling | Report scaffolding (on the roadmap) | Planned |
+| **(c)** Business continuity, backup, crisis management | Organisational; outside a scanner's reach | Out of scope |
 | **(d)** Supply-chain security | Known-CVE checks on JS dependencies (Retire.js); leaked third-party credentials (secret scan) | Partial |
 | **(e)** Security in acquisition, development & maintenance; **vulnerability handling** | The core: black- + white-box scanning mapped to OWASP WSTG, SARIF → GitHub, baseline regression, scan-and-fix loop | **Strong** |
 | **(f)** Assessing the effectiveness of measures | Baseline diff + re-scan-to-verify is a repeatable effectiveness check | Partial |
 | **(g)** Cyber hygiene & training | Remediation playbook + secure-defaults guidance (guidance, not a training programme) | Partial |
 | **(h)** Cryptography & encryption | TLS protocol/cipher/certificate audit, HSTS, cookie `Secure` (transport layer only) | Partial |
 | **(i)** HR security, **access control**, asset management | Access control tested: JWT, IDOR/BOLA, OAuth redirect, client-side-auth, trust-boundary mapping | Partial |
-| **(j)** Multi-factor authentication & secure communications | — (MFA probe on the roadmap) | Planned |
+| **(j)** Multi-factor authentication & secure communications | MFA probe (on the roadmap) | Planned |
 
 **Coverage key:** *Strong* = automated technical testing · *Partial* = part of the
 measure · *Evidence* = output feeds the measure, no direct test · *Planned* = on the
 roadmap · *Out of scope* = organisational or physical.
 
 In practice, Penthera today gives you solid automated evidence for the
-**secure-development and vulnerability-handling duty (e)** — the technical heart of
-the zorgplicht — plus meaningful coverage of supply chain (d), cryptography in
-transit (h), access control (i), and effectiveness testing (f). That is not the
-whole duty of care, but it is a real, defensible start you can run today and re-run
-on every deploy.
+secure-development and vulnerability-handling duty (e), which is the technical
+heart of the zorgplicht, plus meaningful coverage of supply chain (d),
+cryptography in transit (h), access control (i), and effectiveness testing (f).
+That is not the whole duty of care, but it is a real, defensible start you can run
+today and re-run on every deploy.
 
 > **Not legal advice, not a certification, not a guarantee of compliance.**
-> Penthera automates the *technical testing* part of the duty of care. The
-> directive's organisational duties — governance, risk-management policy,
-> incident-notification processes, supply-chain contracts, staff training — need
+> Penthera automates the technical-testing part of the duty of care. The
+> directive's organisational duties (governance, risk-management policy,
+> incident-notification processes, supply-chain contracts, staff training) need
 > human process and, where it matters, review by a qualified advisor. For an
 > authoritative reading, consult your national authority (the NCSC in the
 > Netherlands, the CCB and its CyFun framework in Belgium) or a specialised jurist.
 
 Generate this mapping for your own scan with `--framework nis2`. It adds a
-per-run coverage table — which measures *this* scan actually exercised, driven
-by the probes that ran — to the terminal, Markdown, and JSON reports:
+per-run coverage table (which measures *this* scan actually exercised, driven by
+the probes that ran) to the terminal, Markdown, and JSON reports:
 
 ```bash
 penthera https://myapp.com --framework nis2 -o reports/scan.json
@@ -178,10 +178,10 @@ penthera https://myapp.com --framework nis2 -o reports/scan.json
 
 ### Readiness report (clone → report in two commands)
 
-Go further than the mapping: combine the scan with a short **offline
-self-assessment** (the organisational measures a scanner can't test — policies,
-backups, training, MFA) into a full **NIS2 readiness report** — every Article 21
-measure marked `met / partial / gap / n-a`, with proportionality notes, your
+Go further than the mapping: combine the scan with a short offline
+self-assessment (the organisational measures a scanner can't test, like policies,
+backups, training, and MFA) into a full NIS2 readiness report. Every Article 21
+measure is marked `met / partial / gap / n-a`, with proportionality notes, your
 incident-reporting deadlines, and provenance on every piece of evidence.
 
 ```bash
@@ -200,7 +200,7 @@ others are just added config).
 
 ### Policy pack
 
-Generate the proportionate written policies NIS2 expects — pre-filled from your
+Generate the proportionate written policies NIS2 expects, pre-filled from your
 readiness gaps and the NL incident deadlines:
 
 ```bash
@@ -209,7 +209,7 @@ penthera --policy-pack ./policies --org "Your Company" --readiness --assessment 
 
 Writes editable Markdown starting points: information security, access control,
 incident response, backup/continuity, acceptable use, supplier security, and
-vulnerability management. **Templates, not legal advice** — keep them short and
+vulnerability management. **Templates, not legal advice.** Keep them short and
 used. A two-page policy that genuinely exists is what "proportionate" means.
 
 ### Incident-report helper
@@ -224,13 +224,13 @@ penthera --incident incident.json        # writes incident-reports.md
 
 It computes your three deadlines from when you became aware, flags anything
 overdue, and drafts the early-warning, notification, and final report against
-the required content — with `NEEDS INPUT` where you still have to fill in facts.
-**Drafts to help you meet the deadlines, not a substitute for your authority's
-official form.**
+the required content, with `NEEDS INPUT` where you still have to fill in facts.
+**These are drafts to help you meet the deadlines, not a substitute for your
+authority's official form.**
 
 ### Software bill of materials (SBOM)
 
-Emit a standard CycloneDX SBOM of your dependencies — what enterprises
+Emit a standard CycloneDX SBOM of your dependencies. It's what enterprises
 increasingly require of suppliers, and direct evidence for supply-chain security
 (measure d):
 
@@ -243,8 +243,8 @@ network), with resolved versions and package URLs (purls).
 
 ### Remediation tracking (the audit loop)
 
-Closing findings matters more than finding them. Track them over time —
-time-to-fix, ageing of open items, and what changed since last scan (evidence
+Closing findings matters more than finding them. Track them over time:
+time-to-fix, ageing of open items, and what changed since the last scan (evidence
 for measure f, effectiveness):
 
 ```bash
@@ -265,7 +265,7 @@ printf 'supplier1.com\nsupplier2.com\n' > suppliers.txt
 penthera --suppliers suppliers.txt
 ```
 
-**Strictly passive and public-data-only** — one homepage GET (security headers),
+**Strictly passive and public-data-only.** One homepage GET (security headers),
 a TLS handshake (certificate), and public DNS lookups (SPF/DMARC/MX) per domain.
 No endpoint discovery, no auth probes, no intrusive testing. You get a
 red/amber/green rating per supplier. It's a screening aid for your own vendor
@@ -437,7 +437,7 @@ npm run package:skill   # produces penthera-skill.zip; upload in Settings > Capa
 The skill adds an authorization gate: it instructs the agent to refuse targets you
 do not own or are not authorized to test, and the wizard asks you to confirm before
 scanning a remote host. It is an agent-level and interactive safeguard, not something
-the raw CLI enforces — you are responsible for every target you pass it. Run preflight
+the raw CLI enforces. You are responsible for every target you pass it. Run preflight
 before the first scan:
 
 ```bash
