@@ -1,5 +1,5 @@
 /**
- * Penthera — CLI
+ * Penthera, CLI
  *
  * Argument parsing, dispatch to scanners, report output.
  */
@@ -39,7 +39,7 @@ const HELP = `
   ${bold("penthera")} v${pkg.version} \u2014 lightweight security scanner
 
   ${dim("Usage")}
-    $ penthera                        Interactive setup (TTY — no args needed)
+    $ penthera                        Interactive setup (TTY, no args needed)
     $ penthera <url>                 Scan a live URL (black-box)
     $ penthera --repo <path>         Scan a local repo (white-box)
     $ penthera <url> --repo <path>   Full scan (both)
@@ -217,7 +217,7 @@ export async function run() {
       printError("No supplier domains found in --suppliers input.");
       process.exit(2);
     }
-    process.stderr.write(`  Rating ${domains.length} supplier domain(s) — passive, public-data-only...\n`);
+    process.stderr.write(`  Rating ${domains.length} supplier domain(s), passive, public-data-only...\n`);
     const report = await rateSuppliers(domains, { generatedAt: new Date().toISOString() });
     const outPath = resolve("supplier-ratings.md");
     writeFileSync(outPath, formatSuppliersMarkdown(report));

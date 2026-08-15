@@ -1,5 +1,5 @@
 /**
- * Penthera — Report Formatter
+ * Penthera, Report Formatter
  *
  * Terminal output with ANSI colors, JSON export, SARIF export.
  */
@@ -77,7 +77,7 @@ export function printReport(result, opts = {}) {
     w(`  Issuer     ${t.issuer}`);
     w(`  Subject    ${t.subject}`);
     w(`  Expires    ${t.validTo?.slice(0, 10) || "unknown"} ${t.daysUntilExpiry != null ? c.dim(`(${t.daysUntilExpiry}d)`) : ""}`);
-    w(`  Valid      ${t.valid ? c.green("yes") : c.red("no" + (t.error ? ` — ${t.error}` : ""))}`);
+    w(`  Valid      ${t.valid ? c.green("yes") : c.red("no" + (t.error ? `, ${t.error}` : ""))}`);
     w("");
   }
 
@@ -287,7 +287,7 @@ export function printReport(result, opts = {}) {
       if (opts.verbose && lib.vulnerabilities) {
         for (const v of lib.vulnerabilities) {
           const cves = v.cves?.join(", ") || "no CVE";
-          w(`    ${c.dim(`↳ ${v.severity} — ${cves} (< ${v.below || "latest"})`)}`);
+          w(`    ${c.dim(`↳ ${v.severity}, ${cves} (< ${v.below || "latest"})`)}`);
         }
       }
     }
@@ -337,7 +337,7 @@ export function printReport(result, opts = {}) {
     w(`  ${c.bold("Compliance")} ${c.dim(result.compliance.name)}`);
     w("");
     w(`  Coverage   ${c.bold(`${s.coveredThisScan}/${s.testable}`)} testable Article 21 measures exercised this scan`);
-    w(`  ${c.dim("Technical evidence toward the duty of care — not a certification. Full mapping in the Markdown report.")}`);
+    w(`  ${c.dim("Technical evidence toward the duty of care, not a certification. Full mapping in the Markdown report.")}`);
     w("");
   }
 

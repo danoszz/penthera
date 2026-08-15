@@ -1,5 +1,5 @@
 /**
- * Penthera — URL Scanner (black-box)
+ * Penthera, URL Scanner (black-box)
  *
  * Multi-phase scanning against a live target:
  *
@@ -13,14 +13,14 @@
  *     7. CORS validation
  *     8. Framework-specific checks (CVEs)
  *     9. Cookie security audit (HttpOnly, Secure, SameSite)
- *    10. Retire.js — vulnerable JS library detection
+ *    10. Retire.js, vulnerable JS library detection
  *    11. Arjun-style batched HTTP parameter discovery
  *
  *   --recon (passive OSINT, skipped for localhost):
  *    12. Subdomain discovery via Certificate Transparency (crt.sh)
  *    13. Historical URL mining (Wayback Machine + AlienVault OTX)
  *
- *   --deep (active injection probes — sends attack payloads):
+ *   --deep (active injection probes, sends attack payloads):
  *    14. SQL injection (error-based + time-based blind)
  *    15. Server-Side Template Injection (SSTI)
  *    16. Server-Side Request Forgery (SSRF)
@@ -130,7 +130,7 @@ export async function scanUrl(rawTarget, opts = {}) {
         });
       }
     } catch {
-      // TLS check failed — not critical
+      // TLS check failed, not critical
     }
   }
 
@@ -377,10 +377,10 @@ export async function scanUrl(rawTarget, opts = {}) {
         mxCount: emailResult.mxCount,
       };
       result.findings.push(...emailResult.findings);
-    } catch { /* DNS failure — non-critical */ }
+    } catch { /* DNS failure, non-critical */ }
   }
 
-  // ── Phase 10: Retire.js — Vulnerable JS Libraries ─────────────────────
+  // ── Phase 10: Retire.js, Vulnerable JS Libraries ─────────────────────
   if (!opts.skipRetireJs) {
     progress("Scanning for vulnerable JS libraries (Retire.js)...");
     try {

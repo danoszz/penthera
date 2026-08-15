@@ -5,7 +5,7 @@
   "framework": "nis2",
   "language": "en",
   "authorities": {
-    "supervisor": "RDI — Rijksinspectie Digitale Infrastructuur",
+    "supervisor": "RDI, Rijksinspectie Digitale Infrastructuur",
     "csirt": "NCSC-NL (or your sectoral CSIRT)",
     "note": "The competent authority and CSIRT depend on your sector. Confirm which one applies to you before relying on this."
   },

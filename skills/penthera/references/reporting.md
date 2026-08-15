@@ -11,7 +11,7 @@ You are drafting from technical evidence, not certifying compliance.
 
 - **Only claim what the scan supports.** If a finding or `executedProbes` entry
   backs an answer, cite it. If it doesn't, mark the answer **`NEEDS HUMAN INPUT`**
-  — never invent a control, a policy, or a "yes".
+, never invent a control, a policy, or a "yes".
 - **Organisational questions are not answerable from a scan.** Incident-response
   process, staff training, backups, vendor contracts, data-retention policy →
   always `NEEDS HUMAN INPUT`. Say so plainly.
@@ -31,37 +31,37 @@ Key fields in `reports/scan.json`:
 
 | Field | Use |
 |-------|-----|
-| `findings[]` | `{severity, title, description, url, category, source, wstg[]}` — the raw evidence |
-| `actionPlan[]` | prioritised `{action, why, fix, effort, ownerAction, severity, findings[]}` — the owner remediation plan, already built |
-| `compliance` | NIS2 Article 21 per-measure status (`--framework nis2`) — tested / evidence / planned / out-of-scope |
-| `executedProbes[]` | which probes actually ran — the basis for "we tested X" |
-| `emailAuth` | `{spf, dmarc, dmarcPolicy, mxCount}` — email posture |
+| `findings[]` | `{severity, title, description, url, category, source, wstg[]}`, the raw evidence |
+| `actionPlan[]` | prioritised `{action, why, fix, effort, ownerAction, severity, findings[]}`, the owner remediation plan, already built |
+| `compliance` | NIS2 Article 21 per-measure status (`--framework nis2`), tested / evidence / planned / out-of-scope |
+| `executedProbes[]` | which probes actually ran, the basis for "we tested X" |
+| `emailAuth` | `{spf, dmarc, dmarcPolicy, mxCount}`, email posture |
 | `tls`, `fingerprint`, `endpoints` | transport, stack, and surface facts |
 
-## Document 1 — Remediation plan (for the owner)
+## Document 1, Remediation plan (for the owner)
 
 The scan's Markdown report already contains an **Action plan** section built from
 `actionPlan[]`. To go further, expand each item into a ticket the owner can hand
 to a developer:
 
 For each `actionPlan[]` item, in order:
-1. **What & why** — from `action` + `why`.
-2. **How** — from `fix`, made specific to their stack (detect Next.js/Express/
+1. **What & why**, from `action` + `why`.
+2. **How**, from `fix`, made specific to their stack (detect Next.js/Express/
    Fastify/FastAPI from `package.json`/imports and give the exact config).
-3. **Owner vs developer** — if `ownerAction` is true, call it out (rotate secret,
+3. **Owner vs developer**, if `ownerAction` is true, call it out (rotate secret,
    renew cert, change DNS): the owner must do it; a developer/agent cannot.
-4. **Verify** — "re-scan with `--baseline` to confirm this finding is gone."
+4. **Verify**, "re-scan with `--baseline` to confirm this finding is gone."
 
 Offer to apply the developer-side fixes via **Workflow 4** (scan → fix → verify).
 
-## Document 2 — Security-questionnaire response
+## Document 2, Security-questionnaire response
 
 Vendors get sent questionnaires (SIG Lite, CAIQ, or a customer's own list). Draft
 a response grounded in the scan. Use this table format and fill the **Evidence**
 column from scan data; mark anything unbacked `NEEDS HUMAN INPUT`.
 
 ```markdown
-# Security questionnaire — <company>, as of <scan date>
+# Security questionnaire, <company>, as of <scan date>
 
 > Draft prepared from an automated Penthera scan of <target>. Answers marked
 > NEEDS HUMAN INPUT require confirmation by the owner. This is not a certification.
@@ -83,15 +83,15 @@ Map each questionnaire item to evidence where it exists; be conservative. A
 "Yes" needs a backing probe/finding; otherwise "Partial" (with the gap) or
 `NEEDS HUMAN INPUT`.
 
-## Document 3 — NIS2 duty-of-care evidence summary
+## Document 3, NIS2 duty-of-care evidence summary
 
 From `compliance` (`--framework nis2`). One row per Article 21(2) measure with
 its per-scan status and the evidence, plus the standard disclaimer.
 
 ```markdown
-# NIS2 Article 21 — technical evidence summary (<scan date>)
+# NIS2 Article 21, technical evidence summary (<scan date>)
 
-> Automated technical evidence toward the duty of care (zorgplicht) — not a
+> Automated technical evidence toward the duty of care (zorgplicht), not a
 > compliance determination, an audit, or a certification. Organisational
 > measures need human process; consult your national authority (NCSC in NL, CCB
 > in BE) or a qualified jurist.

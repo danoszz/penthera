@@ -5,7 +5,7 @@
 | Format | Flag | Use |
 |--------|------|-----|
 | Terminal | *(default)* | Colored summary in the shell |
-| **Markdown** | `--markdown file.md` or `-o file.json` | Human-readable report with executive summary, findings tables, recommended actions — companion `.md` written automatically when using `-o` with `.json` |
+| **Markdown** | `--markdown file.md` or `-o file.json` | Human-readable report with executive summary, findings tables, recommended actions, companion `.md` written automatically when using `-o` with `.json` |
 | JSON | `--json` or `-o file.json` | CI pipelines, baseline diffs, custom tooling |
 | SARIF | `--sarif file.sarif` | GitHub Security / Code Scanning |
 

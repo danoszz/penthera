@@ -15,7 +15,7 @@ Override or extend profile defaults:
 | Flag | Effect |
 |------|--------|
 | `--recon` | OSINT recon (subdomains, historical URLs) |
-| `--deep` | Injection probes (SQLi, SSTI, SSRF, XSS, CMDi) — sends attack payloads |
+| `--deep` | Injection probes (SQLi, SSTI, SSRF, XSS, CMDi), sends attack payloads |
 | `--fuzz` | Property-based API fuzzing |
 | `--nuclei <path>` | Community Nuclei YAML templates |
 | `--all` | Enable recon + deep + fuzz |

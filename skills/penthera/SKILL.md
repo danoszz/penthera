@@ -60,7 +60,7 @@ All examples below use `penthera`; substitute `node bin/penthera.js` when needed
 
 | User intent | Command pattern |
 |-------------|-----------------|
-| First-time / unsure | `penthera` (interactive wizard — TTY) or `penthera-scan` |
+| First-time / unsure | `penthera` (interactive wizard, TTY) or `penthera-scan` |
 | Scan a live URL | `penthera <url> --profile standard -o reports/scan.json` |
 | Scan repo only (secrets, routes) | `penthera --repo . -o reports/repo-scan.json` |
 | URL + source combined | `penthera <url> --repo . -o reports/scan.json --sarif reports/scan.sarif` |
@@ -79,10 +79,10 @@ All examples below use `penthera`; substitute `node bin/penthera.js` when needed
 
 These flags send **attack payloads**. Require explicit user confirmation before use:
 
-- `--deep` — SQLi, SSTI, SSRF, XSS, CMDi probes
-- `--fuzz` — property-based API fuzzing
-- `--all` — enables recon + deep + fuzz
-- `--profile deep` — maximum coverage
+- `--deep`, SQLi, SSTI, SSRF, XSS, CMDi probes
+- `--fuzz`, property-based API fuzzing
+- `--all`, enables recon + deep + fuzz
+- `--profile deep`, maximum coverage
 
 If user asks for "full pentest" or "deep scan", confirm they own the target and accept payload-based testing.
 
@@ -99,7 +99,7 @@ mkdir -p reports
 penthera https://staging.example.com --profile standard -o reports/scan.json
 ```
 
-4. Read `reports/scan.md` — summarize critical/high/medium findings.
+4. Read `reports/scan.md`, summarize critical/high/medium findings.
 5. Recommend concrete fixes per finding.
 6. Note exit code: `0` = no critical/high; `1` = critical/high found; `2` = scan failed.
 
@@ -166,7 +166,7 @@ Applying fixes **modifies the user's code**. Before editing:
 - Start with critical and high severity findings.
 - Re-scan after each fix (or batch) to confirm it actually resolved the finding.
 - Never apply fixes against a production system; work in the repo or a branch.
-- Rotating an exposed secret and renewing a TLS certificate are **user actions**, not code edits — flag them clearly rather than attempting them.
+- Rotating an exposed secret and renewing a TLS certificate are **user actions**, not code edits, flag them clearly rather than attempting them.
 
 ## Workflow 5: Owner reports & questionnaire responses
 
@@ -181,9 +181,9 @@ mkdir -p reports
 penthera <url> --repo . --framework nis2 -o reports/scan.json
 ```
 
-2. Read `reports/scan.json` — use `actionPlan`, `compliance`, `emailAuth`, `findings`, and `executedProbes`.
+2. Read `reports/scan.json`, use `actionPlan`, `compliance`, `emailAuth`, `findings`, and `executedProbes`.
 3. Generate the requested document(s): a remediation plan, a security-questionnaire response, or a NIS2 duty-of-care evidence summary.
-4. **Ground every answer in scan evidence.** Mark anything the scan can't support as `NEEDS HUMAN INPUT` — all organisational controls (incident process, backups, training). Never invent a control or imply certification.
+4. **Ground every answer in scan evidence.** Mark anything the scan can't support as `NEEDS HUMAN INPUT`, all organisational controls (incident process, backups, training). Never invent a control or imply certification.
 5. Write drafts to `reports/` and end by listing every `NEEDS HUMAN INPUT` item so the owner knows what only they can answer.
 
 ## Authenticated scans
@@ -222,7 +222,7 @@ Summarize secret findings; remind user to rotate any exposed credentials.
 User: "Scan my localhost app on port 3000"
 
 Actions:
-1. Confirm localhost — authorization satisfied.
+1. Confirm localhost, authorization satisfied.
 2. `bash skills/penthera/scripts/preflight.sh http://localhost:3000`
 3. `penthera http://localhost:3000 --profile quick -o reports/scan.json`
 4. Summarize `reports/scan.md`.
@@ -250,7 +250,7 @@ Actions:
 User: "Scan my localhost:3000 and fix what you find"
 
 Actions:
-1. Confirm localhost — authorization satisfied. Run a standard scan with `--repo .`.
+1. Confirm localhost, authorization satisfied. Run a standard scan with `--repo .`.
 2. Detect the framework (e.g. Next.js from `package.json`).
 3. For each finding, highest severity first, propose the fix from [references/remediation.md](references/remediation.md) as a diff; apply on approval.
 4. Re-scan with `--baseline` to confirm each finding is resolved; report what is fixed and what remains.

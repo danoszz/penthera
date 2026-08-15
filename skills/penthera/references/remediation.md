@@ -178,7 +178,7 @@ app.use("/api/login", rateLimit({ windowMs: 15 * 60 * 1000, max: 10 }));
 **Finding:** an API key, token, password, or private key is committed in the repo.
 **Fix (do all three):**
 1. Move it to an environment variable: `const key = process.env.STRIPE_SECRET_KEY;` (was `const key = "sk_live_..."`).
-2. **Rotate the secret now** — once committed it is compromised, even after removal.
+2. **Rotate the secret now**, once committed it is compromised, even after removal.
 3. Add the file to `.gitignore`; if it was pushed, scrub history (`git filter-repo`).
 
 **Verify:** re-scan the repo (`penthera --repo .`); the secret finding clears. Confirm the old secret is revoked.
@@ -199,7 +199,7 @@ jwt.verify(token, publicKey, { algorithms: ["RS256"] }); // never accept "none"
 
 ## Open redirect
 
-**Finding:** OAuth open redirect — `redirect_uri` (or a `return`/`next` param) reflects an arbitrary URL.
+**Finding:** OAuth open redirect, `redirect_uri` (or a `return`/`next` param) reflects an arbitrary URL.
 **Fix:** validate against an allowlist of exact registered URIs; never redirect to a raw user-supplied URL.
 ```js
 const ALLOWED = new Set(["https://app.example.com/callback"]);

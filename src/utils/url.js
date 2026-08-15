@@ -26,7 +26,7 @@ export function isPrivateHost(url) {
 }
 
 /**
- * True only when a redirect actually SENDS the browser to `attackerHost` — i.e.
+ * True only when a redirect actually SENDS the browser to `attackerHost`, i.e.
  * the Location header resolves to that host's origin. A Location that merely
  * contains the attacker string in its path or query (e.g. an apex→www
  * canonicalization redirect that preserves the query string) is NOT an open

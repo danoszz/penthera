@@ -1,6 +1,6 @@
 # Authorization and ethical use
 
-Penthera sends HTTP requests to targets you specify. Some modes (`--deep`, `--fuzz`, `--all`) send **attack payloads** designed to find vulnerabilities. This is powerful tooling — treat it like a loaded instrument, not a toy.
+Penthera sends HTTP requests to targets you specify. Some modes (`--deep`, `--fuzz`, `--all`) send **attack payloads** designed to find vulnerabilities. This is powerful tooling, treat it like a loaded instrument, not a toy.
 
 ## You may use Penthera when
 
@@ -22,7 +22,7 @@ Unauthorized security testing may violate computer misuse laws (e.g. CFAA, UK Co
 
 **Penthera is provided for legitimate security research and defensive testing only.** The authors and contributors assume **no liability** for misuse. By using this tool, you accept full responsibility for ensuring your scans are authorized and lawful in your jurisdiction.
 
-Penthera is a **research and hardening aid**, not a weapon. The goal is to find and fix weaknesses in systems you are responsible for — not to cause harm.
+Penthera is a **research and hardening aid**, not a weapon. The goal is to find and fix weaknesses in systems you are responsible for, not to cause harm.
 
 > Before scanning any URL that is not localhost, confirm you have permission. When in doubt, **do not scan**.
 
