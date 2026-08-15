@@ -28,9 +28,17 @@ describe("self-assessment", () => {
 });
 
 describe("buildReadiness", () => {
-  it("marks an unassessed, unscanned measure as a gap (not n/a)", () => {
+  it("marks an unassessed, unscanned measure as not-assessed, not a gap or n/a", () => {
     const r = buildReadiness({ executedProbes: [], findings: [] }, { jurisdiction: NL });
-    // (c) business continuity: no scan signal, no attestation → gap
+    // (c) business continuity: nothing measured, nothing attested. That is an
+    // unknown. Calling it a gap would tell an entity that has not filled in the
+    // self-assessment that it failed, which proportionality forbids.
+    expect(r.measures.find((m) => m.id === "c").status).toBe("not-assessed");
+  });
+
+  it("reports a real gap only when something was actually assessed as missing", () => {
+    const answers = { answers: { c1: { answer: "no" }, c2: { answer: "no" } } };
+    const r = buildReadiness({ executedProbes: [], findings: [] }, { answers, jurisdiction: NL });
     expect(r.measures.find((m) => m.id === "c").status).toBe("gap");
   });
 

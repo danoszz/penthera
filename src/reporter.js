@@ -319,7 +319,11 @@ export function printReport(result, opts = {}) {
     for (const f of sorted) {
       const colorFn = SEV_COLOR[f.severity] || c.dim;
       const label = SEV_LABEL[f.severity] || "    ";
-      w(`  ${colorFn(label)}  ${f.title}`);
+      // Flag the ones a scanner genuinely can't adjudicate, so nobody reads a
+      // heuristic as a confirmed break. Certainties stay unannotated.
+      const needsReview = f.confidence === "needs-human-review" || f.confidence === "potential";
+      const tag = needsReview ? c.dim(` [${f.confidence}]`) : "";
+      w(`  ${colorFn(label)}  ${f.title}${tag}`);
       if (f.url)  w(`  ${" ".repeat(6)} ${c.dim(f.url)}${f.status ? c.dim(` \u2192 ${f.status}`) : ""}`);
       if (f.description && opts.verbose) w(`  ${" ".repeat(6)} ${c.dim(f.description)}`);
     }
@@ -457,7 +461,12 @@ export function writeSarifReport(result, filePath) {
       }] : [],
       properties: {
         severity: f.severity,
+        // Provenance travels with the finding into GitHub code scanning, so a
+        // heuristic result stays labelled as one wherever it is consumed.
+        confidence: f.confidence,
         source: f.source,
+        method: f.method,
+        collectedAt: f.collected_at,
         url: f.url,
         httpStatus: f.status,
         wstg: f.wstg || resolveWstgTags(f),

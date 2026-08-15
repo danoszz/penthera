@@ -2,10 +2,13 @@
  * Compare scan findings against a previous JSON report.
  */
 import { readFileSync } from "node:fs";
+import { fingerprintFinding } from "../../lib/audit-loop.js";
 
-function findingKey(f) {
-  return `${f.severity}::${f.title}::${f.url || ""}::${f.source || ""}`;
-}
+// Shared with dedupe and the audit loop so one finding has one identity
+// everywhere. Deliberately excludes severity: a finding whose severity is
+// re-rated is the same finding, and keying on it made every re-rating show up
+// as one resolved plus one new.
+const findingKey = fingerprintFinding;
 
 export function compareWithBaseline(currentFindings, baselinePath) {
   let baseline;

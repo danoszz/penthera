@@ -453,7 +453,7 @@ export async function run() {
     if (!opts.quiet && !opts.json) {
       const s = merged.readiness.summary;
       process.stderr.write(
-        `  NIS2 readiness  ${s.met} met · ${s.partial} partial · ${s.gap} gap · ${s["n/a"]} n/a\n`,
+        `  NIS2 readiness  ${s.met} met · ${s.partial} partial · ${s.gap} gap · ${s["not-assessed"]} not assessed\n`,
       );
       process.stderr.write(`  Readiness report ${rdPath}\n`);
     }

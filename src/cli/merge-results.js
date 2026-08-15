@@ -3,6 +3,7 @@
  */
 import { enrichFindingsWithWstg } from "../../lib/owasp-wstg.js";
 import { stampProvenance } from "../../lib/provenance.js";
+import { fingerprintFinding } from "../../lib/audit-loop.js";
 
 export function mergeResults(results) {
   let merged;
@@ -63,7 +64,8 @@ function mergeEndpoints(results) {
 export function dedupeFindings(findings) {
   const seen = new Set();
   return findings.filter((f) => {
-    const key = `${f.severity}::${f.title}::${f.url || ""}::${f.source || ""}`;
+    // Same identity function as the baseline diff and the audit loop.
+    const key = fingerprintFinding(f);
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
