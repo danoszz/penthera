@@ -13,6 +13,7 @@ import { formatMarkdownReport } from "../report/markdown.js";
 import { formatSarif } from "../reporter.js";
 import { formatReadinessMarkdown } from "../../lib/compliance/readiness.js";
 import { writeEvidenceBundle, assertEmptyDir } from "../report/evidence.js";
+import { footerLines } from "../report/footer.js";
 
 /** Validate the report flags. Returns { template } or throws with a user-facing message. */
 export function prepareReportOptions(opts) {
@@ -34,7 +35,7 @@ export function prepareReportOptions(opts) {
 /** The --audience or --report-template report as Markdown, or null when neither is set. */
 export function customReport(result, opts, { version, template }) {
   if (template) return renderTemplate(template, buildReportModel(result, { version }));
-  if (opts.audience) return formatAudienceReport(result, opts.audience, { version });
+  if (opts.audience) return formatAudienceReport(result, opts.audience, { version, footer: !opts["no-footer"] });
   return null;
 }
 
@@ -43,11 +44,13 @@ export function customReport(result, opts, { version, template }) {
  * the custom template report, readiness and SBOM when they were produced.
  */
 export function writeEvidence(result, opts, { version, template, mdOpts, sbom, argv, now = new Date().toISOString() }) {
+  const footer = !opts["no-footer"];
   const artifacts = [
+    { path: "README.md", kind: "readme", content: evidenceReadme(result, { version, footer }) },
     { path: "report.json", kind: "json", content: JSON.stringify(result, null, 2) + "\n" },
     { path: "report.md", kind: "markdown", content: formatMarkdownReport(result, mdOpts) },
     { path: "report.sarif", kind: "sarif", content: JSON.stringify(formatSarif(result), null, 2) + "\n" },
-    ...AUDIENCES.map((a) => ({ path: `report-${a}.md`, kind: `audience:${a}`, content: formatAudienceReport(result, a, { version }) })),
+    ...AUDIENCES.map((a) => ({ path: `report-${a}.md`, kind: `audience:${a}`, content: formatAudienceReport(result, a, { version, footer }) })),
   ];
   if (template) artifacts.push({ path: "report-custom.md", kind: "template", content: renderTemplate(template, buildReportModel(result, { version })) });
   if (result.readiness) artifacts.push({ path: "nis2-readiness.md", kind: "readiness", content: formatReadinessMarkdown(result.readiness) });
@@ -69,4 +72,24 @@ export function writeEvidence(result, opts, { version, template, mdOpts, sbom, a
     repo: opts.repo ? resolve(opts.repo) : null,
     signKey: opts["sign-key"] || null,
   });
+}
+
+/** README.md at the root of an evidence bundle: what is in it and how to check it. */
+export function evidenceReadme(result, { version, footer = true } = {}) {
+  return [
+    "# Penthera evidence bundle",
+    "",
+    `Target: \`${String(result.target || "unknown").replace(/`/g, "")}\` · Penthera v${version}`,
+    "",
+    "- `manifest.json` lists every file with its SHA-256; `manifest.json.sig` is its signature when the bundle was signed.",
+    "- `report.json` and `report.sarif` are the machine-readable results; `report.md` and `report-<audience>.md` are for people.",
+    "",
+    "Check that nothing changed since the bundle was written:",
+    "",
+    "```",
+    "penthera evidence verify <this-dir> --allowed-signers <file>",
+    "```",
+    "",
+    ...footerLines({ footer }),
+  ].join("\n");
 }

@@ -1,0 +1,58 @@
+name: Monthly stats
+
+# On the 1st of each month, opens "Penthera this month: <Month YYYY>" with
+# public numbers for the month before (npm downloads, stars, forks, skills.sh
+# installs, dependent repositories, merged PRs), month-over-month changes and a
+# draft post. Reads public endpoints only; posts nothing. See docs/marketing.md.
+# Turn off: disable this workflow in the Actions tab.
+#
+# Dry run: Actions → Monthly stats → Run workflow with dry-run checked prints
+# the issue to the job summary instead of opening it.
+
+on:
+  schedule:
+    - cron: "0 7 1 * *"
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: Print the issue instead of opening it
+        type: boolean
+        default: true
+      month:
+        description: Month to report (YYYY-MM). Empty means last month.
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  stats:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: 24
+
+      - name: Ensure the label exists
+        if: github.event_name == 'schedule' || !inputs.dry-run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh label create monthly-stats --repo "$GITHUB_REPOSITORY" --color 0E8A16 --description "Monthly public numbers and a draft post" 2>/dev/null || true
+
+      - name: Open the stats issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry-run }}
+          MONTH: ${{ inputs.month }}
+        run: |
+          args=(--repo "$GITHUB_REPOSITORY")
+          if [ -n "$MONTH" ]; then args+=(--month "$MONTH"); fi
+          if [ "$DRY_RUN" = "true" ]; then args+=(--dry-run); fi
+          node scripts/marketing/monthly-stats.mjs "${args[@]}"

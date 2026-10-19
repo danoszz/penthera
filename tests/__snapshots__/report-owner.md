@@ -39,3 +39,5 @@ Serious problems went from 4 to 2 over the last 3 scans (down).
 ---
 
 *Authorized security testing only. See the Penthera README for ethical use guidelines.*
+
+Checked by Penthera, open-source security for the apps and AI systems you ship · https://github.com/danoszz/penthera

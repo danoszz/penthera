@@ -42,6 +42,7 @@ Open-source security for the apps and AI systems you ship: check it before you d
 | CRA reporting and AI-BOM | [compliance-cra.md](./compliance-cra.md) |
 | Reports and evidence bundles | [evidence.md](./evidence.md) |
 | Privacy, network use, `--offline` | [privacy.md](./privacy.md) |
+| Local dashboard (`penthera ui`) | [dashboard.md](./dashboard.md) |
 | Scan your app in GitHub Actions | [examples/github-actions-scan.yml](./examples/github-actions-scan.yml), set `PENTEST_STAGING_URL` |
 | Penthera's own CI | `.github/workflows/ci.yml` (full tests + mock scan), `codeql.yml`, `scorecard.yml` |
 | Docker | `docker build -t penthera . && docker run penthera https://localhost:3000` |

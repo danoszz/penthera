@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark light">
+  <meta name="referrer" content="no-referrer">
+  <title>penthera ui</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <script src="/js/theme.js"></script>
+  <link rel="stylesheet" href="/app.css">
+  <script type="module" src="/js/app.js"></script>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <header class="menubar">
+    <span class="mb-mark">
+      <svg width="14" height="16" viewBox="0 0 7 8" aria-hidden="true" shape-rendering="crispEdges"><path class="px" d="M0 0h5v1h1v1h1v2H6v1H5v1H2v2H0zM2 2v2h3V2z"/></svg>
+      penthera
+    </span>
+    <nav aria-label="Screens">
+      <ol>
+        <li><a href="#/overview" data-view="overview"><span class="key">1</span>Overview</a></li>
+        <li><a href="#/findings" data-view="findings"><span class="key">2</span>Findings</a></li>
+        <li><a href="#/run" data-view="run"><span class="key">3</span>Run</a></li>
+        <li><a href="#/history" data-view="history"><span class="key">4</span>History</a></li>
+        <li><a href="#/deps" data-view="deps"><span class="key">5</span>Dependencies</a></li>
+        <li><a href="#/ai" data-view="ai"><span class="key">6</span>AI tooling</a></li>
+        <li><a href="#/evidence" data-view="evidence"><span class="key">7</span>Evidence</a></li>
+        <li><a href="#/settings" data-view="settings"><span class="key">8</span>Settings</a></li>
+      </ol>
+    </nav>
+    <div class="mb-right">
+      <span id="mb-chips"></span>
+      <button type="button" class="themebtn" id="theme-btn" aria-label="Switch theme">◐ dark</button>
+      <span class="mb-clock" id="mb-clock" aria-hidden="true"></span>
+    </div>
+  </header>
+  <div class="desktop">
+    <div class="window">
+      <div class="titlebar"><span class="box close" aria-hidden="true"></span><span class="title" id="win-title">penthera :: overview</span><span class="box zoom" aria-hidden="true"></span></div>
+      <div class="prompt" id="prompt"><span class="user">penthera@127.0.0.1</span>:<span class="path">~/overview</span>$ <span id="prompt-cmd"></span><span class="cursor" aria-hidden="true"></span></div>
+      <main class="main" id="main" tabindex="-1">
+        <noscript><p>penthera ui needs JavaScript: every screen reads from the local API on this machine.</p></noscript>
+      </main>
+      <footer class="status">
+        <span><kbd>1</kbd>-<kbd>8</kbd> screens</span>
+        <span><kbd>/</kbd> filter findings</span>
+        <span><kbd>j</kbd> <kbd>k</kbd> move in tables</span>
+        <span><kbd>y</kbd> <kbd>n</kbd> <kbd>q</kbd> approve, skip, stop a diff</span>
+        <span id="status-bind"></span>
+      </footer>
+    </div>
+  </div>
+  <div class="sr" role="status" aria-live="polite" id="announce"></div>
+</body>
+</html>

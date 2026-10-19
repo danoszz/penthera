@@ -156,7 +156,7 @@ describe("evidence bundle", () => {
       argv: ["https://shop.example", "--auth-bearer", "tok3n"], now: META.generatedAt,
     });
     expect(manifest.artifacts.map((a) => a.path)).toEqual([
-      "report-auditor.md", "report-custom.md", "report-developer.md", "report-owner.md",
+      "README.md", "report-auditor.md", "report-custom.md", "report-developer.md", "report-owner.md",
       "report.json", "report.md", "report.sarif", "sbom.cdx.json",
     ]);
     expect(manifest.command).not.toContain("tok3n");
@@ -262,7 +262,7 @@ describe("penthera --evidence end to end", () => {
       encoding: "utf-8", env: { ...process.env, PENTHERA_NO_ONBOARDING: "1" },
     });
     expect([0, 1]).toContain(scan.status);
-    expect(readManifest(ev).artifacts.length).toBe(6);
+    expect(readManifest(ev).artifacts.length).toBe(7);
     const v = spawnSync(process.execPath, [bin, "evidence", "verify", ev, "--json"], { encoding: "utf-8" });
     expect(v.status).toBe(0);
     expect(JSON.parse(v.stdout).ok).toBe(true);

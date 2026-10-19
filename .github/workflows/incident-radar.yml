@@ -1,0 +1,67 @@
+name: Incident radar
+
+# Daily: new malware advisories for npm and PyPI from the public GitHub Advisory
+# Database become issues labelled `incident-radar`, each with a checklist (add
+# IOCs, verify `penthera deps` flags it, post) and a draft "check if you're
+# affected" post. It drafts; a person posts. State is the issues themselves.
+# Turn off: disable this workflow in the Actions tab. See docs/marketing.md.
+#
+# Dry run: Actions → Incident radar → Run workflow with dry-run checked. The
+# issues it would open are printed to the job summary instead.
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: Print the issues instead of opening them
+        type: boolean
+        default: true
+      mode:
+        description: "notable: own issue only for popular npm packages. all: one issue per advisory."
+        type: choice
+        options: [notable, all]
+        default: notable
+      since-hours:
+        description: Look-back window in hours
+        type: string
+        default: "48"
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: incident-radar
+  cancel-in-progress: false
+
+jobs:
+  radar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: 24
+
+      - name: Ensure the label exists
+        if: github.event_name == 'schedule' || !inputs.dry-run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh label create incident-radar --repo "$GITHUB_REPOSITORY" --color B60205 --description "New supply-chain malware advisory to triage" 2>/dev/null || true
+
+      - name: Check new advisories
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry-run }}
+          MODE: ${{ inputs.mode || 'notable' }}
+          SINCE_HOURS: ${{ inputs.since-hours || '48' }}
+        run: |
+          args=(--repo "$GITHUB_REPOSITORY" --mode "$MODE" --since-hours "$SINCE_HOURS" --cap 5)
+          if [ "$DRY_RUN" = "true" ]; then args+=(--dry-run); fi
+          node scripts/marketing/incident-radar.mjs "${args[@]}"

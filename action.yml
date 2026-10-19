@@ -30,6 +30,10 @@ inputs:
     description: "Post or update one PR comment with the capability diff (deps mode)."
     required: false
     default: "true"
+  footer:
+    description: 'End the PR comment and Markdown with one "Checked by Penthera" line. Set "false" to leave it off.'
+    required: false
+    default: "true"
   sarif:
     description: Upload SARIF to GitHub code scanning (needs security-events write).
     required: false
@@ -71,6 +75,7 @@ runs:
         INPUT_BASE_REF: ${{ inputs.base-ref }}
         INPUT_URL: ${{ inputs.url }}
         INPUT_VERSION: ${{ inputs.penthera-version }}
+        INPUT_FOOTER: ${{ inputs.footer }}
         PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
       run: |
         set -euo pipefail
@@ -132,6 +137,8 @@ runs:
             exit 2
             ;;
         esac
+
+        if [ "$INPUT_FOOTER" = "false" ]; then args+=(--no-footer); fi
 
         set +e
         node "$PENTHERA_DIR/bin/penthera.js" "${args[@]}" --sarif "$out/penthera.sarif" -o "$out/penthera.json"

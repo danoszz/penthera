@@ -21,6 +21,32 @@ All notable changes to Penthera are documented here. Versioning follows [SemVer]
   smoke matrix, package contents and size, zero third-party egress offline,
   supply chain and version/docs checks, written to `audit/REPORT.md`. Runs
   weekly in CI. See [docs/internal-audit.md](docs/internal-audit.md)
+- **Marketing automation that drafts, never posts** (`docs/marketing.md`): no
+  social-media tokens, no tracking, no auto-posting; every workflow SHA-pinned
+  with least-privilege permissions and a `workflow_dispatch` dry run
+  - Release post drafts: `publish.yml` writes a LinkedIn (~600 characters) and
+    an X/Bluesky (≤280) post from the CHANGELOG section to the job summary and
+    a collapsed "Share this release" section in the GitHub Release
+    (`scripts/marketing/release-post.mjs`)
+  - Incident radar (`incident-radar.yml`, daily): new npm and PyPI malware
+    advisories from the public GitHub Advisory Database become
+    `incident-radar` issues with affected versions, an IOC checklist and a
+    draft "check if you're affected" post. Popular packages get their own
+    issue (at most 5 per run); the rest are batched into one issue
+  - Demo media (`demo-media.yml`): VHS tapes in `assets/tapes/` for a URL
+    scan, `penthera agents` and `penthera deps --diff`, re-rendered on release
+    and opened as a PR
+  - Monthly stats issue (`monthly-stats.yml`): npm downloads, stars, forks,
+    skills.sh installs, dependents and merged PRs, with month-over-month
+    changes and a draft post
+  - Contributor flywheel (`contributor-flywheel.yml`): when fewer than 3
+    `good first issue` issues are open, one reminder lists the
+    `TODO(good-first-issue)` markers in the code
+- **Report footer**: Markdown reports, audience reports, the PR comment and
+  the evidence bundle end with one line, "Checked by Penthera, open-source
+  security for the apps and AI systems you ship". Never in SARIF or JSON.
+  `--no-footer` (or `footer: "false"` in the Action) leaves it off. Evidence
+  bundles now include a `README.md`
 - **Python support for `penthera deps`** (`lib/deps/python/`): reads `uv.lock`,
   `poetry.lock`, `pdm.lock`, `Pipfile.lock` and `requirements*.txt` (pinned and
   `--hash` lines, `-r` includes, pip-compile `# via` for direct deps), and the
@@ -50,6 +76,10 @@ All notable changes to Penthera are documented here. Versioning follows [SemVer]
 
 ### Fixed
 
+- Repo scans skip nested git repositories and worktrees (any subfolder with
+  its own `.git`, such as coding-agent worktrees under `.claude/worktrees`),
+  instead of reporting their files as this repo's, and no longer follow
+  symlinked folders out of the repo.
 - The secret scanner no longer reports a value that is only a template
   placeholder (`apiKey: "${key}"`, `{{ api_key }}`) as a hardcoded secret.
 - `penthera-scan --help` and `--version` exit 0 instead of starting the wizard.
@@ -201,6 +231,22 @@ Requires Node 22+. Upgrading from 1.1.x or 1.2.x needs no config changes.
 
 ### Added
 
+- **`penthera ui [--open] [--port 0] [--project <dir>] [--reports <dir>] [--demo]`**:
+  a local dashboard on 127.0.0.1 (random port, one-time URL), styled as a
+  1-bit early-90s Mac desktop with a terminal inside, in dark and light themes.
+  Overview (posture per project, severity mix, findings over time, time to
+  fix, hosts contacted; a three-step start when there is no data yet),
+  Findings (filters, a plain-words explanation, evidence, sources, fix diff),
+  Run (scan, check dependencies, audit AI tooling, or the fix loop with an
+  Apply / Skip / Stop dialog on every diff, live output over SSE), History
+  (new, fixed and still open between two scans), Dependencies, AI tooling,
+  Evidence (create a bundle from the latest scan, verify in one click,
+  download the auditor report) and Settings. Reads only the chosen folders and
+  `~/.penthera`; no network, no new dependencies, no build step. Host check
+  against DNS rebinding, one-time token swapped for an HttpOnly SameSite=Strict
+  cookie, Origin check and JSON-only bodies on state changes, strict CSP, no
+  CORS, rate-limited unauthenticated requests, allowlisted static files.
+  Penthera scans it clean. `--demo` seeds fake data. See `docs/dashboard.md`
 - **GitHub Action** (`uses: danoszz/penthera@<sha>`, `action.yml`): on PRs that
   change the lockfile it runs `penthera deps --base <PR base>`, upserts one PR
   comment marked `<!-- penthera-deps -->` (edited in place on every push), and

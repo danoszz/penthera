@@ -15,6 +15,7 @@ const PKG_VERSION = JSON.parse(
 
 // ── ANSI helpers ─────────────────────────────────────────────────────────
 
+// TODO(good-first-issue): also drop colors when stdout is not a TTY (piped output gets escape codes); let FORCE_COLOR=1 override.
 const NO_COLOR = !!process.env.NO_COLOR;
 
 const ansi = (code) => (s) => NO_COLOR ? s : `\x1b[${code}m${s}\x1b[0m`;

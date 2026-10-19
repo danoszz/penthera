@@ -9,6 +9,7 @@
  */
 import { buildReportModel, CONFIDENCE_LABELS } from "./model.js";
 import { mdInline } from "./md-escape.js";
+import { footerLines } from "./footer.js";
 
 export const AUDIENCES = ["developer", "owner", "auditor"];
 
@@ -49,8 +50,9 @@ function header(L, title, m) {
   L.push(`> ${md(m.target)} · scanned ${when(m.timestamp)} · Penthera v${m.tool.version}`, "");
 }
 
-function footer(L) {
+function footer(L, m) {
   L.push("---", "", "*Authorized security testing only. See the Penthera README for ethical use guidelines.*", "");
+  L.push(...footerLines(m));
 }
 
 function timelineSection(L, t, { heading = "## Fix timeline" } = {}) {
@@ -109,7 +111,7 @@ export function formatDeveloperReport(m) {
     for (const x of m.suppressed) L.push(`- ${md(x.title)} (${code(x.fid)}): ${md(x.reason)} (${md(x.actor)}, ${x.by})`);
     L.push("");
   }
-  footer(L);
+  footer(L, m);
   return L.join("\n");
 }
 
@@ -165,7 +167,7 @@ export function formatOwnerReport(m) {
     L.push("## Fixes", "");
     L.push(`${t.verified} ${t.verified === 1 ? "fix" : "fixes"} verified by a re-scan, ${t.failed} failed, ${t.open} still open. Typical time to fix: ${t.medianTimeToFix}.`, "");
   }
-  footer(L);
+  footer(L, m);
   return L.join("\n");
 }
 
@@ -254,15 +256,15 @@ export function formatAuditorReport(m) {
 
   L.push("## Verifying this report", "");
   L.push(`If this report came in an evidence bundle, check that nothing in it changed since it was produced: ${code("penthera evidence verify <dir> --allowed-signers <file>")}. See [docs/evidence.md](${EVIDENCE_URL}).`, "");
-  footer(L);
+  footer(L, m);
   return L.join("\n");
 }
 
 const FORMATTERS = { developer: formatDeveloperReport, owner: formatOwnerReport, auditor: formatAuditorReport };
 
 /** Render the report for one audience. Throws on an unknown audience. */
-export function formatAudienceReport(result, audience, { version } = {}) {
+export function formatAudienceReport(result, audience, { version, footer = true } = {}) {
   const fmt = FORMATTERS[audience];
   if (!fmt) throw new Error(`Unknown --audience "${audience}". Use one of: ${AUDIENCES.join(", ")}.`);
-  return fmt(buildReportModel(result, { version }));
+  return fmt({ ...buildReportModel(result, { version }), footer });
 }

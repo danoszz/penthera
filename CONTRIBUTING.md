@@ -6,6 +6,11 @@ project is organized, and the release/publishing checklist for maintainers.
 By participating you agree to keep things respectful and to use the tool only
 for **authorized** security testing (see [README — Ethical use](README.md#ethical-use--authorization)).
 
+Looking for a first task? Pick an issue labelled
+[`good first issue`](https://github.com/danoszz/penthera/labels/good%20first%20issue),
+or search the code for `TODO(good-first-issue)`: each marks a small, scoped
+change. Maintainers: see [docs/marketing.md](docs/marketing.md#contributor-flywheel).
+
 ---
 
 ## Development setup

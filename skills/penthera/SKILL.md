@@ -80,6 +80,7 @@ All examples below use `penthera`; substitute `node bin/penthera.js` when needed
 | macOS machine audit | `penthera --machine` |
 | Audit MCP servers, skills, hooks, agent config | `penthera agents . --home -o reports/agents.json` (see **Workflow 6**) |
 | Report for my auditor / manager / developers | `--audience auditor\|owner\|developer --markdown reports/<who>.md`, or `--evidence <dir>` (see **Workflow 7**) |
+| Open the penthera dashboard / show me my security posture | `penthera ui --open` (see **Dashboard**) |
 
 ## Default safe behavior
 
@@ -325,6 +326,22 @@ penthera hook run       # check what is staged now (exit 1 = blocked)
 1. It checks staged content only: secrets and AI provider keys, `penthera agents` rules on staged agent config, and the capability diff plus license policy when `package-lock.json` is staged. Blocks on high and critical by default (`hook.blockOn` in `penthera.policy.json`).
 2. If `core.hooksPath` is set (husky, lefthook), do not pass `--force`; add `npx --no-install penthera hook run` to that tool's pre-commit config instead.
 3. Never suggest `git commit --no-verify` to get past a finding unless the user asks how to skip it; suggest fixing it or a `penthera.suppress.json` entry with a reason.
+
+## Dashboard
+
+**Triggers:** "open the penthera dashboard", "show me the dashboard", "show my security posture", "run the agent from the UI".
+
+```bash
+penthera ui --open                                   # this folder, reports in ./reports
+penthera ui --project <dir> --reports <dir> --open   # other folders
+penthera ui --demo --open                            # fake data, to look around first
+```
+
+1. Start it in the user's terminal (it keeps running until Ctrl-C). It binds 127.0.0.1 on a random port and prints a one-time URL: tell the user to open that link (or pass `--open`). Never paste the token anywhere else.
+2. It reads only the `--project` folders, the reports folder and `~/.penthera`. If the screens are empty, scan with `-o reports/<name>.json` first (and `penthera deps -o reports/deps.json`, `penthera agents . -o reports/agents.json`).
+3. The Run screen starts scans, dependency checks, AI tooling audits and the fix loop. The fix loop is `penthera agent --loop` with the same rules: the user approves every diff in the page, nothing is pushed. A URL that is not on this machine needs its hostname typed to confirm; the authorization gate above still applies.
+
+See [docs/dashboard.md](../../docs/dashboard.md).
 
 ## Examples
 

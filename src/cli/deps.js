@@ -117,7 +117,8 @@ export async function runDeps(args, opts, { version }) {
   else if (opts.quiet) printFindings(merged.findings);
   else printReport(merged, { verbose: opts.verbose });
 
-  const mdOpts = { version, baseline: baselineStats };
+  const footer = !opts["no-footer"];
+  const mdOpts = { version, baseline: baselineStats, footer };
   const note = (s) => { if (!quiet) process.stderr.write(s); };
   if (opts.output) {
     writeJsonReport(merged, opts.output);
@@ -138,7 +139,7 @@ export async function runDeps(args, opts, { version }) {
     const { formatPrComment } = await import("../../lib/deps/report.js");
     const path = resolve(opts["pr-comment"]);
     mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(path, formatPrComment(merged, { version }));
+    writeFileSync(path, formatPrComment(merged, { version, footer }));
     note(`  PR comment     ${opts["pr-comment"]}\n`);
   }
   if (opts.evidence) {

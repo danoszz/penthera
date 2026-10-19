@@ -10,6 +10,7 @@ import { formatAuditLoopMarkdown } from "../../lib/audit-loop.js";
 import { referencesFor, formatSourcesMarkdown } from "../../lib/references.js";
 import { formatDepsMarkdown } from "../../lib/deps/report.js";
 import { mdInline } from "./md-escape.js";
+import { footerLines } from "./footer.js";
 
 const SEV_ORDER = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
 const SEV_TAG = {
@@ -42,6 +43,7 @@ const mdEscape = mdInline;
 export function formatMarkdownReport(result, opts = {}) {
   const findings = sortFindings(result.findings);
   const counts = countBySeverity(findings);
+  // TODO(good-first-issue): the "0.2.0" fallback is stale; read the version from package.json instead.
   const version = opts.version || "0.2.0";
   const lines = [];
 
@@ -56,6 +58,7 @@ export function formatMarkdownReport(result, opts = {}) {
   lines.push(`|---|---|`);
   lines.push(`| **Target** | \`${result.target || "unknown"}\` |`);
   lines.push(`| **Scan time** | ${result.timestamp?.replace("T", " ").slice(0, 19) || "-"} UTC |`);
+  // TODO(good-first-issue): a missing duration prints ", "; print "-" like the other empty cells and add a test.
   lines.push(`| **Duration** | ${result.duration ? `${(result.duration / 1000).toFixed(1)}s` : ", "} |`);
   lines.push(`| **Mode** | ${result.modes?.join(", ") || result.mode || "-"} |`);
   lines.push(`| **Reachable** | ${result.reachable ? "Yes" : "No"} |`);
@@ -230,6 +233,7 @@ export function formatMarkdownReport(result, opts = {}) {
   lines.push("");
   lines.push("*Authorized security testing only. See Penthera README for ethical use guidelines.*");
   lines.push("");
+  lines.push(...footerLines(opts));
 
   return lines.join("\n");
 }

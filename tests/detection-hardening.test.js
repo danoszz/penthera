@@ -137,3 +137,28 @@ describe("open redirect — destination-origin check (no same-site FP)", () => {
     expect(redirectsToHost("/dashboard", req, "evil.com")).toBe(false);
   });
 });
+
+describe("scanSecrets: nested repos and symlinks", () => {
+  it("skips a nested git repo or worktree and does not follow symlinked folders", async () => {
+    const { mkdirSync, symlinkSync } = await import("node:fs");
+    const root = mkdtempSync(join(tmpdir(), "penthera-nested-"));
+    const outside = mkdtempSync(join(tmpdir(), "penthera-outside-"));
+    try {
+      const assign = (k, v) => `const ${k} = "${v}";\n`;
+      const secret = "Zq8" + "Wd7R" + "K2mP9vL4";
+      writeFileSync(join(root, "app.js"), assign("apiKey", secret));
+      // A worktree checkout inside the repo: `.git` is a file there.
+      mkdirSync(join(root, ".claude", "worktrees", "wt1"), { recursive: true });
+      writeFileSync(join(root, ".claude", "worktrees", "wt1", ".git"), "gitdir: /elsewhere\n");
+      writeFileSync(join(root, ".claude", "worktrees", "wt1", "copy.js"), assign("apiKey", secret));
+      // A symlinked folder pointing outside the repo.
+      writeFileSync(join(outside, "leak.js"), assign("apiKey", secret));
+      symlinkSync(outside, join(root, "linked"), "dir");
+      const urls = scanSecrets(root).map((f) => f.url);
+      expect(urls).toEqual(["app.js"]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
+});

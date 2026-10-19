@@ -38,7 +38,10 @@ const PKG = readJson(join(ROOT, "package.json"));
 const BENCH_MAX_DROP = 0.02;
 
 /** Package budget (current 1.2.0: ~475 KB packed, ~1.3 MB unpacked, 138 files). */
-const PACK_BUDGET = { packedBytes: 650_000, unpackedBytes: 1_800_000, files: 200 };
+// Raised for the dashboard (src/ui: ~245 KB unpacked, ~40 KB packed, 22 small files, no
+// dependencies): was 650_000 packed / 1_800_000 unpacked / 200 files. The headroom above
+// today's size stays about the same.
+const PACK_BUDGET = { packedBytes: 720_000, unpackedBytes: 2_050_000, files: 230 };
 
 /** Paths the npm package may contain. Anything else fails the packaging gate. */
 const PACK_ALLOW = [

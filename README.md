@@ -67,6 +67,7 @@ teams that don't have one.
 | | Review pull requests | Comments the dependency capability diff on every PR that touches the lockfile | [GitHub Action](docs/commands/action.md) |
 | | Audit your AI tooling | Skills, MCP servers, hooks, plugins, and rule files: hidden instructions, unpinned servers, over-broad permissions, silent updates | [`penthera agents --home`](docs/commands/agents.md) |
 | **After you ship** | Report and prove | Reports for developers, owners, and auditors; a hashed, signable evidence bundle; NIS2 and CRA readiness and report drafts | [`penthera <url> --audience auditor --evidence out/`](docs/evidence.md) |
+| | See it all | A local dashboard on 127.0.0.1: where each project stands, findings in plain words, history, deps, AI tooling, evidence, and the fix loop with Apply / Skip / Stop per diff | [`penthera ui`](docs/dashboard.md) |
 | | Keep watching | Scheduled checks of your own production for drift: certificates, headers, new endpoints, keys in bundles, new CVEs in your SBOM | *on the [roadmap](ROADMAP.md)* |
 
 What it is not: a human pentester, a 24/7 SOC, or incident response. It does the
@@ -200,10 +201,15 @@ out as Markdown, JSON, and SARIF, with the fixes in priority order.
 | `penthera hook install` | Pre-commit hook on staged changes, about 0.1 to 0.5 s | [hook.md](docs/commands/hook.md) |
 | `uses: danoszz/penthera@<sha>` | PR comment with the capability diff, plus SARIF | [action.md](docs/commands/action.md) |
 | `penthera --machine` | macOS checks (persistence, keyloggers, rootkits) | [scan.md](docs/commands/scan.md) |
+| `penthera ui [--open] [--demo]` | Local dashboard on 127.0.0.1; runs scans and the fix loop from the page | [dashboard.md](docs/dashboard.md) |
 
 Scans, `agents` and `deps` write Markdown, JSON and SARIF (`--markdown`,
 `--json`, `--sarif`). Exit code `1` means critical or high findings, `2` means
 the scan failed.
+
+| `penthera ui`, dark | `penthera ui`, light |
+|---|---|
+| ![The dashboard overview in the dark theme](assets/dashboard/overview-dark.jpg) | ![The dashboard overview in the light theme](assets/dashboard/overview-light.jpg) |
 
 ## How it works
 

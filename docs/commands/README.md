@@ -14,6 +14,7 @@ has the full flag list.
 | `penthera hook` | [hook.md](hook.md) | Pre-commit hook for secrets, agent config and dependency changes |
 | GitHub Action | [action.md](action.md) | The capability diff as a pull-request comment, plus SARIF |
 | Agent Skill | [skill.md](skill.md) | Let Claude Code, Cursor and other agents drive Penthera |
+| `penthera ui` | [dashboard.md](../dashboard.md) | The local dashboard: posture, findings, history, evidence, and the fix loop from the page |
 
 Compliance flags (`--framework nis2`, `--readiness`, `--cra`, `--aibom`, ...)
 are covered in [compliance-nis2.md](../compliance-nis2.md) and

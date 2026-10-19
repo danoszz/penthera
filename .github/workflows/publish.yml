@@ -89,6 +89,30 @@ jobs:
             echo "- \`npm stage list penthera\` then \`npm stage approve <stage-id>\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
+      # Marketing: draft (never post) a LinkedIn and an X/Bluesky post from the
+      # CHANGELOG section for this tag, for the job summary and, via the release
+      # job, a collapsed "Share this release" in the release body. A person
+      # posts it after approving the staged package. See docs/marketing.md.
+      - name: Draft release posts
+        id: draft
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          mkdir -p "$RUNNER_TEMP/share"
+          if node scripts/marketing/release-post.mjs --tag "$GITHUB_REF_NAME" > "$RUNNER_TEMP/share/share.md"; then
+            cat "$RUNNER_TEMP/share/share.md" >> "$GITHUB_STEP_SUMMARY"
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::No CHANGELOG section for $GITHUB_REF_NAME; skipping the post drafts."
+          fi
+
+      - name: Keep the drafts for the release job
+        if: steps.draft.outputs.ok == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-share
+          path: ${{ runner.temp }}/share/share.md
+          retention-days: 7
+
   # Separate job so the write token never sits next to `npm ci` / `npm test`,
   # which run third-party code. No checkout: it only calls the GitHub API.
   release:
@@ -103,3 +127,28 @@ jobs:
         run: |
           gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 \
             || gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --generate-notes --verify-tag
+
+      # Attach the post drafts (written by the publish job) to the release.
+      # Only the GitHub API is called here. See docs/marketing.md.
+      - name: Download release post drafts
+        id: share
+        continue-on-error: true # no CHANGELOG section means no drafts
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: release-share
+          path: ${{ runner.temp }}/share
+
+      - name: Add "Share this release" to the release body
+        if: steps.share.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          share="$RUNNER_TEMP/share/share.md"
+          body="$RUNNER_TEMP/body.md"
+          gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json body --jq .body > "$body"
+          if ! grep -q '<!-- penthera-share -->' "$body"; then
+            printf '\n\n' >> "$body"
+            cat "$share" >> "$body"
+            gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --notes-file "$body"
+          fi

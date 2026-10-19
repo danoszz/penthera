@@ -1,0 +1,56 @@
+name: Contributor flywheel
+
+# When an issue closes and fewer than 3 issues labelled "good first issue" are
+# open, opens (or updates) one reminder issue listing the TODO(good-first-issue)
+# markers in the code. See docs/marketing.md.
+# Turn off: disable this workflow in the Actions tab.
+#
+# Dry run: Actions → Contributor flywheel → Run workflow with dry-run checked.
+
+on:
+  issues:
+    types: [closed]
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: Print the reminder instead of opening it
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: contributor-flywheel
+  cancel-in-progress: false
+
+jobs:
+  remind:
+    # Closing the reminder itself must not reopen it straight away.
+    if: github.event_name == 'workflow_dispatch' || !contains(github.event.issue.labels.*.name, 'contributor-flywheel')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: 24
+
+      - name: Ensure the label exists
+        if: github.event_name == 'issues' || !inputs.dry-run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh label create contributor-flywheel --repo "$GITHUB_REPOSITORY" --color 7057FF --description "Reminder to stock good first issues" 2>/dev/null || true
+
+      - name: Check good first issues
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry-run }}
+        run: |
+          args=(--repo "$GITHUB_REPOSITORY" --min 3)
+          if [ "$DRY_RUN" = "true" ]; then args+=(--dry-run); fi
+          node scripts/marketing/contributor-flywheel.mjs "${args[@]}"

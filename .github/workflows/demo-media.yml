@@ -1,0 +1,95 @@
+name: Demo media
+
+# Re-renders the demo GIFs from assets/tapes/*.tape with VHS and opens a PR with
+# the result. Never pushes to main: the GIFs land on a media/* branch and a
+# person merges the PR. Runs on every published release and on demand.
+# Turn off: disable this workflow in the Actions tab. See docs/marketing.md.
+#
+# Needs "Allow GitHub Actions to create and approve pull requests" (Settings →
+# Actions → General). PRs opened with GITHUB_TOKEN do not trigger CI; close and
+# reopen the PR to run it.
+#
+# Dry run: Actions → Demo media → Run workflow with dry-run checked renders the
+# GIFs and uploads them as a workflow artifact without opening a PR.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: Render and upload as an artifact, no PR
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: demo-media
+  cancel-in-progress: true
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write # push the media/* branch for the PR
+      pull-requests: write # open the PR
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Install VHS
+        uses: charmbracelet/vhs-action@f6d7db07a432fcd3b06772628d36a57f96d95dcf # v2.1.1
+        with:
+          version: v0.12.1
+
+      - name: Render tapes
+        run: |
+          set -euo pipefail
+          for tape in assets/tapes/*.tape; do
+            case "$(basename "$tape")" in _*) continue ;; esac
+            echo "::group::$tape"
+            vhs "$tape"
+            echo "::endgroup::"
+          done
+          git status --short assets/
+
+      - name: Upload GIFs
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: demo-media
+          path: assets/*.gif
+          retention-days: 14
+
+      - name: Open a PR with the new GIFs
+        if: github.event_name == 'release' || !inputs.dry-run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name || 'manual' }}
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- assets/; then
+            echo "GIFs unchanged; no PR." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          branch="media/demo-$TAG-$GITHUB_RUN_ID"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git add assets/*.gif
+          git commit -m "chore(media): re-render demo GIFs ($TAG)"
+          git push origin "$branch"
+          gh pr create --base main --head "$branch" \
+            --title "chore(media): re-render demo GIFs ($TAG)" \
+            --body "Rendered by the Demo media workflow from \`assets/tapes/*.tape\` ([run]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)). Watch each GIF before merging; post the best one as a clip."
