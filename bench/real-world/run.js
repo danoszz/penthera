@@ -18,7 +18,7 @@
  * Results from it are marked as not from the frozen release.
  */
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { BENCH_DIR, cacheDir, included, isMain, parseArgs, projectId, readJson, readManifest, writeJson } from "./lib.js";
@@ -37,14 +37,22 @@ export function resolveScanner({ scanner, scannerBin }, cache) {
   return { ...meta, frozen: true };
 }
 
-function runOne(scanner, args, env, timeoutMs) {
+function runOne(scanner, args, env, timeoutMs, outFile) {
   const t0 = Date.now();
-  const r = spawnSync(process.execPath, ["--import", GUARD, scanner.bin, ...args], {
-    env, encoding: "utf8", maxBuffer: 512 * 1024 * 1024, timeout: timeoutMs, stdio: ["ignore", "pipe", "pipe"],
-  });
+  // stdout goes to a file, not a pipe: penthera 1.7.0 calls process.exit()
+  // after writing, which truncates large JSON on a pipe at 64 KB.
+  const fd = openSync(outFile, "w");
+  let r;
+  try {
+    r = spawnSync(process.execPath, ["--import", GUARD, scanner.bin, ...args], {
+      env, encoding: "utf8", maxBuffer: 64 * 1024 * 1024, timeout: timeoutMs, stdio: ["ignore", fd, "pipe"],
+    });
+  } finally {
+    closeSync(fd);
+  }
   const ms = Date.now() - t0;
   let json = null;
-  try { json = JSON.parse(r.stdout); } catch { /* not JSON: failure below */ }
+  try { json = JSON.parse(readFileSync(outFile, "utf8")); } catch { /* not JSON: failure below */ }
   return { status: r.status, ms, json, stderr: (r.stderr || "").slice(-2000), timedOut: r.error?.code === "ETIMEDOUT" };
 }
 
@@ -80,7 +88,9 @@ export function scanProject(p, { cache, set, scanner, timeoutMs = 10 * 60 * 1000
   };
   try {
     for (const [name, args] of Object.entries(jobs)) {
-      const r = runOne(scanner, args, env, timeoutMs);
+      const raw = join(out, `${name}.stdout`);
+      const r = runOne(scanner, args, env, timeoutMs, raw);
+      rmSync(raw, { force: true });
       const ok = r.json && !r.timedOut && r.status !== 2;
       // `deps` exits 2 when a project has no lockfile; that is "no input", not a failure.
       const noInput = name === "deps" && !r.json && /No package-lock\.json/.test(r.stderr);

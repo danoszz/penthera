@@ -100,15 +100,24 @@ export function npmSpecsToFetch(repoDir, npmCache) {
   return { lockfile: lockPath, specs, skipped };
 }
 
+/** Environment for npm with empty user and global configs (npm refuses one file for both). */
+function emptyNpmConfig(dir) {
+  const user = join(dir, "empty-user.npmrc");
+  const global = join(dir, "empty-global.npmrc");
+  writeFileSync(user, "");
+  writeFileSync(global, "");
+  const env = { ...process.env, NPM_CONFIG_USERCONFIG: user, NPM_CONFIG_GLOBALCONFIG: global };
+  for (const k of Object.keys(env)) if (/^npm_config_/i.test(k) && !/^NPM_CONFIG_(USER|GLOBAL)CONFIG$/.test(k)) delete env[k];
+  return env;
+}
+
 function npmCacheAdd(specs, npmCache, scratch) {
   // An empty working folder and empty configs: no project .npmrc can redirect
   // the registry or add credentials. `npm cache add` downloads and verifies
   // tarballs; it never runs lifecycle scripts.
-  const cfg = join(scratch, "empty.npmrc");
-  writeFileSync(cfg, "");
   execFileSync("npm", ["cache", "add", ...specs, "--cache", npmCache, "--registry", NPM_REGISTRY, "--ignore-scripts", "--no-audit", "--no-fund"], {
     cwd: scratch,
-    env: { ...process.env, NPM_CONFIG_USERCONFIG: cfg, NPM_CONFIG_GLOBALCONFIG: cfg },
+    env: emptyNpmConfig(scratch),
     stdio: ["ignore", "pipe", "pipe"],
     timeout: 30 * 60 * 1000,
   });
@@ -190,15 +199,16 @@ export function fetchScanner(version, cache) {
   if (existsSync(meta)) return readJson(meta);
   rmSync(dir, { recursive: true, force: true });
   mkdirSync(dir, { recursive: true });
-  const cfg = join(dir, "empty.npmrc");
-  writeFileSync(cfg, "");
-  const env = { ...process.env, NPM_CONFIG_USERCONFIG: cfg, NPM_CONFIG_GLOBALCONFIG: cfg };
-  const out = JSON.parse(execFileSync("npm", ["pack", `penthera@${version}`, "--json", "--pack-destination", dir, "--registry", NPM_REGISTRY], { cwd: dir, env }).toString());
-  const tgz = join(dir, out[0].filename);
+  const env = emptyNpmConfig(dir);
+  const raw = JSON.parse(execFileSync("npm", ["pack", `penthera@${version}`, "--json", "--pack-destination", dir, "--registry", NPM_REGISTRY], { cwd: dir, env }).toString());
+  // npm ≤ 10 prints an array, npm 11 an object keyed by package name.
+  const packed = Array.isArray(raw) ? raw[0] : Object.values(raw)[0];
+  if (packed.version !== version) throw new Error(`npm packed ${packed.id}, expected penthera@${version}`);
+  const tgz = join(dir, packed.filename);
   execFileSync("tar", ["-xzf", tgz, "-C", dir]);
   const pkgDir = join(dir, "package");
   execFileSync("npm", ["install", "--omit=dev", "--ignore-scripts", "--no-audit", "--no-fund", "--registry", NPM_REGISTRY], { cwd: pkgDir, env, stdio: ["ignore", "pipe", "pipe"] });
-  const info = { version, integrity: out[0].integrity, shasum: out[0].shasum, bin: join(pkgDir, "bin", "penthera.js") };
+  const info = { version, integrity: packed.integrity, shasum: packed.shasum, bin: join(pkgDir, "bin", "penthera.js") };
   writeJson(meta, info);
   return info;
 }
