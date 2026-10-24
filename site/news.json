@@ -2,6 +2,11 @@
   "note": "The ticker at the top of the page. Newest first; an item about a date still ahead may close the list. Every item needs a date (YYYY-MM-DD), one short line (at most 120 characters, no hype) and an https source a reader can check. tests/site.test.js enforces this; site/build.mjs renders it.",
   "items": [
     {
+      "date": "2026-10-22",
+      "text": "NCSC-NL: vulnerabilities fixed in Oracle Fusion Middleware, rated high likelihood and high impact (NCSC-2026-0448)",
+      "source": "https://advisories.ncsc.nl/advisory?id=NCSC-2026-0448"
+    },
+    {
       "date": "2026-10-21",
       "text": "PHP fixes two remote code execution flaws rated CVSS 9.2: update to 8.2.35, 8.3.36, 8.4.27 or 8.5.12",
       "source": "https://www.php.net/ChangeLog-8.php"
@@ -12,6 +17,11 @@
       "source": "https://nos.nl/liveblog/2636066-websites-kwetsbaar-voor-softwarelek-digid-en-mijnoverheid-uit-de-lucht"
     },
     {
+      "date": "2026-10-21",
+      "text": "Node.js announces security releases: check which release lines are affected",
+      "source": "https://nodejs.org/en/blog/vulnerability/october-2026-security-releases"
+    },
+    {
       "date": "2026-09-11",
       "text": "EU: Cyber Resilience Act Article 14 applies: report actively exploited vulnerabilities within 24 hours",
       "source": "https://eur-lex.europa.eu/eli/reg/2024/2847/oj/eng"
@@ -20,21 +30,6 @@
       "date": "2025-11-24",
       "text": "Shai-Hulud 2.0: a second npm worm wave steals credentials through install scripts",
       "source": "https://github.com/wiz-sec-public/wiz-research-iocs/blob/main/reports/shai-hulud-2-packages.csv"
-    },
-    {
-      "date": "2025-09-25",
-      "text": "postmark-mcp: an MCP server on npm quietly BCCs every email it sends to an attacker",
-      "source": "https://snyk.io/blog/malicious-mcp-server-on-npm-postmark-mcp-harvests-emails/"
-    },
-    {
-      "date": "2025-09-15",
-      "text": "Shai-Hulud: a self-spreading npm worm compromises @ctrl/tinycolor and 40+ packages",
-      "source": "https://www.stepsecurity.io/blog/ctrl-tinycolor-and-40-npm-packages-compromised"
-    },
-    {
-      "date": "2025-08-26",
-      "text": "s1ngularity: compromised Nx releases use local AI coding CLIs to hunt for secrets",
-      "source": "https://github.com/advisories/GHSA-cxm3-wv7p-598c"
     },
     {
       "date": "2027-12-11",
