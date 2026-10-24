@@ -1,0 +1,79 @@
+{
+  "version": 1,
+  "set": "pilot",
+  "description": "Pilot corpus (E1 \u00a7 6.4): two projects per web-app framework, chosen by hand to test the pipeline. Not part of the pre-registered sample; excluded from the E1 frame by URL.",
+  "chosen": "2026-10-20",
+  "selection": "GitHub topic search (fastify, hono, fastapi, nextjs, express), permissive licence, not archived, not a fork, a default-branch commit in the last 24 months, an application rather than a library, template or example. Commit pinned at the default-branch head on the date chosen.",
+  "projects": [
+    {
+      "url": "https://github.com/umami-software/umami",
+      "commit": "e92fdab99508a8ed05249f6c5f07e140deab79e1",
+      "license": "MIT",
+      "stratum": "nextjs",
+      "framework": "nextjs"
+    },
+    {
+      "url": "https://github.com/miurla/morphic",
+      "commit": "231b37d09da7bfd7a66ef516309ae2736cc4bf67",
+      "license": "Apache-2.0",
+      "stratum": "nextjs",
+      "framework": "nextjs"
+    },
+    {
+      "url": "https://github.com/louislam/uptime-kuma",
+      "commit": "7fc106bc4304aa579dc4f1eb6195302b2b7e0854",
+      "license": "MIT",
+      "stratum": "express",
+      "framework": "express"
+    },
+    {
+      "url": "https://github.com/janoside/btc-rpc-explorer",
+      "commit": "26e282a06e87b645c6e0687e2503d26d1e623dea",
+      "license": "MIT",
+      "stratum": "express",
+      "framework": "express"
+    },
+    {
+      "url": "https://github.com/kyantech/Palmr",
+      "commit": "6d785dc2b2d13ea41e74ffab6688571f34580b3c",
+      "license": "Apache-2.0",
+      "stratum": "fastify",
+      "framework": "fastify"
+    },
+    {
+      "url": "https://github.com/riccardoperra/codeimage",
+      "commit": "27b185f18d36f2baec3a8cc5a43e8794586096c3",
+      "license": "MIT",
+      "stratum": "fastify",
+      "framework": "fastify"
+    },
+    {
+      "url": "https://github.com/SonicJs-Org/sonicjs",
+      "commit": "590e4bde8760b4ebf9b54d2e745f4ec4d7ed8f25",
+      "license": "MIT",
+      "stratum": "hono",
+      "framework": "hono"
+    },
+    {
+      "url": "https://github.com/Rabithua/Rote",
+      "commit": "f7cc56ba4c1d8632c4c4d2d12d6867fd0b4376ec",
+      "license": "MIT",
+      "stratum": "hono",
+      "framework": "hono"
+    },
+    {
+      "url": "https://github.com/polarsource/polar",
+      "commit": "ab3413418e4573d546f83f27ff0d0fc7b5df1dd3",
+      "license": "Apache-2.0",
+      "stratum": "fastapi",
+      "framework": "fastapi"
+    },
+    {
+      "url": "https://github.com/remsky/Kokoro-FastAPI",
+      "commit": "ebd4ec9cc97b258b25afc39444a5e1701055db50",
+      "license": "Apache-2.0",
+      "stratum": "fastapi",
+      "framework": "fastapi"
+    }
+  ]
+}

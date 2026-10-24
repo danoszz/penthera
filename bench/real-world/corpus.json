@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "set": "e1",
+  "description": "The E1 corpus (docs/research/prereg/E1-real-world-accuracy.md). Empty until the sampling frame is frozen and the sample is drawn (\u00a7 3.4 to \u00a7 3.6).",
+  "frame": null,
+  "excludedUrls": [
+    "https://github.com/umami-software/umami",
+    "https://github.com/miurla/morphic",
+    "https://github.com/louislam/uptime-kuma",
+    "https://github.com/janoside/btc-rpc-explorer",
+    "https://github.com/kyantech/Palmr",
+    "https://github.com/riccardoperra/codeimage",
+    "https://github.com/SonicJs-Org/sonicjs",
+    "https://github.com/Rabithua/Rote",
+    "https://github.com/polarsource/polar",
+    "https://github.com/remsky/Kokoro-FastAPI"
+  ],
+  "projects": []
+}
