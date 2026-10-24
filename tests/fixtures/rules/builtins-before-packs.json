@@ -1,16 +1,16 @@
 {
-  "_note": "Built-in rules as they were in lib/ before rule packs (main @ afafb24). tests/rule-packs.test.js checks the engines still expose exactly these, in this order, now that part of them lives in lib/rules/core. Changed on purpose since: E11b pass 2 (Hardcoded password reads key names by their words).",
+  "_note": "Built-in rules as they were in lib/ before rule packs (main @ afafb24). tests/rule-packs.test.js checks the engines still expose exactly these, in this order, now that part of them lives in lib/rules/core. Changed on purpose since: E11b pass 2 (Hardcoded password reads key names by their words); E11b round 2 (AWS ASIA keys, all GitHub token prefixes, Stripe restricted keys; the generic API key rule accepts broader token and secret names, same pattern).",
   "secrets": [
     {
       "name": "AWS access key",
-      "source": "AKIA[0-9A-Z]{16}",
+      "source": "A[KS]IA[0-9A-Z]{16}",
       "flags": "",
       "severity": "critical",
       "skipIf": true
     },
     {
       "name": "GitHub token",
-      "source": "ghp_[a-zA-Z0-9]{36,}",
+      "source": "gh[pousr]_[a-zA-Z0-9]{36,}|github_pat_[a-zA-Z0-9_]{82}",
       "flags": "",
       "severity": "critical",
       "skipIf": false
@@ -101,7 +101,7 @@
     },
     {
       "name": "Stripe secret key",
-      "source": "sk_live_[a-zA-Z0-9]{20,}",
+      "source": "[sr]k_live_[a-zA-Z0-9]{20,}",
       "flags": "",
       "severity": "critical",
       "skipIf": false

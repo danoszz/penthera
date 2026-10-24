@@ -28,7 +28,8 @@ for GitHub at large: keys leak through notes and docs too.
   extension when it starts with a private-key header.
 - In `.txt` and `.md`, only rules that match a fixed shape run: provider key
   prefixes and private keys. The assignment guesses (`password = "..."`) do
-  not, because docs are full of example passwords.
+  not, because docs are full of example passwords. E11b round 2 treats
+  `.markdown`, `.rst`, `.adoc` and `.asciidoc` the same way.
 - One function, `secretRulesFor()`, decides this for the repo scan, the
   commit hook and the benchmark replay, so the benchmark measures what users
   run.

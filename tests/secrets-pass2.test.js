@@ -199,7 +199,8 @@ describe("generic API keys (A5)", () => {
     }
     expect(api(`publicApiKey: "${real[0]}"`)).toBe(0);
     expect(api(`api_key_id = "${real[0]}"`)).toBe(0);
-    expect(api(`token = "${real[0]}"`)).toBe(0);
+    // A bare `token` counts since E11b round 2 (tests/secrets-round2.test.js); a pagination cursor does not.
+    expect(api(`next_token = "${real[0]}"`)).toBe(0);
   });
 });
 
