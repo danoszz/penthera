@@ -62,7 +62,8 @@
     "refresh:retire-db": "node scripts/refresh-retire-db.mjs",
     "rules:build": "node scripts/rules/build-pack.mjs",
     "rules:check": "node scripts/rules/check-bundled.mjs",
-    "audit:internal": "node scripts/audit/run.mjs"
+    "audit:internal": "node scripts/audit/run.mjs",
+    "bench:public": "node bench/public/run.mjs"
   },
   "keywords": [
     "security",
