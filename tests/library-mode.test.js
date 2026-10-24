@@ -10,7 +10,7 @@ import { join, dirname } from "node:path";
 import { tmpdir } from "node:os";
 import { lexJs, maskStrings, stripComments } from "../lib/whitebox/js-lex.js";
 import { findSinks, scanCodeSinks } from "../lib/whitebox/code-sinks.js";
-import { detectLibrary, exportedFunctions, paramNames, parameterTaint } from "../lib/whitebox/library.js";
+import { detectLibrary, exportedFunctions, namedFunctions, paramNames, parameterTaint } from "../lib/whitebox/library.js";
 import { scanRepo } from "../src/scan-repo.js";
 
 // Split so Penthera's own scans do not read the fixtures as real sinks.
@@ -82,6 +82,18 @@ describe("sink shapes (both modes)", () => {
   });
 });
 
+describe("long lines", () => {
+  const ordinary = Array.from({ length: 300 }, (_, i) => `const v${i} = load(${i});`).join("\n");
+  it("reads a file with one long generated line among ordinary code", () => {
+    const src = `const table = [${"1,".repeat(3000)}1];\n${ordinary}\nconst out = ${EVAL}("[" + text + "]");\n`;
+    expect(findSinks(src)).toMatchObject([{ pattern: "eval", line: 302 }]);
+  });
+  it("still skips a file that is mostly long lines (minified)", () => {
+    const src = `${"var a=b(c);".repeat(2000)}${EVAL}(x);\n${"var d=e(f);".repeat(2000)}\n`;
+    expect(findSinks(src)).toEqual([]);
+  });
+});
+
 describe("library mode: exported parameters as sources", () => {
   const shapes = {
     "module.exports = function": `const { ${EXEC} } = require('${CP}')\nmodule.exports = function (name, cb) { ${EXEC}('pkill ' + name, cb) }\n`,
@@ -96,6 +108,8 @@ describe("library mode: exported parameters as sources", () => {
     "ESM export const": `import { ${EXEC}Sync } from 'node:${CP}'\nexport const df = (path) => ${EXEC}Sync(\`df -k \${path}\`)\n`,
     "callback inside": `const c = require('${CP}')\nmodule.exports = function (files) { files.forEach((f) => c.${EXEC}('rm ' + f)) }\n`,
     "iteration helper": `const c = require('${CP}')\nexports.all = function (files, done) { each(files, function (file, next) { const cmd = 'gzip ' +\n  file.path\n  c.${EXEC}(cmd, next) }, done) }\n`,
+    "members copied onto exports in a loop": `const c = require('${CP}')\nvar api = { add: function (pkg) { c.${EXEC}Sync('npm i ' + pkg) } }\nfor (var k in api) {\n  exports[k] = api[k]\n}\n`,
+    "Object.assign of a named object": `const c = require('${CP}')\nconst api = { rm(dir) { c.${EXEC}('rm -r ' + dir) } }\nObject.assign(module.exports, api)\n`,
     "pushed into an argument list": `const c = require('${CP}')\nmodule.exports = function (msg) { const args = ['say']; args.push(JSON.stringify(msg)); c.${EXEC}(args.join(' ')) }\n`,
   };
   for (const [name, src] of Object.entries(shapes)) {
@@ -119,7 +133,7 @@ describe("library mode: exported parameters as sources", () => {
       "constant command": `const c = require('${CP}')\nmodule.exports = function (cb) { c.${EXEC}('uname -a', cb) }\n`,
       "IIFE parameters are not a caller's": `const c = require('${CP}')\nmodule.exports = (function (root) { return { info() { c.${EXEC}('ls ' + root) } } })(__dirname)\n`,
       "spawn with an argument array": `const { spawn } = require('${CP}')\nmodule.exports = (file) => spawn('convert', [file, 'out.png'])\n`,
-      "stored on this, read in another method (not followed)": `const c = require('${CP}')\nclass T { constructor(p) { this.p = p } info() { c.${EXEC}('tool ' + this.p) } }\nmodule.exports = T\n`,
+      "a field set from a constant": `const c = require('${CP}')\nclass T { constructor(p) { this.p = p; this.bin = 'tool' } info() { c.${EXEC}(this.bin + ' --version') } }\nmodule.exports = T\n`,
       "parameter name inside a string": `const c = require('${CP}')\nmodule.exports = function (name) { c.${EXEC}('echo name') }\n`,
     };
     for (const [name, src] of Object.entries(quiet)) expect(lib(src), name).toEqual([]);
@@ -138,6 +152,85 @@ describe("library mode: exported parameters as sources", () => {
   it("lists what a file exports", () => {
     const { code } = lexJs("function a(x) {}\nfunction b(y) {}\nconst c = (z) => z\nmodule.exports = { a, c }\n");
     expect(exportedFunctions(code).map((f) => f.name).sort()).toEqual(["a", "c"]);
+  });
+});
+
+describe("library mode: one helper call", () => {
+  const found = {
+    "function declaration": `const { ${EXEC}Sync } = require('${CP}')\nfunction probe(tool) { return ${EXEC}Sync('which ' + tool) }\nmodule.exports = function has(name) { return probe(name) }\n`,
+    "arrow bound to a const": `const { ${EXEC} } = require('${CP}')\nconst list = (url) => new Promise((ok) => ${EXEC}(\`tool ls \${url}\`, ok))\nconst get = (url) => list(url).then(String)\nmodule.exports = { get }\n`,
+    "function expression in a var list": `var c = require('${CP}'), n = 1, run = function (opts, cb) { c.${EXEC}('tool ' + opts.flag, cb) }\nmodule.exports = { go: function (o, cb) { run({ flag: o.flag }, cb) } }\n`,
+    "second argument": `const c = require('${CP}')\nfunction tag(dir, name) { c.${EXEC}Sync('git tag ' + name, { cwd: dir }) }\nexports.tag = (name) => tag(process.cwd(), name)\n`,
+    "spread into a rest parameter": `const c = require('${CP}')\nfunction sh(...parts) { return c.${EXEC}Sync(parts.join(' ')) }\nexports.git = (...args) => sh('git', ...args)\n`,
+    "a value derived from the parameter": `const c = require('${CP}')\nfunction kill(pid) { c.${EXEC}('kill -9 ' + pid) }\nexports.stop = function (port) { const pid = lookup(port); kill(pid) }\n`,
+  };
+  for (const [name, src] of Object.entries(found)) {
+    it(`follows ${name}`, () => {
+      const hits = lib(src);
+      expect(hits.length, src).toBe(1);
+      expect(hits[0]).toMatchObject({ confidence: "potential", tainted: false, library: { kind: "parameter" } });
+      expect(hits[0].library.via).toBeTruthy();
+      expect(app(src)).toEqual([]);
+    });
+  }
+
+  it("marks a helper that runs the exported parameter unchanged", () => {
+    const hits = lib(`const c = require('${CP}')\nfunction sh(cmd) { return c.${EXEC}Sync(cmd) }\nexports.run = function (command) { return sh(command) }\n`);
+    expect(hits).toMatchObject([{ library: { kind: "runs-argument", function: "exports.run", via: "sh" } }]);
+  });
+
+  it("stops after one hop and at untainted arguments", () => {
+    const quiet = {
+      "two hops": `const c = require('${CP}')\nfunction inner(x) { c.${EXEC}('tool ' + x) }\nfunction mid(y) { inner(y) }\nmodule.exports = function (z) { mid(z) }\n`,
+      "tainted value at another position": `const c = require('${CP}')\nfunction run(cmd, cb) { c.${EXEC}('tool ' + cmd, cb) }\nmodule.exports = function (done) { run('--version', done) }\n`,
+      "a name bound twice": `const c = require('${CP}')\nfunction run(x) { c.${EXEC}('tool ' + x) }\nfunction run(x) { return x }\nmodule.exports = (v) => run(v)\n`,
+      "a method of another object": `const c = require('${CP}')\nconst h = { run(x) { c.${EXEC}('tool ' + x) } }\nmodule.exports = (v) => other.run(v)\n`,
+      "a helper called from a function that is not exported": `const c = require('${CP}')\nfunction run(x) { c.${EXEC}('tool ' + x) }\nfunction local(v) { run(v) }\nmodule.exports = () => local('a')\n`,
+    };
+    for (const [name, src] of Object.entries(quiet)) expect(lib(src), name).toEqual([]);
+  });
+
+  it("names the helper in the finding", () => {
+    const [f] = findSinks(`const c = require('${CP}')\nfunction probe(t) { c.${EXEC}Sync('which ' + t) }\nexports.has = (n) => probe(n)\n`, { library: true });
+    expect(f.library).toEqual({ function: "exports.has", kind: "parameter", via: "probe" });
+  });
+
+  it("lists the functions a file calls by name", () => {
+    const { code } = lexJs("function a(x) {}\nconst b = (y) => y\nvar n = 1, c = function (z) {}\nconst o = { d(w) {} }\nlet e = async (v) => v\n");
+    expect([...namedFunctions(code).keys()].sort()).toEqual(["a", "b", "c", "e"]);
+  });
+});
+
+describe("library mode: values kept on this", () => {
+  const found = {
+    "class field set in the constructor": `const c = require('${CP}')\nclass Disk { constructor(dev) { this.dev = dev } usage() { return c.${EXEC}Sync('df ' + this.dev) } }\nmodule.exports = Disk\n`,
+    "prototype method and constructor function": `var c = require('${CP}')\nfunction Img(file, opts) { this.file = file; this.opts = opts || {} }\nImg.prototype.info = function () { c.${EXEC}('identify "' + this.file + '"') }\nmodule.exports = Img\n`,
+    "prototype object and a method that builds the command": `var c = require('${CP}')\nfunction Doc(path) { this.path = path }\nDoc.prototype = {\n  command: function () { return 'pdfinfo "' + this.path + '"' },\n  pages: function (cb) { var cmd = this.command(); c.${EXEC}(cmd, cb) },\n}\nmodule.exports = Doc\n`,
+    "a setter and self = this": `const c = require('${CP}')\nclass Job { setTarget(t) { this.target = t } run() { const self = this; setTimeout(function () { c.${EXEC}('ping ' + self.target) }) } }\nexport default Job\n`,
+    "an options field": `const c = require('${CP}')\nexport class Tool { constructor(options) { this.options = options } version() { return c.${EXEC}Sync(\`\${this.options.bin} --version\`) } }\n`,
+    "an instance returned by an exported factory": `var c = require('${CP}')\nvar Stat = function (dir) { this.dir = dir }\nStat.prototype.size = function () { return c.${EXEC}Sync('du -s ' + this.dir) }\nmodule.exports = function (dir) { return new Stat(dir) }\n`,
+  };
+  for (const [name, src] of Object.entries(found)) {
+    it(`follows ${name}`, () => {
+      const hits = lib(src);
+      expect(hits.length, src).toBe(1);
+      expect(hits[0]).toMatchObject({ confidence: "potential", tainted: false, library: { kind: "parameter" } });
+      expect(app(src)).toEqual([]);
+    });
+  }
+
+  it("keeps fields to their own class", () => {
+    const quiet = {
+      "another class": `const c = require('${CP}')\nclass A { constructor(p) { this.p = p } }\nclass B { constructor() { this.p = 'x' } run() { c.${EXEC}('tool ' + this.p) } }\nmodule.exports = { A, B }\n`,
+      "a class that is not exported": `const c = require('${CP}')\nclass T { constructor(p) { this.p = p } run() { c.${EXEC}('tool ' + this.p) } }\nmodule.exports = () => 1\n`,
+      "a field set from another field": `const c = require('${CP}')\nclass T { constructor(p) { this.p = p; this.q = 'x' } a() { this.r = this.q } b() { c.${EXEC}('tool ' + this.r) } }\nmodule.exports = T\n`,
+    };
+    for (const [name, src] of Object.entries(quiet)) expect(lib(src), name).toEqual([]);
+  });
+
+  it("finds the class of each exported function", () => {
+    const { code } = lexJs("function K(a) { this.a = a }\nK.prototype.m = function () {}\nconst P = K.prototype\nP.n = function () {}\nclass C { x() {} }\nmodule.exports = { K, C }\n");
+    expect(Object.fromEntries(exportedFunctions(code).map((f) => [f.name, f.cls]))).toEqual({ K: "K", "K.prototype.m": "K", "P.n": "K", x: "C" });
   });
 });
 

@@ -128,9 +128,13 @@ Express, Koa, Fastify or Next.js. The report says when it is on, and why.
 
 How it works. Penthera finds the functions a caller can reach
 (`module.exports`, `exports.x`, prototype and class methods of an exported
-constructor, objects returned by an exported factory, ESM `export`). It
+constructor, objects and instances returned by an exported factory, members
+copied onto `exports` in a loop, ESM `export`). It
 follows each parameter through assignments, closures and callbacks inside that
-function. A shell command built from one is reported as `command-injection`
+function, and one call further: when the function passes the value to a named
+function in the same file, that function's parameter is followed too. A value
+a constructor or setter keeps on `this` (`this.path = path`) is followed into
+the other methods of the same class or prototype. A shell command built from one is reported as `command-injection`
 at `potential` confidence and severity high. A function whose whole job is to
 run its argument (`exec(cmd)`) is reported at severity medium, with the note
 that callers must not pass untrusted input. In library mode the scan also
@@ -139,12 +143,14 @@ examples and docs folders.
 
 How we know. On the dev half of SecBench.js (49 command injections in npm
 packages, the half we tuned on), strict recall went from 0.00 to 0.82, 95% CI
-0.69 to 0.90 (40 of 49); 33 of 49 without the "runs its argument" cases. It
-flagged no command injection in 150 npm packages of the benign baseline (dev half), and nothing new in
-16 app repositories. The sealed test half is not scored yet.
+0.69 to 0.90 (40 of 49), in the first version. The helper step and fields on
+`this` took it to 0.94, 95% CI 0.83 to 0.98 (46 of 49); 39 of 49 without the
+"runs its argument" cases. It flagged no command injection in 150 npm packages
+of the benign baseline (dev half), and nothing new in 16 app repositories. The
+sealed test half is not scored yet.
 
-Limits. A value passed on to a helper function, or stored on `this` and read
-in another method, is not followed. Sanitizers are not recognized, so a
+Limits. Only one helper call is followed, and only to a function the file
+calls by name. A field set from another field is not followed. Sanitizers are not recognized, so a
 correctly escaped command can still be reported; that is what `potential`
 means.
 
