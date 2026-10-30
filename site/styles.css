@@ -1052,7 +1052,7 @@ main > .desk { padding-top: clamp(64px, 8vw, 120px); }
  * set here because `.foot-nav a` outranks the global `a:hover`. The negative
  * margin keeps the text on the column's edge while the highlight has air. */
 .foot-nav { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 48px 32px; }
-.foot-k {
+.foot-k, .tag {
   width: fit-content; margin-bottom: 18px; padding: 5px 12px 4px;
   font-size: 13px; line-height: 1.3; color: var(--pill-ink); background: var(--pill-bg);
   clip-path: polygon(0 3px, 3px 3px, 3px 0, calc(100% - 6px) 0, calc(100% - 6px) 2px, 100% 2px, 100% calc(100% - 4px), calc(100% - 3px) calc(100% - 4px), calc(100% - 3px) 100%, 5px 100%, 5px calc(100% - 2px), 0 calc(100% - 2px));
@@ -1062,6 +1062,11 @@ main > .desk { padding-top: clamp(64px, 8vw, 120px); }
 .foot-group:nth-child(2) .foot-k { --pill-ink: #0a0a0a; --pill-tilt: 0.8deg; --pill-bg: linear-gradient(180deg, #dfe3e9 0%, #b9c0ca 40%, #9aa3b0 54%, #e4e8ed 72%, #aab2bd 100%); }
 .foot-group:nth-child(3) .foot-k { --pill-ink: #ffffff; --pill-tilt: -0.4deg; --pill-bg: linear-gradient(180deg, #5d6572 0%, #2b2f36 44%, #15171b 58%, #4a515c 100%); }
 .foot-group:nth-child(4) .foot-k { --pill-ink: #00006b; --pill-tilt: 1.1deg; --pill-bg: linear-gradient(180deg, #c9c9ff 0%, #8a8aff 60%, #7a7aff 100%); }
+/* The same pills as tags and eyebrows anywhere else. */
+.tag { display: inline-block; margin-bottom: 0; font-family: var(--px); --pill-ink: #ffffff; --pill-tilt: -1.2deg; --pill-bg: #0000ed; }
+.tag-steel { --pill-ink: #0a0a0a; --pill-tilt: 0.8deg; --pill-bg: linear-gradient(180deg, #dfe3e9 0%, #b9c0ca 40%, #9aa3b0 54%, #e4e8ed 72%, #aab2bd 100%); }
+.tag-ink { --pill-ink: #ffffff; --pill-tilt: -0.4deg; --pill-bg: linear-gradient(180deg, #5d6572 0%, #2b2f36 44%, #15171b 58%, #4a515c 100%); }
+.tag-violet { --pill-ink: #00006b; --pill-tilt: 1.1deg; --pill-bg: linear-gradient(180deg, #c9c9ff 0%, #8a8aff 60%, #7a7aff 100%); }
 .foot-nav ul { display: grid; justify-items: start; margin: 0; padding: 0; list-style: none; }
 .foot-nav a {
   display: inline-flex; align-items: center; min-height: 30px; margin-left: -4px; padding: 0 4px;
@@ -1364,96 +1369,128 @@ main > .desk { padding-top: clamp(64px, 8vw, 120px); }
 .bm-hub span { color: var(--text-2); }
 .pb-link { font-family: var(--px); font-size: 12px; }
 
-/* Blog (site/blog.mjs): a teletext newspaper. Always light, on grey paper. The
- * furniture is teletext: the page bar, mosaic title, blue plates and the four
- * coloured keys. The reading is a newspaper: a serif at a comfortable size and
- * measure, using the reader's own fonts, so nothing is fetched. */
+/* Blog (site/blog.mjs): a teletext newspaper, set by Bringhurst's rules.
+ * The fun is spent once, on the furniture: page bar, mosaic title, blue plates,
+ * four keys. The reading is quiet: one serif, ragged right, about 70 characters.
+ * --u is one line of text; vertical space comes in whole or half lines, so the
+ * column keeps its rhythm. Departure Mono is drawn on an 11 px grid: it stays at
+ * 16.5 and 22 px, which land on whole pixels on a 2x screen.
+ * Deliberate breaks from the book: space between paragraphs rather than indents
+ * (easier for many readers on a screen), a heavy title, and full-width bars. */
 :root[data-paper] {
   --paper-serif: Charter, "Bitstream Charter", "Iowan Old Style", Georgia, serif;
-  --ground: #e6e6e1; --ground-rgb: 230, 230, 225; --t2: 0.82; --t3: 0.68;
+  --ground: #e6e6e1; --ground-rgb: 230, 230, 225;
+  --ink-rgb: 18, 21, 26;                /* a cool black: warm blacks suit ivory, not grey */
+  --t2: 0.84; --t3: 0.72;
+  --mono-s: 1.03125rem;                 /* 16.5 px */
   background: var(--ground);
+  font-synthesis: none;
 }
 [data-paper] body { background: var(--ground); }
-.ttx-bar { display: flex; flex-wrap: wrap; gap: 0 2ch; margin: 0; padding: 6px var(--gutter); font-family: var(--px); font-size: 14px; color: #ffffff; background: var(--accent); }
+.ttx-bar { display: flex; flex-wrap: wrap; gap: 0 2ch; margin: 0; padding: 6px var(--gutter); font-family: var(--px); font-size: var(--mono-s); font-variant-ligatures: none; color: #ffffff; background: var(--accent); }
 .ttx-bar .ttx-date { margin-left: auto; }
-.terms.blog { max-width: 1040px; min-height: 100svh; padding-top: 28px; }
-.terms.blog .eyebrow { margin: 0; }
-/* An article: the byline in the margin, the text beside it, as a newspaper column. */
-@media (min-width: 1000px) {
-  .blog-post { display: grid; grid-template-columns: minmax(0, 1fr) 680px; gap: 0 48px; align-items: start; }
-  .blog-post > * { grid-column: 1 / -1; }
-  .blog-post > .blog-meta { grid-column: 1; position: sticky; top: 24px; margin-top: 40px; }
-  .blog-post > .paper-body, .blog-post > .blog-src { grid-column: 2; }
-  .blog-post > .paper-body { grid-row: span 2; }
-}
-.terms.blog .eyebrow a { color: inherit; }
-.terms.blog h1 { margin-top: 20px; max-width: 22ch; font-size: clamp(40px, 6.4vw, 76px); line-height: 1; letter-spacing: -0.035em; font-weight: 700; color: var(--text-1); text-wrap: balance; }
-.terms.blog h1:has(.ttx-title) { max-width: none; margin-right: 8px; }
-/* The title: solid blocks on a hard ink shadow. Blocks switch, they never ease.
- * The pointer inverts what it crosses; rows arrive one by one, as a teletext
- * page did, and all at once under reduced motion. */
-.ttx-title { display: block; width: 100%; height: auto; overflow: visible; filter: drop-shadow(clamp(3px, 0.7vw, 8px) clamp(3px, 0.7vw, 8px) 0 #0a0a0a); cursor: crosshair; touch-action: pan-y; }
+@media (max-width: 480px) { .ttx-bar .ttx-date { display: none; } }
+.terms.blog { max-width: 65rem; min-height: 100svh; padding-top: 28px; padding-bottom: 160px; }
+.terms.blog .eyebrow { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; }
+.terms.blog .tag { font-size: var(--mono-s); }
+.blog a.tag, .blog a.tag:hover { color: var(--pill-ink); background: var(--pill-bg); text-decoration: none; }
+/* Weight falls as size rises: the big head is medium, the small one bold. */
+.terms.blog h1 { margin: 20px 0 0 -0.04em; max-width: 22ch; font-size: clamp(2.5rem, 6.4vw, 4.75rem); line-height: 1.02; letter-spacing: -0.03em; word-spacing: -0.04em; font-weight: 500; color: var(--text-1); text-wrap: balance; }
+.terms.blog h1:has(.ttx-title) { margin-left: 0; max-width: none; }
+/* The title: solid blocks, the one heavy thing on the page. Blocks switch, they
+ * never ease. The pointer inverts what it crosses; rows arrive one by one, as a
+ * teletext page did, and all at once under reduced motion. */
+.ttx-title { display: block; width: 100%; height: auto; cursor: crosshair; touch-action: pan-y; }
 .ttx-title rect { fill: transparent; shape-rendering: crispEdges; }
 .ttx-title rect.on { fill: var(--accent); }
-.ttx-title rect.x { fill: #0a0a0a; }
+.ttx-title rect.x { fill: rgb(var(--ink-rgb)); }
 .ttx-title rect.on.x { fill: transparent; }
 @keyframes ttx-row { from, 99% { opacity: 0; } }
 @media (prefers-reduced-motion: no-preference) {
   .ttx-title .r0 { animation: ttx-row 60ms; } .ttx-title .r1 { animation: ttx-row 120ms; } .ttx-title .r2 { animation: ttx-row 180ms; } .ttx-title .r3 { animation: ttx-row 240ms; }
   .ttx-title .r4 { animation: ttx-row 300ms; } .ttx-title .r5 { animation: ttx-row 360ms; } .ttx-title .r6 { animation: ttx-row 420ms; }
 }
-.ttx-mast { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px 32px; margin-top: 28px; }
-.terms.blog .ttx-mast .terms-for { margin: 0; }
-.ttx-reveal { min-height: 44px; padding: 0 18px; font-family: var(--px); font-size: 15px; color: #ffffff; background: #0a0a0a; border: 0; box-shadow: 5px 5px 0 var(--accent); cursor: pointer; }
-.ttx-reveal[hidden] { display: none; }
-.ttx-reveal:hover { background: var(--accent); box-shadow: 5px 5px 0 #0a0a0a; }
-.ttx-reveal:active { transform: translate(5px, 5px); box-shadow: none; }
-.ttx-reveal[aria-pressed="true"] { background: var(--accent); box-shadow: none; transform: translate(5px, 5px); }
 /* Long bare URLs in a post break instead of widening the page at 390 px. */
-.blog a { overflow-wrap: anywhere; color: var(--accent); }
+.blog a { overflow-wrap: anywhere; color: var(--accent); text-underline-offset: 0.15em; }
 .blog a:hover { background: var(--accent); color: var(--on-accent); text-decoration: none; }
-.blog-meta, .blog-src { margin-top: 16px; font-family: var(--px); font-size: 13px; color: var(--text-3); }
-.paper-body { max-width: 680px; margin-top: 36px; font-family: var(--paper-serif); font-size: clamp(18px, 1.5vw, 20px); line-height: 1.62; color: var(--text-1); hanging-punctuation: first; }
-.paper-body p, .paper-body ul, .paper-body ol { margin-top: 1em; }
-.terms.blog .paper-body > .terms-for:first-child { max-width: none; margin: 0 0 1.4em; font-family: var(--sans); font-size: clamp(22px, 2.4vw, 28px); line-height: 1.28; letter-spacing: -0.015em; font-weight: 500; color: var(--text-1); }
-.paper-body > .terms-for:first-child + p::first-letter { float: left; margin: 0.08em 0.14em 0 0; padding: 0.1em 0.16em; font-family: var(--px); font-size: 2.6em; line-height: 0.95; color: #ffffff; background: var(--accent); }
-.terms.blog .paper-body h2 { width: fit-content; max-width: 100%; margin-top: 2em; padding: 3px 10px; font-family: var(--px); font-size: 19px; font-weight: 400; line-height: 1.3; letter-spacing: 0; color: #ffffff; background: var(--accent); }
-.terms.blog .paper-body h2 + p { margin-top: 0.7em; }
-.paper-body h3 { margin-top: 1.6em; font-family: var(--sans); font-size: 1.05em; font-weight: 700; }
-.paper-body code { font-family: var(--px); font-size: 0.86em; }
-.paper-body pre { margin-top: 1em; padding: 12px 14px; border: 0; background: #000000; color: #ffffff; overflow-x: auto; }
-.paper-body pre code { font-size: 14px; line-height: 1.5; }
-.blog-draft { display: inline-block; margin-bottom: 16px; padding: 6px 10px; font-family: var(--px); font-size: 13px; background: var(--accent); color: var(--on-accent); }
-/* Blog figures: white plates (blog/figures/*.svg) on the grey paper. */
-.md-fig { margin: 32px 0 0; }
+.blog-meta, .blog-src { margin-top: 16px; font-family: var(--px); font-size: var(--mono-s); line-height: 1.45; font-variant-ligatures: none; color: var(--text-2); }
+.blog-meta span + span::before { content: " · "; }
+.paper-toc { display: none; }
+
+/* The column: about 70 characters, in rem so a reader's own text size wins. */
+.paper-body { --u: 1.6em; max-width: 35.5rem; margin-top: 36px; font-family: var(--paper-serif); font-size: clamp(1.125rem, 1.05rem + 0.3vw, 1.25rem); line-height: 1.6; font-variant-numeric: oldstyle-nums proportional-nums; font-kerning: normal; color: var(--text-1); hanging-punctuation: first allow-end; text-wrap: pretty; }
+.paper-body p, .paper-body ul, .paper-body ol { margin-top: var(--u); }
+.terms.blog .paper-body > .terms-for:first-child { max-width: none; margin: 0 0 var(--u); font-family: var(--sans); font-size: clamp(1.375rem, 2.4vw, 1.75rem); line-height: 1.28; letter-spacing: -0.015em; font-weight: 500; color: var(--text-1); text-wrap: pretty; font-variant-numeric: normal; }
+.paper-body > .terms-for:first-child + p { margin-top: 0; }
+/* An initial two lines deep, close to the rest of its word. ::first-letter keeps
+ * the word whole for a screen reader. */
+.paper-body > .terms-for:first-child + p::first-letter { float: left; margin: 0.12em 0.08em 0 0; padding: 0.12em 0.2em; font-family: var(--px); font-size: 2.75rem; line-height: 0.9; color: #ffffff; background: var(--accent); }
+/* Section heads are the footer's pills, in its four finishes. */
+.terms.blog .paper-body h2 { --pill-ink: #ffffff; --pill-tilt: -1.2deg; --pill-bg: #0000ed; width: fit-content; max-width: 100%; margin-top: calc(var(--u) * 1.5); padding: 2px 12px 1px; font-family: var(--px); font-size: 1.375rem; font-weight: 400; line-height: calc(var(--u) - 3px); letter-spacing: 0; font-variant-numeric: normal; font-variant-ligatures: none; color: var(--pill-ink); background: var(--pill-bg); clip-path: polygon(0 3px, 3px 3px, 3px 0, calc(100% - 6px) 0, calc(100% - 6px) 2px, 100% 2px, 100% calc(100% - 4px), calc(100% - 3px) calc(100% - 4px), calc(100% - 3px) 100%, 5px 100%, 5px calc(100% - 2px), 0 calc(100% - 2px)); transform: rotate(var(--pill-tilt)); scroll-margin-top: 24px; text-wrap: balance; }
+.terms.blog .paper-body h2:nth-of-type(4n + 2) { --pill-ink: #0a0a0a; --pill-tilt: 0.8deg; --pill-bg: linear-gradient(180deg, #dfe3e9 0%, #b9c0ca 40%, #9aa3b0 54%, #e4e8ed 72%, #aab2bd 100%); }
+.terms.blog .paper-body h2:nth-of-type(4n + 3) { --pill-tilt: -0.4deg; --pill-bg: linear-gradient(180deg, #5d6572 0%, #2b2f36 44%, #15171b 58%, #4a515c 100%); }
+.terms.blog .paper-body h2:nth-of-type(4n) { --pill-ink: #00006b; --pill-tilt: 1.1deg; --pill-bg: linear-gradient(180deg, #c9c9ff 0%, #8a8aff 60%, #7a7aff 100%); }
+.terms.blog .paper-body h2 + p { margin-top: calc(var(--u) * 0.5); }
+.paper-body h3 { margin-top: var(--u); font-family: var(--sans); font-size: 1em; line-height: var(--u); font-weight: 700; }
+.paper-body h3 + p { margin-top: 0; }
+.paper-body ul, .paper-body ol { padding-left: 1.25em; }
+.paper-body li + li { margin-top: 0.3em; }
+.paper-body ul { list-style-type: square; }
+.paper-body li::marker { color: var(--accent); }
+@media (min-width: 62.5rem) { .paper-body ul, .paper-body ol { margin-left: -1.25em; } }
+.paper-body strong { font-weight: 700; }
+.paper-body code { font-family: var(--px); font-size: var(--mono-s); font-variant-ligatures: none; }
+.paper-body pre { margin-top: var(--u); padding: 12px 14px; border: 0; background: #000000; color: #ffffff; overflow-x: auto; }
+.paper-body pre code { line-height: 1.5; }
+.blog-draft { display: inline-block; margin-bottom: 16px; padding: 6px 10px; font-family: var(--px); font-size: var(--mono-s); background: var(--accent); color: var(--on-accent); }
+/* Blog figures: white plates (blog/figures/*.svg), the caption held close. */
+.md-fig { margin: var(--u, 32px) 0 0; }
 .md-fig img { display: block; width: 100%; height: auto; background: #ffffff; }
-.md-fig figcaption { margin-top: 10px; font-family: var(--sans); font-size: 15px; line-height: 1.5; color: var(--text-2); }
+.md-fig figcaption { margin-top: 10px; font-family: var(--sans); font-size: 0.9375rem; line-height: 1.5; font-variant-numeric: lining-nums; color: var(--text-2); }
+
+/* An article: the byline and contents in the margin, so the column sits off
+ * centre with a working margin beside it, and the page ends with a deep foot. */
+@media (min-width: 62.5rem) {
+  .blog-post { display: grid; grid-template-columns: minmax(0, 1fr) 35.5rem; gap: 0 48px; align-items: start; }
+  .blog-post > * { grid-column: 1 / -1; }
+  .blog-post > .paper-side { grid-column: 1; grid-row: span 2; position: sticky; top: 24px; align-self: start; max-height: calc(100svh - 112px); margin-top: 40px; overflow-y: auto; }
+  .blog-post > .paper-body, .blog-post > .blog-src { grid-column: 2; }
+  .blog-post .blog-meta { margin-top: 0; }
+  .blog-meta span { display: block; }
+  .blog-meta span + span::before { content: none; }
+  .paper-toc { display: block; margin-top: 28px; font-family: var(--px); font-size: var(--mono-s); line-height: 1.3; font-variant-ligatures: none; }
+  .paper-toc ol { list-style: none; margin: 0; padding: 0; }
+  .terms .paper-toc li { margin-top: 8px; }
+  .paper-toc a { color: var(--text-1); text-decoration: none; }
+}
 
 /* The front page: the newest post leads, the rest fill columns beside it. */
-.terms.blog .terms-for { max-width: 44ch; margin-top: 20px; font-size: 15px; color: var(--text-2); }
 .ttx-front { list-style: none; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 48px 32px; margin-top: 48px; padding: 0; }
 .terms.blog .ttx-front li { margin: 0; min-width: 0; }
 .ttx-front li:first-child { grid-column: span 2; }
-.ttx-line { display: flex; gap: 2ch; margin: 0; font-family: var(--px); font-size: 13px; color: var(--text-3); }
-.ttx-line .ttx-page { padding: 0 6px; color: #ffffff; background: var(--accent); }
-.terms.blog .ttx-front h2 { max-width: none; margin-top: 12px; font-size: clamp(24px, 2.4vw, 30px); line-height: 1.12; letter-spacing: -0.02em; font-weight: 700; }
-.terms.blog .ttx-front li:first-child h2 { font-size: clamp(32px, 4.4vw, 52px); line-height: 1.02; letter-spacing: -0.03em; text-wrap: balance; }
+.ttx-line { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; }
+.terms.blog .ttx-front h2 { max-width: none; margin-top: 12px; font-size: clamp(1.5rem, 2.4vw, 1.875rem); line-height: 1.12; letter-spacing: -0.015em; font-weight: 700; text-wrap: balance; }
+.terms.blog .ttx-front li:first-child h2 { font-size: clamp(2rem, 4.4vw, 3.25rem); line-height: 1.04; letter-spacing: -0.028em; font-weight: 500; }
 .ttx-front h2 a { color: var(--text-1); text-decoration: none; }
 .ttx-front img { display: block; width: 100%; height: auto; margin-top: 20px; background: #ffffff; }
-.ttx-front li > p:last-child { margin-top: 12px; font-family: var(--paper-serif); font-size: 18px; line-height: 1.5; color: var(--text-1); }
+.ttx-front li > p:last-child { margin-top: 12px; font-family: var(--paper-serif); font-size: 1.125rem; line-height: 1.5; color: var(--text-1); text-wrap: pretty; }
 @media (max-width: 760px) {
   .ttx-front { grid-template-columns: minmax(0, 1fr); }
   .ttx-front li:first-child { grid-column: auto; }
 }
 
 /* The keys: red, green, yellow, cyan, as on a teletext remote. */
-.ttx-keys { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px 24px; margin-top: 72px; font-family: var(--px); font-size: 14px; }
-.ttx-keys a { display: flex; align-items: center; gap: 10px; color: var(--text-1); text-decoration: none; }
+.ttx-keys { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: 12px 24px; margin-top: 72px; font-family: var(--px); font-size: var(--mono-s); }
+.ttx-keys a { display: flex; align-items: center; gap: 10px; min-height: 44px; color: var(--text-1); text-decoration: none; }
 .ttx-keys a::before { content: ""; flex: none; width: 14px; height: 14px; background: #ff0000; }
 .ttx-keys a:nth-child(2)::before { background: #00c000; }
 .ttx-keys a:nth-child(3)::before { background: #ffd800; }
 .ttx-keys a:nth-child(4)::before { background: #00c8d8; }
-.blog-draft { display: inline-block; margin-bottom: 16px; padding: 6px 10px; font-family: var(--px); font-size: 13px; background: var(--accent); color: var(--on-accent); }
+@media print {
+  [data-paper] .rail, [data-paper] .ttx-keys, [data-paper] .paper-toc, [data-paper] .foot { display: none; }
+  .paper-body h2, .paper-body h3 { break-after: avoid; }
+  .paper-body p { orphans: 3; widows: 3; }
+}
 
 /* Research (/research, site/research.mjs): the benchmark frame. One statement,
  * the public benchmark on a blue plate, then a dated list held apart by space,

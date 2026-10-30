@@ -1,9 +1,10 @@
 /*
- * /blog: the mosaic title plays. The pointer inverts the blocks under it, and
- * Reveal, as on a teletext remote, shows the word hidden in the same grid.
+ * /blog: the mosaic title plays. The pointer inverts the blocks under it, and a
+ * click shows the word hidden in the same grid.
  *
- * The title is whole in the HTML and the h1 carries its text, so a reader
- * without JavaScript loses nothing. No dependencies, tracking or storage.
+ * It is a toy, not a control: the title is whole in the HTML and the h1 carries
+ * its text, so a reader without a pointer or JavaScript loses nothing. No
+ * dependencies, tracking or storage.
  */
 /* global document, matchMedia, requestAnimationFrame */
 (function () {
@@ -13,17 +14,13 @@
 
   function init() {
     var svg = document.querySelector(".ttx-title");
-    var key = document.querySelector(".ttx-reveal");
-    var note = document.querySelector(".ttx-note");
-    if (!svg || !key) return;
+    if (!svg) return;
     var cells = Array.prototype.slice.call(svg.querySelectorAll("rect"));
     var still = matchMedia("(prefers-reduced-motion: reduce)").matches;
     var hidden = false, hit = new Map(), running = false;
 
     function reveal() {
       hidden = !hidden;
-      key.setAttribute("aria-pressed", hidden ? "true" : "false");
-      note.textContent = hidden ? "The title now reads DATA." : "The title reads BLOG again.";
       var word = hidden ? "d" : "b";
       cells.forEach(function (c) {
         var want = c.classList.contains(word);
@@ -56,8 +53,6 @@
       if (!running) { running = true; requestAnimationFrame(fade); }
     }
 
-    key.hidden = false;
-    key.addEventListener("click", reveal);
     svg.addEventListener("click", reveal);
     if (!still) svg.addEventListener("pointermove", punch);
   }

@@ -178,7 +178,7 @@ const sized = (html, figures) => html.replace(/<img src="\/blog\/figures\/([^"]+
 
 // ── HTML, Markdown, Atom ────────────────────────────────────────────────────
 
-/** Two words in one grid: BLOG, and DATA for the Reveal key (site/blog.js). */
+/** Two words in one grid: BLOG, and DATA behind a click (site/blog.js). */
 const GLYPHS = {
   B: "11110 10001 10001 11110 10001 10001 11110", L: "10000 10000 10000 10000 10000 10000 11111", O: "01110 10001 10001 10001 10001 10001 01110", G: "01110 10001 10000 10111 10001 10001 01111",
   D: "11110 10001 10001 10001 10001 10001 11110", A: "01110 10001 10001 11111 10001 10001 10001", T: "11111 00100 00100 00100 00100 00100 00100",
@@ -195,6 +195,29 @@ const mosaic = () => {
   }
   return `<svg class="ttx-title" viewBox="0 0 23 7" aria-hidden="true">${cells.join("")}</svg>`;
 };
+
+/**
+ * Real quotation marks and apostrophes in rendered text. Code stays as typed,
+ * and so do the Markdown copy and the feed.
+ */
+export function smart(html) {
+  let last = " ";
+  return html.split(/(<pre[\s\S]*?<\/pre>|<code>[\s\S]*?<\/code>|<[^>]+>)/).map((part, i) => {
+    if (i % 2) {
+      if (part.startsWith("<code") || part.startsWith("<pre")) last = "x";
+      else if (/^<\/?(p|li|h\d|figcaption|figure)\b/.test(part)) last = " ";
+      return part;
+    }
+    const out = part.replace(/&#39;|&quot;|'|"/g, (m, at, text) => {
+      const before = at ? text[at - 1] : last;
+      const opens = /[\s([–—]/.test(before);
+      if (m === "&quot;" || m === '"') return opens ? "“" : "”";
+      return opens && !/\d/.test(text[at + m.length] || "") ? "‘" : "’";
+    });
+    if (part) last = part[part.length - 1];
+    return out;
+  }).join("");
+}
 
 /** The four coloured links at the bottom of a page, teletext's Fastext keys. */
 const fastext = (keys) => `    <nav class="ttx-keys" aria-label="More pages">${keys.map(([href, text]) => `<a href="${esc(href)}">${esc(text)}</a>`).join("")}</nav>`;
@@ -228,7 +251,7 @@ ${script ? `  <script src="${script}" defer></script>\n` : ""}  ${ld}
   <p class="ttx-bar"><span class="ttx-page">${number}</span><span>Penthera blog</span><span class="ttx-date">${dateline}</span></p>
   <main class="terms land blog${mast ? "" : " blog-post"}" id="main">
 ${draft ? '    <p class="blog-draft">Draft: not approved, not listed and not indexed.</p>\n' : ""}    <nav class="eyebrow" aria-label="Breadcrumb">${crumb}</nav>
-    <h1>${mast ? `${mosaic()}<span class="sr">${esc(h1)}</span>` : esc(h1)}</h1>
+    <h1>${mast ? `${mosaic()}<span class="sr">${esc(h1)}</span>` : smart(esc(h1))}</h1>
 ${body}
   </main>
   ${foot}
@@ -268,9 +291,13 @@ export function postHtml(p, { origin, styles = "/styles.css", theme = "/theme.js
   const path = `/blog/${p.slug}`;
   const url = `${origin}${path}`;
   const minutes = Math.max(1, Math.round(p.md.split(/\s+/).length / 220));
-  const body = `    <p class="blog-meta"><time datetime="${p.date}">${longDate(p.date)}</time> · ${esc(AUTHOR.name)} · ${minutes} min read</p>
+  const html = smart(sized(renderMarkdown(p.md), p.figures));
+  const sections = [...html.matchAll(/<h2 id="([^"]+)">(.*?)<\/h2>/g)].map(([, id, text]) => `<li><a href="#${id}">${text}</a></li>`);
+  const body = `    <aside class="paper-side" aria-label="About this post">
+      <p class="blog-meta"><span><time datetime="${p.date}">${longDate(p.date)}</time></span><span>${esc(AUTHOR.name)}</span><span>${minutes} min read</span></p>
+${sections.length > 2 ? `      <nav class="paper-toc" aria-label="In this post"><ol>${sections.join("")}</ol></nav>\n` : ""}    </aside>
     <div class="paper-body">
-${sized(renderMarkdown(p.md), p.figures)}
+${html}
     </div>
     <p class="blog-src">Sources: ${sourceLinks(p)}.</p>
 ${fastext([["/blog", "All posts"], next ? [`/blog/${next.slug}`, `${next.number} ${next.nav || next.title}`] : ["/benchmarks", "Benchmarks"], ["/blog/feed.xml", "Atom feed"], [`${path}.md`, "Markdown copy"]])}`;
@@ -279,7 +306,7 @@ ${fastext([["/blog", "All posts"], next ? [`/blog/${next.slug}`, `${next.number}
     itemListElement: [["Penthera", "/"], ["Blog", "/blog"], [p.title, path]].map(([n, u], i) => ({ "@type": "ListItem", position: i + 1, name: n, item: `${origin}${u}` })),
   }]);
   return page({ title: p.title, description: p.description, url, path, h1: p.title, ld, body, styles, theme, foot, draft: !p.approved, number, dateline: longDate(p.date),
-    crumb: `<a href="/">Penthera</a> · <a href="/blog">Blog</a>` });
+    crumb: `<a class="tag" href="/">Penthera</a><a class="tag tag-steel" href="/blog">Blog</a>` });
 }
 
 /** One post as Markdown, for agents. */
@@ -291,13 +318,8 @@ export function postMarkdown(p, { origin }) {
 export function blogIndexHtml(posts, { origin, styles = "/styles.css", theme = "/theme.js", script = "/blog.js", foot }) {
   const numbers = pageNumbers(posts);
   const lead = Object.keys(posts[0]?.figures || {})[0];
-  const body = `    <div class="ttx-mast">
-      <p class="terms-for">How Penthera is built and measured, with the data behind each number.</p>
-      <button class="ttx-reveal" type="button" aria-pressed="false" aria-label="Reveal the word hidden in the title" hidden>Reveal</button>
-      <p class="ttx-note sr" role="status"></p>
-    </div>
-    <ul class="ttx-front">
-${posts.map((p, i) => `      <li><p class="ttx-line"><span class="ttx-page">${numbers.get(p.slug)}</span><time datetime="${p.date}">${longDate(p.date)}</time></p><h2><a href="/blog/${p.slug}">${esc(p.title)}</a></h2>${i === 0 && lead ? `<img src="/blog/figures/${lead}" width="${posts[0].figures[lead].width}" height="${posts[0].figures[lead].height}" alt="" loading="lazy">` : ""}<p>${esc(p.description)}</p></li>`).join("\n")}
+  const body = `    <ul class="ttx-front">
+${posts.map((p, i) => `      <li><p class="ttx-line"><span class="tag">${numbers.get(p.slug)}</span><time class="tag tag-steel" datetime="${p.date}">${longDate(p.date)}</time></p><h2><a href="/blog/${p.slug}">${smart(esc(p.title))}</a></h2>${i === 0 && lead ? `<img src="/blog/figures/${lead}" width="${posts[0].figures[lead].width}" height="${posts[0].figures[lead].height}" alt="" loading="lazy">` : ""}<p>${smart(esc(p.description))}</p></li>`).join("\n")}
     </ul>
 ${fastext([["/benchmarks", "Benchmarks"], ["/research", "Research"], ["/blog/feed.xml", "Atom feed"], ["/blog.md", "Markdown copy"]])}`;
   const ld = ldScript([{
@@ -305,7 +327,7 @@ ${fastext([["/benchmarks", "Benchmarks"], ["/research", "Research"], ["/blog/fee
     blogPost: posts.map((p) => ({ "@id": `${origin}/blog/${p.slug}#post` })),
   }]);
   return page({ title: "Blog: how Penthera is built and measured", description: "Posts on how Penthera is built and measured, with the data and the protocol behind every number.",
-    url: `${origin}/blog`, path: "/blog", h1: "Blog", ld, body, styles, theme, foot, type: "website", mast: true, script, dateline: posts[0] ? longDate(posts[0].date) : "", crumb: `<a href="/">Penthera</a> · Blog` });
+    url: `${origin}/blog`, path: "/blog", h1: "Blog", ld, body, styles, theme, foot, type: "website", mast: true, script, dateline: posts[0] ? longDate(posts[0].date) : "", crumb: `<a class="tag" href="/">Penthera</a><span class="tag tag-steel">Blog</span>` });
 }
 
 /** /blog.md */

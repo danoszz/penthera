@@ -9,7 +9,7 @@ import { mkdtempSync, rmSync, readFileSync, readdirSync, writeFileSync, mkdirSyn
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { buildSite } from "../site/build.mjs";
-import { facts, parsePost, readPosts, rowId } from "../site/blog.mjs";
+import { facts, parsePost, readPosts, rowId, smart } from "../site/blog.mjs";
 import { n2 } from "../site/benchmarks.mjs";
 import { renderMarkdown } from "../site/terms.mjs";
 
@@ -164,12 +164,18 @@ describe("blog, published", () => {
     for (const f of ["blog/sealed-half-benchmark.html"]) expect(builds.one(f).replace(/<code>.*?<\/code>/g, "").replace(/<script[\s\S]*?<\/script>/g, ""), f).not.toMatch(/\*\w/);
   });
 
-  it("keeps the blog's title whole without script, with a real key for Reveal", () => {
+  it("sets real quotes and apostrophes, and leaves code as typed", () => {
+    expect(smart(`<p>Penthera&#39;s "first" run, the '90s, 'quoted' and (<em>"x"</em>).</p>`)).toBe("<p>Penthera’s “first” run, the ’90s, ‘quoted’ and (<em>“x”</em>).</p>");
+    expect(smart(`<p>Run <code>--name "a'b"</code> now.</p><pre><code>'x'</code></pre>`)).toBe(`<p>Run <code>--name "a'b"</code> now.</p><pre><code>'x'</code></pre>`);
+    expect(smart(`<a href="a'b">it's</a>`)).toBe(`<a href="a'b">it’s</a>`);
+  });
+
+  it("keeps the blog's title whole without script, and its tags are the footer's pills", () => {
     const html = builds.one("blog.html");
     expect(html).toContain('<span class="sr">Blog</span>');
     expect(html).toMatch(/<script src="\/blog\.js\?v=[\w-]+" defer>/);
-    expect(html).toMatch(/<button class="ttx-reveal"[^>]*aria-pressed="false"[^>]*hidden>Reveal<\/button>/);
     expect(html).not.toMatch(/ style=/);
+    expect(html).toContain('<nav class="eyebrow" aria-label="Breadcrumb"><a class="tag" href="/">Penthera</a>');
     expect((html.match(/class="r\d[^"]* on b/g) || []).length).toBe(html.match(/class="r\d[^"]* b[" ]/g).length);
   });
 
