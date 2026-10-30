@@ -86,16 +86,18 @@ export function smart(html) {
 }
 
 /**
- * Stickers: every tag and eyebrow gets a finish, a cut and a tilt from the page
- * and its place on it, so labels never repeat in a row but a page never changes
- * between builds. The picks are data attributes; styles.css draws them.
+ * Stickers: every tag and eyebrow gets a finish, a cut and now and then a small
+ * tilt from the page and its place on it, so a page never changes between
+ * builds. A tag that already has a finish keeps it: a category always looks the
+ * same. The picks are data attributes; styles.css draws them.
  */
 export function stickers(html, seed = "") {
+  const TILT = [0, 0, 1, 0, 0, 2, 0];
   let n = [...seed].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 9973, 7);
-  return html.replace(/<(\w+) class="((?:[^"]*\s)?(?:tag|eyebrow|sticker)(?:\s[^"]*)?)"/g, (m, el, cls) => {
+  return html.replace(/<(\w+) class="((?:[^"]*\s)?(?:tag|eyebrow|sticker)(?:\s[^"]*)?)"(?! data-f)/g, (m, el, cls) => {
     if (/ttx-crumbs/.test(cls)) return m;
     n += 1;
-    return `${m} data-f="${(n * 7) % 11}" data-c="${(n * 5) % 4}" data-t="${(n * 3) % 8}"`;
+    return `${m} data-f="${(n * 3) % 5}" data-c="${n % 3 ? 0 : 1}" data-t="${TILT[n % 7]}"`;
   });
 }
 

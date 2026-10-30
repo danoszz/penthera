@@ -1035,12 +1035,6 @@ main > .desk { padding-top: clamp(64px, 8vw, 120px); }
   background: linear-gradient(180deg, #8a8aff, #0000ed 60%, #0000b8);
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.35) inset;
 }
-.foot-led::before, .foot-led::after { content: ""; position: absolute; inset: 0; pointer-events: none; will-change: opacity; }
-.foot-led::before { box-shadow: 0 0 4px 1px rgba(0, 0, 237, 0.5), 0 0 12px 2px rgba(0, 0, 237, 0.2); opacity: 0; animation: foot-led-dim 2.8s ease-in-out infinite; }
-.foot-led::after { box-shadow: 0 0 10px 2px rgba(0, 0, 237, 0.7), 0 0 28px 6px rgba(0, 0, 237, 0.35); animation: foot-led 2.8s ease-in-out infinite; }
-.foot-led[data-rest]::before, .foot-led[data-rest]::after { animation-play-state: paused; }
-@keyframes foot-led { 50% { opacity: 0; } }
-@keyframes foot-led-dim { 50% { opacity: 1; } }
 .foot-ctas { display: flex; flex-wrap: wrap; gap: 8px; }
 
 /* The map: four groups, each under a pill cut like the hero's (.pills), in a
@@ -1062,6 +1056,19 @@ main > .desk { padding-top: clamp(64px, 8vw, 120px); }
 .foot-group:nth-child(2) .foot-k { --pill-ink: #0a0a0a; --pill-tilt: 0.8deg; --pill-bg: linear-gradient(180deg, #dfe3e9 0%, #b9c0ca 40%, #9aa3b0 54%, #e4e8ed 72%, #aab2bd 100%); }
 .foot-group:nth-child(3) .foot-k { --pill-ink: #ffffff; --pill-tilt: -0.4deg; --pill-bg: linear-gradient(180deg, #5d6572 0%, #2b2f36 44%, #15171b 58%, #4a515c 100%); }
 .foot-group:nth-child(4) .foot-k { --pill-ink: #00006b; --pill-tilt: 1.1deg; --pill-bg: linear-gradient(180deg, #c9c9ff 0%, #8a8aff 60%, #7a7aff 100%); }
+/* Stickers: every eyebrow, tag and post section head (it's a rule). The theme's
+ * finishes only: blue, steel, ink and two ghost outlines. Most sit straight; the
+ * build tilts a few by a degree (stickers() in site/frame.mjs). Each holds 4.5:1. */
+.tag, .eyebrow, .sticker {
+  width: fit-content; margin-bottom: 18px; padding: 5px 12px 4px;
+  font-size: 13px; line-height: 1.3; color: var(--pill-ink); background: var(--pill-bg);
+  clip-path: var(--pill-cut, polygon(0 3px, 3px 3px, 3px 0, calc(100% - 6px) 0, calc(100% - 6px) 2px, 100% 2px, 100% calc(100% - 4px), calc(100% - 3px) calc(100% - 4px), calc(100% - 3px) 100%, 5px 100%, 5px calc(100% - 2px), 0 calc(100% - 2px)));
+  transform: translate(var(--pill-x, 0), var(--pill-y, 0)) rotate(var(--pill-tilt, 0deg));
+}
+.foot-group:nth-child(1) .foot-k { --pill-ink: #ffffff; --pill-tilt: -1.2deg; --pill-bg: #0000ed; }
+.foot-group:nth-child(2) .foot-k { --pill-ink: #0a0a0a; --pill-tilt: 0.8deg; --pill-bg: linear-gradient(180deg, #dfe3e9 0%, #b9c0ca 40%, #9aa3b0 54%, #e4e8ed 72%, #aab2bd 100%); }
+.foot-group:nth-child(3) .foot-k { --pill-ink: #ffffff; --pill-tilt: -0.4deg; --pill-bg: linear-gradient(180deg, #5d6572 0%, #2b2f36 44%, #15171b 58%, #4a515c 100%); }
+.foot-group:nth-child(4) .foot-k { --pill-ink: #00006b; --pill-tilt: 1.1deg; --pill-bg: linear-gradient(180deg, #c9c9ff 0%, #8a8aff 60%, #7a7aff 100%); }
 /* Stickers: every eyebrow, tag and post section head (it's a rule). The build
  * deals each one a finish (data-f), a cut (data-c) and a tilt (data-t), see
  * stickers() in site/frame.mjs, so they look stuck on by hand: small, some
@@ -1072,26 +1079,12 @@ main > .desk { padding-top: clamp(64px, 8vw, 120px); }
 .eyebrow a, .eyebrow a:hover { color: inherit; background: none; }
 [data-f="1"] { --pill-ink: #0a0a0a; --pill-bg: linear-gradient(180deg, #dfe3e9 0%, #b9c0ca 40%, #9aa3b0 54%, #e4e8ed 72%, #aab2bd 100%); }
 [data-f="2"] { --pill-ink: #ffffff; --pill-bg: linear-gradient(180deg, #5d6572 0%, #2b2f36 44%, #15171b 58%, #4a515c 100%); }
-[data-f="3"] { --pill-ink: #00006b; --pill-bg: linear-gradient(180deg, #c9c9ff 0%, #8a8aff 60%, #7a7aff 100%); }
-[data-f="4"] { --pill-ink: #0a0a0a; --pill-bg: #ffd800; }
-[data-f="5"] { --pill-ink: #0a0a0a; --pill-bg: linear-gradient(120deg, #ffb3e6, #b3f0ff 45%, #fff3a8 75%, #c9c9ff); }
-[data-f="6"] { --pill-ink: #ffd800; --pill-bg: #0a0a0a; }
-[data-f="7"] { --pill-ink: #003338; --pill-bg: #00d8e8; }
-[data-f="8"] { --pill-ink: #ffffff; --pill-bg: #d6002a; }
-[data-f="9"] { --pill-ink: #0a0a0a; --pill-bg: #2fd64a; }
-[data-f="10"] { --pill-ink: #0a0a0a; --pill-bg: #fdfdfa; }
+[data-f="3"], [data-f="4"] { --pill-cut: none; --pill-ink: var(--accent-ink); --pill-bg: transparent; box-shadow: inset 0 0 0 1px currentColor; }
+[data-f="4"] { --pill-ink: var(--text-1); }
 .band-blue [data-f="0"] { --pill-ink: #0000ed; --pill-bg: #ffffff; }
 [data-c="1"] { --pill-cut: none; }
-[data-c="2"] { --pill-cut: polygon(0 0, 100% 0, 100% 35%, calc(100% - 4px) 50%, 100% 65%, 100% 100%, 0 100%, 0 65%, 4px 50%, 0 35%); }
-[data-c="3"] { --pill-cut: polygon(0 0, calc(100% - 7px) 0, 100% 7px, 100% 100%, 0 100%); }
-[data-t="0"] { --pill-tilt: 0deg; }
-[data-t="1"] { --pill-tilt: -3.2deg; --pill-y: 1px; }
-[data-t="2"] { --pill-tilt: 2.2deg; --pill-x: 3px; }
-[data-t="3"] { --pill-tilt: 0deg; --pill-x: 6px; --pill-y: -2px; }
-[data-t="4"] { --pill-tilt: 4.4deg; --pill-y: -1px; }
-[data-t="5"] { --pill-tilt: -1.3deg; --pill-x: -2px; }
-[data-t="6"] { --pill-tilt: 0deg; }
-[data-t="7"] { --pill-tilt: -5.5deg; --pill-x: 4px; --pill-y: 2px; }
+[data-t="1"] { --pill-tilt: -1deg; }
+[data-t="2"] { --pill-tilt: 0.8deg; }
 .foot-nav ul { display: grid; justify-items: start; margin: 0; padding: 0; list-style: none; }
 .foot-nav a {
   display: inline-flex; align-items: center; min-height: 30px; margin-left: -4px; padding: 0 4px;
@@ -1137,7 +1130,6 @@ main > .desk { padding-top: clamp(64px, 8vw, 120px); }
 .foot-mark:hover .foot-word { background: linear-gradient(180deg, #8a8aff 0%, #2a2aff 45%, #0000ed 60%, #0000b8 100%); }
 
 .foot-facts { display: flex; flex-wrap: wrap; gap: 6px 28px; margin-top: calc(-1 * clamp(16px, 3vw, 40px)); font-size: 12px; color: var(--text-3); }
-@media (prefers-reduced-motion: reduce) { .foot-led::before, .foot-led::after { animation: none; } }
 .nowrap { white-space: nowrap; }
 /* The maker, at the end of Open R&D. */
 .by {
@@ -1434,10 +1426,13 @@ h1, h2, h3 { text-wrap: balance; }
 /* Weight falls as size rises: the big head is medium, the small one bold. */
 .terms.blog h1 { margin: 20px 0 0 -0.04em; max-width: 22ch; font-size: clamp(2.5rem, 6.4vw, 4.75rem); line-height: 1.02; letter-spacing: -0.03em; word-spacing: -0.04em; font-weight: 500; color: var(--text-1); text-wrap: balance; }
 .terms.blog h1:has(.ttx-title) { margin-left: 0; max-width: none; }
+/* The front page runs the full width of the window, and the title stretches with
+ * it like a wide face. The list then fits itself to how many posts there are. */
+.terms.blog:not(.blog-post) { max-width: none; padding-inline: var(--gutter); }
 /* The title: solid blocks, the one heavy thing on the page. Blocks switch, they
  * never ease. The pointer inverts what it crosses; rows arrive one by one, as a
  * teletext page did, and all at once under reduced motion. */
-.ttx-title { display: block; width: 100%; height: auto; cursor: crosshair; touch-action: pan-y; }
+.ttx-title { display: block; width: 100%; height: clamp(148px, 20vw, 320px); cursor: crosshair; touch-action: pan-y; }
 .ttx-title rect { fill: transparent; shape-rendering: crispEdges; }
 .ttx-title rect.on { fill: var(--accent); }
 .ttx-title rect.x { fill: rgb(var(--ink-rgb)); }
@@ -1500,25 +1495,43 @@ h1, h2, h3 { text-wrap: balance; }
   .paper-toc a[aria-current]::before { content: ""; position: absolute; top: 0.32em; left: -1.25rem; width: 0.5rem; height: 0.5rem; background: var(--accent); }
 }
 
-/* The front page: the newest post leads, the rest fill columns beside it. */
-.ttx-front { list-style: none; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 48px; padding: 0; }
-/* A post is a white card, the same white as its figure. The whole card opens
- * the post: the title's link stretches over it. */
-.terms.blog .ttx-front li { position: relative; margin: 0; min-width: 0; padding: 20px; background: #ffffff; outline: 2px solid transparent; outline-offset: -2px; transition: outline-color 120ms var(--out); }
+/* The front page. Three layouts while Daan picks (data-layout, one stays). */
+.terms .ttx-front { list-style: none; display: grid; gap: 12px; margin-top: clamp(64px, 8vw, 120px); padding: 0; }
+.terms.blog .ttx-front li { position: relative; margin: 0; min-width: 0; padding: clamp(20px, 2.4vw, 36px); background: #ffffff; outline: 2px solid transparent; outline-offset: -2px; transition: outline-color 120ms var(--out); }
 .terms.blog .ttx-front li:hover, .terms.blog .ttx-front li:has(a:focus-visible) { outline-color: var(--accent); }
-.ttx-front li:first-child { grid-column: span 2; }
-.ttx-line { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; }
-.terms.blog .ttx-front h2 { max-width: none; margin-top: 12px; font-size: clamp(1.5rem, 2.4vw, 1.875rem); line-height: 1.12; letter-spacing: -0.015em; font-weight: 700; text-wrap: balance; }
-.terms.blog .ttx-front li:first-child h2 { font-size: clamp(2rem, 4.4vw, 3.25rem); line-height: 1.04; letter-spacing: -0.028em; font-weight: 500; }
+.ttx-line { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin: 0; }
+.ttx-when { font-family: var(--px); font-size: 0.6875rem; color: var(--text-3); }
+.terms.blog .ttx-front h2 { max-width: 22ch; margin-top: 14px; font-size: clamp(1.5rem, 2.4vw, 2rem); line-height: 1.1; letter-spacing: -0.018em; font-weight: 500; text-wrap: balance; }
 .ttx-front h2 a { color: var(--text-1); text-decoration: none; }
 .ttx-front h2 a::after { content: ""; position: absolute; inset: 0; }
 .ttx-front h2 a:hover, .ttx-front li:hover h2 a { color: var(--accent); background: none; }
 .ttx-front h2 a:focus-visible { outline: none; }
-.ttx-front img { display: block; width: 100%; height: auto; margin-top: 16px; background: #ffffff; }
-.ttx-front li > p:last-child { margin-top: 12px; font-family: var(--paper-serif); font-size: 1.125rem; line-height: 1.5; color: var(--text-1); text-wrap: pretty; }
-@media (max-width: 760px) {
-  .ttx-front { grid-template-columns: minmax(0, 1fr); }
-  .ttx-front li:first-child { grid-column: auto; }
+.ttx-front img { display: block; width: 100%; height: auto; margin-top: 20px; background: #ffffff; }
+.terms.blog .ttx-front .ttx-deck { max-width: 34em; margin-top: 12px; font-family: var(--paper-serif); font-size: 1.125rem; line-height: 1.5; color: var(--text-1); text-wrap: pretty; }
+.ttx-front[data-layout="b"] img, .ttx-front[data-layout="a"] li:not(:first-child) img { display: none; }
+@media (min-width: 62.5rem) {
+  /* A: the newest post is a wide feature, the rest are rows on its columns. */
+  .ttx-front[data-layout="a"] li { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); grid-template-areas: "line deck" "head deck"; gap: 0 clamp(32px, 4vw, 72px); align-content: start; }
+  .ttx-front[data-layout="a"] li:first-child { grid-template-rows: auto auto 1fr; grid-template-areas: "line fig" "head fig" "deck fig"; }
+  .ttx-front[data-layout="a"] .ttx-line { grid-area: line; }
+  .ttx-front[data-layout="a"] h2 { grid-area: head; }
+  .ttx-front[data-layout="a"] .ttx-deck { grid-area: deck; }
+  .terms.blog .ttx-front[data-layout="a"] li:not(:first-child) .ttx-deck { margin-top: 0; }
+  .ttx-front[data-layout="a"] img { grid-area: fig; margin-top: 0; }
+  .terms.blog .ttx-front[data-layout="a"] li:first-child h2 { font-size: clamp(2.25rem, 4vw, 3.5rem); line-height: 1.03; letter-spacing: -0.028em; }
+  /* B: a teletext index, one post to a row. */
+  .ttx-front[data-layout="b"] li { display: grid; grid-template-columns: 13rem minmax(0, 1.4fr) minmax(0, 1fr); gap: 0 clamp(24px, 3vw, 56px); align-items: baseline; }
+  .ttx-front[data-layout="b"] .ttx-line { display: block; }
+  .ttx-front[data-layout="b"] .ttx-when { display: block; margin-top: 10px; }
+  .terms.blog .ttx-front[data-layout="b"] h2 { max-width: none; margin-top: 0; font-size: clamp(1.75rem, 3vw, 2.5rem); line-height: 1.06; letter-spacing: -0.024em; }
+  .terms.blog .ttx-front[data-layout="b"] .ttx-deck { margin-top: 0; }
+  /* C: equal cards, as many across as there are posts, up to three. */
+  .ttx-front[data-layout="c"] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .ttx-front[data-layout="c"][data-n="1"] { grid-template-columns: minmax(0, 1fr); }
+  .ttx-front[data-layout="c"][data-n="2"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ttx-front[data-layout="c"] li { display: flex; flex-direction: column; }
+  .ttx-front[data-layout="c"] .ttx-deck { order: 2; }
+  .ttx-front[data-layout="c"] img { order: 3; margin-top: auto; padding-top: 24px; }
 }
 
 /* The keys: red, green, yellow, cyan, as on a teletext remote. */
@@ -1528,6 +1541,7 @@ h1, h2, h3 { text-wrap: balance; }
 .ttx-keys a:nth-child(2)::before { background: #00c000; }
 .ttx-keys a:nth-child(3)::before { background: #ffd800; }
 .ttx-keys a:nth-child(4)::before { background: #00c8d8; }
+.ttx-keys a[href="/benchmarks"]::before { background: #ff7a00; }
 @media print {
   [data-paper] .rail, [data-paper] .ttx-keys, [data-paper] .paper-toc, [data-paper] .foot { display: none; }
   .paper-body h2, .paper-body h3 { break-after: avoid; }

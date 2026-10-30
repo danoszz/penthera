@@ -8,6 +8,7 @@
  *   date: 2026-11-03
  *   approved: false              # Daan sets a date (YYYY-MM-DD) to publish
  *   sources: bench/public/published.json, bench/public/RESULTS.md
+ *   category: Method             # the tag above the post; one word
  *   keywords: secret scanner benchmark, gitleaks vs trufflehog
  *   ---
  *   > The one question the post answers?
@@ -195,8 +196,12 @@ const mosaic = () => {
     const blog = lit("BLOG", x, y), data = lit("DATA", x, y);
     cells.push(`<rect x="${x}" y="${y}" width="1" height="1" class="r${y}${blog ? " on b" : ""}${data ? " d" : ""}"/>`);
   }
-  return `<svg class="ttx-title" viewBox="0 0 23 7" aria-hidden="true">${cells.join("")}</svg>`;
+  return `<svg class="ttx-title" viewBox="0 0 23 7" preserveAspectRatio="none" aria-hidden="true">${cells.join("")}</svg>`;
 };
+
+/** A post's category tag: one finish per category, so a tag means the same everywhere. */
+const CATEGORY = { Benchmark: 0, Method: 3 };
+const categoryTag = (p) => `<span class="tag" data-f="${CATEGORY[p.category] ?? 4}" data-c="0" data-t="0">${esc(p.category || "Note")}</span>`;
 
 /** The four coloured links at the bottom of a page, teletext's Fastext keys. */
 const fastext = (keys) => `    <nav class="ttx-keys" aria-label="More pages">${keys.map(([href, text]) => `<a href="${esc(href)}">${esc(text)}</a>`).join("")}</nav>`;
@@ -285,7 +290,7 @@ ${fastext([["/blog", "All posts"], next ? [`/blog/${next.slug}`, `${next.number}
     itemListElement: [["Penthera", "/"], ["Blog", "/blog"], [p.title, path]].map(([n, u], i) => ({ "@type": "ListItem", position: i + 1, name: n, item: `${origin}${u}` })),
   }]);
   return page({ title: p.title, description: p.description, url, path, h1: p.title, ld, body, styles, theme, script, foot, draft: !p.approved, number, dateline: longDate(p.date),
-    crumb: `<a class="tag" href="/">Penthera</a><a class="tag tag-steel" href="/blog">Blog</a>` });
+    crumb: `<a class="tag" href="/">Penthera</a><a class="tag" href="/blog">Blog</a>${categoryTag(p)}` });
 }
 
 /** One post as Markdown, for agents. */
@@ -294,11 +299,14 @@ export function postMarkdown(p, { origin }) {
 }
 
 /** /blog: the published posts, newest first. */
-export function blogIndexHtml(posts, { origin, styles = "/styles.css", theme = "/theme.js", script = "/blog.js", foot }) {
+export function blogIndexHtml(posts, { origin, styles = "/styles.css", theme = "/theme.js", script = "/blog.js", foot, layout = process.env.PENTHERA_BLOG_LAYOUT || "a" }) {
   const numbers = pageNumbers(posts);
-  const lead = Object.keys(posts[0]?.figures || {})[0];
-  const body = `    <ul class="ttx-front">
-${posts.map((p, i) => `      <li><p class="ttx-line"><span class="tag">${numbers.get(p.slug)}</span><time class="tag tag-steel" datetime="${p.date}">${longDate(p.date)}</time></p><h2><a href="/blog/${p.slug}">${smart(esc(p.title))}</a></h2>${i === 0 && lead ? `<img src="/blog/figures/${lead}" width="${posts[0].figures[lead].width}" height="${posts[0].figures[lead].height}" alt="" loading="lazy">` : ""}<p>${smart(esc(p.description))}</p></li>`).join("\n")}
+  const figure = (p) => {
+    const name = Object.keys(p.figures || {})[0];
+    return name ? `<img src="/blog/figures/${name}" width="${p.figures[name].width}" height="${p.figures[name].height}" alt="" loading="lazy">` : "";
+  };
+  const body = `    <ul class="ttx-front" data-layout="${layout}" data-n="${posts.length}">
+${posts.map((p) => `      <li><p class="ttx-line">${categoryTag(p)}<span class="ttx-when">${numbers.get(p.slug)} · <time datetime="${p.date}">${longDate(p.date)}</time></span></p><h2><a href="/blog/${p.slug}">${smart(esc(p.title))}</a></h2>${figure(p)}<p class="ttx-deck">${smart(esc(p.description))}</p></li>`).join("\n")}
     </ul>
 ${fastext([["/benchmarks", "Benchmarks"], ["/research", "Research"], ["/blog/feed.xml", "Atom feed"], ["/blog.md", "Markdown copy"]])}`;
   const ld = ldScript([{
@@ -306,7 +314,7 @@ ${fastext([["/benchmarks", "Benchmarks"], ["/research", "Research"], ["/blog/fee
     blogPost: posts.map((p) => ({ "@id": `${origin}/blog/${p.slug}#post` })),
   }]);
   return page({ title: "Blog: how Penthera is built and measured", description: "Posts on how Penthera is built and measured, with the data and the protocol behind every number.",
-    url: `${origin}/blog`, path: "/blog", h1: "Blog", ld, body, styles, theme, foot, type: "website", mast: true, script, dateline: posts[0] ? longDate(posts[0].date) : "", crumb: `<a class="tag" href="/">Penthera</a><span class="tag tag-steel">Blog</span>` });
+    url: `${origin}/blog`, path: "/blog", h1: "Blog", ld, body, styles, theme, foot, type: "website", mast: true, script, dateline: posts[0] ? longDate(posts[0].date) : "", crumb: `<a class="tag" href="/">Penthera</a><span class="tag">Blog</span>` });
 }
 
 /** /blog.md */

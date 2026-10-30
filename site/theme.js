@@ -35,14 +35,5 @@
       });
     }
     sync(btns);
-
-    // The footer's LED breathes only while it is on screen (styles.css).
-    var led = document.querySelector(".foot-led");
-    if (led && "IntersectionObserver" in window) {
-      new IntersectionObserver(function (entries) {
-        if (entries[0].isIntersecting) led.removeAttribute("data-rest");
-        else led.setAttribute("data-rest", "");
-      }).observe(led);
-    }
   });
 })();
