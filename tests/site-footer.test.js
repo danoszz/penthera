@@ -54,6 +54,10 @@ describe("site rail", () => {
     expect(current(siteRail({ url: "/terms" }))).toBeUndefined();
   });
 
+  it("carries no data-h: /pro's horizontal page looks for that attribute", () => {
+    expect(siteRail({ url: "/pro" })).not.toMatch(/\sdata-h[=\s>]/);
+  });
+
   it("holds the download back only on the homepage and drops Blog without a post", () => {
     expect(siteRail({ url: "/" })).toContain("data-hero");
     expect(siteRail({ url: "/" })).toContain('class="rail-download" href="#get"');

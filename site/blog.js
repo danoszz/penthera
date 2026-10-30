@@ -1,18 +1,19 @@
 /*
  * /blog: the mosaic title plays. The pointer inverts the blocks under it, and a
- * click shows the word hidden in the same grid.
+ * click shows the word hidden in the same grid. On a post, the contents in the
+ * margin follow the section being read.
  *
  * It is a toy, not a control: the title is whole in the HTML and the h1 carries
  * its text, so a reader without a pointer or JavaScript loses nothing. No
  * dependencies, tracking or storage.
  */
-/* global document, matchMedia, requestAnimationFrame */
+/* global document, innerHeight, matchMedia, requestAnimationFrame, window */
 (function () {
   "use strict";
 
   var COLS = 23, ROWS = 7, HOLD = 420;
 
-  function init() {
+  function title() {
     var svg = document.querySelector(".ttx-title");
     if (!svg) return;
     var cells = Array.prototype.slice.call(svg.querySelectorAll("rect"));
@@ -55,6 +56,34 @@
 
     svg.addEventListener("click", reveal);
     if (!still) svg.addEventListener("pointermove", punch);
+  }
+
+  // The margin's contents show which section is being read.
+  function contents() {
+    var links = Array.prototype.slice.call(document.querySelectorAll(".paper-toc a"));
+    if (!links.length) return;
+    var heads = links.map(function (a) { return document.getElementById(a.getAttribute("href").slice(1)); });
+    function mark() {
+      var at = -1;
+      heads.forEach(function (h, i) { if (h.getBoundingClientRect().top < innerHeight * 0.35) at = i; });
+      links.forEach(function (a, i) {
+        if (i === at) a.setAttribute("aria-current", "true");
+        else a.removeAttribute("aria-current");
+      });
+    }
+    // On scroll, not an observer: a fast jump can pass a head without crossing anything.
+    var queued = false;
+    window.addEventListener("scroll", function () {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(function () { queued = false; mark(); });
+    }, { passive: true });
+    mark();
+  }
+
+  function init() {
+    title();
+    contents();
   }
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);

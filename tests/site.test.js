@@ -286,7 +286,7 @@ describe("site before and after", () => {
     const packRules = activePacks().reduce((n, p) => n + p.count, 0);
     const rules = COUNTS.urlTemplates + COUNTS.secretPatterns + COUNTS.capabilities + COUNTS.agentRules + packRules;
     // The totals sit under the four areas in "What it checks".
-    expect(sec).toContain(`Counts from this release's rules: ${rules} readable rules, citing ${COUNTS.references} sources.`);
+    expect(sec).toContain(`Counts from this release’s rules: ${rules} readable rules, citing ${COUNTS.references} sources.`);
     expect(sec).toContain(`<p class="map-n">${(COUNTS.popularNpm + COUNTS.popularPypi).toLocaleString("en-US")}<span> package names</span></p>`);
     expect(rules).toBeLessThan(1000); // the count is what it is; never round it up
     expect(sec).not.toMatch(/1,?000\+/);

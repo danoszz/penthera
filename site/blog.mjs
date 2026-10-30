@@ -42,7 +42,9 @@ import { RANK_INTERVALS, fieldTools, n2, ord } from "./benchmarks.mjs";
 
 /** F-beta: beta below 1 weighs precision more, above 1 recall. */
 const fBeta = (p, r, beta) => (p && r ? ((1 + beta * beta) * p * r) / (beta * beta * p + r) : 0);
-import { ldScript, siteFooter } from "./frame.mjs";
+import { ldScript, siteFooter, smart } from "./frame.mjs";
+
+export { smart };
 
 const REPO = "https://github.com/danoszz/penthera";
 const AUTHOR = { "@type": "Person", name: "Daan van der Zwaag", url: "https://daanvanderzwaag.com" };
@@ -196,29 +198,6 @@ const mosaic = () => {
   return `<svg class="ttx-title" viewBox="0 0 23 7" aria-hidden="true">${cells.join("")}</svg>`;
 };
 
-/**
- * Real quotation marks and apostrophes in rendered text. Code stays as typed,
- * and so do the Markdown copy and the feed.
- */
-export function smart(html) {
-  let last = " ";
-  return html.split(/(<pre[\s\S]*?<\/pre>|<code>[\s\S]*?<\/code>|<[^>]+>)/).map((part, i) => {
-    if (i % 2) {
-      if (part.startsWith("<code") || part.startsWith("<pre")) last = "x";
-      else if (/^<\/?(p|li|h\d|figcaption|figure)\b/.test(part)) last = " ";
-      return part;
-    }
-    const out = part.replace(/&#39;|&quot;|'|"/g, (m, at, text) => {
-      const before = at ? text[at - 1] : last;
-      const opens = /[\s([–—]/.test(before);
-      if (m === "&quot;" || m === '"') return opens ? "“" : "”";
-      return opens && !/\d/.test(text[at + m.length] || "") ? "‘" : "’";
-    });
-    if (part) last = part[part.length - 1];
-    return out;
-  }).join("");
-}
-
 /** The four coloured links at the bottom of a page, teletext's Fastext keys. */
 const fastext = (keys) => `    <nav class="ttx-keys" aria-label="More pages">${keys.map(([href, text]) => `<a href="${esc(href)}">${esc(text)}</a>`).join("")}</nav>`;
 
@@ -250,7 +229,7 @@ ${script ? `  <script src="${script}" defer></script>\n` : ""}  ${ld}
 <body>
   <p class="ttx-bar"><span class="ttx-page">${number}</span><span>Penthera blog</span><span class="ttx-date">${dateline}</span></p>
   <main class="terms land blog${mast ? "" : " blog-post"}" id="main">
-${draft ? '    <p class="blog-draft">Draft: not approved, not listed and not indexed.</p>\n' : ""}    <nav class="eyebrow" aria-label="Breadcrumb">${crumb}</nav>
+${draft ? '    <p class="blog-draft">Draft: not approved, not listed and not indexed.</p>\n' : ""}    <nav class="eyebrow ttx-crumbs" aria-label="Breadcrumb">${crumb}</nav>
     <h1>${mast ? `${mosaic()}<span class="sr">${esc(h1)}</span>` : smart(esc(h1))}</h1>
 ${body}
   </main>
@@ -287,12 +266,12 @@ export function postLd(p, origin) {
 }
 
 /** One post as HTML. */
-export function postHtml(p, { origin, styles = "/styles.css", theme = "/theme.js", foot, number = "P100", next }) {
+export function postHtml(p, { origin, styles = "/styles.css", theme = "/theme.js", script = "/blog.js", foot, number = "P100", next }) {
   const path = `/blog/${p.slug}`;
   const url = `${origin}${path}`;
   const minutes = Math.max(1, Math.round(p.md.split(/\s+/).length / 220));
-  const html = smart(sized(renderMarkdown(p.md), p.figures));
-  const sections = [...html.matchAll(/<h2 id="([^"]+)">(.*?)<\/h2>/g)].map(([, id, text]) => `<li><a href="#${id}">${text}</a></li>`);
+  const html = smart(sized(renderMarkdown(p.md), p.figures)).replace(/<h2 id=/g, '<h2 class="sticker" id=');
+  const sections = [...html.matchAll(/<h2 class="sticker" id="([^"]+)">(.*?)<\/h2>/g)].map(([, id, text]) => `<li><a href="#${id}">${text}</a></li>`);
   const body = `    <aside class="paper-side" aria-label="About this post">
       <p class="blog-meta"><span><time datetime="${p.date}">${longDate(p.date)}</time></span><span>${esc(AUTHOR.name)}</span><span>${minutes} min read</span></p>
 ${sections.length > 2 ? `      <nav class="paper-toc" aria-label="In this post"><ol>${sections.join("")}</ol></nav>\n` : ""}    </aside>
@@ -305,7 +284,7 @@ ${fastext([["/blog", "All posts"], next ? [`/blog/${next.slug}`, `${next.number}
     "@type": "BreadcrumbList",
     itemListElement: [["Penthera", "/"], ["Blog", "/blog"], [p.title, path]].map(([n, u], i) => ({ "@type": "ListItem", position: i + 1, name: n, item: `${origin}${u}` })),
   }]);
-  return page({ title: p.title, description: p.description, url, path, h1: p.title, ld, body, styles, theme, foot, draft: !p.approved, number, dateline: longDate(p.date),
+  return page({ title: p.title, description: p.description, url, path, h1: p.title, ld, body, styles, theme, script, foot, draft: !p.approved, number, dateline: longDate(p.date),
     crumb: `<a class="tag" href="/">Penthera</a><a class="tag tag-steel" href="/blog">Blog</a>` });
 }
 
@@ -380,7 +359,7 @@ export function blogFiles(posts, { origin, styles, script, drafts = false, foot 
     const at = posts.published.indexOf(p);
     const after = at < 0 ? null : posts.published[(at + 1) % posts.published.length];
     const next = after && after !== p ? { ...after, number: numbers.get(after.slug) } : null;
-    out[`blog/${p.slug}.html`] = postHtml(p, { origin, styles, foot, number: numbers.get(p.slug) || "Draft", next });
+    out[`blog/${p.slug}.html`] = postHtml(p, { origin, styles, script, foot, number: numbers.get(p.slug) || "Draft", next });
     if (p.approved) out[`blog/${p.slug}.md`] = postMarkdown(p, { origin });
   }
   return out;

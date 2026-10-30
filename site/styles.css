@@ -71,7 +71,7 @@
   --ground: #fdfdfa;
   --sheen: 0.95; --lit: 0.7; --shade: 0.07;
   --ground-rgb: 253, 253, 250;
-  --ink-rgb: 10, 10, 10;
+  --ink-rgb: 18, 21, 26;
   --t2: 0.72;
   --t3: 0.6;
   --desk-a: 0.5;
@@ -311,9 +311,9 @@ h3 > .lock { width: 24px; height: 28px; vertical-align: -4px; margin-right: 12px
 .bar .theme, .bar .download { display: inline-flex; }
 .bar .download { color: var(--text-1); background: none; border-color: rgba(var(--ink-rgb), 0.45); box-shadow: none; }
 @media (min-width: 1101px) {
-  :root:has(.rail[data-h="1"]) .bar .star { display: inline-flex; }
-  :root:has(.rail[data-h="2"]) .bar .download { display: none; }
-  :root:has(.rail[data-h="2"]) .bar-status { display: block; margin: 0 10px 0 0; font-family: var(--px); font-size: 13px; letter-spacing: 0.02em; color: var(--text-1); white-space: nowrap; }
+  :root:has(.rail[data-head="1"]) .bar .star { display: inline-flex; }
+  :root:has(.rail[data-head="2"]) .bar .download { display: none; }
+  :root:has(.rail[data-head="2"]) .bar-status { display: block; margin: 0 10px 0 0; font-family: var(--px); font-size: 13px; letter-spacing: 0.02em; color: var(--text-1); white-space: nowrap; }
 }
 /* Below 1100 px the dock spans the window, and the download keeps its place. */
 @media (max-width: 1100px) {
@@ -1052,21 +1052,46 @@ main > .desk { padding-top: clamp(64px, 8vw, 120px); }
  * set here because `.foot-nav a` outranks the global `a:hover`. The negative
  * margin keeps the text on the column's edge while the highlight has air. */
 .foot-nav { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 48px 32px; }
-.foot-k, .tag {
+.foot-k, .tag, .eyebrow, .sticker {
   width: fit-content; margin-bottom: 18px; padding: 5px 12px 4px;
   font-size: 13px; line-height: 1.3; color: var(--pill-ink); background: var(--pill-bg);
-  clip-path: polygon(0 3px, 3px 3px, 3px 0, calc(100% - 6px) 0, calc(100% - 6px) 2px, 100% 2px, 100% calc(100% - 4px), calc(100% - 3px) calc(100% - 4px), calc(100% - 3px) 100%, 5px 100%, 5px calc(100% - 2px), 0 calc(100% - 2px));
-  transform: rotate(var(--pill-tilt));
+  clip-path: var(--pill-cut, polygon(0 3px, 3px 3px, 3px 0, calc(100% - 6px) 0, calc(100% - 6px) 2px, 100% 2px, 100% calc(100% - 4px), calc(100% - 3px) calc(100% - 4px), calc(100% - 3px) 100%, 5px 100%, 5px calc(100% - 2px), 0 calc(100% - 2px)));
+  transform: translate(var(--pill-x, 0), var(--pill-y, 0)) rotate(var(--pill-tilt, 0deg));
 }
 .foot-group:nth-child(1) .foot-k { --pill-ink: #ffffff; --pill-tilt: -1.2deg; --pill-bg: #0000ed; }
 .foot-group:nth-child(2) .foot-k { --pill-ink: #0a0a0a; --pill-tilt: 0.8deg; --pill-bg: linear-gradient(180deg, #dfe3e9 0%, #b9c0ca 40%, #9aa3b0 54%, #e4e8ed 72%, #aab2bd 100%); }
 .foot-group:nth-child(3) .foot-k { --pill-ink: #ffffff; --pill-tilt: -0.4deg; --pill-bg: linear-gradient(180deg, #5d6572 0%, #2b2f36 44%, #15171b 58%, #4a515c 100%); }
 .foot-group:nth-child(4) .foot-k { --pill-ink: #00006b; --pill-tilt: 1.1deg; --pill-bg: linear-gradient(180deg, #c9c9ff 0%, #8a8aff 60%, #7a7aff 100%); }
-/* The same pills as tags and eyebrows anywhere else. */
-.tag { display: inline-block; margin-bottom: 0; font-family: var(--px); --pill-ink: #ffffff; --pill-tilt: -1.2deg; --pill-bg: #0000ed; }
-.tag-steel { --pill-ink: #0a0a0a; --pill-tilt: 0.8deg; --pill-bg: linear-gradient(180deg, #dfe3e9 0%, #b9c0ca 40%, #9aa3b0 54%, #e4e8ed 72%, #aab2bd 100%); }
-.tag-ink { --pill-ink: #ffffff; --pill-tilt: -0.4deg; --pill-bg: linear-gradient(180deg, #5d6572 0%, #2b2f36 44%, #15171b 58%, #4a515c 100%); }
-.tag-violet { --pill-ink: #00006b; --pill-tilt: 1.1deg; --pill-bg: linear-gradient(180deg, #c9c9ff 0%, #8a8aff 60%, #7a7aff 100%); }
+/* Stickers: every eyebrow, tag and post section head (it's a rule). The build
+ * deals each one a finish (data-f), a cut (data-c) and a tilt (data-t), see
+ * stickers() in site/frame.mjs, so they look stuck on by hand: small, some
+ * straight, some crooked, none matching its neighbour. Every finish holds at
+ * least 4.5:1. */
+.tag, .eyebrow, .sticker { --pill-ink: #ffffff; --pill-bg: #0000ed; display: inline-block; margin-bottom: 14px; padding: 5px 8px 4px; font-family: var(--px); font-size: 0.6875rem; line-height: 1.35; letter-spacing: 0; font-variant-ligatures: none; transform-origin: 30% 60%; }
+.tag { margin-bottom: 0; }
+.eyebrow a, .eyebrow a:hover { color: inherit; background: none; }
+[data-f="1"] { --pill-ink: #0a0a0a; --pill-bg: linear-gradient(180deg, #dfe3e9 0%, #b9c0ca 40%, #9aa3b0 54%, #e4e8ed 72%, #aab2bd 100%); }
+[data-f="2"] { --pill-ink: #ffffff; --pill-bg: linear-gradient(180deg, #5d6572 0%, #2b2f36 44%, #15171b 58%, #4a515c 100%); }
+[data-f="3"] { --pill-ink: #00006b; --pill-bg: linear-gradient(180deg, #c9c9ff 0%, #8a8aff 60%, #7a7aff 100%); }
+[data-f="4"] { --pill-ink: #0a0a0a; --pill-bg: #ffd800; }
+[data-f="5"] { --pill-ink: #0a0a0a; --pill-bg: linear-gradient(120deg, #ffb3e6, #b3f0ff 45%, #fff3a8 75%, #c9c9ff); }
+[data-f="6"] { --pill-ink: #ffd800; --pill-bg: #0a0a0a; }
+[data-f="7"] { --pill-ink: #003338; --pill-bg: #00d8e8; }
+[data-f="8"] { --pill-ink: #ffffff; --pill-bg: #d6002a; }
+[data-f="9"] { --pill-ink: #0a0a0a; --pill-bg: #2fd64a; }
+[data-f="10"] { --pill-ink: #0a0a0a; --pill-bg: #fdfdfa; }
+.band-blue [data-f="0"] { --pill-ink: #0000ed; --pill-bg: #ffffff; }
+[data-c="1"] { --pill-cut: none; }
+[data-c="2"] { --pill-cut: polygon(0 0, 100% 0, 100% 35%, calc(100% - 4px) 50%, 100% 65%, 100% 100%, 0 100%, 0 65%, 4px 50%, 0 35%); }
+[data-c="3"] { --pill-cut: polygon(0 0, calc(100% - 7px) 0, 100% 7px, 100% 100%, 0 100%); }
+[data-t="0"] { --pill-tilt: 0deg; }
+[data-t="1"] { --pill-tilt: -3.2deg; --pill-y: 1px; }
+[data-t="2"] { --pill-tilt: 2.2deg; --pill-x: 3px; }
+[data-t="3"] { --pill-tilt: 0deg; --pill-x: 6px; --pill-y: -2px; }
+[data-t="4"] { --pill-tilt: 4.4deg; --pill-y: -1px; }
+[data-t="5"] { --pill-tilt: -1.3deg; --pill-x: -2px; }
+[data-t="6"] { --pill-tilt: 0deg; }
+[data-t="7"] { --pill-tilt: -5.5deg; --pill-x: 4px; --pill-y: 2px; }
 .foot-nav ul { display: grid; justify-items: start; margin: 0; padding: 0; list-style: none; }
 .foot-nav a {
   display: inline-flex; align-items: center; min-height: 30px; margin-left: -4px; padding: 0 4px;
@@ -1343,6 +1368,19 @@ main > .desk { padding-top: clamp(64px, 8vw, 120px); }
 .terms li + li { margin-top: 6px; }
 .terms pre { padding: 12px 14px; border: 1px solid var(--hair); overflow-x: auto; }
 .terms-for { font-family: var(--px); font-size: 13px; color: var(--text-3); }
+/* Type rules for every reading page, from Bringhurst (the blog below goes further).
+ * A serif at about 65 characters, space in whole lines, ragged right. */
+html { font-synthesis: none; font-kerning: normal; }
+p, li, dd, figcaption { text-wrap: pretty; }
+h1, h2, h3 { text-wrap: balance; }
+.terms h1 { margin-left: -0.04em; font-weight: 500; letter-spacing: -0.03em; word-spacing: -0.04em; }
+.terms h2 { font-weight: 500; }
+.terms h3 { font-weight: 700; }
+.terms > p:not([class]), .terms > ul:not([class]), .terms > ol:not([class]) { max-width: 35.5rem; font-family: Charter, "Bitstream Charter", "Iowan Old Style", Georgia, serif; font-size: clamp(1.125rem, 1.05rem + 0.3vw, 1.25rem); line-height: 1.6; font-variant-numeric: oldstyle-nums proportional-nums; margin-top: 1.6em; hanging-punctuation: first allow-end; }
+.terms > ul:not([class]), .terms > ol:not([class]) { padding-left: 1.25em; }
+.terms > ul:not([class]) { list-style-type: square; }
+.terms > ul:not([class]) li::marker, .terms > ol:not([class]) li::marker { color: var(--accent-ink); }
+.terms > h2 + p:not([class]) { margin-top: 0.8em; }
 /* Landing pages (site/pages/): the terms frame, plus the live check as the one call to action. */
 .land-cta { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; margin: 28px 0 8px; }
 .land-cta .btn { text-decoration: none; }
@@ -1391,8 +1429,7 @@ main > .desk { padding-top: clamp(64px, 8vw, 120px); }
 .ttx-bar .ttx-date { margin-left: auto; }
 @media (max-width: 480px) { .ttx-bar .ttx-date { display: none; } }
 .terms.blog { max-width: 65rem; min-height: 100svh; padding-top: 28px; padding-bottom: 160px; }
-.terms.blog .eyebrow { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; }
-.terms.blog .tag { font-size: var(--mono-s); }
+.terms.blog .ttx-crumbs { display: flex; flex-wrap: wrap; gap: 6px; width: auto; margin: 0; padding: 0; background: none; clip-path: none; transform: none; }
 .blog a.tag, .blog a.tag:hover { color: var(--pill-ink); background: var(--pill-bg); text-decoration: none; }
 /* Weight falls as size rises: the big head is medium, the small one bold. */
 .terms.blog h1 { margin: 20px 0 0 -0.04em; max-width: 22ch; font-size: clamp(2.5rem, 6.4vw, 4.75rem); line-height: 1.02; letter-spacing: -0.03em; word-spacing: -0.04em; font-weight: 500; color: var(--text-1); text-wrap: balance; }
@@ -1425,12 +1462,9 @@ main > .desk { padding-top: clamp(64px, 8vw, 120px); }
 /* An initial two lines deep, close to the rest of its word. ::first-letter keeps
  * the word whole for a screen reader. */
 .paper-body > .terms-for:first-child + p::first-letter { float: left; margin: 0.12em 0.08em 0 0; padding: 0.12em 0.2em; font-family: var(--px); font-size: 2.75rem; line-height: 0.9; color: #ffffff; background: var(--accent); }
-/* Section heads are the footer's pills, in its four finishes. */
-.terms.blog .paper-body h2 { --pill-ink: #ffffff; --pill-tilt: -1.2deg; --pill-bg: #0000ed; width: fit-content; max-width: 100%; margin-top: calc(var(--u) * 1.5); padding: 2px 12px 1px; font-family: var(--px); font-size: 1.375rem; font-weight: 400; line-height: calc(var(--u) - 3px); letter-spacing: 0; font-variant-numeric: normal; font-variant-ligatures: none; color: var(--pill-ink); background: var(--pill-bg); clip-path: polygon(0 3px, 3px 3px, 3px 0, calc(100% - 6px) 0, calc(100% - 6px) 2px, 100% 2px, 100% calc(100% - 4px), calc(100% - 3px) calc(100% - 4px), calc(100% - 3px) 100%, 5px 100%, 5px calc(100% - 2px), 0 calc(100% - 2px)); transform: rotate(var(--pill-tilt)); scroll-margin-top: 24px; text-wrap: balance; }
-.terms.blog .paper-body h2:nth-of-type(4n + 2) { --pill-ink: #0a0a0a; --pill-tilt: 0.8deg; --pill-bg: linear-gradient(180deg, #dfe3e9 0%, #b9c0ca 40%, #9aa3b0 54%, #e4e8ed 72%, #aab2bd 100%); }
-.terms.blog .paper-body h2:nth-of-type(4n + 3) { --pill-tilt: -0.4deg; --pill-bg: linear-gradient(180deg, #5d6572 0%, #2b2f36 44%, #15171b 58%, #4a515c 100%); }
-.terms.blog .paper-body h2:nth-of-type(4n) { --pill-ink: #00006b; --pill-tilt: 1.1deg; --pill-bg: linear-gradient(180deg, #c9c9ff 0%, #8a8aff 60%, #7a7aff 100%); }
-.terms.blog .paper-body h2 + p { margin-top: calc(var(--u) * 0.5); }
+/* Section heads are stickers, a size up so they still read as heads. */
+.terms.blog .paper-body h2.sticker { max-width: 100%; margin: calc(var(--u) * 1.5) 0 0; padding: 4px 10px 3px; font-size: var(--mono-s); font-weight: 400; line-height: 1.4; font-variant-numeric: normal; color: var(--pill-ink); background: var(--pill-bg); scroll-margin-top: 24px; text-wrap: balance; }
+.terms.blog .paper-body h2 + p { margin-top: calc(var(--u) * 0.6); }
 .paper-body h3 { margin-top: var(--u); font-family: var(--sans); font-size: 1em; line-height: var(--u); font-weight: 700; }
 .paper-body h3 + p { margin-top: 0; }
 .paper-body ul, .paper-body ol { padding-left: 1.25em; }
@@ -1458,21 +1492,29 @@ main > .desk { padding-top: clamp(64px, 8vw, 120px); }
   .blog-post .blog-meta { margin-top: 0; }
   .blog-meta span { display: block; }
   .blog-meta span + span::before { content: none; }
-  .paper-toc { display: block; margin-top: 28px; font-family: var(--px); font-size: var(--mono-s); line-height: 1.3; font-variant-ligatures: none; }
+  .paper-toc { display: block; margin-top: 28px; padding-left: 1.25rem; font-family: var(--px); font-size: var(--mono-s); line-height: 1.3; font-variant-ligatures: none; }
   .paper-toc ol { list-style: none; margin: 0; padding: 0; }
   .terms .paper-toc li { margin-top: 8px; }
-  .paper-toc a { color: var(--text-1); text-decoration: none; }
+  .paper-toc a { position: relative; display: block; color: var(--text-3); text-decoration: none; }
+  .paper-toc a[aria-current] { color: var(--text-1); }
+  .paper-toc a[aria-current]::before { content: ""; position: absolute; top: 0.32em; left: -1.25rem; width: 0.5rem; height: 0.5rem; background: var(--accent); }
 }
 
 /* The front page: the newest post leads, the rest fill columns beside it. */
-.ttx-front { list-style: none; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 48px 32px; margin-top: 48px; padding: 0; }
-.terms.blog .ttx-front li { margin: 0; min-width: 0; }
+.ttx-front { list-style: none; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 48px; padding: 0; }
+/* A post is a white card, the same white as its figure. The whole card opens
+ * the post: the title's link stretches over it. */
+.terms.blog .ttx-front li { position: relative; margin: 0; min-width: 0; padding: 20px; background: #ffffff; outline: 2px solid transparent; outline-offset: -2px; transition: outline-color 120ms var(--out); }
+.terms.blog .ttx-front li:hover, .terms.blog .ttx-front li:has(a:focus-visible) { outline-color: var(--accent); }
 .ttx-front li:first-child { grid-column: span 2; }
-.ttx-line { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; }
+.ttx-line { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; }
 .terms.blog .ttx-front h2 { max-width: none; margin-top: 12px; font-size: clamp(1.5rem, 2.4vw, 1.875rem); line-height: 1.12; letter-spacing: -0.015em; font-weight: 700; text-wrap: balance; }
 .terms.blog .ttx-front li:first-child h2 { font-size: clamp(2rem, 4.4vw, 3.25rem); line-height: 1.04; letter-spacing: -0.028em; font-weight: 500; }
 .ttx-front h2 a { color: var(--text-1); text-decoration: none; }
-.ttx-front img { display: block; width: 100%; height: auto; margin-top: 20px; background: #ffffff; }
+.ttx-front h2 a::after { content: ""; position: absolute; inset: 0; }
+.ttx-front h2 a:hover, .ttx-front li:hover h2 a { color: var(--accent); background: none; }
+.ttx-front h2 a:focus-visible { outline: none; }
+.ttx-front img { display: block; width: 100%; height: auto; margin-top: 16px; background: #ffffff; }
 .ttx-front li > p:last-child { margin-top: 12px; font-family: var(--paper-serif); font-size: 1.125rem; line-height: 1.5; color: var(--text-1); text-wrap: pretty; }
 @media (max-width: 760px) {
   .ttx-front { grid-template-columns: minmax(0, 1fr); }

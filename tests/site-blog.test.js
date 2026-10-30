@@ -175,7 +175,7 @@ describe("blog, published", () => {
     expect(html).toContain('<span class="sr">Blog</span>');
     expect(html).toMatch(/<script src="\/blog\.js\?v=[\w-]+" defer>/);
     expect(html).not.toMatch(/ style=/);
-    expect(html).toContain('<nav class="eyebrow" aria-label="Breadcrumb"><a class="tag" href="/">Penthera</a>');
+    expect(html).toMatch(/<nav class="eyebrow ttx-crumbs" aria-label="Breadcrumb"><a class="tag" data-f="\d+" data-c="\d" data-t="\d" href="\/">Penthera/);
     expect((html.match(/class="r\d[^"]* on b/g) || []).length).toBe(html.match(/class="r\d[^"]* b[" ]/g).length);
   });
 

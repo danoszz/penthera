@@ -60,6 +60,45 @@ export function footGroups({ pages = [], benchmarks = [], posts = [] } = {}) {
   ];
 }
 
+/**
+ * Real quotation marks, apostrophes and ellipses in the text of a page. The
+ * build runs every page through it, so copy can be typed plainly. Code, scripts
+ * and the head stay as typed: a command must still paste.
+ */
+export function smart(html) {
+  let last = " ";
+  return html.split(/(<head[\s\S]*?<\/head>|<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>|<textarea[\s\S]*?<\/textarea>|<pre\b[\s\S]*?<\/pre>|<code\b[\s\S]*?<\/code>|<kbd\b[\s\S]*?<\/kbd>|<samp\b[\s\S]*?<\/samp>|<[^>]+>)/).map((part, i) => {
+    if (i % 2) {
+      if (/^<(code|pre|kbd|samp)\b/.test(part)) last = "x";
+      else if (/^<\/?(p|li|h\d|div|td|th|dd|dt|figcaption|figure|section|button|summary)\b/.test(part)) last = " ";
+      return part;
+    }
+    const out = part.replace(/&#39;|&quot;|'|"|(?<!\.)\.\.\.(?!\.)/g, (m, at, text) => {
+      if (m === "...") return "…";
+      const before = at ? text[at - 1] : last;
+      const opens = /[\s([–—]/.test(before);
+      if (m === "&quot;" || m === '"') return opens ? "“" : "”";
+      return opens && !/\d/.test(text[at + m.length] || "") ? "‘" : "’";
+    });
+    if (part) last = part[part.length - 1];
+    return out;
+  }).join("");
+}
+
+/**
+ * Stickers: every tag and eyebrow gets a finish, a cut and a tilt from the page
+ * and its place on it, so labels never repeat in a row but a page never changes
+ * between builds. The picks are data attributes; styles.css draws them.
+ */
+export function stickers(html, seed = "") {
+  let n = [...seed].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 9973, 7);
+  return html.replace(/<(\w+) class="((?:[^"]*\s)?(?:tag|eyebrow|sticker)(?:\s[^"]*)?)"/g, (m, el, cls) => {
+    if (/ttx-crumbs/.test(cls)) return m;
+    n += 1;
+    return `${m} data-f="${(n * 7) % 11}" data-c="${(n * 5) % 4}" data-t="${(n * 3) % 8}"`;
+  });
+}
+
 const STAR = '<svg class="star-glyph" viewBox="0 0 9 9" aria-hidden="true"><path d="M4 0h1v2h1v1h3v1H8v1H7v1h1v3H7V8H6V7H3v1H2v1H1V6h1V5H1V4H0V3h3V2h1z"/></svg>';
 const DOWN = '<svg class="download-glyph" viewBox="0 0 9 10" aria-hidden="true"><path d="M4 0h1v6h1V5h1V4h1v1H7v1H6v1H5v1H4V7H3V6H2V5H1V4h1v1h1v1h1zM0 9h9v1H0z"/></svg>';
 
@@ -88,7 +127,7 @@ export function siteRail({ url = "/", stars = "", blog = true, header = process.
     const on = seg === r.match || (r.match === "research" && seg.startsWith("research-"));
     return `<a href="${r.href}"${on ? ` aria-current="${url === r.href ? "page" : "true"}"` : ""}>${r.text}</a>`;
   }).join("");
-  return `<nav class="rail"${home ? " data-hero" : ""} data-h="${header}" aria-label="Main">
+  return `<nav class="rail"${home ? " data-hero" : ""} data-head="${header}" aria-label="Main">
     <a class="rail-mark" href="/"><span aria-hidden="true"></span><span class="sr">Penthera, home</span></a>
     <div class="rail-links">${links}</div>
     <div class="rail-more"><div class="rail-more-in">

@@ -32,7 +32,7 @@ import { landingPages, landingHtml, landingMarkdown } from "./landing.mjs";
 import { termsPage, docPage } from "./terms.mjs";
 import { publicBenchHtml } from "./public-bench.mjs";
 import { readPosts, blogFiles } from "./blog.mjs";
-import { siteFooter, siteRail, footGroups } from "./frame.mjs";
+import { siteFooter, siteRail, smart, stickers, footGroups } from "./frame.mjs";
 import { benchmarkHtml, benchmarkMarkdown, benchmarkViews, cardFor, fieldTools, hubHtml, hubMarkdown } from "./benchmarks.mjs";
 import { cardRows, rowTag } from "./check/card.js";
 import { researchEntries, researchHtml, researchMarkdown } from "./research.mjs";
@@ -619,11 +619,12 @@ export async function buildSite({ out = join(SITE, "dist"), engine, blogDir = jo
     writeFileSync(join(OUT, f), text);
   }
 
-  // The rail goes on every rendered page here, so no page template can miss it.
+  // The rail goes on every rendered page here, so no page template can miss it,
+  // and so do the real quotes and apostrophes.
   for (const f of readdirSync(OUT, { recursive: true }).map(String).filter((n) => n.endsWith(".html"))) {
     const url = "/" + f.replace(/\\/g, "/").replace(/(^|\/)index\.html$/, "").replace(/\.html$/, "");
     const html = readFileSync(join(OUT, f), "utf8");
-    writeFileSync(join(OUT, f), html.replace(/<main\b/, `${siteRail({ url: url === "/" ? "/" : url.replace(/\/$/, ""), stars: values.STARS, blog: posts.published.length > 0 })}\n$&`));
+    writeFileSync(join(OUT, f), stickers(smart(html), url).replace(/<main\b/, `${siteRail({ url: url === "/" ? "/" : url.replace(/\/$/, ""), stars: values.STARS, blog: posts.published.length > 0 })}\n$&`));
   }
 
   const total = readdirSync(OUT, { recursive: true }).map((f) => join(OUT, f)).filter((f) => statSync(f).isFile()).reduce((n, f) => n + statSync(f).size, 0);
