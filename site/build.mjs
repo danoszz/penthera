@@ -33,6 +33,7 @@ import { termsPage, docPage } from "./terms.mjs";
 import { publicBenchHtml } from "./public-bench.mjs";
 import { readPosts, blogFiles } from "./blog.mjs";
 import { typeHtml, typeMarkdown } from "./type.mjs";
+import { hubHtml as newsHub, releases } from "./news.mjs";
 import { siteFooter, siteRail, smart, stickers, footGroups } from "./frame.mjs";
 import { benchmarkHtml, benchmarkMarkdown, benchmarkViews, cardFor, fieldTools, hubHtml, hubMarkdown } from "./benchmarks.mjs";
 import { cardRows, rowTag } from "./check/card.js";
@@ -618,6 +619,19 @@ export async function buildSite({ out = join(SITE, "dist"), engine, blogDir = jo
   for (const [f, text] of Object.entries(agentFiles({ root: ROOT, site: SITE, version: siteVersion(version), origin: ORIGIN, values, pub, posts: posts.published, research }))) {
     mkdirSync(dirname(join(OUT, f)), { recursive: true });
     writeFileSync(join(OUT, f), text);
+  }
+
+  // The hub prototype: one template, three real pages (site/news.mjs).
+  if (process.env.PENTHERA_HUB) {
+    cpSync(join(SITE, "hub.js"), join(OUT, "hub.js"));
+    const script = `/hub.js?v=${hash(readFileSync(join(OUT, "hub.js")))}`;
+    const bench = pub?.benchmarks ? benchmarkViews(pub).map((v) => ({ date: pub.date, type: "Benchmark", title: v.c.label || v.c.slug, summary: "Every tool, every interval, on the sealed half.", href: `/benchmarks/${v.c.slug}` })) : [];
+    const all = [...research, ...bench, ...releases(ROOT)].sort((a, z) => (z.date || "").localeCompare(a.date || ""));
+    const hub = (k) => newsHub(k, all, { origin: ORIGIN, styles, foot, script, posts: posts.published });
+    writeFileSync(join(OUT, "news.html"), hub("all"));
+    writeFileSync(join(OUT, "research.html"), hub("research"));
+    writeFileSync(join(OUT, "blog.html"), hub("articles"));
+    writeFileSync(join(OUT, "blog", "index.html"), hub("articles"));
   }
 
   // /type: the type system, drawn with itself (site/type.mjs).

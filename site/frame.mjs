@@ -126,8 +126,10 @@ const RAIL = [
 export function siteRail({ url = "/", stars = "", blog = true, header = process.env.PENTHERA_NAV_H || "1" } = {}) {
   const home = url === "/";
   const seg = url.split("/")[1] || "";
-  const links = RAIL.filter((r) => blog || r.match !== "blog").map((r) => {
-    const on = seg === r.match || (r.match === "research" && seg.startsWith("research-"));
+  // The hub prototype: News in the Blog slot, current on /blog too.
+  const rail = process.env.PENTHERA_HUB ? RAIL.map((r) => (r.match === "blog" ? { text: "News", href: "/news", match: "news" } : r)) : RAIL;
+  const links = rail.filter((r) => blog || r.match !== "blog").map((r) => {
+    const on = seg === r.match || (r.match === "research" && seg.startsWith("research-")) || (r.match === "news" && seg === "blog");
     return `<a href="${r.href}"${on ? ` aria-current="${url === r.href ? "page" : "true"}"` : ""}>${r.text}</a>`;
   }).join("");
   return `<nav class="rail"${home ? " data-hero" : ""} data-head="${header}" aria-label="Main">
