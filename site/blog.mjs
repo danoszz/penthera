@@ -299,13 +299,13 @@ export function postMarkdown(p, { origin }) {
 }
 
 /** /blog: the published posts, newest first. */
-export function blogIndexHtml(posts, { origin, styles = "/styles.css", theme = "/theme.js", script = "/blog.js", foot, layout = process.env.PENTHERA_BLOG_LAYOUT || "a" }) {
+export function blogIndexHtml(posts, { origin, styles = "/styles.css", theme = "/theme.js", script = "/blog.js", foot }) {
   const numbers = pageNumbers(posts);
   const figure = (p) => {
     const name = Object.keys(p.figures || {})[0];
     return name ? `<img src="/blog/figures/${name}" width="${p.figures[name].width}" height="${p.figures[name].height}" alt="" loading="lazy">` : "";
   };
-  const body = `    <ul class="ttx-front" data-layout="${layout}" data-n="${posts.length}">
+  const body = `    <ul class="ttx-front">
 ${posts.map((p) => `      <li><p class="ttx-line">${categoryTag(p)}<span class="ttx-when">${numbers.get(p.slug)} · <time datetime="${p.date}">${longDate(p.date)}</time></span></p><h2><a href="/blog/${p.slug}">${smart(esc(p.title))}</a></h2>${figure(p)}<p class="ttx-deck">${smart(esc(p.description))}</p></li>`).join("\n")}
     </ul>
 ${fastext([["/benchmarks", "Benchmarks"], ["/research", "Research"], ["/blog/feed.xml", "Atom feed"], ["/blog.md", "Markdown copy"]])}`;

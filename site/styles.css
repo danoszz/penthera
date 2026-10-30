@@ -1495,43 +1495,25 @@ h1, h2, h3 { text-wrap: balance; }
   .paper-toc a[aria-current]::before { content: ""; position: absolute; top: 0.32em; left: -1.25rem; width: 0.5rem; height: 0.5rem; background: var(--accent); }
 }
 
-/* The front page. Three layouts while Daan picks (data-layout, one stays). */
+/* The front page: a teletext index, one post to a row, each with a small figure
+ * so the rows don't read alike. The whole white row opens the post. It takes any
+ * number of posts, and the title's width doesn't depend on them. */
 .terms .ttx-front { list-style: none; display: grid; gap: 12px; margin-top: clamp(64px, 8vw, 120px); padding: 0; }
-.terms.blog .ttx-front li { position: relative; margin: 0; min-width: 0; padding: clamp(20px, 2.4vw, 36px); background: #ffffff; outline: 2px solid transparent; outline-offset: -2px; transition: outline-color 120ms var(--out); }
+.terms.blog .ttx-front li { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 6rem; grid-template-areas: "line line" "head thumb" "deck deck"; gap: 14px 16px; margin: 0; min-width: 0; padding: clamp(20px, 2.4vw, 36px); background: #ffffff; outline: 2px solid transparent; outline-offset: -2px; transition: outline-color 120ms var(--out); }
 .terms.blog .ttx-front li:hover, .terms.blog .ttx-front li:has(a:focus-visible) { outline-color: var(--accent); }
-.ttx-line { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin: 0; }
+.ttx-line { grid-area: line; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin: 0; }
 .ttx-when { font-family: var(--px); font-size: 0.6875rem; color: var(--text-3); }
-.terms.blog .ttx-front h2 { max-width: 22ch; margin-top: 14px; font-size: clamp(1.5rem, 2.4vw, 2rem); line-height: 1.1; letter-spacing: -0.018em; font-weight: 500; text-wrap: balance; }
+.terms.blog .ttx-front h2 { grid-area: head; max-width: none; margin: 0; font-size: clamp(1.5rem, 3vw, 2.5rem); line-height: 1.06; letter-spacing: -0.024em; font-weight: 500; text-wrap: balance; }
 .ttx-front h2 a { color: var(--text-1); text-decoration: none; }
 .ttx-front h2 a::after { content: ""; position: absolute; inset: 0; }
 .ttx-front h2 a:hover, .ttx-front li:hover h2 a { color: var(--accent); background: none; }
 .ttx-front h2 a:focus-visible { outline: none; }
-.ttx-front img { display: block; width: 100%; height: auto; margin-top: 20px; background: #ffffff; }
-.terms.blog .ttx-front .ttx-deck { max-width: 34em; margin-top: 12px; font-family: var(--paper-serif); font-size: 1.125rem; line-height: 1.5; color: var(--text-1); text-wrap: pretty; }
-.ttx-front[data-layout="b"] img, .ttx-front[data-layout="a"] li:not(:first-child) img { display: none; }
+.ttx-front img { grid-area: thumb; display: block; width: 100%; height: auto; }
+.terms.blog .ttx-front .ttx-deck { grid-area: deck; max-width: 34em; margin: 0; font-family: var(--paper-serif); font-size: 1.125rem; line-height: 1.5; color: var(--text-1); text-wrap: pretty; }
 @media (min-width: 62.5rem) {
-  /* A: the newest post is a wide feature, the rest are rows on its columns. */
-  .ttx-front[data-layout="a"] li { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); grid-template-areas: "line deck" "head deck"; gap: 0 clamp(32px, 4vw, 72px); align-content: start; }
-  .ttx-front[data-layout="a"] li:first-child { grid-template-rows: auto auto 1fr; grid-template-areas: "line fig" "head fig" "deck fig"; }
-  .ttx-front[data-layout="a"] .ttx-line { grid-area: line; }
-  .ttx-front[data-layout="a"] h2 { grid-area: head; }
-  .ttx-front[data-layout="a"] .ttx-deck { grid-area: deck; }
-  .terms.blog .ttx-front[data-layout="a"] li:not(:first-child) .ttx-deck { margin-top: 0; }
-  .ttx-front[data-layout="a"] img { grid-area: fig; margin-top: 0; }
-  .terms.blog .ttx-front[data-layout="a"] li:first-child h2 { font-size: clamp(2.25rem, 4vw, 3.5rem); line-height: 1.03; letter-spacing: -0.028em; }
-  /* B: a teletext index, one post to a row. */
-  .ttx-front[data-layout="b"] li { display: grid; grid-template-columns: 13rem minmax(0, 1.4fr) minmax(0, 1fr); gap: 0 clamp(24px, 3vw, 56px); align-items: baseline; }
-  .ttx-front[data-layout="b"] .ttx-line { display: block; }
-  .ttx-front[data-layout="b"] .ttx-when { display: block; margin-top: 10px; }
-  .terms.blog .ttx-front[data-layout="b"] h2 { max-width: none; margin-top: 0; font-size: clamp(1.75rem, 3vw, 2.5rem); line-height: 1.06; letter-spacing: -0.024em; }
-  .terms.blog .ttx-front[data-layout="b"] .ttx-deck { margin-top: 0; }
-  /* C: equal cards, as many across as there are posts, up to three. */
-  .ttx-front[data-layout="c"] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .ttx-front[data-layout="c"][data-n="1"] { grid-template-columns: minmax(0, 1fr); }
-  .ttx-front[data-layout="c"][data-n="2"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .ttx-front[data-layout="c"] li { display: flex; flex-direction: column; }
-  .ttx-front[data-layout="c"] .ttx-deck { order: 2; }
-  .ttx-front[data-layout="c"] img { order: 3; margin-top: auto; padding-top: 24px; }
+  .terms.blog .ttx-front li { grid-template-columns: 11rem minmax(0, 1.4fr) minmax(0, 1fr) 11rem; grid-template-areas: "line head deck thumb"; gap: 0 clamp(24px, 3vw, 56px); align-items: start; }
+  .ttx-line { display: block; }
+  .ttx-when { display: block; margin-top: 10px; }
 }
 
 /* The keys: red, green, yellow, cyan, as on a teletext remote. */
