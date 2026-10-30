@@ -164,6 +164,15 @@ describe("blog, published", () => {
     for (const f of ["blog/sealed-half-benchmark.html"]) expect(builds.one(f).replace(/<code>.*?<\/code>/g, "").replace(/<script[\s\S]*?<\/script>/g, ""), f).not.toMatch(/\*\w/);
   });
 
+  it("keeps the blog's title whole without script, with a real key for Reveal", () => {
+    const html = builds.one("blog.html");
+    expect(html).toContain('<span class="sr">Blog</span>');
+    expect(html).toMatch(/<script src="\/blog\.js\?v=[\w-]+" defer>/);
+    expect(html).toMatch(/<button class="ttx-reveal"[^>]*aria-pressed="false"[^>]*hidden>Reveal<\/button>/);
+    expect(html).not.toMatch(/ style=/);
+    expect((html.match(/class="r\d[^"]* on b/g) || []).length).toBe(html.match(/class="r\d[^"]* b[" ]/g).length);
+  });
+
   it("prints the blog on light paper, whatever the reader's theme", () => {
     for (const f of ["blog.html", "blog/sealed-half-benchmark.html"]) {
       expect(builds.one(f), f).toContain('<html lang="en" data-theme="light" data-paper>');

@@ -178,11 +178,22 @@ const sized = (html, figures) => html.replace(/<img src="\/blog\/figures\/([^"]+
 
 // ── HTML, Markdown, Atom ────────────────────────────────────────────────────
 
-/** BLOG in separated mosaic blocks, double height, as teletext drew its titles. */
-const MOSAIC = ["11110 10001 10001 11110 10001 10001 11110", "10000 10000 10000 10000 10000 10000 11111", "01110 10001 10001 10001 10001 10001 01110", "01110 10001 10000 10111 10001 10001 01111"];
+/** Two words in one grid: BLOG, and DATA for the Reveal key (site/blog.js). */
+const GLYPHS = {
+  B: "11110 10001 10001 11110 10001 10001 11110", L: "10000 10000 10000 10000 10000 10000 11111", O: "01110 10001 10001 10001 10001 10001 01110", G: "01110 10001 10000 10111 10001 10001 01111",
+  D: "11110 10001 10001 10001 10001 10001 11110", A: "01110 10001 10001 11111 10001 10001 10001", T: "11111 00100 00100 00100 00100 00100 00100",
+};
+const lit = (word, col, row) => {
+  const glyph = GLYPHS[word[Math.floor(col / 6)]];
+  return col % 6 !== 5 && glyph.split(" ")[row][col % 6] === "1";
+};
 const mosaic = () => {
-  const cells = MOSAIC.flatMap((glyph, g) => glyph.split(" ").flatMap((row, y) => [...row].flatMap((c, x) => (c === "1" ? [`M${g * 6 + x} ${y * 1.5}h.84v1.34h-.84z`] : []))));
-  return `<svg class="ttx-title" viewBox="0 0 23 10.34" aria-hidden="true"><path d="${cells.join("")}"/></svg>`;
+  const cells = [];
+  for (let y = 0; y < 7; y++) for (let x = 0; x < 23; x++) {
+    const blog = lit("BLOG", x, y), data = lit("DATA", x, y);
+    cells.push(`<rect x="${x}" y="${y}" width="1" height="1" class="r${y}${blog ? " on b" : ""}${data ? " d" : ""}"/>`);
+  }
+  return `<svg class="ttx-title" viewBox="0 0 23 7" aria-hidden="true">${cells.join("")}</svg>`;
 };
 
 /** The four coloured links at the bottom of a page, teletext's Fastext keys. */
@@ -191,7 +202,7 @@ const fastext = (keys) => `    <nav class="ttx-keys" aria-label="More pages">${k
 /** A post's page number. The oldest is P101, so a new post never renumbers the others. */
 const pageNumbers = (posts) => new Map(posts.map((p, i) => [p.slug, `P${100 + posts.length - i}`]));
 
-function page({ title, description, url, path, h1, crumb, ld, body, styles, theme, foot = siteFooter(), draft = false, type = "article", feed = true, number = "P100", dateline = "", mast = false }) {
+function page({ title, description, url, path, h1, crumb, ld, body, styles, theme, foot = siteFooter(), draft = false, type = "article", feed = true, number = "P100", dateline = "", mast = false, script = "" }) {
   return `<!doctype html>
 <html lang="en" data-theme="light" data-paper>
 <head>
@@ -211,7 +222,7 @@ ${feed ? '  <link rel="alternate" type="application/atom+xml" href="/blog/feed.x
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="${styles}">
   <script src="${theme}"></script>
-  ${ld}
+${script ? `  <script src="${script}" defer></script>\n` : ""}  ${ld}
 </head>
 <body>
   <p class="ttx-bar"><span class="ttx-page">${number}</span><span>Penthera blog</span><span class="ttx-date">${dateline}</span></p>
@@ -277,10 +288,14 @@ export function postMarkdown(p, { origin }) {
 }
 
 /** /blog: the published posts, newest first. */
-export function blogIndexHtml(posts, { origin, styles = "/styles.css", theme = "/theme.js", foot }) {
+export function blogIndexHtml(posts, { origin, styles = "/styles.css", theme = "/theme.js", script = "/blog.js", foot }) {
   const numbers = pageNumbers(posts);
   const lead = Object.keys(posts[0]?.figures || {})[0];
-  const body = `    <p class="terms-for">How Penthera is built and measured, with the data behind each number.</p>
+  const body = `    <div class="ttx-mast">
+      <p class="terms-for">How Penthera is built and measured, with the data behind each number.</p>
+      <button class="ttx-reveal" type="button" aria-pressed="false" aria-label="Reveal the word hidden in the title" hidden>Reveal</button>
+      <p class="ttx-note sr" role="status"></p>
+    </div>
     <ul class="ttx-front">
 ${posts.map((p, i) => `      <li><p class="ttx-line"><span class="ttx-page">${numbers.get(p.slug)}</span><time datetime="${p.date}">${longDate(p.date)}</time></p><h2><a href="/blog/${p.slug}">${esc(p.title)}</a></h2>${i === 0 && lead ? `<img src="/blog/figures/${lead}" width="${posts[0].figures[lead].width}" height="${posts[0].figures[lead].height}" alt="" loading="lazy">` : ""}<p>${esc(p.description)}</p></li>`).join("\n")}
     </ul>
@@ -290,7 +305,7 @@ ${fastext([["/benchmarks", "Benchmarks"], ["/research", "Research"], ["/blog/fee
     blogPost: posts.map((p) => ({ "@id": `${origin}/blog/${p.slug}#post` })),
   }]);
   return page({ title: "Blog: how Penthera is built and measured", description: "Posts on how Penthera is built and measured, with the data and the protocol behind every number.",
-    url: `${origin}/blog`, path: "/blog", h1: "Blog", ld, body, styles, theme, foot, type: "website", mast: true, dateline: posts[0] ? longDate(posts[0].date) : "", crumb: `<a href="/">Penthera</a> · Blog` });
+    url: `${origin}/blog`, path: "/blog", h1: "Blog", ld, body, styles, theme, foot, type: "website", mast: true, script, dateline: posts[0] ? longDate(posts[0].date) : "", crumb: `<a href="/">Penthera</a> · Blog` });
 }
 
 /** /blog.md */
@@ -329,10 +344,10 @@ ${posts.map((p) => `  <entry>
  * The files the blog adds to the site, as site path to content. Nothing when
  * no post is approved; drafts only with `drafts: true` (a local preview).
  */
-export function blogFiles(posts, { origin, styles, drafts = false, foot }) {
+export function blogFiles(posts, { origin, styles, script, drafts = false, foot }) {
   const out = {};
   if (posts.published.length) {
-    const index = blogIndexHtml(posts.published, { origin, styles, foot });
+    const index = blogIndexHtml(posts.published, { origin, styles, script, foot });
     out["blog.html"] = index;
     out["blog/index.html"] = index;
     out["blog.md"] = blogIndexMarkdown(posts.published, { origin });

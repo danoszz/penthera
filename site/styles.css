@@ -1388,7 +1388,27 @@ main > .desk { padding-top: clamp(64px, 8vw, 120px); }
 }
 .terms.blog .eyebrow a { color: inherit; }
 .terms.blog h1 { margin-top: 20px; max-width: 22ch; font-size: clamp(40px, 6.4vw, 76px); line-height: 1; letter-spacing: -0.035em; font-weight: 700; color: var(--text-1); text-wrap: balance; }
-.ttx-title { display: block; width: clamp(220px, 38vw, 420px); height: auto; fill: var(--accent); }
+.terms.blog h1:has(.ttx-title) { max-width: none; margin-right: 8px; }
+/* The title: solid blocks on a hard ink shadow. Blocks switch, they never ease.
+ * The pointer inverts what it crosses; rows arrive one by one, as a teletext
+ * page did, and all at once under reduced motion. */
+.ttx-title { display: block; width: 100%; height: auto; overflow: visible; filter: drop-shadow(clamp(3px, 0.7vw, 8px) clamp(3px, 0.7vw, 8px) 0 #0a0a0a); cursor: crosshair; touch-action: pan-y; }
+.ttx-title rect { fill: transparent; shape-rendering: crispEdges; }
+.ttx-title rect.on { fill: var(--accent); }
+.ttx-title rect.x { fill: #0a0a0a; }
+.ttx-title rect.on.x { fill: transparent; }
+@keyframes ttx-row { from, 99% { opacity: 0; } }
+@media (prefers-reduced-motion: no-preference) {
+  .ttx-title .r0 { animation: ttx-row 60ms; } .ttx-title .r1 { animation: ttx-row 120ms; } .ttx-title .r2 { animation: ttx-row 180ms; } .ttx-title .r3 { animation: ttx-row 240ms; }
+  .ttx-title .r4 { animation: ttx-row 300ms; } .ttx-title .r5 { animation: ttx-row 360ms; } .ttx-title .r6 { animation: ttx-row 420ms; }
+}
+.ttx-mast { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px 32px; margin-top: 28px; }
+.terms.blog .ttx-mast .terms-for { margin: 0; }
+.ttx-reveal { min-height: 44px; padding: 0 18px; font-family: var(--px); font-size: 15px; color: #ffffff; background: #0a0a0a; border: 0; box-shadow: 5px 5px 0 var(--accent); cursor: pointer; }
+.ttx-reveal[hidden] { display: none; }
+.ttx-reveal:hover { background: var(--accent); box-shadow: 5px 5px 0 #0a0a0a; }
+.ttx-reveal:active { transform: translate(5px, 5px); box-shadow: none; }
+.ttx-reveal[aria-pressed="true"] { background: var(--accent); box-shadow: none; transform: translate(5px, 5px); }
 /* Long bare URLs in a post break instead of widening the page at 390 px. */
 .blog a { overflow-wrap: anywhere; color: var(--accent); }
 .blog a:hover { background: var(--accent); color: var(--on-accent); text-decoration: none; }
