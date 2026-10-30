@@ -5,7 +5,7 @@
  * rows so the browser's view transition can carry them across. No dependencies,
  * tracking or fetches; only the last word is kept, for this tab.
  */
-/* global document, location, matchMedia, requestAnimationFrame, sessionStorage, window */
+/* global document, location, matchMedia, requestAnimationFrame, window */
 (function () {
   "use strict";
 
