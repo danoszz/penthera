@@ -1364,15 +1364,75 @@ main > .desk { padding-top: clamp(64px, 8vw, 120px); }
 .bm-hub span { color: var(--text-2); }
 .pb-link { font-family: var(--px); font-size: 12px; }
 
-/* Blog (site/blog.mjs): the landing frame. */
+/* Blog (site/blog.mjs): a teletext newspaper. Always light, on grey paper. The
+ * furniture is teletext: the page bar, mosaic title, blue plates and the four
+ * coloured keys. The reading is a newspaper: a serif at a comfortable size and
+ * measure, using the reader's own fonts, so nothing is fetched. */
+:root[data-paper] {
+  --paper-serif: Charter, "Bitstream Charter", "Iowan Old Style", Georgia, serif;
+  --ground: #e6e6e1; --ground-rgb: 230, 230, 225; --t2: 0.82; --t3: 0.68;
+  background: var(--ground);
+}
+[data-paper] body { background: var(--ground); }
+.ttx-bar { display: flex; flex-wrap: wrap; gap: 0 2ch; margin: 0; padding: 6px var(--gutter); font-family: var(--px); font-size: 14px; color: #ffffff; background: var(--accent); }
+.ttx-bar .ttx-date { margin-left: auto; }
+.terms.blog { max-width: 1040px; min-height: 100svh; padding-top: 28px; }
+.terms.blog .eyebrow { margin: 0; }
+/* An article: the byline in the margin, the text beside it, as a newspaper column. */
+@media (min-width: 1000px) {
+  .blog-post { display: grid; grid-template-columns: minmax(0, 1fr) 680px; gap: 0 48px; align-items: start; }
+  .blog-post > * { grid-column: 1 / -1; }
+  .blog-post > .blog-meta { grid-column: 1; position: sticky; top: 24px; margin-top: 40px; }
+  .blog-post > .paper-body, .blog-post > .blog-src { grid-column: 2; }
+  .blog-post > .paper-body { grid-row: span 2; }
+}
+.terms.blog .eyebrow a { color: inherit; }
+.terms.blog h1 { margin-top: 20px; max-width: 22ch; font-size: clamp(40px, 6.4vw, 76px); line-height: 1; letter-spacing: -0.035em; font-weight: 700; color: var(--text-1); text-wrap: balance; }
+.ttx-title { display: block; width: clamp(220px, 38vw, 420px); height: auto; fill: var(--accent); }
 /* Long bare URLs in a post break instead of widening the page at 390 px. */
-.blog a { overflow-wrap: anywhere; }
+.blog a { overflow-wrap: anywhere; color: var(--accent); }
+.blog a:hover { background: var(--accent); color: var(--on-accent); text-decoration: none; }
 .blog-meta, .blog-src { margin-top: 16px; font-family: var(--px); font-size: 13px; color: var(--text-3); }
-/* Blog figures: white paper plates (blog/figures/*.svg) in both themes, framed
- * so the plate reads as a figure on the black ground too. */
+.paper-body { max-width: 680px; margin-top: 36px; font-family: var(--paper-serif); font-size: clamp(18px, 1.5vw, 20px); line-height: 1.62; color: var(--text-1); hanging-punctuation: first; }
+.paper-body p, .paper-body ul, .paper-body ol { margin-top: 1em; }
+.terms.blog .paper-body > .terms-for:first-child { max-width: none; margin: 0 0 1.4em; font-family: var(--sans); font-size: clamp(22px, 2.4vw, 28px); line-height: 1.28; letter-spacing: -0.015em; font-weight: 500; color: var(--text-1); }
+.paper-body > .terms-for:first-child + p::first-letter { float: left; margin: 0.08em 0.14em 0 0; padding: 0.1em 0.16em; font-family: var(--px); font-size: 2.6em; line-height: 0.95; color: #ffffff; background: var(--accent); }
+.terms.blog .paper-body h2 { width: fit-content; max-width: 100%; margin-top: 2em; padding: 3px 10px; font-family: var(--px); font-size: 19px; font-weight: 400; line-height: 1.3; letter-spacing: 0; color: #ffffff; background: var(--accent); }
+.terms.blog .paper-body h2 + p { margin-top: 0.7em; }
+.paper-body h3 { margin-top: 1.6em; font-family: var(--sans); font-size: 1.05em; font-weight: 700; }
+.paper-body code { font-family: var(--px); font-size: 0.86em; }
+.paper-body pre { margin-top: 1em; padding: 12px 14px; border: 0; background: #000000; color: #ffffff; overflow-x: auto; }
+.paper-body pre code { font-size: 14px; line-height: 1.5; }
+.blog-draft { display: inline-block; margin-bottom: 16px; padding: 6px 10px; font-family: var(--px); font-size: 13px; background: var(--accent); color: var(--on-accent); }
+/* Blog figures: white plates (blog/figures/*.svg) on the grey paper. */
 .md-fig { margin: 32px 0 0; }
-.md-fig img { display: block; width: 100%; height: auto; background: #ffffff; border: 1px solid var(--frame); }
-.md-fig figcaption { margin-top: 10px; line-height: 1.6; }
+.md-fig img { display: block; width: 100%; height: auto; background: #ffffff; }
+.md-fig figcaption { margin-top: 10px; font-family: var(--sans); font-size: 15px; line-height: 1.5; color: var(--text-2); }
+
+/* The front page: the newest post leads, the rest fill columns beside it. */
+.terms.blog .terms-for { max-width: 44ch; margin-top: 20px; font-size: 15px; color: var(--text-2); }
+.ttx-front { list-style: none; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 48px 32px; margin-top: 48px; padding: 0; }
+.terms.blog .ttx-front li { margin: 0; min-width: 0; }
+.ttx-front li:first-child { grid-column: span 2; }
+.ttx-line { display: flex; gap: 2ch; margin: 0; font-family: var(--px); font-size: 13px; color: var(--text-3); }
+.ttx-line .ttx-page { padding: 0 6px; color: #ffffff; background: var(--accent); }
+.terms.blog .ttx-front h2 { max-width: none; margin-top: 12px; font-size: clamp(24px, 2.4vw, 30px); line-height: 1.12; letter-spacing: -0.02em; font-weight: 700; }
+.terms.blog .ttx-front li:first-child h2 { font-size: clamp(32px, 4.4vw, 52px); line-height: 1.02; letter-spacing: -0.03em; text-wrap: balance; }
+.ttx-front h2 a { color: var(--text-1); text-decoration: none; }
+.ttx-front img { display: block; width: 100%; height: auto; margin-top: 20px; background: #ffffff; }
+.ttx-front li > p:last-child { margin-top: 12px; font-family: var(--paper-serif); font-size: 18px; line-height: 1.5; color: var(--text-1); }
+@media (max-width: 760px) {
+  .ttx-front { grid-template-columns: minmax(0, 1fr); }
+  .ttx-front li:first-child { grid-column: auto; }
+}
+
+/* The keys: red, green, yellow, cyan, as on a teletext remote. */
+.ttx-keys { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px 24px; margin-top: 72px; font-family: var(--px); font-size: 14px; }
+.ttx-keys a { display: flex; align-items: center; gap: 10px; color: var(--text-1); text-decoration: none; }
+.ttx-keys a::before { content: ""; flex: none; width: 14px; height: 14px; background: #ff0000; }
+.ttx-keys a:nth-child(2)::before { background: #00c000; }
+.ttx-keys a:nth-child(3)::before { background: #ffd800; }
+.ttx-keys a:nth-child(4)::before { background: #00c8d8; }
 .blog-draft { display: inline-block; margin-bottom: 16px; padding: 6px 10px; font-family: var(--px); font-size: 13px; background: var(--accent); color: var(--on-accent); }
 
 /* Research (/research, site/research.mjs): the benchmark frame. One statement,

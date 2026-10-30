@@ -178,15 +178,29 @@ const sized = (html, figures) => html.replace(/<img src="\/blog\/figures\/([^"]+
 
 // ── HTML, Markdown, Atom ────────────────────────────────────────────────────
 
-function page({ title, description, url, path, h1, crumb, ld, body, styles, theme, foot = siteFooter(), draft = false, type = "article", feed = true }) {
+/** BLOG in separated mosaic blocks, double height, as teletext drew its titles. */
+const MOSAIC = ["11110 10001 10001 11110 10001 10001 11110", "10000 10000 10000 10000 10000 10000 11111", "01110 10001 10001 10001 10001 10001 01110", "01110 10001 10000 10111 10001 10001 01111"];
+const mosaic = () => {
+  const cells = MOSAIC.flatMap((glyph, g) => glyph.split(" ").flatMap((row, y) => [...row].flatMap((c, x) => (c === "1" ? [`M${g * 6 + x} ${y * 1.5}h.84v1.34h-.84z`] : []))));
+  return `<svg class="ttx-title" viewBox="0 0 23 10.34" aria-hidden="true"><path d="${cells.join("")}"/></svg>`;
+};
+
+/** The four coloured links at the bottom of a page, teletext's Fastext keys. */
+const fastext = (keys) => `    <nav class="ttx-keys" aria-label="More pages">${keys.map(([href, text]) => `<a href="${esc(href)}">${esc(text)}</a>`).join("")}</nav>`;
+
+/** A post's page number. The oldest is P101, so a new post never renumbers the others. */
+const pageNumbers = (posts) => new Map(posts.map((p, i) => [p.slug, `P${100 + posts.length - i}`]));
+
+function page({ title, description, url, path, h1, crumb, ld, body, styles, theme, foot = siteFooter(), draft = false, type = "article", feed = true, number = "P100", dateline = "", mast = false }) {
   return `<!doctype html>
-<html lang="en">
+<html lang="en" data-theme="light" data-paper>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${esc(title)} · Penthera</title>
   <meta name="description" content="${esc(description)}">
-  <meta name="color-scheme" content="dark light">
+  <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#0000ed">
 ${draft ? '  <meta name="robots" content="noindex, nofollow">\n' : ""}  <link rel="canonical" href="${url}">
   <link rel="alternate" type="text/markdown" href="${path}.md">
 ${feed ? '  <link rel="alternate" type="application/atom+xml" href="/blog/feed.xml" title="Penthera blog">\n' : ""}  <meta property="og:site_name" content="Penthera">
@@ -200,9 +214,10 @@ ${feed ? '  <link rel="alternate" type="application/atom+xml" href="/blog/feed.x
   ${ld}
 </head>
 <body>
-  <main class="terms land blog" id="main">
+  <p class="ttx-bar"><span class="ttx-page">${number}</span><span>Penthera blog</span><span class="ttx-date">${dateline}</span></p>
+  <main class="terms land blog${mast ? "" : " blog-post"}" id="main">
 ${draft ? '    <p class="blog-draft">Draft: not approved, not listed and not indexed.</p>\n' : ""}    <nav class="eyebrow" aria-label="Breadcrumb">${crumb}</nav>
-    <h1>${esc(h1)}</h1>
+    <h1>${mast ? `${mosaic()}<span class="sr">${esc(h1)}</span>` : esc(h1)}</h1>
 ${body}
   </main>
   ${foot}
@@ -238,17 +253,21 @@ export function postLd(p, origin) {
 }
 
 /** One post as HTML. */
-export function postHtml(p, { origin, styles = "/styles.css", theme = "/theme.js", foot }) {
+export function postHtml(p, { origin, styles = "/styles.css", theme = "/theme.js", foot, number = "P100", next }) {
   const path = `/blog/${p.slug}`;
   const url = `${origin}${path}`;
-  const body = `    <p class="blog-meta"><time datetime="${p.date}">${longDate(p.date)}</time> · ${esc(AUTHOR.name)}</p>
+  const minutes = Math.max(1, Math.round(p.md.split(/\s+/).length / 220));
+  const body = `    <p class="blog-meta"><time datetime="${p.date}">${longDate(p.date)}</time> · ${esc(AUTHOR.name)} · ${minutes} min read</p>
+    <div class="paper-body">
 ${sized(renderMarkdown(p.md), p.figures)}
-    <p class="blog-src">Sources: ${sourceLinks(p)}.</p>`;
+    </div>
+    <p class="blog-src">Sources: ${sourceLinks(p)}.</p>
+${fastext([["/blog", "All posts"], next ? [`/blog/${next.slug}`, `${next.number} ${next.nav || next.title}`] : ["/benchmarks", "Benchmarks"], ["/blog/feed.xml", "Atom feed"], [`${path}.md`, "Markdown copy"]])}`;
   const ld = ldScript([postLd(p, origin), {
     "@type": "BreadcrumbList",
     itemListElement: [["Penthera", "/"], ["Blog", "/blog"], [p.title, path]].map(([n, u], i) => ({ "@type": "ListItem", position: i + 1, name: n, item: `${origin}${u}` })),
   }]);
-  return page({ title: p.title, description: p.description, url, path, h1: p.title, ld, body, styles, theme, foot, draft: !p.approved,
+  return page({ title: p.title, description: p.description, url, path, h1: p.title, ld, body, styles, theme, foot, draft: !p.approved, number, dateline: longDate(p.date),
     crumb: `<a href="/">Penthera</a> · <a href="/blog">Blog</a>` });
 }
 
@@ -259,17 +278,19 @@ export function postMarkdown(p, { origin }) {
 
 /** /blog: the published posts, newest first. */
 export function blogIndexHtml(posts, { origin, styles = "/styles.css", theme = "/theme.js", foot }) {
+  const numbers = pageNumbers(posts);
+  const lead = Object.keys(posts[0]?.figures || {})[0];
   const body = `    <p class="terms-for">How Penthera is built and measured, with the data behind each number.</p>
-    <ul class="bm-hub">
-${posts.map((p) => `      <li><a href="/blog/${p.slug}">${esc(p.title)}</a><span><time datetime="${p.date}">${longDate(p.date)}</time>. ${esc(p.description)}</span></li>`).join("\n")}
+    <ul class="ttx-front">
+${posts.map((p, i) => `      <li><p class="ttx-line"><span class="ttx-page">${numbers.get(p.slug)}</span><time datetime="${p.date}">${longDate(p.date)}</time></p><h2><a href="/blog/${p.slug}">${esc(p.title)}</a></h2>${i === 0 && lead ? `<img src="/blog/figures/${lead}" width="${posts[0].figures[lead].width}" height="${posts[0].figures[lead].height}" alt="" loading="lazy">` : ""}<p>${esc(p.description)}</p></li>`).join("\n")}
     </ul>
-    <p><a href="/blog/feed.xml">Atom feed</a></p>`;
+${fastext([["/benchmarks", "Benchmarks"], ["/research", "Research"], ["/blog/feed.xml", "Atom feed"], ["/blog.md", "Markdown copy"]])}`;
   const ld = ldScript([{
     "@type": "Blog", "@id": `${origin}/blog#blog`, url: `${origin}/blog`, name: "Penthera blog", author: AUTHOR,
     blogPost: posts.map((p) => ({ "@id": `${origin}/blog/${p.slug}#post` })),
   }]);
   return page({ title: "Blog: how Penthera is built and measured", description: "Posts on how Penthera is built and measured, with the data and the protocol behind every number.",
-    url: `${origin}/blog`, path: "/blog", h1: "Blog", ld, body, styles, theme, foot, type: "website", crumb: `<a href="/">Penthera</a> · Blog` });
+    url: `${origin}/blog`, path: "/blog", h1: "Blog", ld, body, styles, theme, foot, type: "website", mast: true, dateline: posts[0] ? longDate(posts[0].date) : "", crumb: `<a href="/">Penthera</a> · Blog` });
 }
 
 /** /blog.md */
@@ -317,8 +338,12 @@ export function blogFiles(posts, { origin, styles, drafts = false, foot }) {
     out["blog.md"] = blogIndexMarkdown(posts.published, { origin });
     out["blog/feed.xml"] = atomFeed(posts.published, { origin });
   }
+  const numbers = pageNumbers(posts.published);
   for (const p of [...posts.published, ...(drafts ? posts.drafts : [])]) {
-    out[`blog/${p.slug}.html`] = postHtml(p, { origin, styles, foot });
+    const at = posts.published.indexOf(p);
+    const after = at < 0 ? null : posts.published[(at + 1) % posts.published.length];
+    const next = after && after !== p ? { ...after, number: numbers.get(after.slug) } : null;
+    out[`blog/${p.slug}.html`] = postHtml(p, { origin, styles, foot, number: numbers.get(p.slug) || "Draft", next });
     if (p.approved) out[`blog/${p.slug}.md`] = postMarkdown(p, { origin });
   }
   return out;

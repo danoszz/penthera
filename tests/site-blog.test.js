@@ -156,6 +156,16 @@ describe("blog, published", () => {
     expect(o.has("blog/figures/secrets-precision-recall.svg")).toBe(false);
   });
 
+  it("prints the blog on light paper, whatever the reader's theme", () => {
+    for (const f of ["blog.html", "blog/sealed-half-benchmark.html"]) {
+      expect(builds.one(f), f).toContain('<html lang="en" data-theme="light" data-paper>');
+      expect(builds.one(f), f).toContain('<meta name="color-scheme" content="light">');
+    }
+    const theme = readFileSync(join(ROOT, "site/theme.js"), "utf8");
+    expect(theme).toContain('if (!paper) root.setAttribute("data-theme"');
+    expect(theme).toContain('paper ? [] : document.querySelectorAll("[data-theme-toggle]")');
+  });
+
   it("every figure in the repo's posts exists in blog/figures/ and has alt text", () => {
     for (const f of files) {
       const md = readFileSync(join(BLOG, f), "utf8");

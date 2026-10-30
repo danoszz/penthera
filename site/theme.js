@@ -10,7 +10,9 @@
   var stored = null;
   try { stored = localStorage.getItem(KEY); } catch (e) { /* storage blocked */ }
   var system = window.matchMedia && matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
-  root.setAttribute("data-theme", stored === "light" || stored === "dark" ? stored : system);
+  // The blog is printed on paper (data-paper): always light, with no switch.
+  var paper = root.hasAttribute("data-paper");
+  if (!paper) root.setAttribute("data-theme", stored === "light" || stored === "dark" ? stored : system);
 
   // Switches labelled "Dark theme" (one in the bar, one in the footer): on is
   // dark, off is light. They all show the same state.
@@ -18,11 +20,11 @@
     var dark = root.getAttribute("data-theme") === "dark";
     for (var i = 0; i < btns.length; i++) btns[i].setAttribute("aria-checked", dark ? "true" : "false");
     var meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) meta.setAttribute("content", dark ? "#000000" : "#fdfdfa");
+    if (meta && !paper) meta.setAttribute("content", dark ? "#000000" : "#fdfdfa");
   }
 
   document.addEventListener("DOMContentLoaded", function () {
-    var btns = document.querySelectorAll("[data-theme-toggle]");
+    var btns = paper ? [] : document.querySelectorAll("[data-theme-toggle]");
     for (var i = 0; i < btns.length; i++) {
       btns[i].hidden = false;
       btns[i].addEventListener("click", function () {
