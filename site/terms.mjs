@@ -15,6 +15,8 @@ function inline(text) {
   return esc(text)
     .replace(/`([^`]+)`/g, "<code>$1</code>")
     .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    // Single asterisks are italics, but not inside code: `*.js` stays as written.
+    .replace(/<code>.*?<\/code>|(^|[\s(>])\*([^\s*](?:[^*]*[^\s*])?)\*(?=$|[\s.,;:(<)])/g, (m, before, text) => (text ? `${before}<em>${text}</em>` : m))
     .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (m, label, href) => {
       // Anchors, site paths and https links stay; a relative path is a file in docs/.
       const url = /^(#|\/(?!\/)|https:\/\/)/.test(href) ? href : new URL(href, REPO).href;

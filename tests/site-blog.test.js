@@ -11,6 +11,7 @@ import { tmpdir } from "node:os";
 import { buildSite } from "../site/build.mjs";
 import { facts, parsePost, readPosts, rowId } from "../site/blog.mjs";
 import { n2 } from "../site/benchmarks.mjs";
+import { renderMarkdown } from "../site/terms.mjs";
 
 const ROOT = join(import.meta.dirname, "..");
 const BLOG = join(ROOT, "blog");
@@ -154,6 +155,13 @@ describe("blog, published", () => {
     expect(builds.one("blog/feed.xml")).toContain(`${ORIGIN}/blog/figures/dev-to-test.svg`);
     // A draft's figures are not shipped.
     expect(o.has("blog/figures/secrets-precision-recall.svg")).toBe(false);
+  });
+
+  it("sets single asterisks in italics, outside code and sums", () => {
+    expect(renderMarkdown("*The Annals of Statistics*, *7*(1), 1–26.")).toContain("<em>The Annals of Statistics</em>, <em>7</em>(1), 1–26.");
+    expect(renderMarkdown("Run `lint *.js and *.ts` with **care**.")).toContain("<code>lint *.js and *.ts</code> with <strong>care</strong>.");
+    expect(renderMarkdown("Two * three * four.")).toContain("Two * three * four.");
+    for (const f of ["blog/sealed-half-benchmark.html"]) expect(builds.one(f).replace(/<code>.*?<\/code>/g, "").replace(/<script[\s\S]*?<\/script>/g, ""), f).not.toMatch(/\*\w/);
   });
 
   it("prints the blog on light paper, whatever the reader's theme", () => {
