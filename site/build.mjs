@@ -32,6 +32,7 @@ import { landingPages, landingHtml, landingMarkdown } from "./landing.mjs";
 import { termsPage, docPage } from "./terms.mjs";
 import { publicBenchHtml } from "./public-bench.mjs";
 import { readPosts, blogFiles } from "./blog.mjs";
+import { typeHtml, typeMarkdown } from "./type.mjs";
 import { siteFooter, siteRail, smart, stickers, footGroups } from "./frame.mjs";
 import { benchmarkHtml, benchmarkMarkdown, benchmarkViews, cardFor, fieldTools, hubHtml, hubMarkdown } from "./benchmarks.mjs";
 import { cardRows, rowTag } from "./check/card.js";
@@ -618,6 +619,10 @@ export async function buildSite({ out = join(SITE, "dist"), engine, blogDir = jo
     mkdirSync(dirname(join(OUT, f)), { recursive: true });
     writeFileSync(join(OUT, f), text);
   }
+
+  // /type: the type system, drawn with itself (site/type.mjs).
+  writeFileSync(join(OUT, "type.html"), typeHtml({ origin: ORIGIN, styles, foot }));
+  writeFileSync(join(OUT, "type.md"), typeMarkdown({ origin: ORIGIN }));
 
   // The rail goes on every rendered page here, so no page template can miss it,
   // and so do the real quotes and apostrophes.

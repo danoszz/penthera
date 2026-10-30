@@ -47,6 +47,7 @@ export function footGroups({ pages = [], benchmarks = [], posts = [] } = {}) {
     { id: "trust", label: "Trust", links: [
       { href: "/trust", text: "Trust" },
       { href: "/terms", text: "Terms" },
+      { href: "/type", text: "Type system" },
       { href: `${REPO}/blob/main/docs/privacy.md`, text: "Privacy and network use" },
       { href: "/.well-known/security.txt", text: "security.txt" },
       { href: "/llms.txt", text: "llms.txt" },

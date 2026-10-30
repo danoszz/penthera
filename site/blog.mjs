@@ -209,7 +209,7 @@ const fastext = (keys) => `    <nav class="ttx-keys" aria-label="More pages">${k
 /** A post's page number. The oldest is P101, so a new post never renumbers the others. */
 const pageNumbers = (posts) => new Map(posts.map((p, i) => [p.slug, `P${100 + posts.length - i}`]));
 
-function page({ title, description, url, path, h1, crumb, ld, body, styles, theme, foot = siteFooter(), draft = false, type = "article", feed = true, number = "P100", dateline = "", mast = false, script = "" }) {
+function page({ title, description, url, path, h1, crumb, ld, body, styles, theme, foot = siteFooter(), draft = false, type = "article", feed = true, number = "P100", bar = "Penthera blog", dateline = "", mast = false, article = !mast, script = "" }) {
   return `<!doctype html>
 <html lang="en" data-theme="light" data-paper>
 <head>
@@ -232,8 +232,8 @@ ${feed ? '  <link rel="alternate" type="application/atom+xml" href="/blog/feed.x
 ${script ? `  <script src="${script}" defer></script>\n` : ""}  ${ld}
 </head>
 <body>
-  <p class="ttx-bar"><span class="ttx-page">${number}</span><span>Penthera blog</span><span class="ttx-date">${dateline}</span></p>
-  <main class="terms land blog${mast ? "" : " blog-post"}" id="main">
+  <p class="ttx-bar"><span class="ttx-page">${number}</span><span>${bar}</span><span class="ttx-date">${dateline}</span></p>
+  <main class="terms land blog${article ? " blog-post" : ""}" id="main">
 ${draft ? '    <p class="blog-draft">Draft: not approved, not listed and not indexed.</p>\n' : ""}    <nav class="eyebrow ttx-crumbs" aria-label="Breadcrumb">${crumb}</nav>
     <h1>${mast ? `${mosaic()}<span class="sr">${esc(h1)}</span>` : smart(esc(h1))}</h1>
 ${body}
@@ -243,6 +243,8 @@ ${body}
 </html>
 `;
 }
+
+export { page as paperPage };
 
 /** Make site paths absolute, for the Markdown copy and the feed. */
 const absolute = (md, origin) => md.replace(/\]\(\/(?!\/)/g, `](${origin}/`);
