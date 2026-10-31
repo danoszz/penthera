@@ -22,7 +22,7 @@
 | Industry map SHA-256 | `78df4910d953379f21d935aeb3ef658d85cbef036539e1a31362c9ad7e26e075` |
 | E20 exclusion file SHA-256 | `246127f639968afc906d59f155f6a993982f3a33c0655718234955319ebe4c34` |
 | Legacy classifier SHA-256 | `7023106f7bd73c1e4122d80e9479f63a4a04091f1426327be70621951fe71d3b` (`bench/front-door/legacy/classify-7023106f.mjs`, the detector that stopped pass 2) |
-| Frozen classifier SHA-256 | `449f964708f7f3f165c4f5f1a6d43600890c864dc94e90f78c77d4fd4abc0a99` (`bench/front-door/classify.mjs`) |
+| Frozen classifier SHA-256 | `ffd44cf9df79d0de10079cbe9e367420226c5034a0ee4a78461cd474419a8ed7` (`bench/front-door/classify.mjs`) |
 | Public Suffix List SHA-256 | `d3e6243b51695327984abb3e2a5aa7077096867f75121e031e6a5a3840ca8bcd` (commit `9dfbe81931367b3f0af21035c36ae7eeb830dd88`, fetched 30 Oct 2026, private suffixes included) |
 | Registration commit | The commit that merges this file to `main` |
 | T1k list SHA-256 | `d670a3c1910fe7baa4883dcb8320b1ec99d7d29f9d22954b9288ae678540674e` (`tranco-ZJ8PG-top1000.csv`) |
@@ -839,7 +839,7 @@ hash. It can't sit elsewhere, because the detector is what the stop reads.
   backstop for retained addresses, so it stays strict there, and a fire no longer costs a run. See
   "Withheld text".
 - **Old hash.** `7023106f7bd73c1e4122d80e9479f63a4a04091f1426327be70621951fe71d3b`.
-- **New hash.** `449f964708f7f3f165c4f5f1a6d43600890c864dc94e90f78c77d4fd4abc0a99`.
+- **New hash.** `ffd44cf9df79d0de10079cbe9e367420226c5034a0ee4a78461cd474419a8ed7`.
 - **No graded result changes.** `classify`, `classifyRegistered`, `scrub`, `evidenceOf` and every other
   export keep their source, byte for byte, so a label, a stored excerpt or a grade can't differ. The detector's reach changed in both directions, so its effect was measured, below. Pilot round 1 isn't regraded, and its seal isn't redone. Its raw file is pruned,
   so a replay would read no excerpts, and we don't count one as evidence.

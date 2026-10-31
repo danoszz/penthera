@@ -313,8 +313,9 @@ const SENTENCE_DOT = /[.。．｡] /y;
 const LAST_LABEL = /^(?:\p{L}[\p{L}\p{M}]+|xn--[a-z0-9-]*[a-z0-9])$/u;
 // A candidate is whole unless what follows shows it goes on as something else. A fire costs one record's text
 // and a miss keeps an address, so this lists what rejects and all else is an edge. Punctuation of a query, fragment,
-// port or sentence only counts up to a space or the end, so `x.com:443`, `x.com?a=b` and `x.com..y` aren't domains.
-const TOKEN_EDGE = /[.:?#。．｡]*(?:$| |[^\s\p{L}\p{N}\p{M}_\-/\\@=&%+~.:?#。．｡])/uy;
+// port or sentence only counts up to a space or the end, so `x.com:443`, `x.com?a=b` and `x.com..y` aren't domains,
+// and neither is what the scrub leaves of them, `x.com?<query>` and `x.com#<fragment>`.
+const TOKEN_EDGE = /[.:?#。．｡]*(?:$| )|[.:。．｡]*[^\s\p{L}\p{N}\p{M}_\-/\\@=&%+~.:?#。．｡<]|</uy;
 // A name holds 253 characters, and spelled dots or spaces around them add a few to each label.
 const MAX_DOMAIN_CHARS = 1024;
 
