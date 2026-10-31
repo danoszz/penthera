@@ -66,7 +66,7 @@ function sourceCodes() {
 describe("homepage as Markdown", () => {
   it("builds index.md from the page's values, with pinned commands and the links", () => {
     const md = read("index.md");
-    expect(md).toMatch(/^# Penthera: your open-source cyber security agent\n/);
+    expect(md).toMatch(/^# Penthera: free security scanner and fixer\n/);
     expect(md).not.toMatch(/\{\{|undefined|—/);
     for (const cmd of [`npx penthera@${SITE_V}`, "npx skills add danoszz/penthera", `claude mcp add penthera -- npx -y penthera@${SITE_V} mcp`]) expect(md).toContain(cmd);
     const pins = [...md.matchAll(/penthera@(\d[\w.-]*)/g)].map((m) => m[1]);

@@ -161,7 +161,7 @@ export function siteRail({ url = "/", stars = "", blog = true, header = process.
       </a>
       <a class="rail-download" href="${home ? "#get" : "/#get"}" data-track="download-dock">
         ${DOWN}
-        <span>Download</span>
+        <span>Install</span>
       </a>
     </div></div>
   </nav>`;
@@ -172,7 +172,7 @@ const link = (l) => `<li${l.sub ? ' class="foot-sub"' : ""}><a href="${esc(l.hre
 /**
  * The footer of every page. Outside <main>, after it.
  * @param {{ groups?: ReturnType<typeof footGroups>, version?: string, stars?: string, home?: boolean }} opts
- *   home: on the homepage the Download button goes to #get on the same page
+ *   home: on the homepage the Install button goes to #get on the same page
  */
 export function siteFooter({ groups = footGroups(), version = "", stars = "", home = false } = {}) {
   const nav = groups.map((g) => `<div class="foot-group">
@@ -183,7 +183,7 @@ export function siteFooter({ groups = footGroups(), version = "", stars = "", ho
       </div>`).join("\n      ");
   return `<footer class="foot">
     <div class="foot-head">
-      <p class="foot-status"><span class="foot-led" aria-hidden="true"></span>Built from Penthera${version ? ` ${esc(version)}` : ""}. Runs offline. Rules decide.</p>
+      <p class="foot-status"><span class="foot-led" aria-hidden="true"></span>Built from Penthera${version ? ` ${esc(version)}` : ""}. Code scans run offline. Rules decide.</p>
       <div class="foot-ctas">
         <button class="theme glass" type="button" role="switch" aria-checked="true" aria-label="Dark theme" data-theme-toggle hidden>
           <span class="theme-track" aria-hidden="true"><span class="theme-knob"></span></span>
@@ -194,7 +194,7 @@ export function siteFooter({ groups = footGroups(), version = "", stars = "", ho
         </a>
         <a class="download glass" href="${home ? "#get" : "/#get"}">
           ${DOWN}
-          <span>Download</span>
+          <span>Install</span>
         </a>
       </div>
     </div>

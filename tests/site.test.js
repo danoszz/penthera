@@ -112,8 +112,8 @@ describe("site build", () => {
     for (const tag of ['property="og:image"', 'name="twitter:card" content="summary_large_image"', 'property="og:image:width" content="1200"']) {
       expect(html, tag).toContain(tag);
     }
-    expect(html).toContain('property="og:title" content="Penthera: your open-source cyber security agent"');
-    expect(html).toContain('name="twitter:title" content="Penthera: your open-source cyber security agent"');
+    expect(html).toContain('property="og:title" content="Penthera: make your app more secure for free"');
+    expect(html).toContain('name="twitter:title" content="Penthera: make your app more secure for free"');
     for (const tag of ["og:description", "twitter:description"]) {
       const d = html.match(new RegExp(`(?:property|name)="${tag}" content="([^"]+)"`))[1];
       expect(d.length, tag).toBeLessThanOrEqual(155);
@@ -449,7 +449,7 @@ describe("site story", () => {
     for (const [i, m] of order.entries()) expect(at[i], m).toBeGreaterThan(0);
     expect([...at].sort((a, b) => a - b)).toEqual(at);
     expect(h).toContain("AI coding tools ship faster than anyone can check.");
-    expect(h).toContain('<h1 class="ask-sub" id="hero-title">Penthera: your <span class="nowrap">open-source</span> cyber security agent.</h1>');
+    expect(h).toContain('<h1 class="ask-sub" id="hero-title">Make your app more secure for free</h1>');
     expect(h).toContain('<p class="bubble">yo is my app secure?</p>');
     expect(h).toMatch(/<h2 id="faq-title">Before you install\.<\/h2>/);
     // Merged away: no section repeats another.
@@ -550,7 +550,7 @@ describe("site story", () => {
   it("shows the four areas with counts from the rules, and the tour as three dashboard steps", () => {
     const h = html();
     const map = h.slice(h.indexOf('id="checks"'), h.indexOf('id="trust"'));
-    for (const [n, what] of [[COUNTS.secretPatterns, "secret and AI-key patterns"], [COUNTS.agentRules, "AI-tooling rules"], [COUNTS.urlTemplates, "URL scan templates"], [(COUNTS.popularNpm + COUNTS.popularPypi).toLocaleString("en-US"), "package names"]]) {
+    for (const [n, what] of [[COUNTS.secretPatterns, "secret and AI-key patterns"], [COUNTS.agentRules, "AI setup rules"], [COUNTS.urlTemplates, "URL scan templates"], [(COUNTS.popularNpm + COUNTS.popularPypi).toLocaleString("en-US"), "package names"]]) {
       expect(map).toContain(`<p class="map-n">${n}<span> ${what}</span></p>`);
     }
     expect(map.match(/<li class="map-cell /g)).toHaveLength(4);
@@ -687,7 +687,7 @@ describe("site landing pages", () => {
   it("answers once, with the live check as the call to action and the CLI for the code", () => {
     for (const p of checkPages) {
       const h = read(`${p.slug}.html`);
-      expect(h, p.slug).toContain('<a class="btn" data-variant="default" href="/#scan">Check your site</a>');
+      expect(h, p.slug).toContain('<a class="btn" data-variant="default" href="/#scan">Check my site</a>');
       expect(h, p.slug).toContain("<code>npx penthera");
       expect(h, p.slug).toContain('<a href="/terms">');
       expect(h, p.slug).not.toMatch(/\{\{|\u0000/);

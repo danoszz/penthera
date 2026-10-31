@@ -14,14 +14,13 @@ check in the page first.
 
 ## Positioning (approved, used verbatim)
 
-- Title (2026-10-21, the hero and README headline): "Penthera: your
-  open-source cyber security agent"
-- Subline: "The security review you never had time for. Offline, rule-based,
-  and you can verify every finding yourself."
-- One-liner, still approved for other copy: "Penthera: an open-source cyber
-  security agent you can use today, and verify yourself."
-- Short line: "Offline cyber security agent for your apps and AI coding tools.
-  Open R&D: measured in public, improved every release."
+- Hero line: "Check it before they wreck it"
+- Tagline (2026-10-31): "Make your app more secure for free"
+- One plain line: "Penthera is a free, open-source security scanner and fixer
+  for your app. It checks your AI setup too"
+- Fixer line, always near "fixer": "It fixes what it can with your OK. For the
+  rest, it tells you or your coding agent how, then checks the fix"
+- Short line: "Free, open-source security scanner and fixer for your app. Checks your AI setup too. Measured in public."
 
 ## Direction: Poster
 

@@ -22,7 +22,7 @@ import { reading, ldScript, siteFooter } from "./frame.mjs";
 import { proMain, waitlistHref } from "./pro.mjs";
 
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-const CTA_HTML = '<p class="land-cta"><a class="btn" data-variant="default" href="/#scan">Check your site</a><span>Free, passive, nothing stored. Your own site only.</span></p>';
+const CTA_HTML = '<p class="land-cta"><a class="btn" data-variant="default" href="/#scan">Check my site</a><span>Free, passive, nothing stored. Your own site only.</span></p>';
 // `cta: waitlist` in the front matter: a mailto, so nothing is stored on the site.
 const WAITLIST_MAIL = "daan@penthera.org";
 const WAITLIST_HREF = waitlistHref();
@@ -62,7 +62,7 @@ export function landingPages(site) {
 export function landingMarkdown(p, { origin, values }) {
   const cta = p.cta === "waitlist" ? `[Join the waitlist](${WAITLIST_HREF})`
     : p.cta === "contact" ? `[${contactLabel(p)}](${contactHref(p)})`
-    : `[Check your site on penthera.org](${origin}/#scan)`;
+    : `[Check my site on penthera.org](${origin}/#scan)`;
   const body = p.body.replaceAll("{{CTA}}", cta)
     .replace(/\]\(\/(?!\/)/g, `](${origin}/`);
   return `${fill(body, values, `site/pages/${p.slug}.md`).trimEnd()}\n`;
@@ -118,7 +118,7 @@ ${check ? `    <div class="land-field" aria-hidden="true"></div>
       <label class="sr" for="land-url">Your site's address</label>
       <div class="scan-row">
         <input id="land-url" name="check" type="text" inputmode="url" autocomplete="url" autocapitalize="off" spellcheck="false" placeholder="your-site.com" required>
-        <button class="btn scan-go" data-variant="default" type="submit">Check</button>
+        <button class="btn scan-go" data-variant="default" type="submit">Check my site</button>
       </div>
       <p class="scan-note">Passive · nothing stored · your own site only · <a href="/terms">Terms</a></p>
     </form>\n` : ""}${reading(body, { question: !check })}

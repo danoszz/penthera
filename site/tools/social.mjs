@@ -35,9 +35,8 @@ const logo = readFileSync(join(ROOT, "src", "ui", "static", "logo.svg"), "utf8")
   .replace(/fill="currentColor"/g, 'fill="#ffffff"');
 const field = `data:image/png;base64,${readFileSync(join(SITE, "media", "field.png")).toString("base64")}`;
 const font = pathToFileURL(join(ROOT, "src", "ui", "static", "fonts", "DepartureMono-Regular.woff2")).href;
-// The approved title, without the "Penthera:" the logotype already says. A
-// non-breaking hyphen keeps "open-source" on one line.
-export const LINE = "Your open\u2011source cyber security agent";
+// The approved tagline.
+export const LINE = "Make your app more secure for free";
 const CHIPS = '<span class="cmd">$ npx penthera</span><span class="pill">Open source</span><span class="pill">MIT</span><span class="pill">Offline</span>';
 
 /**

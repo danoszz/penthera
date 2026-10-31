@@ -10,3 +10,4 @@ section: Changed
   tokens, the hero pills share the sticker styles, and the steel button is a
   `.btn`. The square and story cards use the blue bubbles, without a score.
 - **News is one page with Research and the blog.** `/news`, `/research` and `/blog` share a list with filters, a search and a feed at `/news/feed.xml`, and every view is a real page that works without a script.
+- **Penthera says what it is.** The site calls it a free, open-source security scanner and fixer for your app, with "Make your app more secure for free" under the headline. The field button reads Check my site, the dock reads Install, and the home page now says fixes stay on your machine and nothing is pushed.
