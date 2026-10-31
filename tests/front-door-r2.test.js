@@ -1436,7 +1436,7 @@ describe("package 3 criteria", () => {
     const sheet = readFileSync(join(import.meta.dirname, "..", "bench", "front-door", "run-sheet.md"), "utf8");
     const install = sheet.match(/^test "\$\(node -v\)" = v22\.23\.4 .*npm ci$/m)?.[0];
     expect(install).toBeTruthy();
-    expect(sheet.match(/^npm ci/gm) ?? []).toEqual(["npm ci"]); // the laptop's, which checks its own version
+    expect(sheet).not.toMatch(/^npm ci/m);
     expect(sheet.indexOf(install)).toBeLessThan(sheet.indexOf("e20r:preflight"));
     expect(sheet).toContain('test "$(node -v)" = v22.23.4 && npm run e20r:preflight');
     const tryWith = (version) => {
@@ -1451,6 +1451,25 @@ describe("package 3 criteria", () => {
     expect(tryWith("v26.0.0")).toEqual({ status: 1, installed: false, recorded: null });
     expect(tryWith("v22.23.3")).toEqual({ status: 1, installed: false, recorded: null });
     expect(tryWith("v22.23.4")).toEqual({ status: 0, installed: true, recorded: "v22.23.4" });
+  });
+
+  it("the laptop's install stops on any Node but the exact one, and every laptop step uses that binary", () => {
+    const sheet = readFileSync(join(import.meta.dirname, "..", "bench", "front-door", "run-sheet.md"), "utf8");
+    const install = sheet.match(/^test "\$\("\$NODE22" -v\)" = v22\.23\.4 && npm ci$/m)?.[0];
+    expect(install).toBeTruthy();
+    expect(sheet).not.toMatch(/^npx /m);
+    expect(sheet.match(/^"\$NODE22" bench\/front-door\/[a-z-]+\.mjs/gm)).toEqual(["analyze-r", "make-labeler-kit", "report-tables"].map((f) => `"$NODE22" bench/front-door/${f}.mjs`));
+    expect(sheet.indexOf(install)).toBeLessThan(sheet.indexOf('"$NODE22" bench/front-door/analyze-r.mjs'));
+    const tryWith = (version) => {
+      const home = mkdtempSync(join(tmpdir(), "e20r2-laptop-"));
+      mkdirSync(join(home, "bin"));
+      writeFileSync(join(home, "node22"), `#!/bin/sh\necho ${version}\n`, { mode: 0o755 });
+      writeFileSync(join(home, "bin", "npm"), `#!/bin/sh\ntouch "$HOME/installed"\n`, { mode: 0o755 });
+      const run = spawnSync("/bin/bash", ["-c", install], { env: { HOME: home, NODE22: join(home, "node22"), PATH: `${join(home, "bin")}:/usr/bin:/bin` }, encoding: "utf8" });
+      return { status: run.status, installed: existsSync(join(home, "installed")) };
+    };
+    expect(tryWith("v26.0.0")).toEqual({ status: 1, installed: false });
+    expect(tryWith("v22.23.4")).toEqual({ status: 0, installed: true });
   });
 
   it("the public page makes no absolute privacy claim", () => {

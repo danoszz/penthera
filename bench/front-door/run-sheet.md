@@ -260,10 +260,16 @@ The analysis needs the pass 1 and E20 raw files, which stay on the laptop, so th
 git clone --no-hardlinks <repository> ~/study/e20r-checkout && git -C ~/study/e20r-checkout checkout --detach <run commit>
 ```
 
-`[laptop]` From that checkout. The run's Node version is required, and the laptop's own Node is newer. This must print the version in `manifest.json`, `v22.23.4`:
+`[laptop]` From that checkout. The run's Node version is required, and the laptop's own Node is newer. Set `NODE22` to a Node v22.23.4 binary. On an arm64 Mac, the npm package `node-bin-darwin-arm64@22.23.4` holds one. Don't use `npx -y node@22.23.4` for this: on a Mac it can run the laptop's own Node, with no error.
 
 ```bash
-npm ci && npx -y node@22.23.4 -v
+export NODE22=<path to a Node v22.23.4 binary>
+```
+
+`[laptop]` This stops on any other version, which must also be the version in `manifest.json`, and only then installs:
+
+```bash
+test "$("$NODE22" -v)" = v22.23.4 && npm ci
 ```
 
 `[laptop]` The same run, named as on the server:
@@ -289,7 +295,7 @@ shasum -a 256 <private run folder>/raw.jsonl
 `[laptop]` From the detached checkout. `--pass1` takes the deciding run, as the file's header says. The other inputs are private, and match their frozen hashes. It refuses a checkout or a Node version that isn't the run's:
 
 ```bash
-npx -y node@22.23.4 bench/front-door/analyze-r.mjs --pass1 <private run folder>/raw.jsonl --pass2 <pass 1 raw.jsonl> --e20 <E20 tranco raw.jsonl> <E20 yc raw.jsonl> --industries <industries.csv> --e20-excluded <e20-health-excluded.txt> --out <private run folder>/analysis.json
+"$NODE22" bench/front-door/analyze-r.mjs --pass1 <private run folder>/raw.jsonl --pass2 <pass 1 raw.jsonl> --e20 <E20 tranco raw.jsonl> <E20 yc raw.jsonl> --industries <industries.csv> --e20-excluded <e20-health-excluded.txt> --out <private run folder>/analysis.json
 ```
 
 Read coverage, skips, `textWithheld` and bounds first, then the primary endpoints, then C1 to C11 in order. Nothing is re-cut after looking.
@@ -301,7 +307,7 @@ The human and the model each label from the sheet, and neither sees the other's 
 `[laptop]` Build the kit. `<sampled>` is the count `draw` printed. The kit shows the sheet's hash, and each labeler sends it back with their labels:
 
 ```bash
-npx -y node@22.23.4 bench/front-door/make-labeler-kit.mjs <private run folder>/validation-sheet.json ~/study/kit --expect <the sampled count draw printed>
+"$NODE22" bench/front-door/make-labeler-kit.mjs <private run folder>/validation-sheet.json ~/study/kit --expect <the sampled count draw printed>
 ```
 
 `[laptop]` Send the kit to the labeler and the model. No other copy of the sheet is made. Write down every copy's path in the deletion ledger, `~/study/copies.txt`, so each can be deleted. Each labeler returns a file of `id,label` rows.
@@ -345,7 +351,7 @@ rsync -a <server>:penthera/$RUN/validation-key.json <server>:penthera/$RUN/score
 `[laptop]` Assemble the one report that joins the claims and the audit. It proves the chain from the raw file, runs the score and the whole analysis again, compares every field, and writes nothing on any difference. It takes as long as the analysis:
 
 ```bash
-npx -y node@22.23.4 bench/front-door/report-tables.mjs --run <private run folder> --analysis <private run folder>/analysis.json --score <private run folder>/score.json --out <private run folder>/final-report.md --pass2 <pass 1 raw.jsonl> --e20 <E20 tranco raw.jsonl> <E20 yc raw.jsonl> --industries <industries.csv> --e20-excluded <e20-health-excluded.txt>
+"$NODE22" bench/front-door/report-tables.mjs --run <private run folder> --analysis <private run folder>/analysis.json --score <private run folder>/score.json --out <private run folder>/final-report.md --pass2 <pass 1 raw.jsonl> --e20 <E20 tranco raw.jsonl> <E20 yc raw.jsonl> --industries <industries.csv> --e20-excluded <e20-health-excluded.txt>
 ```
 
 `[laptop]` Dated notes go on `main` only after `final-report.md` exists. They can't reach the detached checkout.
