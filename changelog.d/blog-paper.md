@@ -4,3 +4,4 @@ section: Changed
 - The footer's status light no longer pulses.
 - Terms, Trust and landing pages share the articles' reading column, with contents in the margin. Website check and Lovable pages open on the check. Benchmarks carry the block title.
 - Link previews use a new blue card, and research pages get a plain one.
+- A 30-second film on how Penthera works replaces the homepage loop, with real output on a demo app.
