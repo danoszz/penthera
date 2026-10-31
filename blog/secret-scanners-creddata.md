@@ -1,6 +1,7 @@
 ---
 title: We benchmarked {{fact:secrets.of}} free secret scanners on {{fact:secrets.n}} labelled secrets. We came {{fact:secrets.penthera.place}}.
 nav: Secret scanner test
+category: Benchmark
 description: gitleaks, trufflehog, deepsecrets, Nosey Parker and five more on Samsung CredData's sealed half, with intervals, the limits, and where Penthera loses.
 date: 2026-10-28
 approved: 2026-10-28

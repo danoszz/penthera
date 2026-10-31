@@ -6,7 +6,7 @@
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { siteFooter } from "./frame.mjs";
+import { reading, siteFooter } from "./frame.mjs";
 
 const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const REPO = "https://github.com/danoszz/penthera/blob/main/docs/";
@@ -15,6 +15,8 @@ function inline(text) {
   return esc(text)
     .replace(/`([^`]+)`/g, "<code>$1</code>")
     .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    // Single asterisks are italics, but not inside code: `*.js` stays as written.
+    .replace(/<code>.*?<\/code>|(^|[\s(>])\*([^\s*](?:[^*]*[^\s*])?)\*(?=$|[\s.,;:(<)])/g, (m, before, text) => (text ? `${before}<em>${text}</em>` : m))
     .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (m, label, href) => {
       // Anchors, site paths and https links stay; a relative path is a file in docs/.
       const url = /^(#|\/(?!\/)|https:\/\/)/.test(href) ? href : new URL(href, REPO).href;
@@ -113,12 +115,13 @@ export function docPage(root, { file, slug, eyebrow, description, styles = "/sty
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="${styles}">
   <script src="${theme}"></script>
+  <script src="/blog.js" defer></script>
 </head>
 <body>
-  <main class="terms" id="main">
+  <main class="terms with-margin" id="main">
     <p class="eyebrow"><a href="/">Penthera</a> · ${esc(eyebrow)}</p>
     <h1>${esc(title)}</h1>
-${body}
+${reading(body)}
   </main>
   ${foot}
 </body>

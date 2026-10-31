@@ -18,11 +18,11 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { renderMarkdown } from "./terms.mjs";
 import { fill } from "./agents.mjs";
-import { ldScript, siteFooter } from "./frame.mjs";
+import { reading, ldScript, siteFooter } from "./frame.mjs";
 import { proMain, waitlistHref } from "./pro.mjs";
 
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-const CTA_HTML = '<p class="land-cta"><a class="btn" data-variant="default" href="/#scan">Check your site</a><span>Free, passive, nothing stored. Your own site only.</span></p>';
+const CTA_HTML = '<p class="land-cta"><a class="btn" data-variant="default" href="/#scan">Check my site</a><span>Free, passive, nothing stored. Your own site only.</span></p>';
 // `cta: waitlist` in the front matter: a mailto, so nothing is stored on the site.
 const WAITLIST_MAIL = "daan@penthera.org";
 const WAITLIST_HREF = waitlistHref();
@@ -62,7 +62,7 @@ export function landingPages(site) {
 export function landingMarkdown(p, { origin, values }) {
   const cta = p.cta === "waitlist" ? `[Join the waitlist](${WAITLIST_HREF})`
     : p.cta === "contact" ? `[${contactLabel(p)}](${contactHref(p)})`
-    : `[Check your site on penthera.org](${origin}/#scan)`;
+    : `[Check my site on penthera.org](${origin}/#scan)`;
   const body = p.body.replaceAll("{{CTA}}", cta)
     .replace(/\]\(\/(?!\/)/g, `](${origin}/`);
   return `${fill(body, values, `site/pages/${p.slug}.md`).trimEnd()}\n`;
@@ -73,6 +73,8 @@ export function landingHtml(p, { origin, values, styles = "/styles.css", theme =
   const md = fill(p.body.replace(/^# .+\n/m, "").replaceAll("{{CTA}}", "\u0000CTA\u0000"), values, `site/pages/${p.slug}.md`);
   const body = renderMarkdown(md).replace(/<p>\u0000CTA\u0000<\/p>/g, ctaHtml(p));
   const url = `${origin}/${p.slug}`;
+  // A page with the check as its action opens on it, not on a wall of text.
+  const check = !p.cta && !p.layout;
   // WebPage and BreadcrumbList, part of the site; the homepage carries the SoftwareApplication.
   const ld = ldScript([
     { "@type": "WebPage", "@id": url, url, name: p.title, description: p.description, isPartOf: { "@type": "WebSite", "@id": `${origin}/#website`, url: `${origin}/`, name: "Penthera" }, about: { "@type": "SoftwareApplication", name: "Penthera", url: `${origin}/` } },
@@ -93,25 +95,33 @@ ${p.unlisted ? '  <meta name="robots" content="noindex, nofollow">\n' : ""}  <li
   <meta property="og:description" content="${esc(p.description)}">
   <meta property="og:type" content="article">
   <meta property="og:url" content="${url}">
-  <meta property="og:image" content="${origin}/media/social/og.png">
+  <meta property="og:image" content="${origin}/media/social/${p.cta === "contact" ? "og-plain" : "og"}.png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:image" content="${origin}/media/social/og.png">
+  <meta name="twitter:image" content="${origin}/media/social/${p.cta === "contact" ? "og-plain" : "og"}.png">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="${styles}">
   <script src="${theme}"></script>
   <script defer src="/_vercel/insights/script.js"></script>
-  <script defer src="/track.js"></script>${p.layout === "pro" ? '\n  <script defer src="/pro.js"></script>' : ""}
+  <script defer src="/track.js"></script>${p.layout === "pro" ? "" : '\n  <script defer src="/blog.js"></script>'}${p.layout === "pro" ? '\n  <script defer src="/pro.js"></script>' : ""}
   ${ld}
 </head>
 <body>
 ${p.layout === "pro" ? `  <main class="pro" id="main">${proMain({ version: values.VERSION, pub })}
   </main>
-  ${foot}` : `  <main class="terms land" id="main">
+  ${foot}` : `  <main class="terms land with-margin${check ? " land-check" : ""}" id="main">
     <p class="eyebrow"><a href="/">Penthera</a> · ${esc(p.eyebrow || "Live check")}</p>
     <h1>${esc(p.h1)}</h1>
-${body}
+${check ? `    <div class="land-field" aria-hidden="true"></div>
+    <form class="land-scan" action="/" method="get">
+      <label class="sr" for="land-url">Your site's address</label>
+      <div class="scan-row">
+        <input id="land-url" name="check" type="text" inputmode="url" autocomplete="url" autocapitalize="off" spellcheck="false" placeholder="your-site.com" required>
+        <button class="btn scan-go" data-variant="default" type="submit">Check my site</button>
+      </div>
+      <p class="scan-note">Passive · nothing stored · your own site only · <a href="/terms">Terms</a></p>
+    </form>\n` : ""}${reading(body, { question: !check })}
   </main>
   ${foot}`}
 </body>

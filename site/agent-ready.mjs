@@ -18,7 +18,7 @@ import { rankingList } from "./benchmarks.mjs";
 const REPO = "https://github.com/danoszz/penthera";
 const NPM = "https://www.npmjs.com/package/penthera";
 /** BRIEF.md, "Positioning (approved, used verbatim)": the short line. */
-export const DESCRIPTION = "Offline cyber security agent for your apps and AI coding tools. Open R&D: measured in public, improved every release.";
+export const DESCRIPTION = "Free, open-source security scanner and fixer for your app. Checks your AI setup too. Measured in public.";
 
 // ── JSON-LD ─────────────────────────────────────────────────────────────────
 
@@ -299,11 +299,11 @@ What it does not do:
 /** /index.md: what the page says, for an agent that asked for Markdown. */
 export function homeMarkdown({ values: v, version, origin, pub = null }) {
   const pin = `penthera@${version}`;
-  return `# Penthera: your open-source cyber security agent
+  return `# Penthera: free security scanner and fixer
 
 > The security review you never had time for. Offline, rule-based, and you can verify every finding yourself.
 
-Penthera ${version} is an open-source security agent for your apps and AI coding tools. It runs on your machine, with no account and no telemetry. Readable rules decide every finding and show the evidence; a model may only propose. MIT license, Node.js 22 or later, ${v.DEPS_N}.
+Penthera ${version} is a free, open-source security scanner and fixer for your app, and it checks your AI setup. It runs on your machine, with no account and no telemetry. Readable rules decide every finding and show the evidence; a model may only propose. MIT license, Node.js 22 or later, ${v.DEPS_N}.
 
 This is ${origin}/ as Markdown. Only scan what you own or are authorized to test.
 

@@ -220,9 +220,9 @@ describe("benchmark pages, linked and listed", () => {
     const home = read("index.html");
     const title = home.match(/<title>([^<]+)<\/title>/)[1];
     expect(title.length).toBeLessThanOrEqual(60);
-    expect(title).toBe("Penthera: your open-source cyber security agent");
+    expect(title).toBe("Penthera: free security scanner and fixer for your app");
     const d = unesc(home.match(/<meta name="description" content="([^"]+)">/)[1]);
     expect(d.length).toBeLessThanOrEqual(160);
-    expect(d).toContain(`benchmarked against ${fieldTools(pub)} free tools`);
+    expect(d).toContain(`Benchmarked against ${fieldTools(pub)} free tools`);
   });
 });

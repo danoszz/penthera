@@ -9,8 +9,9 @@ import { mkdtempSync, rmSync, readFileSync, readdirSync, writeFileSync, mkdirSyn
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { buildSite } from "../site/build.mjs";
-import { facts, parsePost, readPosts, rowId } from "../site/blog.mjs";
+import { facts, parsePost, readPosts, rowId, smart } from "../site/blog.mjs";
 import { n2 } from "../site/benchmarks.mjs";
+import { renderMarkdown } from "../site/terms.mjs";
 
 const ROOT = join(import.meta.dirname, "..");
 const BLOG = join(ROOT, "blog");
@@ -154,6 +155,38 @@ describe("blog, published", () => {
     expect(builds.one("blog/feed.xml")).toContain(`${ORIGIN}/blog/figures/dev-to-test.svg`);
     // A draft's figures are not shipped.
     expect(o.has("blog/figures/secrets-precision-recall.svg")).toBe(false);
+  });
+
+  it("sets single asterisks in italics, outside code and sums", () => {
+    expect(renderMarkdown("*The Annals of Statistics*, *7*(1), 1–26.")).toContain("<em>The Annals of Statistics</em>, <em>7</em>(1), 1–26.");
+    expect(renderMarkdown("Run `lint *.js and *.ts` with **care**.")).toContain("<code>lint *.js and *.ts</code> with <strong>care</strong>.");
+    expect(renderMarkdown("Two * three * four.")).toContain("Two * three * four.");
+    for (const f of ["blog/sealed-half-benchmark.html"]) expect(builds.one(f).replace(/<code>.*?<\/code>/g, "").replace(/<script[\s\S]*?<\/script>/g, ""), f).not.toMatch(/\*\w/);
+  });
+
+  it("sets real quotes and apostrophes, and leaves code as typed", () => {
+    expect(smart(`<p>Penthera&#39;s "first" run, the '90s, 'quoted' and (<em>"x"</em>).</p>`)).toBe("<p>Penthera’s “first” run, the ’90s, ‘quoted’ and (<em>“x”</em>).</p>");
+    expect(smart(`<p>Run <code>--name "a'b"</code> now.</p><pre><code>'x'</code></pre>`)).toBe(`<p>Run <code>--name "a'b"</code> now.</p><pre><code>'x'</code></pre>`);
+    expect(smart(`<a href="a'b">it's</a>`)).toBe(`<a href="a'b">it’s</a>`);
+  });
+
+  it("keeps the blog's title whole without script, and its tags are the footer's pills", () => {
+    const html = builds.one("blog.html");
+    expect(html).toContain('<span class="sr">Blog</span>');
+    expect(html).toMatch(/<script src="\/hub\.js\?v=[\w-]+">/);
+    expect(html).not.toMatch(/ style=/);
+    expect(html).toMatch(/<nav class="eyebrow ttx-crumbs" aria-label="Breadcrumb"><a class="tag" data-f="\d+" data-c="\d" data-t="\d" href="\/">Penthera/);
+    expect((html.match(/class="r\d on"/g) || []).length).toBeGreaterThan(40);
+  });
+
+  it("prints the blog on light paper, whatever the reader's theme", () => {
+    for (const f of ["blog.html", "blog/sealed-half-benchmark.html"]) {
+      expect(builds.one(f), f).toMatch(/<html lang="en" data-theme="light" data-paper[ >]/);
+      expect(builds.one(f), f).toContain('<meta name="color-scheme" content="light">');
+    }
+    const theme = readFileSync(join(ROOT, "site/theme.js"), "utf8");
+    expect(theme).toContain('if (!paper) root.setAttribute("data-theme"');
+    expect(theme).toContain('paper ? [] : document.querySelectorAll("[data-theme-toggle]")');
   });
 
   it("every figure in the repo's posts exists in blog/figures/ and has alt text", () => {

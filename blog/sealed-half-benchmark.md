@@ -1,6 +1,7 @@
 ---
 title: How we benchmarked Penthera against {{fact:tools}} free tools, losses included
 nav: Benchmark method
+category: Method
 description: We tuned on one half of four public datasets and scored once on the other, sealed half. What that method is, what it found, and how far to trust it.
 date: 2026-10-28
 approved: 2026-10-28

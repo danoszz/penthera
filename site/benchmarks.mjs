@@ -13,6 +13,7 @@
  * prose here holds no numbers: the limits are words, and anything counted is
  * read from the file.
  */
+import { mosaic } from "./news.mjs";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -325,7 +326,7 @@ const crumbs = (origin, items) => ({
 function frame({ title, description, path, h1, crumb, ld, body, origin, styles, theme, image, foot }) {
   const url = `${origin}${path}`;
   return `<!doctype html>
-<html lang="en">
+<html lang="en" data-view="benchmark">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -347,11 +348,13 @@ function frame({ title, description, path, h1, crumb, ld, body, origin, styles, 
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="${styles}">
   <script src="${theme}"></script>
+  <script src="/hub.js"></script>
   ${ld}
 </head>
 <body>
   <main class="terms land bm" id="main">
     <nav class="eyebrow" aria-label="Breadcrumb">${crumb}</nav>
+    ${mosaic("RANK")}
     <h1>${esc(h1)}</h1>
 ${body}
   </main>
@@ -416,7 +419,7 @@ ${v.b.context.map((c) => `      <li><a href="${esc(c.url)}">${esc(c.title)}</a><
   const ld = ldScript([datasetLd(v, pub, origin), crumbs(origin, [["Penthera", "/"], ["Benchmarks", "/benchmarks"], [v.c.label, path]])]);
   return frame({
     title: v.c.title(v.b), description: description(v), path, h1: v.c.h1(v.b), origin, styles, theme, ld, body, foot,
-    image: image || `${origin}/media/social/og.png`,
+    image: image || `${origin}/media/social/og-plain.png`,
     crumb: `<a href="/">Penthera</a> · <a href="/benchmarks">Benchmarks</a> · ${esc(v.c.label)}`,
   });
 }
@@ -458,7 +461,7 @@ ${views.map((v) => `      <li><a href="/benchmarks/${v.c.slug}">${esc(v.c.h1(v.b
     title: `Security tool benchmarks: Penthera and ${n} free tools on four public datasets`,
     description: `Penthera and ${n} free security tools on four public datasets: secrets, npm and PyPI malware, JavaScript injection. Every score, interval, loss and limit.`,
     path: "/benchmarks", h1: `Penthera and ${n} free security tools, on four public benchmarks`, origin, styles, theme, ld, body, foot,
-    image: image || `${origin}/media/social/og.png`,
+    image: image || `${origin}/media/social/og-plain.png`,
     crumb: `<a href="/">Penthera</a> · Benchmarks`,
   });
 }

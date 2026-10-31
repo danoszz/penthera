@@ -20,7 +20,7 @@ sound, captions in the video ([as text](https://github.com/danoszz/penthera/raw/
 
 ## 1. I'm new
 
-For "is my app safe to ship?" Start with one command in your project folder:
+For "is my app secure?" Start with one command in your project folder:
 
 ```bash
 npx penthera

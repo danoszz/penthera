@@ -7,7 +7,7 @@ description: Check your own site's security headers, TLS, cookies, keys in its J
 
 > For "is my website's security set up right?"
 
-penthera.org checks a public site you own and scores it out of 100. It loads what one browser visit loads, in about 8 seconds. It sends no attacks and stores nothing.
+penthera.org checks a public site you own and scores it out of 100. It loads what one browser visit loads, in about 8 seconds. It sends no attacks and stores nothing. Then fix what it finds with Prompt to fix, or run Penthera on your code.
 
 {{CTA}}
 

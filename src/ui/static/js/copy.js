@@ -90,7 +90,7 @@ export const SETUP = {
   },
   mode: {
     title: "How much do you want to see?",
-    simple: { title: "Simple", body: "Is my app safe, and what do I do about it? Plain words, one list, one button at a time." },
+    simple: { title: "Simple", body: "Is my app secure, and what do I do about it? Plain words, one list, one button at a time." },
     advanced: { title: "Advanced", body: "Everything: dependencies, AI tooling, run history, evidence for auditors, confidence and the raw diffs." },
     note: "You can switch any time in the Penthera menu.",
   },

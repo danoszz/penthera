@@ -149,7 +149,7 @@ export function proMain({ version, pub = null }) {
             <ul class="pills" aria-label="Penthera, Pro, an experiment"><li><a href="/">Penthera</a></li><li>Pro</li><li>An experiment</li></ul>
             <h1 id="pro-title">${MARK}Penthera Pro</h1>
             <p class="pro-lede">Rules decide. Pro keeps the record.</p>
-            <p class="pro-cta"><a class="btn-steel" href="#join" data-track="pro-hero-waitlist">Join the experiment</a><span class="pro-scroll-hint" aria-hidden="true">scroll →</span></p>
+            <p class="pro-cta"><a class="btn btn-steel" href="#join" data-track="pro-hero-waitlist">Join the experiment</a><span class="pro-scroll-hint" aria-hidden="true">scroll →</span></p>
           </div>
         </section>
 

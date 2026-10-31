@@ -147,9 +147,10 @@ export function agentFiles({ root, site, version, origin, values, pub = null, po
   const urls = [
     ["", "site/index.html"], ["index.md", "site/agent-ready.mjs"], ...terms.map((t) => [t, "docs/live-check-terms.md"]),
     ...(existsSync(join(root, "docs", "trust.md")) ? [["trust", "docs/trust.md"]] : []),
+    ["type", "site/type.mjs"],
     ...(bench.length ? [["benchmarks", pub.date], ...bench] : []),
     // /research is dated by its newest entry.
-    ...(research.length ? [["research", research.find((e) => e.date)?.date || "site/research.mjs"]] : []),
+    ...(research.length ? [["research", research.find((e) => e.date)?.date || "site/research.mjs"], ["news", research.find((e) => e.date)?.date || "site/news.mjs"]] : []),
     ...landing.map((p) => [p.slug, `site/pages/${p.slug}.md`]),
     // Approved posts only: a draft is never built, so never listed.
     ...(posts.length ? [["blog", posts[0].date], ...posts.map((p) => [`blog/${p.slug}`, p.date])] : []),
