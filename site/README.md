@@ -34,7 +34,7 @@ node site/serve.mjs     # http://127.0.0.1:4173/ with the production headers
 | `tools/tour-shots.mjs` | Renders the three "See it work" shots in `media/tour/` (1200 × 750 JPEGs at device scale 2, light theme, each cropped to the part that matters) from `penthera ui --demo` on 127.0.0.1 with a local Chrome: the Check my app window, the verdict with the first problem, and a fix waiting with its diff. Re-run it when the dashboard changes. |
 | `tools/social.mjs` | Renders `media/social/og.png` (1200 × 630, the share card for LinkedIn, X and Facebook) and `square.png` (1080 × 1080, Instagram) with a local Chrome. Re-run it when the headline changes. |
 | `tools/reel.mjs` | Renders `media/social/reel.mp4`, the 14-second muted loop that iMessage and other apps play for a shared link (`og:video`, with `og.png` as poster and fallback): setup, a scan, the verdict, the PHP advisory of 21 Oct 2026 and the share card. Cut from `assets/walkthrough.mp4` plus `scripts/media/tapes/advisory.tape`; needs Chrome, vhs and ffmpeg. Re-run it after the walkthrough or the card changes. X shows the image card only. |
-| `media/` | The tour's dashboard shots are copied from `assets/dashboard/` at build time. `field.png` (the hero's 1-bit cloud), `hero.mp4` and its poster, regenerated with `tools/media.sh`; `dvdzwaag.svg`, the maker's wordmark traced with potrace from Daan's own artwork, used as a mask so it takes the ink. |
+| `media/` | The tour's dashboard shots are copied from `assets/dashboard/` at build time. `field.png` (the hero's 1-bit cloud), regenerated with `tools/media.sh`; `dvdzwaag.svg`, the maker's wordmark traced with potrace from Daan's own artwork, used as a mask so it takes the ink. |
 
 ## The browser check
 

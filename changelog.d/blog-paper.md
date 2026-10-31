@@ -13,3 +13,4 @@ section: Changed
 - **Penthera says what it is.** The site calls it a free, open-source security scanner and fixer for your app, with "Make your app more secure for free" under the headline. The field button reads Check my site, the dock reads Install, and the home page now says fixes stay on your machine and nothing is pushed.
 - **Benchmarks sit with News and Research.** `/benchmarks` opens on four scoreboard cards with every ranked tool, and the detail pages use the same paper, with limits beside the answer. Every score, interval and loss stays on the page.
 - The web measurement study is now called State of the Web 2026 in the footer, on `/news` and `/research`, and in `llms.txt`.
+- Every page has a share image now, including news, research, the blog and its posts. iPhones get a home-screen icon.

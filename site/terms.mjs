@@ -112,7 +112,18 @@ export function docPage(root, { file, slug, eyebrow, description, styles = "/sty
   <meta name="color-scheme" content="dark light">
   <link rel="canonical" href="https://penthera.org/${slug}">
   <link rel="alternate" type="text/markdown" href="/docs/${file}">
+  <meta property="og:site_name" content="Penthera">
+  <meta property="og:title" content="${esc(title)}">
+  <meta property="og:description" content="${esc(description)}">
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://penthera.org/${slug}">
+  <meta property="og:image" content="https://penthera.org/media/social/og-plain.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:image" content="https://penthera.org/media/social/og-plain.png">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
   <link rel="stylesheet" href="${styles}">
   <script src="${theme}"></script>
   <script src="/blog.js" defer></script>

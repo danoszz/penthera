@@ -101,6 +101,7 @@ ${p.unlisted ? '  <meta name="robots" content="noindex, nofollow">\n' : ""}  <li
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:image" content="${origin}/media/social/${p.cta === "contact" ? "og-plain" : "og"}.png">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
   <link rel="stylesheet" href="${styles}">
   <script src="${theme}"></script>
   <script defer src="/_vercel/insights/script.js"></script>

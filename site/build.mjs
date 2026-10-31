@@ -504,6 +504,7 @@ export async function buildSite({ out = join(SITE, "dist"), engine, blogDir = jo
   // The dashboard's own font and marks, so the site and penthera ui match.
   const UI = join(ROOT, "src", "ui", "static");
   for (const f of ["favicon.svg", "logo.svg"]) cpSync(join(UI, f), join(OUT, f));
+  cpSync(join(SITE, "media", "apple-touch-icon.png"), join(OUT, "apple-touch-icon.png"));
   mkdirSync(join(OUT, "fonts"), { recursive: true });
   for (const f of ["DepartureMono-Regular.woff2", "DepartureMono-LICENSE.txt"]) cpSync(join(UI, "fonts", f), join(OUT, "fonts", f));
   // The walkthrough is no longer on the page; it stays at its URL for links shared before.

@@ -402,6 +402,7 @@ export function researchHtml(entries, { origin, pub = null, styles = "/styles.cs
   <meta property="og:image" content="${origin}/media/social/og-plain.png">
   <meta name="twitter:card" content="summary_large_image">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
   <link rel="stylesheet" href="${styles}">
   <script src="${theme}"></script>
   <script src="${script}" defer></script>

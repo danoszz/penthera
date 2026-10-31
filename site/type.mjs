@@ -7,7 +7,7 @@
 import { paperPage } from "./blog.mjs";
 
 const SCALE = [
-  ["t-poster", "42 to 124", "Helvetica", "The poster headline", "Is your site safe?"],
+  ["t-poster", "42 to 124", "Helvetica", "The poster headline", "Check it before they wreck it"],
   ["t-h1", "40 to 88", "Helvetica", "Page titles", "Rules decide"],
   ["t-h2", "32 to 56", "Helvetica", "Section titles", "What it finds"],
   ["t-h3", "26 to 40", "Helvetica", "Post titles in a list", "We benchmarked ten scanners"],

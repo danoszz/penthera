@@ -209,7 +209,7 @@ const fastext = (keys) => `    <nav class="ttx-keys" aria-label="More pages">${k
 /** A post's page number. The oldest is P101, so a new post never renumbers the others. */
 const pageNumbers = (posts) => new Map(posts.map((p, i) => [p.slug, `P${100 + posts.length - i}`]));
 
-function page({ title, description, url, path, h1, crumb, ld, body, styles, theme, foot = siteFooter(), draft = false, type = "article", feed = true, number = "P100", bar = "Penthera blog", dateline = "", mast = false, article = !mast, script = "", mastHtml = "", view = "", headScript = "", image = "", headline = false, main = "" }) {
+function page({ title, description, url, path, h1, crumb, ld, body, styles, theme, foot = siteFooter(), draft = false, type = "article", feed = true, number = "P100", bar = "Penthera blog", dateline = "", mast = false, article = !mast, script = "", mastHtml = "", view = "", headScript = "", image = `${new URL(url).origin}/media/social/og-plain.png`, headline = false, main = "" }) {
   return `<!doctype html>
 <html lang="en" data-theme="light" data-paper${view ? ` data-view="${view}"` : ""}>
 <head>
@@ -226,12 +226,13 @@ ${feed ? '  <link rel="alternate" type="application/atom+xml" href="/blog/feed.x
   <meta property="og:description" content="${esc(description)}">
   <meta property="og:type" content="${type}">
   <meta property="og:url" content="${url}">
-${image ? `  <meta property="og:image" content="${image}">
+  <meta property="og:image" content="${image}">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:image" content="${image}">
-` : ""}  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
   <link rel="stylesheet" href="${styles}">
   <script src="${theme}"></script>
 ${script ? `  <script src="${script}" defer></script>\n` : ""}${headScript ? `  <script src="${headScript}"></script>\n` : ""}  ${ld}
