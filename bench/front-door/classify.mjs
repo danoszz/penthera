@@ -289,6 +289,11 @@ export const scrub = (text) => scrubAddresses(stripFields(capped(String(text ?? 
   .replace(TOKEN_RUN, (m) => (isToken(m) ? "<token>" : m))
   .replace(LONG_NUMBER, (m) => (digits(m) >= 9 && !/^\d{4}-\d{2}-\d{2}/.test(m) ? "<number>" : m));
 
+// What a scrub leaves behind, listed here on its own so a change to the scrub can't hide in the detector.
+const OWN_TOKENS = Object.freeze(["<email>", "<ip>", "<token>", "<id>", "<number>", "<query>", "<fragment>", "<input>"]);
+/** Does this text open with one of our tokens? */
+const opensWithOwnToken = (text) => OWN_TOKENS.some((t) => text.startsWith(t));
+
 /**
  * What should never survive a scrub. This walks tokens with its own tests and
  * shares no pattern with `scrub`, so one regex fault can't hide from both.
@@ -306,13 +311,17 @@ export function scrubMisses(text) {
     if (low.startsWith("at", k)) {
       k += 2;
       while (low[k] === " ") k++;
-      if ("])}".includes(low[k] ?? "?")) out.email++;
+      if (!"])}".includes(low[k] ?? "?")) continue;
+      k++;
+      while (low[k] === " ") k++;
+      if (!opensWithOwnToken(low.slice(k, k + 16))) out.email++;
     }
   }
-  // A bare `at` before something with a dot.
+  // A bare `at` before something with a dot. A domain opens with a letter or digit, which leaves out
+  // our own tokens, paths and bracketed words, and a URL isn't an address.
   const words = low.split(/\s+/);
   for (let i = 1; i < words.length; i++) {
-    if (words[i] !== "at" || !/[\p{L}\p{N}._%+-]$/u.test(words[i - 1])) continue;
+    if (words[i] !== "at" || !/[\p{L}\p{N}._%+-]$/u.test(words[i - 1]) || !/^[\p{L}\p{N}]/u.test(words[i + 1] ?? "") || words[i + 1].includes("://")) continue;
     if (/^[^\s.]+(?:\s*\.\s*|\s+dot\s+)[a-z]{2,}\b/.test(words.slice(i + 1, i + 5).join(" "))) out.email++;
   }
   // Ordinary pages hold many entities for quotes and dashes. Only ones that spell ASCII hide text.

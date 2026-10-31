@@ -50,6 +50,14 @@ The audit sheet goes to one labeler and to a hosted model. The 12-month deletion
 - A compressed page body isn't read. It's labeled `body-unavailable` and counts against excerpt coverage.
 - The 50% floor, 20% ceilings, the 30, 25 and 10 count floors, the 90% excerpt floor, the two-round cap and the 5% removal cap are judgment calls, not derived values.
 
+## After the stopped pass 2
+
+- The detector now skips a bracketed `at` whose next word is one of our own tokens. Stored text is scrubbed, so that neighbour is ours unless a page itself prints such a token.
+- A bare `at` counts only before a word that opens with a letter or digit and isn't a URL. So `john at (example.com)` and `john at "example.com"` get past both the scrub and the detector.
+- Pass 3 learns which sites to skip from the stopped pass's pruned raw file. A purge deletes that file, so a purged pass 2 can't be followed by pass 3.
+- A false-fire review rests on one named person's note, and only its hash is kept with the run.
+- The realistic corpus in the tests is hand-written. It finds common sentence forms, and it says nothing about forms nobody wrote down.
+
 ## Stops
 
 - A signal or the stop file takes effect between sites, so visits in flight finish, up to the 30-second hard cap each.

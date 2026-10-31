@@ -13,6 +13,7 @@
 | Runs | Pass 1 no earlier than 12 hours after the updated study page is live, pass 2 seven days later |
 | Amendment | **One pass only.** Amendment 1 (30 Oct 2026, before any data) replaces every mention of pass 2 below. See the end of this file |
 | Amendment 2 | **Adopted.** 31 Oct 2026, effective through the commit that merges this row to `main`. E20-R2, a prospective corrected remeasurement after the pass 1 data was seen. See the end of this file. The runner refuses a pilot or pass 2 unless this row says Adopted |
+| Amendment 3 | **Draft.** Not adopted. E20-R2 after a false stop: a detector fix, pilot round 2, and pass 3. See the end of this file. The runner refuses pilot round 2 and pass 3 until this row says Adopted |
 | Source address | `178.104.243.225` |
 | Prior opt-outs SHA-256 | `e25d88b24aa1d4122cd78e65af9c8febfd9f7309959ae1ae89446ccc90b07126` (`prior-optouts.txt`, 95 sites) |
 | Pass 1 raw SHA-256 | `ef791bee6c9598880af6da7f11db023e96e6d75b219670e45317ee9575e453dd` |
@@ -20,7 +21,7 @@
 | E20 YC raw SHA-256 | `b5a98cc266b232e63eee8864198dc961ffe21133fdbf43a51069acf2fcaf0391` |
 | Industry map SHA-256 | `78df4910d953379f21d935aeb3ef658d85cbef036539e1a31362c9ad7e26e075` |
 | E20 exclusion file SHA-256 | `246127f639968afc906d59f155f6a993982f3a33c0655718234955319ebe4c34` |
-| Frozen classifier SHA-256 | `7023106f7bd73c1e4122d80e9479f63a4a04091f1426327be70621951fe71d3b` (`bench/front-door/classify.mjs`) |
+| Frozen classifier SHA-256 | `0dc0cbc32ece5f55e9aa9a5e80c70539b07d9837780f5c327518edbe3edb35c1` (`bench/front-door/classify.mjs`) |
 | Public Suffix List SHA-256 | `d3e6243b51695327984abb3e2a5aa7077096867f75121e031e6a5a3840ca8bcd` (commit `9dfbe81931367b3f0af21035c36ae7eeb830dd88`, fetched 30 Oct 2026, private suffixes included) |
 | Registration commit | The commit that merges this file to `main` |
 | T1k list SHA-256 | `d670a3c1910fe7baa4883dcb8320b1ec99d7d29f9d22954b9288ae678540674e` (`tranco-ZJ8PG-top1000.csv`) |
@@ -776,3 +777,57 @@ a third adjudicator.** The figures are reported as checked by one person.
 - `platformOf` now reads Akamai's other headers as the classifier does, so a few pass 1 and pass 2
   strata for C3 and C4 can differ for that reason.
 - SPF semantics and DMARC reporting are not validated.
+
+## Amendment 3: E20-R2 after a false stop (draft, 31 Oct 2026)
+
+**Status: draft.** Adoption changes this line and the Amendment 3 row to adopted, and takes effect
+through the commit that merges them to `main`. The runner reads both. It overrides Amendment 2 where
+they differ.
+
+**What happened.** Pass 2 stopped itself at 188 of 7,031 sites at 10:30 UTC on 31 October 2026. Its
+in-flight check flagged an email in `evidence.pageExcerpt.text` of one record.
+
+**The false fire.** The scrub had worked. It had replaced an address, leaving text such as
+`at <email>.` The detector then read `at`, our own token and the period as a spaced address. Without
+the period it doesn't fire. So the stop came from the detector reading the scrub's own output, not
+from an address in stored text. This is the finding of the code review, and a person must confirm it
+on the record, as below.
+
+**A person's review.** A named person reviews the flagged record on the server, printing it to no
+shared place, and records the review with a note whose hash is kept. Only then is the text pruned.
+If the review finds a real address, this amendment doesn't apply: the stopped pass goes to purge, and
+a further run needs a new amendment.
+
+**The partial run.** It is reported as a partial run with its coverage, and it decides no claim. Its
+records aren't pooled with any other run.
+
+**The change.** The detector ignores our own scrub tokens as neighbours, so `at <email>.` and
+`(at) <email>` don't fire. A bare `at` now counts only before a word that opens with a letter or digit
+and isn't a URL. A corpus of contact sentences written for this fix found the same false fire on
+`at https://...`, `at /path.html` and `at (name.com)`, which any page could have held. The scrub is
+unchanged, and so are the classifier's labels. `classify.mjs` holds both, so its frozen hash changes. This departs from "no rule changes after
+pass 2 starts". It touches only what the stop check and the privacy reports read.
+
+**Pilot round 2.** The code changed, so a new pilot round is required, as the next round, on other
+sites and under the same rules. It also skips the 188 sites. The gate of Amendment 2 applies to it in
+full, and pass 3 refuses unless it started after the stopped pass.
+
+**Pass 3.** A new pass replaces pass 2 under the rules of Amendment 2, with `--pass 3`, in its own
+fixed folder `e20r-pass3`, with pass 2's seed, 2021, because nothing here needs another. Everything
+Amendment 2 says of pass 2 as the run that decides claims applies to pass 3. It runs once. The lock on
+pass 2 stays, so pass 2 can't start again. Pass 3 refuses unless the stopped pass has a finished,
+partial manifest, a recorded review by a named person, and a prune proof that matches its raw file.
+
+**Nobody gets a second visit.** Pass 3 skips the 50 sites of pilot round 1 and all 188 sites of the
+stopped pass, and they are counted. The sites come from the pruned raw file of the stopped pass, so a
+purged pass can't be followed by pass 3.
+
+**Precision.** That is 238 of 7,031 sites, or 3.4%, out of pass 3. Pilot round 2 takes up to 50 more,
+which are dropped for good too, so pass 3 can have 288 sites fewer, or 4.1%, and 6,743 sites. Intervals
+widen by about 2% at that size. The stopped pass's sites are the start of a seeded shuffle, so their
+removal is not tied to what they answered. Pilot sites are drawn evenly across the claim lists, so the
+smaller lists lose a larger share, and the report gives coverage per list.
+
+**Limits.** Sites in the stopped pass were visited under Amendment 2 and aren't in the claims. The
+decision to run again came after the stop. The scrub's forms and the detector's other limits don't
+change.

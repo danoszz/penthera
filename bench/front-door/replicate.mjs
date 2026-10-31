@@ -5,7 +5,7 @@
  *
  *   node bench/front-door/replicate.mjs --self-test
  *       Loopback only: visits tests/fixtures/mock-server.js.
- *   node bench/front-door/replicate.mjs (--pass 2 | --pilot <n> [--pilot-round <k>]) --registered E20R --lists <dir> --exclude <file> --homepage-only <file> --removals <file> --prior-optouts <file> --pilot-dropped <file>
+ *   node bench/front-door/replicate.mjs (--pass 3 | --pass 2 | --pilot <n> [--pilot-round <k>]) --registered E20R --lists <dir> --exclude <file> --homepage-only <file> --removals <file> --prior-optouts <file> --pilot-dropped <file>
  *       The registered run. Refused unless the prereg says Registered, Amendment
  *       2 is adopted, no placeholder is left, the checkout is a clean commit on
  *       the tip of origin main, this machine's one public IPv4 is the registered address, the
@@ -15,6 +15,8 @@
  *       and writes pilot-sites.txt with its hash in the manifest. A later round
  *       and pass 2 need --pilot-dropped to hold exactly the sites of every earlier
  *       round. Pass 2 has one fixed folder, so a second start can't revisit sites.
+ *       Pass 3 exists only under Amendment 3, after pass 2 stopped: it has its own fixed
+ *       folder, and needs that stopped pass reviewed and pruned, and a pilot round after it.
  *       Rate, order and sub-measures are fixed; no flag changes them. --prior-optouts
  *       must match its frozen hash. --removals is required, may be empty, and only
  *       takes sites out, so its hash is recorded in the manifest, not checked.
@@ -84,7 +86,7 @@ export const R_COHORTS = Object.freeze({
   "NL-Cbw": { file: "nl-cbw.csv", format: "yc", homepageOnly: true },
 });
 // Pass 1 ran with 2020. Pass 2 keeps the seed § 5 registered for it. The pilot draws its sample and its order from its own.
-export const PASS_SEED = Object.freeze({ 1: 2020, 2: 2021, pilot: 2026 });
+export const PASS_SEED = Object.freeze({ 1: 2020, 2: 2021, 3: 2021, pilot: 2026 });
 export const PILOT_MAX = 50;
 export const PILOT_MIN = 50;
 // A third live round is a new decision, not a retry.
@@ -353,12 +355,19 @@ export function recordedHashR(preregText, label) {
 const PLACEHOLDER = /<[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)+[^>]*>/;
 export const sourceAddressOf = (preregText) => /^\|\s*Source address\s*\|\s*`([\d.]+)`/m.exec(preregText)?.[1] ?? null;
 
+/** Amendment 3 counts only when its row and its own status line both say so. */
+export const amendment3Adopted = (preregText) => {
+  const i = preregText.indexOf("## Amendment 3");
+  return /^\|\s*Amendment 3\s*\|\s*\*\*Adopted\./m.test(preregText) && i >= 0 && /^\*\*Status: adopted\.\*\*/m.test(preregText.slice(i));
+};
+
 /** Throws unless this pass may leave loopback. */
 export function authorizeR({ loopback, registered, pass, listHashes = {}, excludeHash, homepageOnlyHash, preregText, pageText = "", tree = {}, sourceIps = [], removals, priorOptOuts, pilot, classifierHash, pslHash }) {
   if (loopback) return { mode: "loopback" };
   if (registered !== "E20R") throw new Error("Refused: this run would reach other hosts. It needs --registered E20R, after the maintainer registered the protocol (AGENTS.md rule 6).");
   if (pass === 1) throw new Error("Refused: pass 1 ran on 30 October 2026.");
-  if (!PASS_SEED[pass]) throw new Error("Refused: use --pass 2 or --pilot <n>.");
+  if (!PASS_SEED[pass]) throw new Error("Refused: use --pass 3, --pass 2 or --pilot <n>.");
+  if (pass === 3 && !amendment3Adopted(preregText)) throw new Error("Refused: pass 3 needs Amendment 3 adopted, in its row and its own status line.");
   if (!/^\|\s*Status\s*\|\s*\*\*Registered\./m.test(preregText)) throw new Error("Refused: the E20-R prereg's status is not Registered.");
   if (!/^\|\s*Amendment 2\s*\|\s*\*\*Adopted\./m.test(preregText)) throw new Error("Refused: Amendment 2 is not adopted in the prereg.");
   if (!/^\*\*Status: adopted\.\*\*/m.test(amendmentText(preregText))) throw new Error("Refused: Amendment 2's own status line does not say adopted.");
@@ -378,7 +387,7 @@ export function authorizeR({ loopback, registered, pass, listHashes = {}, exclud
   if (removals === undefined) throw new Error("Refused: a registered run needs --removals <file>. It may be empty.");
   if (priorOptOuts === undefined) throw new Error("Refused: a registered run needs --prior-optouts <file>.");
   if (recordedHashR(preregText, "Prior opt-outs") !== sha256(priorOptOuts)) throw new Error("Refused: the prior opt-out list does not match its frozen hash.");
-  if (pass === 2 && !pilot?.ok) throw new Error(`Refused: ${pilot?.why || "pass 2 needs --pilot-dropped and a passed pilot."}`);
+  if ((pass === 2 || pass === 3) && !pilot?.ok) throw new Error(`Refused: ${pilot?.why || `pass ${pass} needs --pilot-dropped and a passed pilot.`}`);
   if (pass === "pilot" && pilot && !pilot.ok) throw new Error(`Refused: ${pilot.why}`);
   const frozen = recordedHashR(preregText, "Frozen classifier");
   if (!frozen || frozen !== classifierHash) throw new Error("Refused: classify.mjs does not match the frozen classifier hash.");
@@ -556,6 +565,32 @@ export function pilotRounds(results = RESULTS) {
   return rounds;
 }
 
+/**
+ * Amendment 3: the pass 2 that stopped, and the sites it visited. It counts only as a
+ * finished, partial run whose false fire a named person reviewed and whose text is
+ * pruned, since the pruned raw file is what says which sites to leave alone.
+ */
+export function stoppedPass(results = RESULTS) {
+  const no = (why) => ({ ok: false, why });
+  const dir = join(results, "e20r-pass2");
+  const file = join(dir, "manifest.json");
+  if (!existsSync(file)) return no("there is no stopped pass 2");
+  const bytes = readFileSync(file);
+  const m = JSON.parse(bytes);
+  if (!m.finishedAt || !m.partial) return no("pass 2 has no finished, partial manifest");
+  if (purgeState(dir) !== "none") return no("pass 2 was purged, so its sites can't be skipped");
+  if (!falseFireReviewed(dir)) return no("pass 2 has no recorded false-fire review");
+  const proofFile = join(dir, "prune-manifest.json");
+  const proof = existsSync(proofFile) ? JSON.parse(readFileSync(proofFile, "utf8")) : null;
+  if (proof?.kind !== "stopped" || proof.manifestSha256 !== sha256(bytes) || proof.rawSha256Before !== m.rawSha256) return no("pass 2 has no prune proof of its own");
+  const raw = join(dir, "raw.jsonl");
+  if (!existsSync(raw) || proof.rawSha256After !== sha256(readFileSync(raw))) return no("pass 2's raw file is not the pruned one");
+  if (holdsText(raw)) return no("pass 2 still holds excerpt text");
+  const hosts = readFileSync(raw, "utf8").split("\n").filter(Boolean).map((l) => siteKey(JSON.parse(l).host));
+  if (hosts.length !== m.records) return no("pass 2's raw file doesn't hold every site its manifest counts");
+  return { ok: true, why: "", hosts, finishedAt: m.finishedAt, manifestSha256: sha256(bytes), rawSha256: proof.rawSha256After };
+}
+
 /** A later round and pass 2 need the file to hold exactly the sites of every pilot round, finished or not: a killed round still visited them. */
 export function checkPilotDropped(dropped, rounds, { need = true } = {}) {
   if (!rounds.length) return need ? { ok: false, why: "No pilot manifest found." } : { ok: true, why: "" };
@@ -714,7 +749,7 @@ export async function runPass(rows, { pass, out, loopbackPort, exclude = new Map
   const recent = [];
   let stoppedFor = null;
   const watch = (record) => {
-    if (pass !== 2) return;
+    if (pass === "pilot") return;
     if (pageTextMissed(record)) stoppedFor = "a privacy scrub missed something";
     recent.push(resolverFailed(record));
     if (recent.length > rollingWindow) recent.shift();
@@ -858,15 +893,26 @@ export async function main(args, deps = {}) {
   const removalsBytes = flag(args, "--removals") ? readFileSync(flag(args, "--removals")) : null;
   const priorBytes = flag(args, "--prior-optouts") ? readFileSync(flag(args, "--prior-optouts")) : null;
   const pilotBytes = flag(args, "--pilot-dropped") ? readFileSync(flag(args, "--pilot-dropped")) : null;
-  let lists, exclude, rows, removals, prior, pilotDropped, unmatchedRemovals, pilotProof;
+  let lists, exclude, rows, removals, prior, pilotDropped, unmatchedRemovals, pilotProof, stopped;
   try {
     pilotDropped = pilotBytes ? readRemovals(pilotBytes.toString("utf8"), "pilot") : new Map();
     const now = deps.state ?? studyState();
     const known = pilotRounds(results);
     if (existsSync(stopFile)) throw new Error(`Refused: the stop file ${stopFile} exists. Remove it only once its reason is settled.`);
+    const prereg = deps.preregText ?? (existsSync(PREREG_R) ? readFileSync(PREREG_R, "utf8") : "");
+    const pass2Began = existsSync(join(results, "e20r-pass2", "manifest.json"));
+    if (pass2Began && pass !== 2) stopped = stoppedPass(results);
+    if (pass === 3) {
+      if (!pass2Began) throw new Error("Refused: pass 3 follows a stopped pass 2, and there is none.");
+      if (!stopped.ok) throw new Error(`Refused: pass 3 needs the stopped pass disposed of: ${stopped.why}.`);
+      const lastRound = known.at(-1) && JSON.parse(readFileSync(join(results, known.at(-1).dir, "manifest.json"), "utf8"));
+      if (!(lastRound?.startedAt > stopped.finishedAt)) throw new Error("Refused: pass 3 needs a pilot round after the stopped pass, because the code changed.");
+    }
     if (pilot !== null) {
+      if (existsSync(join(results, "e20r-pass3", "manifest.json"))) throw new Error("Refused: pass 3 has started, so no pilot round can follow it.");
+      if (pass2Began && !stopped.ok) throw new Error(`Refused: pass 2 has started, so no pilot round can follow it: ${stopped.why}.`);
+      if (pass2Began && !amendment3Adopted(prereg)) throw new Error("Refused: pass 2 has started, so a pilot round needs Amendment 3 adopted.");
       if (Math.max(known.filter((r) => r.live).length, readRoundsLog(roundsLog).filter((l) => l.live).length) >= MAX_LIVE_ROUNDS) throw new Error(`Refused: ${MAX_LIVE_ROUNDS} live pilot rounds ran. A third needs an amendment.`);
-      if (existsSync(join(results, "e20r-pass2", "manifest.json"))) throw new Error("Refused: pass 2 has started, so no pilot round can follow it.");
       const top = Math.max(0, ...known.map((r) => Number(r.dir.split("-").pop())));
       if (round <= top) throw new Error(`Refused: round ${round} is not after round ${top}. Use a higher --pilot-round.`);
     }
@@ -881,7 +927,7 @@ export async function main(args, deps = {}) {
       listHashes: Object.fromEntries(Object.entries(bytes).map(([c, b]) => [c, b ? sha256(b) : null])),
       excludeHash: excludeBytes ? sha256(excludeBytes) : undefined,
       homepageOnlyHash: homepageBytes ? sha256(homepageBytes) : undefined,
-      preregText: deps.preregText ?? (existsSync(PREREG_R) ? readFileSync(PREREG_R, "utf8") : ""),
+      preregText: prereg,
       pageText: deps.pageText ?? (existsSync(STUDY_PAGE) ? readFileSync(STUDY_PAGE, "utf8") : ""),
       tree: deps.tree ?? gitState(), sourceIps: deps.sourceIps ?? sourceAddresses(),
       removals: removalsBytes ?? undefined, priorOptOuts: priorBytes ?? undefined,
@@ -891,7 +937,8 @@ export async function main(args, deps = {}) {
     lists = Object.fromEntries(Object.entries(R_COHORTS).map(([c, { format }]) => [c, readList(bytes[c].toString("utf8"), format)]));
     removals = readRemovals(removalsBytes.toString("utf8"));
     prior = readRemovals(priorBytes.toString("utf8"), "opted-out-earlier");
-    exclude = new Map([...readExclusions(excludeBytes.toString("utf8")), ...pilotDropped, ...prior, ...removals]);
+    const visited = new Map((stopped?.ok ? stopped.hosts : []).map((h) => [h, "stopped-pass"]));
+    exclude = new Map([...readExclusions(excludeBytes.toString("utf8")), ...pilotDropped, ...prior, ...removals, ...visited]);
     const all = mergeCohorts(lists);
     const missing = unmatchedHosts(readHostList(homepageBytes.toString("utf8")), all);
     if (missing.length) throw new Error(`Refused: ${missing.length} homepage-only entries match no listed site.`);
@@ -906,7 +953,7 @@ export async function main(args, deps = {}) {
     return 3;
   }
   if (deps.stopBeforeRun) { say("authorized"); return 0; }
-  const out = join(results, pilot === null ? "e20r-pass2" : `e20r-pilot-${round}`);
+  const out = join(results, pilot === null ? `e20r-pass${pass}` : `e20r-pilot-${round}`);
   const listNow = () => ({ listSha256: Object.fromEntries(Object.entries(R_COHORTS).map(([c, { file }]) => [c, fileHash(join(dir, file))])) });
   const inputs = { exclusion: flag(args, "--exclude"), homepageOnly: flag(args, "--homepage-only"), removals: flag(args, "--removals"), priorOptOuts: flag(args, "--prior-optouts"), pilotDropped: flag(args, "--pilot-dropped") };
   const sourceIps = sourceNow();
@@ -929,6 +976,7 @@ export async function main(args, deps = {}) {
       ...deps.state, ...(deps.fixture ? { fixture: true } : {}), sourceIps,
       inputFiles: { exclusion: sha256(excludeBytes), homepageOnly: sha256(homepageBytes), removals: sha256(removalsBytes), priorOptOuts: sha256(priorBytes), pilotDropped: pilotBytes ? sha256(pilotBytes) : null },
       ...(pilot === null ? { pilotRounds: pilotProof } : {}),
+      ...(stopped?.ok ? { stoppedPass: { sites: stopped.hosts.length, manifestSha256: stopped.manifestSha256, rawSha256: stopped.rawSha256 } } : {}),
       listSha256: Object.fromEntries(Object.entries(bytes).map(([c, b]) => [c, sha256(b)])), exclusionSha256: sha256(excludeBytes), homepageOnlySha256: sha256(homepageBytes),
       removals: { used: true, count: removals.size, unmatched: unmatchedRemovals.length, sha256: sha256(removalsBytes) },
       priorOptOuts: { used: true, count: prior.size, sha256: sha256(priorBytes) },

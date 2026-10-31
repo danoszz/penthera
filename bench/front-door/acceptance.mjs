@@ -18,12 +18,12 @@ import { appendFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSyn
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { classify } from "./classify.mjs";
+import { classify, scrub } from "./classify.mjs";
 import { siteOrg } from "./psl.mjs";
 import { robotsVerdict, sha256, strictRobots, wholeSiteStop } from "./run.mjs";
 import { main as analyze, secondaryCohorts } from "./analyze-r.mjs";
 import { main as reportMain } from "./pilot-report.mjs";
-import { recordMisses, resolverFailed, sealHash } from "./record-checks.mjs";
+import { pageTextMissed, recordMisses, resolverFailed, sealHash } from "./record-checks.mjs";
 import { CLAIM_COHORTS, main as replicate, PREREG_R, R_COHORTS } from "./replicate.mjs";
 import { main as validation, scoreLabels } from "./validation-sample.mjs";
 
@@ -414,7 +414,7 @@ export async function runAcceptance() {
     close(fx, reviewedPilot.runDir, { prune: false });
     const notePath = join(root, "pilot-note.txt");
     writeFileSync(notePath, "Checked by hand.\n");
-    reportMain(["--privacy", reviewedPilot.runDir, "--false-fire", notePath], { log: quiet, fail: quiet });
+    reportMain(["--privacy", reviewedPilot.runDir, "--false-fire", notePath, "--reviewer", "acceptance"], { log: quiet, fail: quiet });
     add("2: a reviewed false fire may be pruned", "allowed", (() => { const said = []; const code = validation(["prune", reviewedPilot.runDir], { log: (m) => said.push(m), fail: (m) => said.push(m) }); return { code, said: said.join(" ") }; })(), /"verified":true/);
     add("2: and passes the privacy check of the gate", "refused", await gate(reviewedPilot), /e20r-pilot-1 failed/);
 
@@ -517,7 +517,7 @@ export async function runAcceptance() {
     add("a false fire has no run until it is reviewed", "refused", analysis(reviewedDir), /privacy report/);
     const note = join(fx.root, "false-fire.txt");
     writeFileSync(note, "Checked by hand: a place name, not an address.\n");
-    add("a reviewed false fire keeps the run", "allowed", (() => { const code = reportMain(["--privacy", reviewedDir, "--false-fire", note], { log: quiet, fail: quiet }); return { code, said: "reviewed" }; })());
+    add("a reviewed false fire keeps the run", "allowed", (() => { const code = reportMain(["--privacy", reviewedDir, "--false-fire", note, "--reviewer", "acceptance"], { log: quiet, fail: quiet }); return { code, said: "reviewed" }; })());
     add("and the analysis reports it as a deviation", "allowed", (() => { const got = analysis(reviewedDir); return { code: got.code || (JSON.parse(readFileSync(join(reviewedDir, "analysis.json"), "utf8")).privacyDeviation?.noteSha256 ? 0 : 3), said: got.said }; })(), /analyzed/);
 
     const crashed = join(whole.results, "crashed");
@@ -570,6 +570,50 @@ export async function runAcceptance() {
     const third = secondRound(twoLive);
     if (!existsSync(third)) throw new Error("fixture lost a round");
     add("C8: a third live pilot round", "refused", await run(twoLive, pilotArgs(50, 3)), /2 live pilot rounds/);
+
+    // Amendment 3: pass 2 stopped, a person reviewed it, it was pruned, a pilot round followed, pass 3 ran.
+    const adopted = `${fx.prereg}\n| Amendment 3 | **Adopted.** Merged |\n\n## Amendment 3\n\n**Status: adopted.** Merged\n`;
+    const pass3 = (at) => pass2(at).map((a, i, all) => (all[i - 1] === "--pass" ? "3" : a));
+    const stopSoon = { afterRecord: (k) => { if (k === 2) writeFileSync(fx.stopFile, ""); } };
+    const falseFired = clean();
+    await run(falseFired, pass2(falseFired), stopSoon);
+    rmSync(fx.stopFile);
+    const firedRun = join(falseFired.results, "e20r-pass2");
+    const replaySaid = [];
+    const replayCode = reportMain(["--replay", join(firedRun, "raw.jsonl")], { log: (m) => replaySaid.push(m), fail: quiet });
+    add("replay prints counts only", "allowed", truth(replayCode === 0 && !/selftest|example/.test(replaySaid.join("")) && JSON.parse(replaySaid[0]).records > 0, "replay"));
+    add("pass 3 before the review", "refused", await run(falseFired, pass3(falseFired), { preregText: adopted }), /no recorded false-fire review/);
+    add("no pilot round before the review", "refused", await run(falseFired, pilotArgs(50, 2), { preregText: adopted }), /pass 2 has started.*false-fire review/);
+    const reviewNote = join(root, "pass2-note.txt");
+    writeFileSync(reviewNote, "Checked by hand: our own token, no address.\n");
+    const unnamed = [];
+    add("a review with no person named", "refused", { code: reportMain(["--privacy", firedRun, "--false-fire", reviewNote], { log: quiet, fail: (m) => unnamed.push(m) }), said: unnamed.join(" ") }, /--reviewer/);
+    add("a review with a person named", "allowed", { code: reportMain(["--privacy", firedRun, "--false-fire", reviewNote, "--reviewer", "acceptance"], { log: quiet, fail: quiet }), said: "reviewed" });
+    add("pass 3 before the prune", "refused", await run(falseFired, pass3(falseFired), { preregText: adopted }), /no prune proof/);
+    add("the stopped pass is pruned", "allowed", pruned(firedRun), /"verified":true/);
+    add("pilot round 2 before Amendment 3 is adopted", "refused", await run(falseFired, pilotArgs(50, 2)), /needs Amendment 3 adopted/);
+    add("pass 3 with no pilot round after the stop", "refused", await run(falseFired, pass3(falseFired), { preregText: adopted }), /pilot round after the stopped pass/);
+    secondRound(falseFired);
+    add("pass 3 with the amendment unadopted", "refused", await run(falseFired, pass3(falseFired), { stopBeforeRun: true }), /Amendment 3 adopted/);
+    add("pass 3 under Amendment 3", "allowed", await run(falseFired, pass3(falseFired), { preregText: adopted }));
+    const stoppedHosts = new Set(readFileSync(join(firedRun, "raw.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l).host));
+    const thirdRaw = readFileSync(join(falseFired.results, "e20r-pass3", "raw.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
+    add("nobody gets a second visit in pass 3", "allowed", truth(stoppedHosts.size > 0 && thirdRaw.filter((r) => stoppedHosts.has(r.host)).length === stoppedHosts.size && thirdRaw.filter((r) => stoppedHosts.has(r.host)).every((r) => r.status === "excluded" && !r.counters), "pass 3 records"));
+    add("pass 3's manifest names the stopped pass", "allowed", truth(JSON.parse(readFileSync(join(falseFired.results, "e20r-pass3", "manifest.json"), "utf8")).stoppedPass?.sites === stoppedHosts.size, "manifest"));
+    add("a second start of pass 3", "refused", await catching(() => run(falseFired, pass3(falseFired), { preregText: adopted })), /already holds a run/);
+    add("the pass 2 lock stays", "refused", await catching(() => run(falseFired, pass2(falseFired), { preregText: adopted })), /already holds a run/);
+    add("no pilot round after pass 3 started", "refused", await run(falseFired, pilotArgs(50, 3), { preregText: adopted }), /pass 3 has started/);
+    const noStop = clean();
+    add("pass 3 with no pass 2 at all", "refused", await run(noStop, pass3(noStop), { preregText: adopted }), /no stopped pass|there is none/);
+    const wholeThen = clean();
+    await run(wholeThen, pass2(wholeThen));
+    add("pass 3 after a whole pass 2", "refused", await run(wholeThen, pass3(wholeThen), { preregText: adopted }), /no finished, partial manifest/);
+    const purgedStop = clean();
+    await run(purgedStop, pass2(purgedStop), stopSoon);
+    rmSync(fx.stopFile);
+    purge(join(purgedStop.results, "e20r-pass2"));
+    add("pass 3 after a purged pass 2", "refused", await run(purgedStop, pass3(purgedStop), { preregText: adopted }), /purged/);
+    add("the scrub's own output doesn't stop a run", "allowed", truth(!pageTextMissed({ evidence: { pageExcerpt: { text: scrub("Reach us at info@example.com. We reply.") } } }), "pageTextMissed"));
 
     const wrongInput = fx.prereg.replace(/(Pass 1 raw SHA-256 \| `)[0-9a-f]{64}/, `$1${"0".repeat(64)}`);
     const secondRun = clean();

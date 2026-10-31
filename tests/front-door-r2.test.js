@@ -17,11 +17,11 @@ import { classify, classifyRegistered, cookieNames, cspEvidence, evidenceOf, loo
 import { authorize, exclusionFor, percentDecoded, globMatch, ipv4Lookup, percentForm, platformOf, readExclusions, robotsAccess, robotsBinary, robotsVerdict, strictRobots, visit, wholeSiteStop } from "../bench/front-door/run.mjs";
 import { optedOut } from "../api/_lib/page.mjs";
 import { CheckError, resolvePublic } from "../api/_lib/guard.mjs";
-import { MAX_LIVE_ROUNDS, PREREG_R, recordedHashR, STUDY_PAGE, caaTree, checkPilotDropped, codeFiles, codeHash, dmarcReading, mergeCohorts, PILOT_MIN, ROLLING_WINDOW, siteDns, normalizeHost, pilotRounds, readDomain, readHostList, readRemovals, runPass, NO_DNS, unmatchedHosts, V2_LIMITS, visitInWorker } from "../bench/front-door/replicate.mjs";
+import { amendment3Adopted, MAX_LIVE_ROUNDS, PASS_SEED, PREREG_R, recordedHashR, STUDY_PAGE, caaTree, checkPilotDropped, codeFiles, codeHash, dmarcReading, mergeCohorts, PILOT_MIN, ROLLING_WINDOW, siteDns, normalizeHost, pilotRounds, readDomain, readHostList, readRemovals, runPass, NO_DNS, unmatchedHosts, V2_LIMITS, visitInWorker } from "../bench/front-door/replicate.mjs";
 import { orgDomain, publicSuffix, PSL_VERSION, pslSha256, siteKey, siteOrg } from "../bench/front-door/psl.mjs";
 import { claims, clusterDiff, combine, coverageBounds, decide, diffClaim, dnsCoverage, e20Index, fisherExact, intervalOutcomes, isEligible, standardizedDiff, traitsByCohort } from "../bench/front-door/analyze-r.mjs";
-import { decidePilot, main as reportMain, pilotReport, sealPilot, stopRules, privacyReport } from "../bench/front-door/pilot-report.mjs";
-import { MIN_ELIGIBLE, MIN_GRADED, NO_PRIVACY, pageTextMissed, purgeState, recordMisses, resolverFailed, unfinishedRun } from "../bench/front-door/record-checks.mjs";
+import { decidePilot, replayRaw, main as reportMain, pilotReport, sealPilot, stopRules, privacyReport } from "../bench/front-door/pilot-report.mjs";
+import { falseFireReviewed, MIN_ELIGIBLE, MIN_GRADED, NO_PRIVACY, pageTextMissed, purgeState, recordMisses, resolverFailed, unfinishedRun } from "../bench/front-door/record-checks.mjs";
 import { main as analyzeMain, challengeByEdge, secondaryCohorts } from "../bench/front-door/analyze-r.mjs";
 import { main as validationMain, purgeRun, blindSheet, drawSample, parseLabels, pruneExcerpt, prunePilot, rewriteRun, scoreLabels, stratumOf, weightedMetrics } from "../bench/front-door/validation-sample.mjs";
 import { runAcceptance } from "../bench/front-door/acceptance.mjs";
@@ -1070,8 +1070,8 @@ describe("acceptance", () => {
   it("every stop condition refuses pass 2, for its own reason, and a clean pilot is allowed", async () => {
     const rows = await runAcceptance();
     expect(rows.filter((r) => !r.pass)).toEqual([]);
-    expect(rows.length).toBeGreaterThanOrEqual(150);
-  }, 180_000);
+    expect(rows.length).toBeGreaterThanOrEqual(190);
+  }, 240_000);
 });
 
 describe("limits", () => {
@@ -1318,7 +1318,9 @@ describe("package 3 criteria", () => {
     expect(stored).not.toMatch(/Wien|jan@/);
     expect(unfinishedRun(dir)).toBe(NO_PRIVACY);
     expect(() => privacyReport(dir, { falseFire: Buffer.alloc(0) })).toThrow(/empty/);
-    expect(privacyReport(dir, { falseFire: Buffer.from("checked") }).reviewed.noteSha256).toBe(sum("checked"));
+    expect(() => privacyReport(dir, { falseFire: Buffer.from("checked") })).toThrow(/--reviewer/);
+    expect(() => privacyReport(dir, { falseFire: Buffer.from("checked"), reviewer: " " })).toThrow(/--reviewer/);
+    expect(privacyReport(dir, { falseFire: Buffer.from("checked"), reviewer: "a person" }).reviewed).toMatchObject({ noteSha256: sum("checked"), reviewer: "a person" });
     expect(unfinishedRun(dir)).toBeNull();
   });
   it("prune refuses a stored miss, in any field, unless a person reviewed it as false", () => {
@@ -1327,7 +1329,7 @@ describe("package 3 criteria", () => {
       writeFileSync(join(dir, "raw.jsonl"), `${JSON.stringify({ status: "ok", ...leak })}\n`);
       writeFileSync(join(dir, "manifest.json"), JSON.stringify({ kind: "pilot", startedAt: "x" }));
       expect(() => prunePilot(dir)).toThrow(/privacy miss/);
-      privacyReport(dir, { falseFire: Buffer.from("checked") });
+      privacyReport(dir, { falseFire: Buffer.from("checked"), reviewer: "a person" });
       expect(prunePilot(dir).verified).toBe(true);
     }
   });
@@ -1428,5 +1430,82 @@ describe("package 3 criteria", () => {
     expect(page).not.toMatch(/no email addresses/);
     expect(page).toMatch(/99\.55%/);
     expect(page).toMatch(/prospective corrected remeasurement/);
+  });
+});
+
+describe("Amendment 3", () => {
+  const folder = () => mkdtempSync(join(tmpdir(), "e20r2-a3-"));
+  const email = (text) => scrubMisses(text).email;
+
+  it("the detector leaves our own tokens alone, at any sentence ending", () => {
+    for (const text of [
+      "Reach us at <email>.", "Reach us at <email>", "Reach us at <email>, or call.", "Reach us at <email>; we reply.", "Reach us at <email>! Thanks.", "Reach us at <email>? Yes.",
+      "Reach us (at <email>).", "Write to us at (<email>). We reply.", "Reach us at [<email>]. Thanks.", "Reach us at \"<email>\". Thanks.", "Our server is at <ip>. It is fine.", "Call us at <number>. We answer.",
+      "(at) <email>", "(at) <email>.", "us (at) <email>, thanks", "[at] <email>.", "{at} <email>.", "( at ) <email>.", "us (at)<email>.",
+    ]) expect(email(text), text).toBe(0);
+  });
+
+  it("the detector is as strict as before for anything else", () => {
+    for (const text of ["john at example.com", "john at example .com", "john at example . com", "john at example dot com", "john (at) home.nl", "(at) home", "sales [at] 3m.com", "at (at) example.com", "john at emailx.com", "(at) <emailx.com"]) expect(email(text), text).toBeGreaterThan(0);
+  });
+
+  it("the token list is the detector's own, and the scrub stays as strict", () => {
+    for (const [dirty, clean] of [["sales [at] 3m.com", "<email>"], ["john at example .com", "<email>"], ["Reach us at info@example.com.", "Reach us at <email>."], ["(at) Wien", "<email>"]]) expect(scrub(dirty), dirty).toBe(clean);
+  });
+
+  it("common contact sentences come through the scrub with no false fire", () => {
+    const corpus = [
+      "Contact us at info@example.com.", "Email us at sales@example.co.uk, or call.", "Questions? Write to support@example.org!", "Reach our team (support@example.com).", "Mail: jan.de.vries@example.nl.",
+      "Send your CV to jobs@example.com, we reply within a week.", "E-mail: info [at] example [dot] com.", "info (at) example (dot) com", "Contact john at example dot com for more.", "Write to us at info at example.com.",
+      "You can reach us at privacy@example.com. We answer within 30 days.", "For press, contact press@example.com; for sales, sales@example.com.", "Call +31 20 123 4567 or email hello@example.nl.",
+      '<a href="mailto:info@example.com">Email us</a>', "Email: <a href=mailto:a@b.co>a@b.co</a>.", "We are at home. Today we work.", "Our office is at 12 Main St. in London.", "Visit us at www.example.com.",
+      "Find us at example.com, or on X.", "Meet us at booth 12. See you there.", "Support is at help.example.com. Open daily.", "at example.com", "Follow us at @example.", "Available at https://example.com/a?b=c#d.",
+      "Reach us at info@example.com. Or at sales@example.com.", "Contact: info@example.com (sales), billing@example.com (billing).", "Mail ons op info@voorbeeld.nl.", "Schrijf naar info (at) voorbeeld.nl.",
+      "Kontakt: info[at]beispiel.de.", "contact [at] example.fr", "Écrivez-nous à contact@exemple.fr.", "Our server 192.0.2.10 is at capacity.", "Your IP is 203.0.113.7.", "Order 123456789012 shipped.",
+      "Open at 9. Closed at 5.", "Look at this. Then look at that.", "Our rate is at 4.5 percent.", "Reach us at: info@example.com.", "Contact at info@example.com, sales at sales@example.com.", "Reach us at INFO@EXAMPLE.COM.",
+      "Read more at https://example.com.", "Docs at http://docs.example.com/guide.html.", "Available at ftp://example.com/a.zip.", "See it at /docs/guide.html.", "Starts at 9.30 a.m. sharp.", "Priced at $4.99. Buy now.",
+      "Located at No. 5 High St.", "Arrives at 10 a.m. today.", "Sold at Amazon.com and eBay.", "Look at Node.js today.", "Built at Acme Inc. in 2020.", "Treated at St. Mary's Hospital.", "Download it at report.pdf.",
+      "We're at it. Again.", "Stay at home. Stay safe.", "Sign in at app.example.com/login.", "Look at (example.com).", "At Example.com we care.", "Good at Python. Good at Rust.", "Get it at the App Store. Free.",
+      "He is at work . Back soon.", "Mail to: a.b@c.de (a.b@c.de)", "Support: help@example.com | Sales: sales@example.com | Press: press@example.com",
+    ];
+    for (const text of corpus) {
+      const stored = scrub(text);
+      expect(scrubMisses(stored), `${text} -> ${stored}`).toEqual({ ipv4: 0, ipv6: 0, email: 0, query: 0, fragment: 0, jwt: 0, longHex: 0, longNumber: 0 });
+    }
+  });
+
+  it("replay counts misses in a raw file and prints no text, field or site", () => {
+    const dir = folder();
+    const file = join(dir, "raw.jsonl");
+    writeFileSync(file, [{ host: "a.org", evidence: { pageExcerpt: { text: "Reach us at <email>. Thanks." } } }, { host: "b.org", evidence: { values: { server: "jan@example.nl" } } }].map((r) => JSON.stringify(r)).join("\n") + "\n");
+    expect(replayRaw(file)).toMatchObject({ records: 2, flagged: 1 });
+    expect(replayRaw(file).scrubMisses.email).toBeGreaterThan(0);
+    const printed = [];
+    expect(reportMain(["--replay", file], { log: (m) => printed.push(m) })).toBe(1);
+    expect(printed.join()).not.toMatch(/a\.org|b\.org|jan@|server/);
+  });
+
+  it("a review holds under a detector that no longer flags the record, and only with a person named", () => {
+    const dir = folder();
+    const raw = `${JSON.stringify({ status: "ok", evidence: { pageExcerpt: { text: "Reach us at <email>." } } })}\n`;
+    writeFileSync(join(dir, "raw.jsonl"), raw);
+    writeFileSync(join(dir, "manifest.json"), JSON.stringify({ kind: "pass", finishedAt: "x", partial: true, rawSha256: createHash("sha256").update(raw).digest("hex") }));
+    const report = privacyReport(dir, { falseFire: Buffer.from("checked"), reviewer: "a person" });
+    expect(report.clean).toBe(true);
+    expect(falseFireReviewed(dir)).toBe(true);
+  });
+
+  it("pass 3 needs its own amendment, in both places", () => {
+    expect(amendment3Adopted("| Amendment 3 | **Adopted.** x |\n## Amendment 3\n**Status: adopted.** x\n")).toBe(true);
+    expect(amendment3Adopted("| Amendment 3 | **Draft.** x |\n## Amendment 3\n**Status: adopted.** x\n")).toBe(false);
+    expect(amendment3Adopted("| Amendment 3 | **Adopted.** x |\n**Status: adopted.** x\n## Amendment 3\n**Status: draft.** x\n")).toBe(false);
+    expect(amendment3Adopted(readFileSync(PREREG_R, "utf8"))).toBe(false);
+    expect(PASS_SEED[3]).toBe(PASS_SEED[2]);
+  });
+
+  it("the page and the run sheet say what happened", () => {
+    expect(readFileSync(STUDY_PAGE, "utf8")).toContain("each site is visited once in the run itself");
+    const sheet = readFileSync(join(import.meta.dirname, "..", "bench", "front-door", "run-sheet.md"), "utf8");
+    for (const step of ["--pass 3", "--replay", "--false-fire /srv/e20/false-fire-note.txt --reviewer <who>"]) expect(sheet).toContain(step);
   });
 });

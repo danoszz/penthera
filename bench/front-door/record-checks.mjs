@@ -136,7 +136,7 @@ export function purgeState(dir) {
 /** A person recorded that every miss in this run was false, for this manifest. */
 export function falseFireReviewed(dir) {
   const privacy = readJson(join(dir, "privacy-report.json"));
-  return Boolean(privacy?.reviewed) && privacy.manifestSha256 === hash(readFileSync(join(dir, "manifest.json")));
+  return Boolean(privacy?.reviewed?.reviewer) && privacy.manifestSha256 === hash(readFileSync(join(dir, "manifest.json")));
 }
 
 /**

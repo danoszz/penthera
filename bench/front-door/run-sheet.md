@@ -104,6 +104,40 @@ cat $R/e20r-pilot-1/pilot-sites.txt $R/e20r-pilot-2/pilot-sites.txt | sort -u > 
 cat $R/e20r-pilot-1/pilot-sites.txt $R/e20r-pilot-2/pilot-sites.txt | sort | uniq -d | wc -l
 ```
 
+## After the stopped pass 2 (Amendment 3)
+
+Pass 2 stopped at 188 of 7,031 sites. Work through this in order. The steps that reach other hosts need Amendment 3 adopted and the new code deployed from the tip of `main`.
+
+Count what the new detector flags in those records. It prints counts only:
+
+```bash
+node bench/front-door/pilot-report.mjs --replay $R/e20r-pass2/raw.jsonl
+```
+
+A person reviews the flagged record as in [A privacy miss](#a-privacy-miss), on the server only. Record the review with that person's name. The note says what was checked, with no flagged text in it:
+
+```bash
+node bench/front-door/pilot-report.mjs --privacy $R/e20r-pass2 --false-fire /srv/e20/false-fire-note.txt --reviewer <who>
+```
+
+Then prune the stopped pass, and check it prints `"verified":true`:
+
+```bash
+node bench/front-door/validation-sample.mjs prune $R/e20r-pass2
+```
+
+If the review finds a real address, stop here and purge. Amendment 3 no longer applies.
+
+Pilot round 2 is required, because the code changed. Run the two-round block below from "Its sites go on the dropped list", with an explanation in round 1's folder only if round 1 failed. The runner skips the stopped pass's sites itself.
+
+Then pass 3. It takes the dropped list of both rounds, and skips the 188 sites itself:
+
+```bash
+node bench/front-door/replicate.mjs --pass 3 --pilot-dropped /srv/e20/pilot-sites-all.txt $COMMON
+```
+
+Everything below that names `e20r-pass2` holds for `e20r-pass3`: the stop file, the privacy report, the draw, the analysis and failure recovery. Pass 3 runs once.
+
 ## 3. Pass 2
 
 ```bash
@@ -164,7 +198,7 @@ node bench/front-door/pilot-report.mjs --privacy $R/e20r-pass2
 3. A confirmed false fire: write what was checked in a private note, with no flagged text in it, then record it. The analysis reports it as a deviation.
 
 ```bash
-node bench/front-door/pilot-report.mjs --privacy $R/e20r-pass2 --false-fire /srv/e20/false-fire-note.txt
+node bench/front-door/pilot-report.mjs --privacy $R/e20r-pass2 --false-fire /srv/e20/false-fire-note.txt --reviewer <who>
 ```
 
 4. A real miss: purge, with the `purgeConfirm` code the report printed. Report a pass 2 as partial. A pilot round needs a seal first if it has a finished manifest, and pass 2 refuses it without a verified purge or a recorded false fire.
@@ -181,6 +215,6 @@ sha256sum $R/e20r-pass2/raw.jsonl | cut -c1-12
 
 - `purge` deletes the whole per-site raw file and writes `purge-manifest.json` with the original hash and the disposition. It works on finished, partial, crashed and privacy-failed runs, and it can't be undone. The run can't be analyzed afterward. There is no field-level cleaning.
 - A pruned or purged round's sites stay on the dropped list, and `pilot-sites.txt` stays in its folder.
-- Pass 2 is never resumed or restarted. A new run needs a new registration.
+- Pass 2 and pass 3 are never resumed or restarted. A new run needs a new registration.
 - A complaint: `touch ~/.penthera-e20r2-stop`, prune, reply. Remove the stop file only once the reason is settled.
 - A first SIGINT or SIGTERM ends the run after the visits in flight, up to 30 seconds. A second one kills it.
