@@ -5,3 +5,7 @@ section: Changed
 - Terms, Trust and landing pages share the articles' reading column, with contents in the margin. Website check and Lovable pages open on the check. Benchmarks carry the block title.
 - Link previews use a new blue card, and research pages get a plain one.
 - A 30-second film on how Penthera works replaces the homepage loop, with real output on a demo app.
+
+- **One spacing scale and one sticker.** Margins, padding and gaps take `--sp-*`
+  tokens, the hero pills share the sticker styles, and the steel button is a
+  `.btn`. The square and story cards use the blue bubbles, without a score.

@@ -14,7 +14,7 @@
  *   3. the Simple-mode verdict       ┘ follow assets/walkthrough.vtt
  *   4. the PHP advisory of 21 Oct 2026, caught in a pinned Dockerfile
  *      (scripts/media/tapes/advisory.tape, recorded with vhs)
- *   5. the share card itself, og.png (site/tools/social.mjs scanCard)
+ *   5. the share card itself, og.png (site/tools/social.mjs bubbleCard)
  *
  * Each beat crossfades into the next, and the card crossfades back into the
  * first beat, so the loop has no seam. A one-line label in the card's mono
@@ -30,7 +30,7 @@ import { mkdtempSync, mkdirSync, rmSync, statSync, writeFileSync } from "node:fs
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { CARDS, scanCard, shoot } from "./social.mjs";
+import { bubbleCard, shoot } from "./social.mjs";
 
 const SITE = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const ROOT = resolve(SITE, "..");
@@ -82,9 +82,8 @@ const scratch = [tmp];
 try {
   // The end card: the share card itself (og.png), so the loop ends on the
   // poster that link previews show before it plays.
-  const og = CARDS.find((c) => c.file === "og.png");
   const card = join(tmp, "card.png");
-  shoot(scanCard(og.w, og.h, og.layout), W, H, card);
+  shoot(bubbleCard(), W, H, card);
   console.log("end card: the og.png share card");
 
   const labels = join(tmp, "labels.png");

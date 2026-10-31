@@ -23,6 +23,15 @@ describe("type system", () => {
     expect(ls).toEqual([]);
   });
 
+  it("adds no spacing off the scale", () => {
+    const scale = [...css.matchAll(/--sp-(\d+): \1px;/g)].map((m) => Number(m[1]));
+    expect(scale).toEqual([4, 8, 12, 16, 20, 24, 32, 40, 48, 64, 80, 96]);
+    // The px values left in margin, padding and gap predate the scale. Move one onto it and lower this.
+    const off = [...rules.matchAll(/(?<=[;{\s])(?:margin|padding|gap|row-gap|column-gap)(?:-[a-z-]+)?\s*:\s*([^;}]+)/g)]
+      .flatMap((m) => m[1].match(/(?<![\w.#-])\d+px\b/g) ?? []);
+    expect(off.length).toBeLessThanOrEqual(285);
+  });
+
   it("never fakes a style, and sets no weight outside the three", () => {
     expect(css).toMatch(/html \{ font-synthesis: none;/);
     expect([...rules.matchAll(/font-weight:\s*([^;}]+)/g)].map((m) => m[1].trim()).filter((v) => !v.startsWith("var(--w-"))).toEqual([]);

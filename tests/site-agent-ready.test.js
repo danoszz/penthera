@@ -328,7 +328,7 @@ describe("/contact", () => {
     const res = await fetch(`${base}/contact`);
     expect(res.status).toBe(200);
     const html = await res.text();
-    expect(html).toContain('<main class="terms land"');
+    expect(html).toContain('<main class="terms land');
     expect(html).toContain('class="rail"');
     expect(html).toContain("mailto:daan@penthera.org");
     expect(html).toContain("/security/advisories/new");

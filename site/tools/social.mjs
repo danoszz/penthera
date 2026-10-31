@@ -95,85 +95,6 @@ export const SHOTS = [
 ];
 
 /**
- * The share card since the glass hero (2026-10-30): the first screen of the
- * site. The field is check/field.js itself, running in the page, under a solid
- * header with a hard edge; the question and a real report float in one panel of
- * heavy glass, and the scan button is the one blue action. The report is
- * penthera.org's own: 95/100, its one gap (SPF and DMARC) listed honestly.
- * `l.split` puts the plate beside the message (og), otherwise below it.
- */
-const meter = (score, px, gap) => `<div class="meter" style="grid-template-columns: repeat(10, ${px}px); gap: ${gap}px">${
-  Array.from({ length: 100 }, (_, i) => `<i class="${i < score ? "on" : ""}" style="width:${px}px;height:${px}px"></i>`).join("")}</div>`;
-
-const fieldSrc = readFileSync(join(SITE, "check", "field.js"), "utf8");
-
-export const scanCard = (w, h, l) => `<!doctype html><html style="--ink-rgb: 255, 255, 255; --accent-ink: #7a7aff"><head><meta charset="utf-8"><style>
-@font-face { font-family: "Departure Mono"; src: url("${font}") format("woff2"); }
-* { box-sizing: border-box; margin: 0; }
-html, body { width: ${w}px; height: ${h}px; background: #000; color: #fff; overflow: hidden; }
-body { position: relative; font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased; }
-.mono { font-family: "Departure Mono", monospace; letter-spacing: 0.02em; }
-.hero { position: absolute; inset: 0; }
-.field { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; }
-.hero.live img.field { visibility: hidden; }
-.head { position: absolute; inset: 0 0 auto; height: ${l.head}px; padding: 0 ${l.pad}px ${l.headPad}px; display: flex; align-items: flex-end; justify-content: space-between; background: #000; }
-.logo { display: block; width: ${l.logoW}px; height: auto; }
-.url { font-size: ${l.small}px; color: rgba(255,255,255,0.72); }
-.panel {
-  position: absolute; top: ${l.head + l.gap}px; right: ${l.gap}px; bottom: ${l.bottom}px; left: ${l.gap}px;
-  padding: ${l.panelPad}px; display: grid; gap: ${l.colGap}px; align-items: center;
-  ${l.split ? `grid-template-columns: minmax(0, 1fr) ${l.plateW}px;` : "align-content: center;"}
-  background: rgba(0,0,0,0.58); -webkit-backdrop-filter: blur(40px) saturate(1.5); backdrop-filter: blur(40px) saturate(1.5);
-  border: 1px solid rgba(255,255,255,0.24); box-shadow: inset 0 1px 0 rgba(255,255,255,0.2);
-}
-h1 { font-weight: 500; font-size: ${l.h1}px; line-height: 0.98; letter-spacing: -0.04em; text-wrap: balance; }
-.sub { margin-top: ${l.h1 * 0.28}px; font-size: ${l.sub}px; font-weight: 500; letter-spacing: -0.01em; line-height: 1.3; }
-.scan { display: grid; grid-template-columns: 1fr auto; margin-top: ${l.scanGap}px; }
-.scan .in { height: ${l.scanH}px; display: flex; align-items: center; padding: 0 ${l.scanH * 0.3}px; font-size: ${l.mono}px; color: rgba(255,255,255,0.6); background: #000; border: 1px solid #fff; border-right: 0; }
-.scan .go { height: ${l.scanH}px; display: flex; align-items: center; padding: 0 ${l.scanH * 0.5}px; font-size: ${l.mono}px; color: #fff; background: linear-gradient(180deg, #4a4aff, #0000ed 58%, #0000b8); box-shadow: inset 0 1px 0 rgba(255,255,255,0.45); }
-.note { margin-top: ${l.noteGap}px; font-size: ${l.small}px; color: rgba(255,255,255,0.72); }
-.plate { position: relative; padding: ${l.platePad}px; border: 1px solid rgba(255,255,255,0.24);
-  background: radial-gradient(${l.plateW * 1.1}px circle at 50% -40%, rgba(255,255,255,0.16), transparent 70%), linear-gradient(180deg, rgba(255,255,255,0.08), transparent 48%, rgba(0,0,0,0.45)), #16171a;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.3), inset 0 -1px 0 rgba(0,0,0,0.6); }
-.plate::before { content: ""; position: absolute; inset: 0; background: repeating-linear-gradient(180deg, rgba(255,255,255,0.035) 0 1px, transparent 1px 3px); pointer-events: none; }
-.host { font-size: ${l.small}px; color: rgba(255,255,255,0.6); }
-.verdict { margin-top: 6px; font-size: ${l.verdict}px; font-weight: 500; letter-spacing: -0.03em; }
-.score { display: flex; align-items: center; gap: ${l.platePad * 0.7}px; margin-top: ${l.platePad * 0.6}px; }
-.meter { display: grid; }
-.meter i { display: block; background: rgba(255,255,255,0.14); }
-.meter i.on { background: #fff; }
-.n { font-size: ${l.score}px; line-height: 0.85; letter-spacing: -0.05em; font-weight: 500; }
-.n span { font-family: "Departure Mono", monospace; font-size: ${l.small}px; letter-spacing: 0; color: rgba(255,255,255,0.6); margin-left: 6px; }
-.rows { display: grid; gap: 4px; margin-top: ${l.platePad * 0.7}px; }
-.rows div { display: flex; align-items: center; gap: 12px; padding: ${l.rowPad}px; background: rgba(255,255,255,0.05); font-size: ${l.rowFont}px; }
-.rows .m { flex: none; width: ${l.markW}px; text-align: center; padding: 1px 0; font-size: ${l.small * 0.85}px; color: #fff; border: 1px solid rgba(255,255,255,0.5); }
-.rows .bad .m { background: #fff; color: #000; border-color: #fff; }
-</style></head><body>
-<div class="hero"><img class="field" src="${field}" alt=""></div>
-<div class="head">${logo}<span class="url mono">penthera.org</span></div>
-<div class="panel">
-  <div>
-    <h1>Is your site/app safe?</h1>
-    <p class="sub">Find out in seconds. Then fix it with your coding agent.</p>
-    <div class="scan mono"><div class="in">your-site.com</div><div class="go">Check</div></div>
-    <p class="note mono">Passive · nothing stored · your own site only</p>
-  </div>
-  <div class="plate">
-    <p class="host mono">penthera.org</p>
-    <p class="verdict">Solid basics</p>
-    <div class="score">${meter(95, l.cell, 2)}<p class="n">95<span>/100</span></p></div>
-    <div class="rows">
-      <div><span class="m mono">OK</span>HTTPS, TLS 1.3, HSTS</div>
-      <div><span class="m mono">OK</span>7 of 7 browser protections</div>
-      <div class="bad"><span class="m mono">FIX</span>No SPF or DMARC record</div>
-    </div>
-  </div>
-</div>
-<script type="module">${fieldSrc}
-liveField(document.querySelector(".field"));</script>
-</body></html>`;
-
-/**
  * The link card: two chat bubbles on blue, over the dithered field. X lays its
  * title bar over the bottom left, across the card at phone size, so the bottom
  * 160 px stay clear and the logo sits at the top. No score: a number here could
@@ -187,6 +108,19 @@ export const bubbleCard = () => `<!doctype html><meta charset="utf-8"><style>*{b
 .bg{position:absolute;inset:0}
 </style><style>body{background:#0000ed}.f{position:absolute;left:0;right:0;top:0;bottom:0;background:url(${field}) center/1500px auto;filter:blur(1px);opacity:.55;mix-blend-mode:screen}.q{background:rgba(0,0,160,.55);border:1px solid rgba(255,255,255,.5);backdrop-filter:blur(18px)}.a{background:rgba(255,255,255,.92);color:#0000ed;backdrop-filter:blur(18px)}</style><div class="f"></div><div class="b q">yo is my app secure?</div><div class="b a">check it before<br>they wreck it</div><span class="lg">${logo}</span>`;
 
+/**
+ * The same bubbles for feeds. One field, drawn once and faded at the edges, so
+ * no seam shows on a tall card. `l.top` sets the group below the apps' own
+ * buttons.
+ */
+export const bubbleFeed = (w, h, l) => `<!doctype html><meta charset="utf-8"><style>*{box-sizing:border-box;margin:0}html,body{width:${w}px;height:${h}px;overflow:hidden;font-family:"Helvetica Neue",Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}body{position:relative;color:#fff;background:#0000ed}
+.f{position:absolute;inset:0;background:url(${field}) center/${l.field}px auto no-repeat;image-rendering:pixelated;filter:blur(1px);opacity:.55;mix-blend-mode:screen;-webkit-mask-image:linear-gradient(transparent ${l.fade[0]}%,#000 ${l.fade[1]}%,#000 ${l.fade[2]}%,transparent ${l.fade[3]}%)}
+.lg{position:absolute;left:64px;top:${l.logoTop}px;width:${l.logoW}px}.lg svg{display:block;width:100%;height:auto}
+.b{position:absolute;padding:.22em .44em .3em;font-weight:500;letter-spacing:-.035em;line-height:1.04;backdrop-filter:blur(18px)}
+.q{left:64px;top:${l.top}px;font-size:${l.q}px;border-radius:.36em .36em .36em 0;background:rgba(0,0,160,.55);border:1px solid rgba(255,255,255,.5)}
+.a{right:64px;top:${l.top + l.gap}px;font-size:${l.a}px;border-radius:.36em .36em 0 .36em;background:rgba(255,255,255,.92);color:#0000ed}
+</style><div class="f"></div><div class="b q">yo is my app secure?</div><div class="b a">check it before<br>they wreck it</div><span class="lg">${logo}</span>`;
+
 /** The plain card for research pages: no joke beside results. */
 export const plainCard = () => `<!doctype html><meta charset="utf-8"><style>*{box-sizing:border-box;margin:0}html,body{width:1200px;height:630px;overflow:hidden;font-family:"Helvetica Neue",Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;background:#000;color:#fff}
 .strip{position:absolute;left:0;right:0;bottom:0;height:150px;background:url(${field}) left top/1100px auto repeat-x}
@@ -194,25 +128,10 @@ h1{position:absolute;left:64px;top:132px;font-size:124px;font-weight:500;letter-
 .lg{position:absolute;left:64px;top:48px;width:230px}.lg svg{display:block;width:100%;height:auto}</style>
 <div class="strip"></div><h1>Measured in public</h1><span class="lg">${logo}</span>`;
 
-/** The cards the site ships: og.png for link previews, square.png for square feeds, story.png for 9:16. */
-export const CARDS = [
-  { file: "og.png", w: 1200, h: 630, layout: {
-    split: true, pad: 28, head: 76, headPad: 18, gap: 28, bottom: 28, panelPad: 32, plateW: 400, colGap: 36,
-    logoW: 168, h1: 62, sub: 20, scanGap: 28, scanH: 60, mono: 20, noteGap: 14, small: 15,
-    platePad: 24, verdict: 30, score: 68, cell: 8, rowPad: 8, rowFont: 16, markW: 42,
-  } },
-  { file: "square.png", w: 1080, h: 1080, layout: {
-    split: false, pad: 32, head: 96, headPad: 22, gap: 32, bottom: 64, panelPad: 36, plateW: 900, colGap: 26,
-    logoW: 208, h1: 84, sub: 26, scanGap: 24, scanH: 68, mono: 23, noteGap: 12, small: 19,
-    platePad: 24, verdict: 32, score: 72, cell: 7, rowPad: 8, rowFont: 20, markW: 48,
-  } },
-  // 1080 × 1920, 9:16 for TikTok, Reels and Stories. The top 220 px and bottom
-  // 360 px stay clear of the apps' own buttons and captions.
-  { file: "story.png", w: 1080, h: 1920, layout: {
-    split: false, pad: 40, head: 240, headPad: 36, gap: 40, bottom: 380, panelPad: 52, plateW: 900, colGap: 44,
-    logoW: 240, h1: 124, sub: 34, scanGap: 36, scanH: 88, mono: 28, noteGap: 18, small: 23,
-    platePad: 34, verdict: 44, score: 104, cell: 11, rowPad: 12, rowFont: 26, markW: 60,
-  } },
+/** The feed cards. story.png keeps the top 220 px and bottom 360 px clear of the apps' own buttons and captions. */
+export const FEEDS = [
+  { file: "square.png", w: 1080, h: 1080, layout: { field: 1728, fade: [0, 12, 88, 100], logoTop: 64, logoW: 240, top: 340, gap: 186, q: 76, a: 110 } },
+  { file: "story.png", w: 1080, h: 1920, layout: { field: 2400, fade: [10, 24, 76, 90], logoTop: 240, logoW: 280, top: 700, gap: 220, q: 84, a: 124 } },
 ];
 
 /**
@@ -249,8 +168,9 @@ export function shoot(html, w, h, file, { transparent = false } = {}) {
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   mkdirSync(OUT, { recursive: true });
   shoot(plainCard(), 1200, 630, join(OUT, "og-plain.png"));
-  for (const s of CARDS) {
-    shoot(s.file === "og.png" ? bubbleCard() : scanCard(s.w, s.h, s.layout), s.w, s.h, join(OUT, s.file));
+  shoot(bubbleCard(), 1200, 630, join(OUT, "og.png"));
+  for (const s of FEEDS) {
+    shoot(bubbleFeed(s.w, s.h, s.layout), s.w, s.h, join(OUT, s.file));
     console.log(`site/media/social/${s.file} ${s.w}×${s.h}`);
   }
 }

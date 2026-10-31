@@ -298,7 +298,7 @@ export function featured(pub) {
 ${rows}
       </ol>
       <p class="rs-feature-note">Where a range follows the rank, Penthera's rank fell in that range in 95% of bootstrap redraws.</p>
-      <p class="rs-feature-cta"><a class="btn-steel" href="/benchmarks">Every tool, interval and limit</a></p>
+      <p class="rs-feature-cta"><a class="btn btn-steel" href="/benchmarks">Every tool, interval and limit</a></p>
     </section>`;
 }
 
@@ -404,7 +404,7 @@ ${tools(entries)}
 ${entries.map(item).join("\n")}
     </ol>
     <p class="rs-none" hidden>Nothing matches. <button type="button" class="rs-reset">Clear the search and filters</button></p>
-    <p class="rs-all" data-js hidden><button type="button" class="btn-steel" aria-controls="rs-items">Show all ${entries.length}</button></p>
+    <p class="rs-all" data-js hidden><button type="button" class="btn btn-steel" aria-controls="rs-items">Show all ${entries.length}</button></p>
     <p class="rs-how">A study is registered by the commit that merges its protocol, and the protocol lists any data seen before that. Changes after that are logged in its deviations section, with the date and the reason. Everything here is read from <a href="${REPO}/tree/main/docs/research">docs/research</a>, <a href="${REPO}/tree/main/bench">bench</a> and the blog when the site is built.</p>
   </main>
   ${foot}
