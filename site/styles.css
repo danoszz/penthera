@@ -2286,6 +2286,9 @@ h1.ask-sub + .ask-sub { margin-top: var(--sp-12); }
 }
 .scan-note { margin-top: var(--sp-4); color: var(--text-2); }
 .scan-note a { color: var(--accent-ink); }
+.blog a.btn[data-variant="default"], .blog a.btn[data-variant="default"]:hover { color: var(--on-accent); }
+.blog.land-check .land-cta a.btn[data-variant="default"] { color: var(--text-1); }
+.terms.blog .land-field { margin-top: var(--sp-24); }
 .scan-stop { margin-top: var(--sp-12); padding: var(--sp-12) var(--sp-16); font-size: var(--t-small); line-height: var(--lh-ui); background: var(--ground); box-shadow: inset 0 0 0 1px var(--frame); }
 .scan-stop[hidden] { display: none; }
 .scan-stop code { font-family: var(--px); overflow-wrap: anywhere; }

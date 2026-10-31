@@ -81,13 +81,13 @@ export function landingHtml(p, { origin, values, styles = "/styles.css", theme =
     { "@type": "BreadcrumbList", itemListElement: [{ "@type": "ListItem", position: 1, name: "Penthera", item: `${origin}/` }, { "@type": "ListItem", position: 2, name: p.h1, item: url }] },
   ]);
   return `<!doctype html>
-<html lang="en">
+<html lang="en"${p.layout === "pro" ? "" : ' data-theme="light" data-paper'}>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${esc(p.title)} · Penthera</title>
   <meta name="description" content="${esc(p.description)}">
-  <meta name="color-scheme" content="dark light">
+  <meta name="color-scheme" content="${p.layout === "pro" ? "dark light" : "light"}">
 ${p.unlisted ? '  <meta name="robots" content="noindex, nofollow">\n' : ""}  <link rel="canonical" href="${url}">
   <link rel="alternate" type="text/markdown" href="/${p.slug}.md">
   <meta property="og:site_name" content="Penthera">
@@ -111,8 +111,9 @@ ${p.unlisted ? '  <meta name="robots" content="noindex, nofollow">\n' : ""}  <li
 <body>
 ${p.layout === "pro" ? `  <main class="pro" id="main">${proMain({ version: values.VERSION, pub })}
   </main>
-  ${foot}` : `  <main class="terms land with-margin${check ? " land-check" : ""}" id="main">
-    <p class="eyebrow"><a href="/">Penthera</a> · ${esc(p.eyebrow || "Live check")}</p>
+  ${foot}` : `  <p class="ttx-bar"><span class="ttx-page">P400</span><span>Penthera ${esc((p.eyebrow || "live check").toLowerCase())}</span></p>
+  <main class="terms land blog with-margin${check ? " land-check" : ""}" id="main">
+    <nav class="eyebrow ttx-crumbs" aria-label="Breadcrumb"><a class="tag" data-f="4" data-c="0" data-t="0" href="/">Penthera</a><span class="tag" data-f="3" data-c="0" data-t="0">${esc(p.eyebrow || "Live check")}</span></nav>
     <h1>${esc(p.h1)}</h1>
 ${check ? `    <div class="land-field" aria-hidden="true"></div>
     <form class="land-scan" action="/" method="get">
@@ -122,7 +123,7 @@ ${check ? `    <div class="land-field" aria-hidden="true"></div>
         <button class="btn scan-go" data-variant="default" type="submit">Check my site</button>
       </div>
       <p class="scan-note">Passive · nothing stored · your own site only · <a href="/terms">Terms</a></p>
-    </form>\n` : ""}${reading(body, { question: !check })}
+    </form>\n` : ""}${reading(body, { question: !check && p.slug !== "contact" })}
   </main>
   ${foot}`}
 </body>

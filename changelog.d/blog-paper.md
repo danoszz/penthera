@@ -16,3 +16,4 @@ section: Changed
 - Every page has a share image now, including news, research, the blog and its posts. iPhones get a home-screen icon.
 - Benchmark share cards use the paper look, with each rank and its range large enough to read in a feed.
 - Fixed the live check's prompt button, which said "Copy failed" after copying. Localhost and other addresses the check can't reach now say what to run instead, before the consent step. The consent slider is clear by keyboard, and a network failure gets a plain message.
+- Trust, Terms, Contact and the landing pages now use the same paper as the news, research and blog pages. Research lists the studies first.
