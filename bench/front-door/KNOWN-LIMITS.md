@@ -22,7 +22,6 @@ The scrub removes patterns. These get through, and neither it nor its detector w
 
 - Names, street addresses and postal codes in page text. These are why unsampled text is deleted.
 - Addresses written in words with no bracket and no dot, such as `john at example`. They read like "Meet me at home".
-- `john at (example.com)` and quoted forms. The scrub keeps them, and the detector stops the run, which is why these aren't silent.
 - Addresses split over markup or across lines beyond the small gaps it allows.
 - Addresses in images, in scripts built at run time, or in encodings it doesn't decode, such as base64.
 - Phone numbers under 9 digits, national ID numbers and similar identifiers.
