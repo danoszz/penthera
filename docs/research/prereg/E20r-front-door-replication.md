@@ -22,7 +22,7 @@
 | Industry map SHA-256 | `78df4910d953379f21d935aeb3ef658d85cbef036539e1a31362c9ad7e26e075` |
 | E20 exclusion file SHA-256 | `246127f639968afc906d59f155f6a993982f3a33c0655718234955319ebe4c34` |
 | Legacy classifier SHA-256 | `7023106f7bd73c1e4122d80e9479f63a4a04091f1426327be70621951fe71d3b` (`bench/front-door/legacy/classify-7023106f.mjs`, the detector that stopped pass 2) |
-| Frozen classifier SHA-256 | `c79fd69519fb3813b11271c2a401d36d2a61ce55d80131cd3ccd9f0d3b86f324` (`bench/front-door/classify.mjs`) |
+| Frozen classifier SHA-256 | `23f1d4d7b7351a1c8f2412bda3b9163ffa4c1d724f68fb568374af76f0f114cf` (`bench/front-door/classify.mjs`) |
 | Public Suffix List SHA-256 | `d3e6243b51695327984abb3e2a5aa7077096867f75121e031e6a5a3840ca8bcd` (commit `9dfbe81931367b3f0af21035c36ae7eeb830dd88`, fetched 30 Oct 2026, private suffixes included) |
 | Registration commit | The commit that merges this file to `main` |
 | T1k list SHA-256 | `d670a3c1910fe7baa4883dcb8320b1ec99d7d29f9d22954b9288ae678540674e` (`tranco-ZJ8PG-top1000.csv`) |
@@ -834,7 +834,7 @@ hash. It can't sit elsewhere, because the detector is what the stop reads.
   `Look at (example.com). Open daily` still fires. This detector is the backstop for retained addresses,
   so it stays strict there, and a fire no longer costs a run. See "Withheld text".
 - **Old hash.** `7023106f7bd73c1e4122d80e9479f63a4a04091f1426327be70621951fe71d3b`.
-- **New hash.** `c79fd69519fb3813b11271c2a401d36d2a61ce55d80131cd3ccd9f0d3b86f324`.
+- **New hash.** `23f1d4d7b7351a1c8f2412bda3b9163ffa4c1d724f68fb568374af76f0f114cf`.
 - **No graded result changes.** `classify`, `classifyRegistered`, `scrub`, `evidenceOf` and every other
   export keep their source, byte for byte, so a label, a stored excerpt or a grade can't differ. The
   detector fires less, apart from one narrow case: it now accepts any letters after the dot, where the

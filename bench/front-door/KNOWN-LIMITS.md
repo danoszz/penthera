@@ -60,7 +60,7 @@ The audit sheet goes to one labeler and to a hosted model. The 12-month deletion
 - `fragment` and `longHex` fires can't be tightened by what a character may be, so they are left to withholding.
 - Withheld records leave the audit's frame, and they aren't missing at random. Audit metrics describe non-withheld records, with worst-case bounds beside them. The headline audit is not estimable past 2.0% withheld in any stratum, so in a stratum under 50 records one withheld record decides it. A label whose pooled frame is under 20 gives no figures of its own.
 - Withholding covers page and error text. A miss in a header, cookie, DNS field or check still goes to the final privacy report and a person.
-- A bare `at` needs a local part in the 16 characters before it. Spelled forms other than `dot`, such as `john at example d0t com`, aren't read.
+- A bare `at` needs a local part in the 16 characters before it, and one closed by a bracket doesn't count, so `(info) at example.x.com` isn't read. That keeps stack traces quiet. Spelled forms other than `dot`, such as `john at example d0t com`, aren't read.
 - The frozen detector in `legacy/` runs only for the legacy finding report. That report names record order and field path, so it stays on the server.
 - Pass 3 learns which sites to skip from the stopped pass's pruned raw file. A purge deletes that file, so a purged pass 2 can't be followed by pass 3.
 - A false-fire review rests on one named person's note. Only its hash is kept with the run, bound to the legacy finding report.

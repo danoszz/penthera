@@ -24,7 +24,7 @@ import { robotsVerdict, sha256, strictRobots, wholeSiteStop } from "./run.mjs";
 import { claims, main as analyze, secondaryCohorts } from "./analyze-r.mjs";
 import { main as reportMain } from "./pilot-report.mjs";
 import { pageTextMissed, PRIVACY_STOP, recordMisses, resolverFailed, safeRecord, sealHash, stopRules, withholdText } from "./record-checks.mjs";
-import { CLAIM_COHORTS, main as replicate, mergeCohorts, PREREG_R, R_COHORTS, runPass, visitInWorker } from "./replicate.mjs";
+import { CLAIM_COHORTS, main as replicate, mergeCohorts, PREREG_R, recordedHashR, R_COHORTS, runPass, visitInWorker } from "./replicate.mjs";
 import { auditFrame, drawSample, main as validation, scoreLabels, stateOf, worstCaseBounds } from "./validation-sample.mjs";
 import { auditRows as auditChainRows } from "./audit-acceptance.mjs";
 import { main as tables, NOT_VALIDATED } from "./report-tables.mjs";
@@ -891,6 +891,14 @@ export async function runAcceptance() {
     add("A8: callbacks and aggregation never see the text", "allowed", truth(seenByCallback.length === 8 && !seenByCallback.some((r) => Object.values(SAMPLES).some((t) => r.includes(t))) && !Object.values(SAMPLES).some((t) => JSON.stringify(kindRun.aggregate).includes(t)), "onRecord and the aggregate"));
 
     const pilotAt = (name) => ({ ...fx, results: join(root, name), roundsLog: join(root, `${name}.log`) });
+    // Every normal DMARC record is stored as `rua=mailto:<redacted>@...`, by the real read, so a round must seal with one.
+    const withDmarc = pilotAt("pilot-dmarc");
+    const dmarcTxt = (name) => (name.startsWith("_dmarc.") ? Promise.resolve([["v=DMARC1; p=reject; rua=mailto:dmarc@example.com"]]) : stub());
+    await run(withDmarc, pilotArgs(50, 1), { dns: { ...DNS, resolveTxt: dmarcTxt } });
+    const dmarcSealed = close(fx, sealOf(withDmarc));
+    const dmarcStored = rawOf(sealOf(withDmarc)).filter((r) => r.dns?.listed?.dmarcRecord?.includes("<redacted>@example.com")).length;
+    const dmarcGate = await gate(withDmarc);
+    add("a round whose records hold a real DMARC rua seals and clears the gate", "allowed", { code: dmarcSealed || dmarcGate.code || (dmarcStored ? 0 : 3), said: `${dmarcStored} records hold it, ${dmarcGate.said}` }, /authorized/);
     const sealOf = (at) => join(at.results, "e20r-pilot-1");
     for (const n of [0, 1, 2]) {
       Object.assign(plant, { text: fires(`pilot-form-${n}`), pages: n, errors: 0 });
@@ -1021,6 +1029,10 @@ export async function runAcceptance() {
     const markerRows = raw(join(markerRun.dir, "run"));
     add("M: a marker beside text leaves no canary in any file, temp folder, stdout or stderr", "allowed", truth(!markerRun.leaked && markerRows.length === Object.keys(CANARY_PAGES).length && markerRows.every((r) => r.evidence.textWithheld && r.evidence.pageExcerpt.text === undefined && r.evidence.excerpt === undefined), `${markerRows.length} records, ${markerRun.said.length} bytes of output`));
     auditChainRows(root, add, truth);
+
+    const protocolNow = readFileSync(PREREG_R, "utf8");
+    const liveClassifier = sha256(readFileSync(join(HERE, "classify.mjs")));
+    add("the protocol names the live classifier, in both places", "allowed", truth(recordedHashR(protocolNow, "Frozen classifier") === liveClassifier && protocolNow.includes(`**New hash.** \`${liveClassifier}\``), liveClassifier.slice(0, 12)));
 
     add("audit labels complete", "allowed", scored(labels(3)));
     add("audit labels incomplete", "refused", scored(labels(2)), /no label/);
