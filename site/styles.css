@@ -1534,7 +1534,9 @@ h1, h2, h3 { text-wrap: balance; }
 .blog-draft { display: inline-block; margin-bottom: var(--sp-16); padding: 6px 10px; font-family: var(--px); font-size: var(--t-mono); background: var(--accent); color: var(--on-accent); }
 /* Blog figures: white plates (blog/figures/*.svg), the caption held close. */
 .md-fig { margin: var(--u, var(--sp-32)) 0 0; }
-.md-fig img { display: block; width: 100%; height: auto; background: #ffffff; }
+.md-fig img { display: block; width: 100%; height: auto; background: #fdfdfa; }
+/* Wide enough to read, past the text column where the page has room. */
+@media (min-width: 1400px) { .md-fig img { width: 760px; max-width: none; } }
 .md-fig figcaption { margin-top: 10px; font-family: var(--sans); font-size: var(--t-small); line-height: var(--lh-read); font-variant-numeric: lining-nums; color: var(--text-2); }
 
 /* An article: the byline and contents in the margin, so the column sits off

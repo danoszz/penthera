@@ -68,11 +68,11 @@ function heroLoop() {
   const still = matchMedia("(prefers-reduced-motion: reduce)");
   let onScreen = true;
   const apply = () => {
-    if (still.matches) { v.pause(); v.controls = true; return; }
-    v.controls = false;
+    // A one-minute film keeps its controls, so anyone can pause it.
+    if (still.matches) { v.pause(); return; }
     // Off screen it waits, so the decoder does not run for nobody.
     if (!onScreen) { v.pause(); return; }
-    v.play().catch(() => { v.controls = true; });
+    v.play().catch(() => {});
   };
   new IntersectionObserver(([e]) => { onScreen = e.isIntersecting; apply(); }).observe(v);
   still.addEventListener("change", apply);
