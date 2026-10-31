@@ -801,12 +801,26 @@ a further run needs a new amendment.
 **The partial run.** It is reported as a partial run with its coverage, and it decides no claim. Its
 records aren't pooled with any other run.
 
-**The change.** The detector ignores our own scrub tokens as neighbours, so `at <email>.` and
-`(at) <email>` don't fire. A bare `at` now counts only before a word that opens with a letter or digit
-and isn't a URL. A corpus of contact sentences written for this fix found the same false fire on
-`at https://...`, `at /path.html` and `at (name.com)`, which any page could have held. The scrub is
-unchanged, and so are the classifier's labels. `classify.mjs` holds both, so its frozen hash changes. This departs from "no rule changes after
-pass 2 starts". It touches only what the stop check and the privacy reports read.
+**The change.** `classify.mjs` holds both the labels and the detector, `scrubMisses`, so the fix
+changes its frozen hash. It can't sit elsewhere, because the detector is what the stop reads.
+
+- **What changed.** Inside `scrubMisses`, and nowhere else in the file. A bracketed `at` no longer counts
+  when its next word is one of our own tokens, from a new list in the detector. A bare `at` counts only
+  before a word that opens with a letter or digit and isn't a URL.
+- **Why.** `at <email>.` is the scrub's own output. A corpus of contact sentences written for this fix
+  found the same false fire on `at https://...`, `at /path.html` and `at (name.com)`, which any page could
+  have held, so another stop was likely.
+- **Old hash.** `7023106f7bd73c1e4122d80e9479f63a4a04091f1426327be70621951fe71d3b`.
+- **New hash.** `0dc0cbc32ece5f55e9aa9a5e80c70539b07d9837780f5c327518edbe3edb35c1`.
+- **No graded result changes.** `classify`, `classifyRegistered`, `scrub`, `evidenceOf` and every other
+  export keep their source, byte for byte, so a label, a stored excerpt or a grade can't differ. The
+  change only adds conditions that skip a count, so the detector can fire less, never more. A pilot round
+  that passed its privacy rule still passes it. Run over the 7,031 records and 691,594 stored strings of
+  pass 1, the old and new file gave 0 label differences, 0 scrub differences and 0 changes in any
+  detector count. Pilot round 1's raw file is on the server, and `pilot-report.mjs --replay` can be run on
+  it. Its seal isn't redone, and it is not regraded.
+- **What it departs from.** "No rule changes after pass 2 starts". This touches only what the stop check
+  and the privacy reports read. The scrub and the labels are unchanged.
 
 **Pilot round 2.** The code changed, so a new pilot round is required, as the next round, on other
 sites and under the same rules. It also skips the 188 sites. The gate of Amendment 2 applies to it in
