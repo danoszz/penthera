@@ -103,23 +103,35 @@ export function docPage(root, { file, slug, eyebrow, description, styles = "/sty
   const title = /^# (.+)$/m.exec(md)[1];
   const body = renderMarkdown(md.replace(/^# .+\n/m, ""));
   return `<!doctype html>
-<html lang="en">
+<html lang="en" data-theme="light" data-paper>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${esc(title)} · Penthera</title>
   <meta name="description" content="${esc(description)}">
-  <meta name="color-scheme" content="dark light">
+  <meta name="color-scheme" content="light">
   <link rel="canonical" href="https://penthera.org/${slug}">
   <link rel="alternate" type="text/markdown" href="/docs/${file}">
+  <meta property="og:site_name" content="Penthera">
+  <meta property="og:title" content="${esc(title)}">
+  <meta property="og:description" content="${esc(description)}">
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://penthera.org/${slug}">
+  <meta property="og:image" content="https://penthera.org/media/social/og-plain.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:image" content="https://penthera.org/media/social/og-plain.png">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
   <link rel="stylesheet" href="${styles}">
   <script src="${theme}"></script>
   <script src="/blog.js" defer></script>
 </head>
 <body>
-  <main class="terms with-margin" id="main">
-    <p class="eyebrow"><a href="/">Penthera</a> · ${esc(eyebrow)}</p>
+  <p class="ttx-bar"><span class="ttx-page">P300</span><span>Penthera ${esc(eyebrow.toLowerCase())}</span></p>
+  <main class="terms land blog with-margin" id="main">
+    <nav class="eyebrow ttx-crumbs" aria-label="Breadcrumb"><a class="tag" data-f="4" data-c="0" data-t="0" href="/">Penthera</a><span class="tag" data-f="3" data-c="0" data-t="0">${esc(eyebrow)}</span></nav>
     <h1>${esc(title)}</h1>
 ${reading(body)}
   </main>

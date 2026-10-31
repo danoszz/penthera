@@ -21,7 +21,8 @@ import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
 import { parseArgs } from "node:util";
 import { publicBenchHtml } from "../../site/public-bench.mjs";
-import { BENCHMARKS, pubHash } from "../../site/benchmarks.mjs";
+import { benchmarkViews, fieldTools, n2, ord, pubHash, tiedPhrase } from "../../site/benchmarks.mjs";
+import { mosaic } from "../../site/news.mjs";
 
 const { values: args } = parseArgs({ options: { published: { type: "string" }, out: { type: "string" }, chrome: { type: "string" }, site: { type: "boolean" } } });
 const ROOT = resolve(import.meta.dirname, "..", "..");
@@ -94,12 +95,45 @@ function shot(name, html, w, h, scale = 2) {
 
 const all = publicBenchHtml(pub);
 const single = (key) => publicBenchHtml({ ...pub, benchmarks: { [key]: pub.benchmarks[key] } });
+// The site's cards, on the hub's paper: the RANK block title, then the place.
+function paper(url, body) {
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><style>
+  @font-face { font-family: "Departure Mono"; src: url("fonts/DepartureMono-Regular.woff2") format("woff2"); }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { width: 1200px; height: 630px; overflow: hidden; background: #e6e6e1; color: #12151a; font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased; }
+  .bar { display: flex; justify-content: space-between; padding: 12px 40px; font: 18px "Departure Mono", monospace; color: #fff; background: #0000ed; }
+  .top { display: grid; grid-template-columns: 392px 1fr; gap: 36px; align-items: end; padding: 32px 40px 0; }
+  .ttx-title { display: block; width: 392px; height: 118px; } rect { fill: transparent; } rect.on { fill: #ff7a00; }
+  h1 { font-size: 46px; font-weight: 500; line-height: 1.02; letter-spacing: -.035em; }
+  .main { position: absolute; left: 40px; right: 40px; top: 228px; bottom: 74px; }
+  .foot { position: absolute; left: 40px; right: 40px; bottom: 26px; display: flex; justify-content: space-between; font: 18px "Departure Mono", monospace; color: #3a404b; }
+  .cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; height: 100%; }
+  .card { display: flex; flex-direction: column; padding: 22px 20px; background: #fff; }
+  .card h2 { font-size: 24px; font-weight: 500; line-height: 1.1; letter-spacing: -.02em; }
+  .place { margin-top: auto; font-size: 92px; font-weight: 500; line-height: 1; letter-spacing: -.04em; }
+  .of, .tied { font: 20px "Departure Mono", monospace; letter-spacing: 0; }
+  .tied { min-height: 26px; margin-top: 10px; }
+  .one { display: grid; grid-template-columns: 290px 1fr; gap: 36px; align-items: center; height: 100%; padding: 22px 26px; background: #fff; }
+  .one .place { margin: 0; font-size: 110px; }
+  .bars { display: grid; align-content: center; gap: 6px; font: 18px "Departure Mono", monospace; }
+  .bars p { display: grid; grid-template-columns: 170px 1fr 56px; gap: 12px; align-items: center; }
+  .bars i { display: block; height: 12px; background: #4a4f58; } .bars .us { font-weight: 700; } .bars .us i { background: #0000ed; }
+  .bars span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; } .bars b { font-weight: 400; text-align: right; }
+  </style></head><body><p class="bar"><span>Penthera benchmarks</span><span>${url}</span></p>${body}
+  <p class="foot"><span>Penthera ${pub.benchmarks[Object.keys(pub.benchmarks)[0]].rows.find((r) => r.kind === "penthera").version} against free tools, on the sealed half</span><span>Every score and loss on the page</span></p></body></html>`;
+}
+const range = (v) => (tiedPhrase(v.iv) || (v.close ? ", within the margin of error" : "")).replace(/^, /, "");
 if (args.site) {
   if (pub.sample) throw new Error("refusing to render site cards from a sample file");
-  shot("hub", page(1200, 630, all, 4, false, "penthera.org/benchmarks"), 1200, 630, 1);
-  for (const [key, c] of Object.entries(BENCHMARKS)) {
-    if (!pub.benchmarks[key]) continue;
-    shot(c.slug, page(1200, 630, single(key), 1, false, `penthera.org/benchmarks/${c.slug}`).replace(".pb-cards { margin: 0;", ".pb-cards { margin: 0 auto; max-width: 520px;"), 1200, 630, 1);
+  const views = benchmarkViews(pub);
+  shot("hub", paper("penthera.org/benchmarks", `<div class="top">${mosaic("RANK")}<h1>Penthera and ${fieldTools(pub)} free security tools</h1></div>
+  <div class="main"><div class="cards">${views.map((v) => `<div class="card"><h2>${v.c.label}</h2><p class="place">${ord(v.us.rank)}<span class="of"> of ${v.b.of}</span></p><p class="tied">${range(v)}</p></div>`).join("")}</div></div>`), 1200, 630, 1);
+  for (const v of views) {
+    const max = Math.max(...v.ranked.map((r) => r.score), 0.01), top = v.ranked.slice(0, 6);
+    if (!top.includes(v.us)) top[5] = v.us;
+    shot(v.c.slug, paper(`penthera.org/benchmarks/${v.c.slug}`, `<div class="top">${mosaic("RANK")}<h1>${v.c.label}</h1></div>
+    <div class="main"><div class="one"><div><p class="place">${ord(v.us.rank)}<span class="of"> of ${v.b.of}</span></p><p class="tied">${range(v)}</p></div>
+    <div class="bars">${top.map((r) => `<p class="${r.kind === "penthera" ? "us" : ""}"><span>${r.tool}</span><i style="width:${Math.max(1, Math.round((Math.max(0, r.score) / max) * 100))}%"></i><b>${n2(r.score)}</b></p>`).join("")}</div></div></div>`), 1200, 630, 1);
   }
   writeFileSync(join(out, "source.json"), JSON.stringify({ published: pubHash(pubText) }, null, 2) + "\n");
   rmSync(tmp, { recursive: true, force: true });

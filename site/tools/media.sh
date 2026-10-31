@@ -5,8 +5,6 @@
 #   field.png  the hero's 1-bit cloud: a walkthrough frame blurred, faded to
 #              nothing at the bottom, error-diffused to one bit, stored as an
 #              alpha mask so CSS can paint it in the theme's ink
-#   hero.mp4   assets/demo.gif (the README's 12-second loop) as H.264
-#   hero.jpg   its first frame, the poster before the video plays
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 out=site/media
@@ -16,8 +14,4 @@ ffmpeg -loglevel error -y -ss 40 -i assets/walkthrough.mp4 -frames:v 1 -filter_c
   [0:v]format=gray,gblur=sigma=40,scale=360:-1:flags=area,normalize=smoothing=0,eq=gamma=1.6,
        geq=lum='lum(X,Y)*pow(max(0,1-Y/H),1.2)',format=monob,format=gray,split[a][b];
   [a]lutyuv=y=255[white];[white][b]alphamerge,format=ya8" "$out/field.png"
-
-ffmpeg -loglevel error -y -i assets/demo.gif -movflags +faststart -pix_fmt yuv420p \
-  -vf "scale=trunc(iw/2)*2:trunc(ih/2)*2:flags=neighbor" -c:v libx264 -preset slow -crf 26 -tune animation "$out/hero.mp4"
-ffmpeg -loglevel error -y -i assets/demo.gif -frames:v 1 -q:v 3 "$out/hero.jpg"
 ls -la "$out"

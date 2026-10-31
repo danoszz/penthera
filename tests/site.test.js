@@ -99,12 +99,31 @@ describe("site build", () => {
   });
 
   it("writes the page, the check and its media, with measured numbers filled in", () => {
-    for (const f of ["index.html", "check.js", "styles.css", "theme.js", "logo.svg", "favicon.svg", "fonts/DepartureMono-Regular.woff2", "media/hero.mp4", "media/field.png", "media/walkthrough.mp4"]) {
+    for (const f of ["index.html", "check.js", "styles.css", "theme.js", "logo.svg", "favicon.svg", "fonts/DepartureMono-Regular.woff2", "media/field.png", "media/walkthrough.mp4"]) {
       expect(existsSync(join(out, f)), f).toBe(true);
     }
     const html = readFileSync(join(out, "index.html"), "utf8");
     expect(html).not.toMatch(/\{\{\w+\}\}/);
     expect(html).toMatch(/src="\/check\.js\?v=[0-9a-f]{10}"/);
+  });
+
+  it("keeps the check's tracking function reachable, and says no before asking consent for an address it can't check", () => {
+    const ui = readFileSync(join(ROOT, "site", "check", "ui.js"), "utf8");
+    // A local named count hid this function once, so a working copy read "Copy failed".
+    expect(ui.match(/\b(?:const|let|var) count\b/g)).toBeNull();
+    expect(ui.indexOf("notCheckable(url)")).toBeLessThan(ui.indexOf("await askConsent(host)"));
+  });
+
+  it("gives every page a share image that exists, and an icon for the iPhone", () => {
+    for (const f of ["news.html", "blog.html", "research.html", "blog/sealed-half-benchmark.html", "trust.html", "terms.html", "type.html"]) {
+      const html = readFileSync(join(out, f), "utf8");
+      const img = html.match(/property="og:image" content="https:\/\/penthera\.org\/([^"?]+)/)?.[1];
+      expect(img, f).toBeTruthy();
+      expect(existsSync(join(out, img)), f).toBe(true);
+      expect(html, f).toContain('name="twitter:card" content="summary_large_image"');
+      expect(html, f).toContain('href="/apple-touch-icon.png"');
+    }
+    expect(existsSync(join(out, "apple-touch-icon.png"))).toBe(true);
   });
 
   it("has share cards for Open Graph and X, with images that exist", () => {

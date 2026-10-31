@@ -68,11 +68,11 @@ function heroLoop() {
   const still = matchMedia("(prefers-reduced-motion: reduce)");
   let onScreen = true;
   const apply = () => {
-    if (still.matches) { v.pause(); v.controls = true; return; }
-    v.controls = false;
+    // A one-minute film keeps its controls, so anyone can pause it.
+    if (still.matches) { v.pause(); return; }
     // Off screen it waits, so the decoder does not run for nobody.
     if (!onScreen) { v.pause(); return; }
-    v.play().catch(() => { v.controls = true; });
+    v.play().catch(() => {});
   };
   new IntersectionObserver(([e]) => { onScreen = e.isIntersecting; apply(); }).observe(v);
   still.addEventListener("change", apply);
@@ -90,10 +90,12 @@ const API = "/api/check";
 const REPO_URL = "https://github.com/danoszz/penthera";
 
 async function callCheck(body) {
-  const res = await fetch(API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...body, consent: true }) });
+  const failed = { message: "The check could not run.", hint: "Try again, or run npx penthera on your own machine." };
+  let res;
+  try { res = await fetch(API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...body, consent: true }) }); } catch { throw failed; }
   let data;
   try { data = await res.json(); } catch { data = null; }
-  if (!res.ok || !data) throw (data?.error || { message: "The check could not run.", hint: "Try again, or run npx penthera on your own machine." });
+  if (!res.ok || !data) throw (data?.error || failed);
   return data;
 }
 
@@ -152,7 +154,7 @@ function promptDialog(report) {
   const form = el("form");
   form.method = "dialog";
   form.append(el("h3", null, "What should the prompt cover?"));
-  const count = el("p", "prompt-count");
+  const tally = el("p", "prompt-count");
   const presets = el("div", "prompt-presets");
   const list = el("ul", "prompt-list");
   const boxes = failed.map((c) => {
@@ -171,7 +173,7 @@ function promptDialog(report) {
   copy.dataset.variant = "default";
   const sync = () => {
     const n = boxes.filter(([b]) => b.checked).length;
-    count.textContent = `${failed.length} findings · ${n} selected`;
+    tally.textContent = `${failed.length} findings · ${n} selected`;
     copy.textContent = `Copy prompt (${n})`;
     copy.disabled = n === 0;
   };
@@ -182,16 +184,18 @@ function promptDialog(report) {
     presets.append(b);
   }
   list.addEventListener("change", sync);
+  // Enter on a checkbox would submit the form, and Cancel is its only submit button.
+  list.addEventListener("keydown", (e) => { if (e.key === "Enter") e.preventDefault(); });
   const cancel = el("button", "btn btn-white", "Cancel");
   cancel.value = "cancel";
   copy.addEventListener("click", async () => {
     const text = promptFor(report, boxes.filter(([b]) => b.checked).map(([, c]) => c));
-    try { await navigator.clipboard.writeText(text); copy.textContent = "Copied"; count("copy", { what: "fix-prompt" }); } catch { copy.textContent = "Copy failed"; }
-    setTimeout(() => dlg.close(), 700);
+    try { await navigator.clipboard.writeText(text); copy.textContent = "Copied. Paste it into your agent."; count("copy", { what: "fix-prompt" }); } catch { copy.textContent = "Copy failed"; }
+    setTimeout(() => dlg.close(), 1600);
   });
   const actions = el("div", "prompt-actions");
   actions.append(cancel, copy);
-  form.append(count, presets, list, actions);
+  form.append(tally, presets, list, actions);
   dlg.append(form);
   dlg.addEventListener("close", () => dlg.remove());
   sync();
@@ -465,13 +469,16 @@ function askConsent(host) {
     range.min = "0";
     range.max = "100";
     range.value = "0";
+    range.step = "5";
     range.setAttribute("aria-label", `Slide to scan ${host}`);
     const label = el("span", "slide-label", "slide to scan");
     label.setAttribute("aria-hidden", "true");
     slide.append(label, range);
+    const keys = el("p", "consent-keys", "With a keyboard, press End on the slider.");
     const cancel = el("button", "btn consent-cancel", "Not my site");
-    cancel.value = "cancel";
-    form.append(ul, terms, slide, cancel);
+    cancel.type = "button";
+    cancel.addEventListener("click", () => finish(false));
+    form.append(ul, terms, slide, keys, cancel);
     dlg.append(form);
     let done = false;
     const finish = (ok) => {
@@ -500,7 +507,8 @@ function askConsent(host) {
       if (Number(range.value) >= 100) finish(true);
     });
     dlg.addEventListener("cancel", () => finish(false));
-    form.addEventListener("submit", () => finish(false));
+    // Enter must not answer this: a held key from the address box would skip it.
+    form.addEventListener("submit", (e) => e.preventDefault());
     document.body.append(dlg);
     dlg.showModal();
     range.focus();
@@ -514,6 +522,19 @@ function askConsent(host) {
 // fix mode too; so does Back above the result.
 let leaveFixMode = () => {};
 
+// Say so before the consent dialog: an address the check can never reach, and
+// what to run instead. The API enforces the same limits.
+function notCheckable(text) {
+  let u;
+  try { u = new URL(/^https?:\/\//i.test(text) ? text : `https://${text}`); } catch { u = null; }
+  if (!u || /\s/.test(text) || !(u.hostname.includes(".") || u.hostname === "localhost" || u.hostname.startsWith("["))) return ["That doesn't look like a web address. Try your-site.com."];
+  const h = u.hostname.replace(/^\[|\]$/g, "");
+  const local = h === "localhost" || h.endsWith(".localhost") || h.endsWith(".local") || h === "::1" || /^(127|10|0)\./.test(h) || /^192\.168\./.test(h) || /^172\.(1[6-9]|2\d|3[01])\./.test(h);
+  if (!local && (!u.port || u.port === "80" || u.port === "443")) return null;
+  const cmd = el("code", null, `npx penthera ${local ? u.href.replace(/^https:/, /^https:/i.test(text) ? "https:" : "http:").replace(/\/$/, "") : u.href.replace(/\/$/, "")}`);
+  return [local ? "This check is for public sites. For your local app, run " : "This check only reads the standard web ports. On your own machine, run ", cmd];
+}
+
 function setupScan() {
   const form = $("[data-scan]");
   const box = $("[data-report]");
@@ -521,6 +542,10 @@ function setupScan() {
   if (!form || !box || !hero) return;
   const input = form.querySelector("input");
   const button = form.querySelector("button[type=submit]");
+  const note = el("p", "scan-stop");
+  note.setAttribute("role", "status");
+  note.hidden = true;
+  form.querySelector(".scan-row").after(note);
 
   const enter = () => {
     if (hero.dataset.mode !== "fix") history.pushState({ penthera: "fix" }, "", "#check");
@@ -542,6 +567,10 @@ function setupScan() {
     if (!url) { input.focus(); return; }
     let host;
     try { host = new URL(/^https?:\/\//i.test(url) ? url : `https://${url}`).host; } catch { host = url; }
+    const stop = notCheckable(url);
+    note.replaceChildren(...(stop ? stop : []));
+    note.hidden = !stop;
+    if (stop) { input.focus(); return; }
     if (!(await askConsent(host))) { input.focus(); return; }
     button.disabled = true;
     enter();

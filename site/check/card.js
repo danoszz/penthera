@@ -31,7 +31,7 @@ export const rowTag = (c) => (c.passed ? "OK" : TAG[c.severity] || c.severity);
 export function handoffTitle(report) {
   const n = failedChecks(report).length;
   if (!n) return "Nothing to fix from the outside.";
-  return n === 1 ? "1 fix. Your agent can do it." : `${n} fixes. Your agent can do them.`;
+  return n === 1 ? "1 thing to fix. Your coding agent can help." : `${n} things to fix. Your coding agent can help.`;
 }
 
 /**

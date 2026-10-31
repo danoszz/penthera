@@ -1313,7 +1313,7 @@ main > .desk { padding-top: clamp(var(--sp-64), 8vw, 120px); }
 .finding summary::-webkit-details-marker { display: none; }
 .finding-mark { flex: none; min-width: 64px; padding: 1px 6px; text-align: center; font-family: var(--px); font-size: var(--t-note); text-transform: uppercase; letter-spacing: var(--tr-mono); border: 1px solid var(--frame); }
 .sev-high .finding-mark { background: var(--frame); color: var(--ground); }
-.sev-medium .finding-mark { background: var(--pt-half); color: var(--text-1); text-shadow: 0 0 3px var(--ground), 0 0 3px var(--ground); }
+.sev-medium .finding-mark { background: none; color: var(--text-1); box-shadow: inset 0 0 0 2px var(--frame); }
 .finding.ok .finding-mark { border-color: var(--hair); background: none; color: var(--text-3); text-shadow: none; }
 .finding.ok .finding-title { color: var(--text-2); }
 .finding-body { display: grid; gap: var(--sp-8); padding: 0 14px 14px 90px; }
@@ -1408,12 +1408,6 @@ h1, h2, h3 { text-wrap: balance; }
 
 /* Benchmark pages (/benchmarks, site/benchmarks.mjs): the landing frame, wider for the tables. */
 .bm .eyebrow a { color: inherit; }
-.bm-answer { margin-top: var(--sp-20); font-size: var(--t-read); line-height: var(--lh-read); max-width: 72ch; }
-.bm-limits { margin-top: 28px; padding: var(--sp-4) var(--sp-20) 18px; border: 1px solid var(--frame); }
-.bm-limits h2 { margin-top: 14px; font-size: var(--t-read); }
-.bm-fig { margin: var(--sp-20) 0 0; max-width: 720px; }
-.bm-fig .pb-row { grid-template-columns: 22ch 1fr 5ch; font-size: var(--t-note); }
-.bm-fig figcaption { margin-top: 10px; font-family: var(--px); font-size: var(--t-note); color: var(--text-3); }
 .bm-table { width: 100%; min-width: 760px; border-collapse: collapse; font-size: var(--t-small); line-height: var(--lh-ui); font-variant-numeric: tabular-nums; }
 .bm-table th, .bm-table td { padding: var(--sp-8) 10px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--hair); }
 .bm-table thead th { font-family: var(--px); font-size: var(--t-note); font-weight: var(--w-text); color: var(--text-2); }
@@ -1421,9 +1415,49 @@ h1, h2, h3 { text-wrap: balance; }
 .bm-table tr.is-us th, .bm-table tr.is-us td { font-weight: var(--w-strong); }
 .bm-kn, .bm-ver { font-family: var(--px); font-size: var(--t-note); font-weight: var(--w-text); color: var(--text-3); white-space: nowrap; }
 .bm-notes { font-size: var(--t-small); color: var(--text-2); }
-.bm-hub { list-style: none; padding: 0; display: grid; gap: 14px; }
-.bm-hub li { display: grid; gap: var(--sp-4); }
-.bm-hub span { color: var(--text-2); }
+/* Benchmarks: on the hub's paper. The answer and its limits, then the scoreboard
+ * at full width, so the data sets the page and not the prose. */
+.terms.blog .paper-head { display: block; max-width: 24ch; margin-top: var(--sp-24); font-size: var(--t-h2); line-height: var(--lh-display); letter-spacing: var(--tr-display); }
+.terms.bm h2 { max-width: 40ch; }
+.bm-open.is-long .bm-answer { max-width: 56ch; }
+.bm-open { display: grid; gap: var(--sp-24); margin-top: var(--sp-32); }
+.bm-answer { margin: 0; max-width: 34ch; font-family: var(--sans); font-size: var(--t-lead); line-height: var(--lh-head); letter-spacing: var(--tr-head); font-weight: var(--w-head); color: var(--text-1); text-wrap: pretty; }
+.bm-limits { padding: var(--sp-16) var(--sp-20); background: #ffffff; }
+.terms.bm .bm-limits h2 { margin: 0; font-family: var(--px); font-size: var(--t-note); font-weight: var(--w-text); letter-spacing: var(--tr-mono); line-height: var(--lh-ui); }
+.terms.bm .bm-limits ul { margin: var(--sp-12) 0 0; padding-left: var(--sp-16); font-family: var(--sans); font-size: var(--t-small); line-height: var(--lh-ui); }
+.terms.bm .bm-limits li + li { margin-top: var(--sp-8); }
+@media (min-width: 1000px) {
+  .bm-open:not(.is-long) { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--sp-48); align-items: start; }
+  .bm-open.is-long .bm-limits ul { columns: 2; column-gap: var(--sp-48); }
+  .bm-open.is-long .bm-limits li { break-inside: avoid; }
+}
+.terms.bm h2.bm-q { margin-top: var(--sp-64); font-size: var(--t-lead); }
+.bm-board { list-style: none; display: grid; gap: var(--sp-8); margin: var(--sp-20) 0 0; padding: 0; }
+@media (min-width: 760px) { .bm-board { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 1280px) { .bm-board { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.terms.bm .bm-card { position: relative; display: flex; margin: 0; flex-direction: column; padding: var(--sp-20); background: #ffffff; outline: 2px solid transparent; outline-offset: -2px; }
+.bm-card:hover, .bm-card:has(a:focus-visible) { outline-color: var(--view); }
+.terms.bm .bm-card h3 { margin: 0; font-family: var(--sans); font-size: var(--t-text); line-height: var(--lh-head); letter-spacing: var(--tr-text); font-weight: var(--w-head); }
+.bm-card h3 a { color: var(--text-1); text-decoration: none; }
+.bm-card h3 a::after { content: ""; position: absolute; inset: 0; }
+.blog .bm-card h3 a:hover { color: var(--text-1); background: none; }
+.bm-card h3 a:focus-visible { outline: none; }
+.bm-set { margin: var(--sp-4) 0 0; font-family: var(--px); font-size: var(--t-note); line-height: var(--lh-ui); color: var(--text-2); }
+.bm-rank { margin: var(--sp-24) 0 0; font-family: var(--px); font-size: var(--t-small); line-height: 1; color: var(--text-1); }
+.bm-rank span { margin-right: var(--sp-4); font-family: var(--display); font-size: var(--t-h1); line-height: 1; letter-spacing: var(--tr-display); font-weight: var(--w-head); }
+.bm-range { min-height: 1.4em; margin: var(--sp-8) 0 0; font-family: var(--px); font-size: var(--t-small); line-height: var(--lh-ui); color: var(--text-1); }
+.bm-card .pb-chart { margin-top: var(--sp-20); }
+.bm-card .pb-row { grid-template-columns: 14ch 1fr 5ch; font-size: var(--t-note); }
+.bm-line { margin: auto 0 0; padding-top: var(--sp-20); font-family: var(--sans); font-size: var(--t-small); line-height: var(--lh-ui); color: var(--text-2); }
+.bm-fig { margin: var(--sp-20) 0 0; padding: var(--sp-20); background: #ffffff; }
+.bm-fig .pb-row { grid-template-columns: 24ch 1fr 5ch; font-size: var(--t-note); }
+.bm-fig figcaption { margin-top: var(--sp-12); font-family: var(--px); font-size: var(--t-note); line-height: var(--lh-ui); color: var(--text-2); }
+@media (max-width: 479px) { .bm-fig .pb-row { grid-template-columns: 13ch 1fr 4ch; } }
+.bm .cmp-scroll { margin-top: var(--sp-20); padding: var(--sp-8) var(--sp-20); background: #ffffff; }
+.bm .bm-notes { max-width: 72ch; margin-top: var(--sp-20); }
+.bm-sections { display: grid; gap: var(--sp-32) var(--sp-48); margin-top: var(--sp-64); }
+@media (min-width: 1000px) { .bm-sections { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.terms.bm .bm-sections h2 { margin-top: 0; font-size: var(--t-text); line-height: var(--lh-head); }
 .pb-link { font-family: var(--px); font-size: var(--t-note); }
 
 /* Blog (site/blog.mjs): a teletext newspaper, set by Bringhurst's rules.
@@ -1500,7 +1534,9 @@ h1, h2, h3 { text-wrap: balance; }
 .blog-draft { display: inline-block; margin-bottom: var(--sp-16); padding: 6px 10px; font-family: var(--px); font-size: var(--t-mono); background: var(--accent); color: var(--on-accent); }
 /* Blog figures: white plates (blog/figures/*.svg), the caption held close. */
 .md-fig { margin: var(--u, var(--sp-32)) 0 0; }
-.md-fig img { display: block; width: 100%; height: auto; background: #ffffff; }
+.md-fig img { display: block; width: 100%; height: auto; background: #fdfdfa; }
+/* Wide enough to read, past the text column where the page has room. */
+@media (min-width: 1400px) { .md-fig img { width: 760px; max-width: none; } }
 .md-fig figcaption { margin-top: 10px; font-family: var(--sans); font-size: var(--t-small); line-height: var(--lh-read); font-variant-numeric: lining-nums; color: var(--text-2); }
 
 /* An article: the byline and contents in the margin, so the column sits off
@@ -1595,7 +1631,6 @@ h1, h2, h3 { text-wrap: balance; }
 .terms.blog .rs .rs-feature { margin-top: 28px; }
 .rs .rs-place { font-size: var(--t-h2); }
 /* Benchmarks wear the hub's title in their key, in a slimmer band. */
-.bm .ttx-title { height: clamp(88px, 12vw, 180px); margin-top: var(--sp-20); }
 
 /* /type: the system drawn with itself. */
 .ty-intro { margin-top: 28px; }
@@ -2253,6 +2288,15 @@ h1.ask-sub + .ask-sub { margin-top: var(--sp-12); }
 }
 .scan-note { margin-top: var(--sp-4); color: var(--text-2); }
 .scan-note a { color: var(--accent-ink); }
+.blog a.btn[data-variant="default"], .blog a.btn[data-variant="default"]:hover { color: var(--on-accent); }
+.blog.land-check .land-cta a.btn[data-variant="default"] { color: var(--text-1); }
+.terms.blog .land-field { margin-top: var(--sp-24); }
+.scan-stop { margin-top: var(--sp-12); padding: var(--sp-12) var(--sp-16); font-size: var(--t-small); line-height: var(--lh-ui); background: var(--ground); box-shadow: inset 0 0 0 1px var(--frame); }
+.scan-stop[hidden] { display: none; }
+.scan-stop code { font-family: var(--px); overflow-wrap: anywhere; }
+.consent-keys { margin-top: var(--sp-8); font-family: var(--px); font-size: var(--t-note); color: var(--text-2); }
+.start-here + .hero-actions { margin-top: var(--sp-12); }
+.start-here { margin-top: 28px; font-family: var(--px); font-size: var(--t-note); line-height: var(--lh-ui); color: var(--text-2); }
 .scan-alt { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-12) 14px; margin-top: var(--sp-12); font-family: var(--px); font-size: var(--t-note); line-height: var(--lh-ui); color: var(--text-2); }
 /* The code scan is a plain link in the panel; it says Copied when clicked. */
 .scan-alt .cmd { min-height: 0; padding: 0; background: none; border: 0; box-shadow: none; }

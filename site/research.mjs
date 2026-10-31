@@ -118,6 +118,18 @@ const SUMMARIES = {
 };
 
 /**
+ * Names readers see, in place of the protocol's id and title. The ids stay in
+ * the protocols, the code and the study's User-Agent.
+ */
+export const PUBLIC_NAMES = {
+  E20: { tag: "State of the Web", title: "State of the Web 2026: how do websites score on front-door checks?" },
+  E20r: {
+    tag: "State of the Web", title: "State of the Web 2026, follow-up: is the front-door gap real, and what do bot challenges hide?",
+    summary: "A follow-up with new groups of sites and a new check, registered before it ran. Aggregates only.",
+  },
+};
+
+/**
  * Studies with a result: the headline, where the result is, and the sentences
  * in that file the headline rests on (checked at build time). E11b's headline
  * is built from published.json instead.
@@ -247,14 +259,15 @@ export function researchEntries({ root, pub = null, posts = [], preregDir = join
       type: "Study",
       status,
       id: p.id,
-      title: p.title,
+      ...(PUBLIC_NAMES[p.id] ? { tag: PUBLIC_NAMES[p.id].tag } : {}),
+      title: PUBLIC_NAMES[p.id]?.title || p.title,
       // A headline only for a result; a draft never shows one.
       ...(status === "Result" ? {
         headline: r.headline,
         result: r.href.startsWith("/") ? r.href : `${BLOB}/${r.href}`,
         ...(r.notes ? { notes: r.notes.map((n) => ({ date: n.date, text: n.text, href: `${BLOB}/${n.href}` })) } : {}),
       } : {}),
-      summary: (status === "Result" && r.summary) || SUMMARIES[p.id] || p.title,
+      summary: (status === "Result" && r.summary) || PUBLIC_NAMES[p.id]?.summary || SUMMARIES[p.id] || p.title,
       href: `${BLOB}/${rel}`,
       source: rel,
     });
@@ -319,7 +332,7 @@ export const researchLd = (entries, { url, origin, description }) => ldScript([
 const text = (s) => esc(s).replace(/(--[a-z][\w-]*)/g, '<span class="nowrap">$1</span>');
 
 function item(e) {
-  const tags = `<span class="rs-type">${esc(e.type)}${e.id ? ` · <span class="rs-id">${esc(e.id)}</span>` : ""}</span>${e.status ? `<span class="${statusClass(e.status)}">${esc(e.status)}</span>` : ""}`;
+  const tags = `<span class="rs-type">${esc(e.type)}${e.id ? ` · <span class="rs-id">${esc(e.tag || e.id)}</span>` : ""}</span>${e.status ? `<span class="${statusClass(e.status)}">${esc(e.status)}</span>` : ""}`;
   const head = e.headline || e.title;
   const more = e.type === "Study" && e.result ? ` <a class="rs-more" href="${esc(e.result)}">Read the result</a>` : "";
   const sub = e.type === "Study" && e.headline ? `<p class="rs-sub">${esc(e.title)}</p>` : "";
@@ -389,6 +402,7 @@ export function researchHtml(entries, { origin, pub = null, styles = "/styles.cs
   <meta property="og:image" content="${origin}/media/social/og-plain.png">
   <meta name="twitter:card" content="summary_large_image">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
   <link rel="stylesheet" href="${styles}">
   <script src="${theme}"></script>
   <script src="${script}" defer></script>
@@ -423,7 +437,7 @@ export function researchMarkdown(entries, { origin, pub = null }) {
     ? `## Featured: the public benchmark (${pub.date})\n\nPenthera and ${fieldTools(pub)} free security tools, scored once on the sealed half of four public datasets ([all four](${origin}/benchmarks.md)):\n\n${benchmarkViews(pub).map((v) => `- ${v.c.label}, ${v.c.dataset.short}: ${rankText(v)}, ${v.c.scoreName} ${n2(v.us.score)}`).join("\n")}\n\nWhere a range follows the rank, Penthera's rank fell in that range in 95% of bootstrap redraws.\n\n`
     : "";
   const extra = (e) => `${e.result ? ` [Result](${abs(e.result)}).` : ""}${(e.notes || []).map((n) => ` ${n.text} [Re-run](${n.href}).`).join("")}`;
-  const line = (e) => `- ${e.date || "Undated"} · ${e.type}${e.id ? ` ${e.id}` : ""}${e.status ? ` · ${e.status}` : ""}: [${e.headline || e.title}](${abs(e.href)}). ${e.summary}${extra(e)}`;
+  const line = (e) => `- ${e.date || "Undated"} · ${e.type}${e.id ? ` ${e.tag || e.id}` : ""}${e.status ? ` · ${e.status}` : ""}: [${e.headline || e.title}](${abs(e.href)}). ${e.summary}${extra(e)}`;
   return `# Penthera research
 
 > ${PURPOSE}
