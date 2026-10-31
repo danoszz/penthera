@@ -113,8 +113,8 @@ data allows, with every result published, losses included.
 
 | Item | Question it answers | State |
 |---|---|---|
-| Penthera Bench v1 and experiment E1 | "How accurate is it on code like mine?" | Pre-registered; tooling in review ([#61](https://github.com/danoszz/penthera/pull/61)) |
-| Pre-registrations for E2 to E5 | "Will the next feature actually help?" | Drafts in review ([#61](https://github.com/danoszz/penthera/pull/61)) |
+| Penthera Bench v1 and experiment E1 | "How accurate is it on code like mine?" | Pre-registered; tooling drafted, not merged ([#61](https://github.com/danoszz/penthera/pull/61)) |
+| Pre-registrations for E2 to E5 | "Will the next feature actually help?" | Drafted, not merged ([#61](https://github.com/danoszz/penthera/pull/61)) |
 | The registered E10 run | "How much does it find in apps it has not seen?" | Pilot published; protocol is a draft ([E10](docs/research/prereg/E10-known-vulnerable-apps.md)) |
 | E9: AI mode against rules alone | "Does AI mode find more?" | Planned; AI mode stays opt-in until it is measured |
 | Harness audit: a checklist, planned `harness-*`, `sandbox-*` and `scorer-*` rules, experiments E7 and E8 | "Am I running my AI agents properly?" | Specs in review: [checklist](docs/agents-safely.md), [rule spec](docs/research/spec-harness-rules.md), [E8 draft](docs/research/prereg/E8-harness-guardrails.md). No rule code before approval |

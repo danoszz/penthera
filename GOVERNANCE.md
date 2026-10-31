@@ -29,10 +29,10 @@ and security reports work, and what happens if the maintainer steps away.
   rules or the roadmap.
 - **Pro is an experiment, not a product for sale.** It measures whether teams
   need anything beyond the free agent, such as a record kept for them and
-  checks on a schedule ([penthera.org/pro](https://penthera.org/pro)). If
-  there is a need, the income keeps Penthera maintained beyond one part-time
-  person: independent reviewers, and outside experts who critique the rules
-  and the code. If there isn't, the free tool is the whole product.
+  checks on a schedule. If there is a need, the income keeps Penthera
+  maintained beyond one part-time person: independent reviewers, and outside
+  experts who critique the rules and the code. If there isn't, the free tool is
+  the whole product.
 
 ## How changes land
 
