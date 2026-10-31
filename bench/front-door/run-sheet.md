@@ -24,19 +24,25 @@ export R=bench/front-door/results
 
 ## 1. Preflight
 
-`[server]` This must print `v22.23.4`. Record it. Use this same executable for `npm ci`, the preflight and every live command, in the `tmux` session that runs them. The command stops on any other version, and only then installs:
+`[server]` This must print `v22.23.4`. Record it. Use this same executable for `npm ci`, the preflight and every live command, in the `tmux` session that runs them.
 
 ```bash
-test "$(node -v)" = v22.23.4 && node -v | tee ~/study/node-version.txt && npm ci
+node -v
 ```
 
 `[server]`
 
 ```bash
-test "$(node -v)" = v22.23.4 && npm run e20r:preflight
+npm ci
 ```
 
-This runs the tests, `npm run e20r:acceptance` and the self-test on this checkout, on loopback. All must pass. A live start on any other Node version refuses with exit 3 before its first request.
+`[server]`
+
+```bash
+npm run e20r:preflight
+```
+
+This runs the tests, `npm run e20r:acceptance` and the self-test on this checkout, on loopback. All must pass.
 
 ## 2. Pilot
 

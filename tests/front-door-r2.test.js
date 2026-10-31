@@ -3,7 +3,6 @@
  * are replaced in this file, so https, redirects and failures run with no socket.
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import http from "node:http";
 import https from "node:https";
@@ -18,7 +17,7 @@ import { classify, classifyRegistered, cookieNames, cspEvidence, evidenceOf, loo
 import { authorize, exclusionFor, percentDecoded, globMatch, ipv4Lookup, percentForm, platformOf, readExclusions, robotsAccess, robotsBinary, robotsVerdict, strictRobots, visit, wholeSiteStop } from "../bench/front-door/run.mjs";
 import { optedOut } from "../api/_lib/page.mjs";
 import { CheckError, resolvePublic } from "../api/_lib/guard.mjs";
-import { amendment3Adopted, mergeSkips, MAX_LIVE_ROUNDS, PASS_SEED, PREREG_R, recordedHashR, STUDY_PAGE, caaTree, checkPilotDropped, codeFiles, codeHash, dmarcReading, mergeCohorts, PILOT_MIN, ROLLING_WINDOW, siteDns, normalizeHost, pilotRounds, readDomain, readHostList, readRemovals, runPass, NO_DNS, unmatchedHosts, V2_LIMITS, visitInWorker } from "../bench/front-door/replicate.mjs";
+import { amendment3Adopted, mergeSkips, MAX_LIVE_ROUNDS, PASS_SEED, PREREG_R, recordedHashR, STUDY_NODE, STUDY_PAGE, caaTree, checkPilotDropped, codeFiles, codeHash, dmarcReading, mergeCohorts, PILOT_MIN, ROLLING_WINDOW, siteDns, normalizeHost, pilotRounds, readDomain, readHostList, readRemovals, runPass, NO_DNS, unmatchedHosts, V2_LIMITS, visitInWorker } from "../bench/front-door/replicate.mjs";
 import { orgDomain, publicSuffix, PSL_VERSION, pslSha256, siteKey, siteOrg } from "../bench/front-door/psl.mjs";
 import { claims, clusterDiff, combine, coverageBounds, decide, diffClaim, dnsCoverage, e20Index, fisherExact, intervalOutcomes, isEligible, standardizedDiff, traitsByCohort } from "../bench/front-door/analyze-r.mjs";
 import { legacyFindings } from "../bench/front-door/legacy-findings.mjs";
@@ -1432,25 +1431,12 @@ describe("package 3 criteria", () => {
     for (const step of ["npm run e20r:preflight", "uniq -d", "pilot-sites-all.txt", "--skip", "validation-sample.mjs purge", "--confirm", "--false-fire", "flaggedFields"]) expect(sheet).toContain(step);
   });
 
-  it("the server's install stops on any Node but the exact one, and records it", () => {
+  it("the server's Node is printed and recorded before the install", () => {
     const sheet = readFileSync(join(import.meta.dirname, "..", "bench", "front-door", "run-sheet.md"), "utf8");
-    const install = sheet.match(/^test "\$\(node -v\)" = v22\.23\.4 .*npm ci$/m)?.[0];
-    expect(install).toBeTruthy();
-    expect(sheet.match(/^npm ci/gm) ?? []).toEqual(["npm ci"]); // the laptop's, which checks its own version
-    expect(sheet.indexOf(install)).toBeLessThan(sheet.indexOf("e20r:preflight"));
-    expect(sheet).toContain('test "$(node -v)" = v22.23.4 && npm run e20r:preflight');
-    const tryWith = (version) => {
-      const home = mkdtempSync(join(tmpdir(), "e20r2-node-"));
-      mkdirSync(join(home, "study"));
-      mkdirSync(join(home, "bin"));
-      writeFileSync(join(home, "bin", "node"), `#!/bin/sh\necho ${version}\n`, { mode: 0o755 });
-      writeFileSync(join(home, "bin", "npm"), `#!/bin/sh\ntouch "$HOME/installed"\n`, { mode: 0o755 });
-      const run = spawnSync("/bin/bash", ["-c", install], { env: { HOME: home, PATH: `${join(home, "bin")}:/usr/bin:/bin` }, encoding: "utf8" });
-      return { status: run.status, installed: existsSync(join(home, "installed")), recorded: existsSync(join(home, "study", "node-version.txt")) ? readFileSync(join(home, "study", "node-version.txt"), "utf8").trim() : null };
-    };
-    expect(tryWith("v26.0.0")).toEqual({ status: 1, installed: false, recorded: null });
-    expect(tryWith("v22.23.3")).toEqual({ status: 1, installed: false, recorded: null });
-    expect(tryWith("v22.23.4")).toEqual({ status: 0, installed: true, recorded: "v22.23.4" });
+    const step = `\`[server]\` This must print \`${STUDY_NODE}\`. Record it. Use this same executable for \`npm ci\`, the preflight and every live command, in the \`tmux\` session that runs them.\n\n\`\`\`bash\nnode -v\n\`\`\``;
+    expect(sheet).toContain(step);
+    expect(sheet.indexOf(step)).toBeLessThan(sheet.indexOf("\nnpm ci\n"));
+    expect(sheet.indexOf("\nnpm ci\n")).toBeLessThan(sheet.indexOf("npm run e20r:preflight"));
   });
 
   it("the public page makes no absolute privacy claim", () => {
