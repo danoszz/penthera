@@ -17,8 +17,8 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { siteKey, siteOrg } from "./psl.mjs";
-import { isEligible, unfinishedRun, withheldCounts } from "./record-checks.mjs";
-import { PREREG_R, recordedHashR } from "./replicate.mjs";
+import { isEligible, selfHashed, unfinishedRun, withheldCounts } from "./record-checks.mjs";
+import { PREREG_R, recordedHashR, studyState } from "./replicate.mjs";
 import { seeded } from "./replicate.mjs";
 import { newcombe } from "./run.mjs";
 
@@ -472,7 +472,11 @@ export function main(args, { fail = console.error, preregText } = {}) {
   }
   if (args.includes("--industries")) out.industries = industryTable(p1, new Map(readFileSync(at("--industries"), "utf8").split(/\r?\n/).slice(1).filter(Boolean).map((l) => l.split(",")).map(([h, i]) => [h, i])));
   if (args.includes("--e20-excluded")) out.replicationAsE20 = replicationAsE20(p1, new Set(readFileSync(at("--e20-excluded"), "utf8").split(/\r?\n/).map((l) => l.trim().toLowerCase()).filter(Boolean)));
-  const text = JSON.stringify(out, null, 2) + "\n";
+  // The run this came from and the state it ran under, for the final report to check.
+  const sha = (f) => createHash("sha256").update(readFileSync(f)).digest("hex");
+  const { codeSha256, protocolSha256, classifierSha256, pslSha256, lockfileSha256 } = studyState();
+  out.provenance = { manifestSha256: sha(join(dirname(at("--pass1")), "manifest.json")), rawSha256: sha(at("--pass1")), state: { codeSha256, protocolSha256, classifierSha256, pslSha256, lockfileSha256 } };
+  const text = JSON.stringify(selfHashed(JSON.parse(JSON.stringify(out))), null, 2) + "\n";
   if (args.includes("--out")) writeFileSync(at("--out"), text); else process.stdout.write(text);
   return 0;
 }

@@ -823,11 +823,12 @@ records aren't pooled with any other run. Nobody reads its results before pass 3
 hash. It can't sit elsewhere, because the detector is what the stop reads.
 
 - **What changed.** Inside `scrubMisses`, and nowhere else in the file. After a bare `at`, what follows
-  counts only if it could open a domain: past an opening bracket or quote, a valid label, then a dot, or
-  the word `dot`, and a word. A valid label starts and ends with a letter or number, may hold hyphens
-  inside, and takes Unicode letters and numbers and punycode. `$29.`, `5:30.`, `Joe's.`, `100%.` and
-  paths hold characters no label can, and our own scrub tokens and web URLs fail the same test. A JWT
-  now has to open at a token's edge, so `keyJ.value` isn't one.
+  counts only if a whole domain opens there: past an opening bracket or quote, two or more valid labels
+  joined by a dot, or the word `dot`, read to the end of the name. A valid label starts and ends with a
+  letter or number, may hold hyphens inside, and takes Unicode letters, numbers and marks and punycode.
+  The last label is two or more letters, or punycode. `$29.`, `5:30.`, `Joe's.`, `100%.` and paths hold
+  characters no label can, and our own scrub tokens and web URLs fail the same test. A JWT now has to
+  open at a token's edge, so `keyJ.value` isn't one.
 - **What still counts.** Bracketed and quoted domains, such as `john at (example.com)`, on purpose. So
   `Look at (example.com). Open daily` still fires. This detector is the backstop for retained addresses,
   so it stays strict there, and a fire no longer costs a run. See "Withheld text".
@@ -851,6 +852,9 @@ BrowseSafe, a public corpus of synthetic web pages, as counts only. It holds no 
 | This one | 7 | 0.04% |
 
 <GAP-DETECTOR-RECOUNT>
+
+The stopped pass's page text is pruned, so this detector can't be replayed on it. Nothing here counts
+as a replay of those records' text at this hash.
 
 The last row was written after reading the shapes behind the second, on the same corpus, so it is
 in-sample, and the real rate may be higher. Pass 3 should see about 3,350 2xx pages. At 0.04% that is
@@ -920,9 +924,12 @@ withheld share is `w = W / N`. The draw takes its rows and weights from `F`.
   worst-case bounds below. When the audit is not estimable, the figures for its frame stay in a table,
   marked as not the audit's result.
 - **Sample sizes don't change.** Each stratum draws its registered rows, or every row of its frame if
-  that is fewer, and the shortfall is reported. A stratum with `F` under 20 gives no precision or recall
-  of its own, because this study quotes no group under 20. That alone doesn't make the headline not
-  estimable.
+  that is fewer, and the shortfall is reported.
+- **Figures by label.** The five strata report through four labels: `candidate-page` is page,
+  `challenge` is challenge, `unrecognized-error-response` is error, and both block strata pool into
+  block. A label whose pooled `F` is under 20 gives no precision, recall, interval or worst-case figure,
+  because this study quotes no group under 20. Its row says "under 20 in frame" in their place. That
+  alone doesn't make the headline not estimable.
 - **One small stratum can decide it.** In a stratum under 50 records, one withheld record is over 2.0%.
   That is the rule working as written, and it won't be relaxed afterwards.
 
@@ -934,6 +941,14 @@ records whose rule label is that label, and `W_other` the other withheld records
 - Recall: `TP / (A + W_other)`.
 
 Kappa has no bound, and says so.
+
+**Provenance.** The draw proof holds the hashes of the audit frame, the sheet and the key. Each label
+file has a manifest binding the labeler, the sheet's hash and the file's hash. Scoring refuses unless all
+of these chain to the run's manifest and its raw file after the draw, and it writes `score.json` with
+the hash of every input and the study's code and protocol hashes. `final-report.mjs` is the one step
+that joins the claims and the audit. It refuses any analysis, score, frame, key or proof that doesn't
+chain, or a checkout that isn't the run's. These hashes aren't keyed, so they catch mix-ups and edits to
+one file, and not an operator who rewrites all of them.
 
 **"Audit not estimable" is an outcome.** It is reported in the summary, beside the claims. It changes no
 claim's decision and no main analysis, which rest on the registered rules. The real-page view of each

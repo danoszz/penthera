@@ -208,10 +208,26 @@ Read coverage, skips, `textWithheld` and bounds first, then the primary endpoint
 
 ## 7. Labels and the score
 
-The human and the model each label `validation-sheet.json`, and neither sees the other's labels. The model labels first, and its file's hash is noted. No other copy of the sheet is made, and every copy's path is written down so it can be deleted. The key stays on the server until both files exist. Then copy `human.csv` and `agent.csv` to `~/study` and score there. The result's metrics cover non-withheld records, with `worstCase` bounds beside them:
+The human and the model each label from `validation-sheet.json`, and neither sees the other's labels. The model labels first, and its file's hash is noted. No other copy of the sheet is made, and every copy's path is written down so it can be deleted. The key stays on the server until both files exist. Then copy `human.csv` and `agent.csv` to `~/study`, and bind each to this draw's sheet:
 
 ```bash
-node bench/front-door/validation-sample.mjs score $RUN/validation-key.json ~/study/human.csv ~/study/agent.csv > ~/study/score.json
+node bench/front-door/validation-sample.mjs label-manifest $RUN ~/study/human.csv human <who>
+```
+
+```bash
+node bench/front-door/validation-sample.mjs label-manifest $RUN ~/study/agent.csv agent <model and session>
+```
+
+Score there. It refuses anything that doesn't chain to this run's manifest, raw file, frame, sheet and key, and it writes `$RUN/score.json`. The metrics cover non-withheld records, with `worstCase` bounds beside them. A label with a pooled frame under 20 says `under 20 in frame` in place of its figures:
+
+```bash
+node bench/front-door/validation-sample.mjs score $RUN/validation-key.json ~/study/human.csv ~/study/agent.csv
+```
+
+Pull `score.json` and the key to the laptop's run folder. Then, in the same checkout as the analysis, assemble the one report that joins the claims and the audit. It refuses anything that doesn't chain, and writes `final-report.md`:
+
+```bash
+node bench/front-door/final-report.mjs <private run folder>
 ```
 
 ## 8. Deletions and the server's end

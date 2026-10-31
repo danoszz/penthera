@@ -297,10 +297,16 @@ const opensWithOwnToken = (text) => {
   while (i < text.length && "([{\"'".includes(text[i])) i++;
   return OWN_TOKENS.some((t) => text.startsWith(t, i));
 };
-// What can follow a bare `at` as an address: past an opening bracket or quote, a valid label, then a dot
-// and a word. A label starts and ends with a letter or number, with hyphens only inside. `$29.`, `5:30.`,
-// `Joe's.`, `100%.` and paths hold characters no label can, and our own tokens and web URLs fail the same test.
-const DOMAIN_AFTER_AT = /^[([{<"'`“‘«]*[\p{L}\p{N}](?:[\p{L}\p{N}-]*[\p{L}\p{N}])?(?:\s*\.\s*|\s+dot\s+)\p{L}{2,}(?![\p{L}\p{N}])/u;
+// What can follow a bare `at` as an address: past an opening bracket or quote, a whole domain, read to
+// its end. Each label starts and ends with a letter or number, with hyphens inside and Unicode allowed. The
+// last is two or more letters, or punycode. `$29.`, `5:30.`, `Joe's.`, `100%.` and paths hold characters no
+// label can, and our own tokens and web URLs fail the same test. Bounded, as a name holds so many labels.
+const LABEL = String.raw`[\p{L}\p{N}](?:[\p{L}\p{N}\p{M}-]*[\p{L}\p{N}\p{M}])?`;
+const TERMINAL = String.raw`(?:xn--[\p{L}\p{N}](?:[\p{L}\p{N}-]*[\p{L}\p{N}])?|\p{L}[\p{L}\p{M}]+)`;
+const DOT = String.raw`(?:\s*[.。．｡]\s*|\s+dot\s+)`;
+const AFTER = String.raw`(?![\p{L}\p{N}\p{M}_-]|[.。．｡][\p{L}\p{N}_-])`;
+const DOMAIN_AFTER_AT = new RegExp(String.raw`^[([{<"'\`“‘«]*(?:${LABEL}${DOT}){1,11}${TERMINAL}${AFTER}`, "u");
+const WORDS_IN_A_DOMAIN = 24;
 // A JWT opens at a token's edge. `keyJ.value` holds the letters and isn't one.
 const JWT_AT_EDGE = /(?:^|[^A-Za-z0-9_-])eyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]/;
 
@@ -332,7 +338,7 @@ export function scrubMisses(text) {
   const words = low.split(/\s+/);
   for (let i = 1; i < words.length; i++) {
     if (words[i] !== "at" || !/[\p{L}\p{N}._%+-]$/u.test(words[i - 1])) continue;
-    if (DOMAIN_AFTER_AT.test(words.slice(i + 1, i + 5).join(" "))) out.email++;
+    if (DOMAIN_AFTER_AT.test(words.slice(i + 1, i + 1 + WORDS_IN_A_DOMAIN).join(" "))) out.email++;
   }
   // Ordinary pages hold many entities for quotes and dashes. Only ones that spell ASCII hide text.
   let spelled = 0;

@@ -629,7 +629,7 @@ export function sourceAddresses(interfaces = networkInterfaces()) {
 export const sourceAddressCount = (interfaces) => sourceAddresses(interfaces).length;
 
 const fileHash = (path) => (existsSync(path) ? createHash("sha256").update(readFileSync(path)).digest("hex") : null);
-const STUDY_ENTRIES = Object.freeze(["bench/front-door/replicate.mjs", "bench/front-door/visit-worker.mjs", "bench/front-door/analyze-r.mjs", "bench/front-door/pilot-report.mjs", "bench/front-door/validation-sample.mjs", "bench/front-door/record-checks.mjs"]);
+const STUDY_ENTRIES = Object.freeze(["bench/front-door/replicate.mjs", "bench/front-door/visit-worker.mjs", "bench/front-door/analyze-r.mjs", "bench/front-door/pilot-report.mjs", "bench/front-door/validation-sample.mjs", "bench/front-door/final-report.mjs", "bench/front-door/record-checks.mjs"]);
 // Data the code reads at run time, which no import names.
 const STUDY_DATA = Object.freeze(["lib/data/retire-jsrepository.json.gz", "lib/data/retire-jsrepository.meta.json", "package-lock.json", "package.json"]);
 const IMPORT = /(?:\bfrom\s*|\bimport\s*\(?\s*)["'](\.{1,2}\/[^"']+)["']/g;

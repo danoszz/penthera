@@ -16,6 +16,8 @@
  *       purge-manifest.json with the original hash and the run's disposition. For a
  *       real privacy miss above all. It can't be undone, and the run decides nothing.
  *       The privacy report prints the code; for a crashed run, take it from sha256sum.
+ *   node bench/front-door/validation-sample.mjs label-manifest <run folder> <labels.csv> <human|agent> <who>
+ *       Binds a label file to this draw's sheet, in <labels.csv>.manifest.json. Scoring requires one for each side.
  *   node bench/front-door/validation-sample.mjs score <validation-key.json> <human.csv> <agent.csv>
  *       Each csv: id,label. Refuses a missing, duplicate, unknown or invalid row. Prints
  *       weighted precision and recall, kappa, disagreement and the unsure count.
@@ -24,11 +26,14 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { dispositionOf, falseFireReviewed, NO_PRIVACY, PRIVACY_STOP, PURGED_FILES, recordMisses, STRATA, stratumOf, unfinishedRun } from "./record-checks.mjs";
-import { holdsText, PASS_SEED, seeded, shuffled } from "./replicate.mjs";
+import { dispositionOf, falseFireReviewed, NO_PRIVACY, PRIVACY_STOP, PURGED_FILES, recordMisses, selfHashed, STRATA, stratumOf, unfinishedRun } from "./record-checks.mjs";
+import { holdsText, PASS_SEED, seeded, shuffled, studyState } from "./replicate.mjs";
 
-// A frame this small gives no precision or recall of its own.
+// A label with a frame this small gives no precision or recall of its own.
 export const MIN_AUDIT_FRAME = 20;
+export const SUPPRESSED = "under 20 in frame";
+// The five strata report through four labels. Block pools its two, and the floor reads the pool.
+export const LABEL_STRATA = Object.freeze({ page: ["candidate-page"], challenge: ["challenge"], block: ["block-signature", "block-unrecognized-403"], error: ["unrecognized-error-response"] });
 // The headline audit is not estimable past 2.0% withheld in any stratum: 1 in 50, as whole numbers, with no rounding.
 export const MAX_WITHHELD = Object.freeze({ records: 1, per: 50 });
 export const overWithheldLimit = (withheld, eligible) => withheld * MAX_WITHHELD.per > MAX_WITHHELD.records * eligible;
@@ -43,7 +48,8 @@ export { STRATA, stratumOf };
  * The audit's frame. For each stratum, `eligible` is its graded records before withholding,
  * `withheld` the ones that lost their text and `frame` the rest, which the draw uses. Withheld
  * rows aren't missing at random, so the headline audit is not estimable when any stratum is over
- * the limit. A small frame loses its own figures, and that alone doesn't decide the headline.
+ * the limit. A label whose pooled frame is small loses its own figures, and that alone doesn't
+ * decide the headline.
  */
 export function auditFrame(records) {
   const graded = records.filter((r) => r.status === "ok");
@@ -53,13 +59,17 @@ export function auditFrame(records) {
     const withheld = all.filter((r) => r.evidence?.textWithheld).length;
     const frame = all.length - withheld;
     const drawn = Math.min(frame, STRATA[stratum]);
-    strata[stratum] = { eligible: all.length, withheld, share: all.length ? withheld / all.length : 0, overLimit: overWithheldLimit(withheld, all.length), frame, drawn, target: STRATA[stratum], shortfall: STRATA[stratum] - drawn, ownFigures: frame >= MIN_AUDIT_FRAME };
+    strata[stratum] = { eligible: all.length, withheld, share: all.length ? withheld / all.length : 0, overLimit: overWithheldLimit(withheld, all.length), frame, drawn, target: STRATA[stratum], shortfall: STRATA[stratum] - drawn };
   }
   for (const r of graded) if (r.evidence?.textWithheld && stratumOf(r)) withheldByRule[RULE_LABEL[r.evidence.class.label]]++;
+  const labels = Object.fromEntries(Object.entries(LABEL_STRATA).map(([label, list]) => {
+    const frame = list.reduce((n, stratum) => n + strata[stratum].frame, 0);
+    return [label, { strata: list, frame, ownFigures: frame >= MIN_AUDIT_FRAME }];
+  }));
   const withheld = Object.values(withheldByRule).reduce((a, b) => a + b, 0);
   const eligible = Object.values(strata).reduce((n, g) => n + g.eligible, 0);
   const notEstimable = Object.values(strata).some((g) => g.overLimit);
-  return { headline: notEstimable ? "not estimable" : "stands, on its frame", notEstimable, scope: "non-withheld records", withheld, eligible, share: eligible ? withheld / eligible : 0, strata, withheldByRule };
+  return { headline: notEstimable ? "not estimable" : "stands, on its frame", notEstimable, scope: "non-withheld records", withheld, eligible, share: eligible ? withheld / eligible : 0, strata, labels, withheldByRule };
 }
 
 /** Precision and recall if the rule label were wrong on every withheld row. */
@@ -198,6 +208,9 @@ export function weightedMetrics(rows, { resamples = BOOTSTRAP.resamples, seed = 
 }
 
 /** Both labelers against the rules and each other. The model is a comparison, never a judge. */
+/** Figures a label's frame can't support give way to the reason, so nothing reads as an estimate. */
+const suppressed = (figures, frame) => Object.fromEntries(Object.entries(figures).map(([label, f]) => [label, frame.labels[label].ownFigures ? f : { suppressed: SUPPRESSED, frame: frame.labels[label].frame }]));
+
 export function scoreLabels(key, humanText, agentText, { frame, ...opts } = {}) {
   if (!key.length) throw new Error("the key is empty");
   const ids = key.map((k) => k.id);
@@ -207,9 +220,10 @@ export function scoreLabels(key, humanText, agentText, { frame, ...opts } = {}) 
   const both = rows.filter((r) => r.human !== "unsure" && r.agent !== "unsure");
   const pairs = {};
   for (const r of rows) if (r.human !== r.agent) pairs[`human ${r.human}, agent ${r.agent}`] = (pairs[`human ${r.human}, agent ${r.agent}`] ?? 0) + 1;
+  const measured = weightedMetrics(rows, opts);
   return {
-    ...(frame ? { headline: frame.headline, ...(frame.notEstimable ? { note: "These figures are for the frame, and are not the audit's result." } : {}), auditScope: frame.scope, frame, worstCase: worstCaseBounds(rows, frame.withheldByRule), kappaWorstCase: "no bound" } : {}),
-    ...weightedMetrics(rows, opts),
+    ...(frame ? { headline: frame.headline, ...(frame.notEstimable ? { note: "These figures are for the frame, and are not the audit's result." } : {}), auditScope: frame.scope, frame, worstCase: suppressed(worstCaseBounds(rows, frame.withheldByRule), frame), kappaWorstCase: "no bound" } : {}),
+    ...measured, ...(frame ? { metrics: suppressed(measured.metrics, frame) } : {}),
     humanVsAgent: {
       rows: rows.length, humanUnsure: rows.filter((r) => r.human === "unsure").length, agentUnsure: rows.filter((r) => r.agent === "unsure").length,
       bothAnswered: both.length,
@@ -223,6 +237,9 @@ export function scoreLabels(key, humanText, agentText, { frame, ...opts } = {}) 
 }
 
 const PRIVATE = Object.freeze({ mode: 0o600 });
+const STATE_FIELDS = Object.freeze(["codeSha256", "protocolSha256", "classifierSha256", "pslSha256", "lockfileSha256"]);
+/** The study state a score or an analysis ran under, for the final report to compare. */
+export const stateOf = (state = studyState()) => Object.fromEntries(STATE_FIELDS.map((k) => [k, state[k]]));
 const hash = (b) => createHash("sha256").update(b).digest("hex");
 const readRaw = (file) => readFileSync(file, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
 
@@ -243,6 +260,54 @@ export function rewriteRun(dir, records, kind, extra = {}) {
   const proof = { kind, manifestSha256: hash(manifestBytes), rawSha256Before: before, rawSha256After: hash(after), records: records.length, prunedAt: new Date().toISOString(), ...extra };
   writeFileSync(join(dir, "prune-manifest.json"), JSON.stringify(proof, null, 2) + "\n", PRIVATE);
   return proof;
+}
+
+/**
+ * What's wrong with this run's draw, or the hashes that bind it. The proof must be this run's,
+ * for its manifest and its raw file, and the frame, sheet and key must be the ones it wrote. The
+ * frame is rebuilt from the raw file, and the key must number the same rows as the sheet.
+ */
+export function verifyDraw(dir, { needKey = true } = {}) {
+  const problem = unfinishedRun(dir);
+  if (problem) return { problem: `this run can't be scored: ${problem}` };
+  const read = (name) => (existsSync(join(dir, name)) ? readFileSync(join(dir, name)) : null);
+  const proofBytes = read("prune-manifest.json"), manifestBytes = read("manifest.json"), raw = read("raw.jsonl"), frame = read("audit-frame.json"), sheet = read("validation-sheet.json"), key = read("validation-key.json");
+  const proof = proofBytes && JSON.parse(proofBytes);
+  const manifest = JSON.parse(manifestBytes);
+  if (proof?.kind !== "validation-draw") return { problem: "this run has no draw proof" };
+  if (proof.manifestSha256 !== hash(manifestBytes) || proof.rawSha256Before !== manifest.rawSha256) return { problem: "its draw proof is for another run" };
+  if (proof.rawSha256After !== hash(raw)) return { problem: "the raw file is not the one the draw left" };
+  if (!frame || proof.frameSha256 !== hash(frame)) return { problem: "this audit frame is not the one this run's draw wrote" };
+  if (!sheet || proof.sheetSha256 !== hash(sheet)) return { problem: "this sheet is not the one this run's draw wrote" };
+  if (JSON.stringify(auditFrame(readRaw(join(dir, "raw.jsonl")))) !== JSON.stringify(JSON.parse(frame))) return { problem: "this audit frame doesn't match the raw file" };
+  if (needKey) {
+    if (!key || proof.keySha256 !== hash(key)) return { problem: "this key is not the one this run's draw wrote" };
+    if (JSON.stringify(JSON.parse(key).map((k) => k.id)) !== JSON.stringify(JSON.parse(sheet).map((r) => r.id))) return { problem: "this key and sheet don't number the same rows" };
+  }
+  return { manifestSha256: hash(manifestBytes), rawSha256: proof.rawSha256After, drawProofSha256: hash(proofBytes), frameSha256: proof.frameSha256, sheetSha256: proof.sheetSha256, keySha256: proof.keySha256 };
+}
+
+/** The record that a label file answers this sheet: who, when, and both hashes. It sits beside the file. */
+export function labelManifest(dir, labelsFile, role, labeler) {
+  if (!["human", "agent"].includes(role) || !String(labeler ?? "").trim()) throw new Error("Refused: label-manifest needs a role, human or agent, and who labeled.");
+  const sheet = readFileSync(join(dir, "validation-sheet.json"));
+  const proof = JSON.parse(readFileSync(join(dir, "prune-manifest.json"), "utf8"));
+  if (proof.sheetSha256 !== hash(sheet)) throw new Error("Refused: this sheet is not the one this run's draw wrote.");
+  const record = { role, labeler, sheetSha256: proof.sheetSha256, labelsSha256: hash(readFileSync(labelsFile)), createdAt: new Date().toISOString() };
+  writeFileSync(`${labelsFile}.manifest.json`, `${JSON.stringify(record, null, 2)}\n`, PRIVATE);
+  return record;
+}
+
+function checkedLabels(file, role, sheetSha256) {
+  const manifestFile = `${file}.manifest.json`;
+  if (!existsSync(manifestFile)) return { problem: `the ${role} labels have no label manifest` };
+  const bytes = readFileSync(manifestFile);
+  const m = JSON.parse(bytes);
+  if (m.role !== role || !String(m.labeler ?? "").trim() || Number.isNaN(Date.parse(m.createdAt))) return { problem: `the ${role} label manifest is not valid` };
+  if (m.sheetSha256 !== sheetSha256) return { problem: `the ${role} labels are for another sheet` };
+  const labels = readFileSync(file);
+  if (m.labelsSha256 !== hash(labels)) return { problem: `the ${role} labels changed after their manifest` };
+  return { labelsSha256: m.labelsSha256, manifestSha256: hash(bytes), labeler: m.labeler, text: labels.toString("utf8") };
 }
 
 /** All text out, for a pilot or for a pass that stopped, and read back to prove it. */
@@ -277,7 +342,7 @@ export function purgeRun(dir, confirm) {
   return { ...proof, verified: true };
 }
 
-export function main([mode, target, a, b], { log = console.log, fail = console.error } = {}) {
+export function main([mode, target, a, b, c], { log = console.log, fail = console.error, ...opts } = {}) {
   if (mode === "draw" && target) {
     const problem = unfinishedRun(target);
     if (problem) { fail(`Refused: ${problem}. ${problem === NO_PRIVACY ? "Run pilot-report.mjs --privacy first." : "Use prune to delete its text."}`); return 3; }
@@ -287,11 +352,12 @@ export function main([mode, target, a, b], { log = console.log, fail = console.e
     const { sheet, key } = blindSheet(sample, records);
     const frameText = JSON.stringify(auditFrame(records), null, 2) + "\n";
     writeFileSync(join(target, "audit-frame.json"), frameText, PRIVATE);
-    writeFileSync(join(target, "validation-sheet.json"), JSON.stringify(sheet, null, 2) + "\n", PRIVATE);
+    const sheetText = JSON.stringify(sheet, null, 2) + "\n";
+    writeFileSync(join(target, "validation-sheet.json"), sheetText, PRIVATE);
     const keyText = JSON.stringify(key, null, 2) + "\n";
     writeFileSync(join(target, "validation-key.json"), keyText, PRIVATE);
     const sampled = new Set(sample.map((s) => s.host));
-    log(JSON.stringify({ sampled: sample.length, withheldFromDraw: records.filter((r) => r.evidence?.textWithheld).length, ...rewriteRun(target, records.map((r) => pruneExcerpt(r, sampled)), "validation-draw", { keySha256: hash(keyText), frameSha256: hash(frameText) }) }));
+    log(JSON.stringify({ sampled: sample.length, withheldFromDraw: records.filter((r) => r.evidence?.textWithheld).length, ...rewriteRun(target, records.map((r) => pruneExcerpt(r, sampled)), "validation-draw", { keySha256: hash(keyText), frameSha256: hash(frameText), sheetSha256: hash(sheetText) }) }));
     return 0;
   }
   if (mode === "prune" && target) {
@@ -315,16 +381,29 @@ export function main([mode, target, a, b], { log = console.log, fail = console.e
       return 3;
     }
   }
+  if (mode === "label-manifest" && target && a && b) {
+    try {
+      log(JSON.stringify(labelManifest(target, a, b, c)));
+      return 0;
+    } catch (e) {
+      fail(e.message);
+      return 3;
+    }
+  }
   if (mode === "score" && target && a && b) {
-    const proofFile = join(dirname(target), "prune-manifest.json");
-    const proof = existsSync(proofFile) ? JSON.parse(readFileSync(proofFile, "utf8")) : null;
-    if (proof?.keySha256 !== hash(readFileSync(target))) { fail("Refused: this key is not the one this run's draw wrote."); return 3; }
-    const frameFile = join(dirname(target), "audit-frame.json");
-    if (!existsSync(frameFile) || proof.frameSha256 !== hash(readFileSync(frameFile))) { fail("Refused: this audit frame is not the one this run's draw wrote."); return 3; }
-    console.log(JSON.stringify(scoreLabels(JSON.parse(readFileSync(target, "utf8")), readFileSync(a, "utf8"), readFileSync(b, "utf8"), { frame: JSON.parse(readFileSync(frameFile, "utf8")) }), null, 2));
+    const dir = dirname(target);
+    const bound = verifyDraw(dir);
+    if (bound.problem) { fail(`Refused: ${bound.problem}.`); return 3; }
+    const human = checkedLabels(a, "human", bound.sheetSha256), agent = checkedLabels(b, "agent", bound.sheetSha256);
+    for (const side of [human, agent]) if (side.problem) { fail(`Refused: ${side.problem}.`); return 3; }
+    const frame = JSON.parse(readFileSync(join(dir, "audit-frame.json"), "utf8"));
+    const scored = scoreLabels(JSON.parse(readFileSync(target, "utf8")), human.text, agent.text, { frame, ...opts });
+    const score = selfHashed(JSON.parse(JSON.stringify({ ...scored, provenance: { ...bound, human: { labelsSha256: human.labelsSha256, manifestSha256: human.manifestSha256, labeler: human.labeler }, agent: { labelsSha256: agent.labelsSha256, manifestSha256: agent.manifestSha256, labeler: agent.labeler }, state: stateOf() } })));
+    writeFileSync(join(dir, "score.json"), `${JSON.stringify(score, null, 2)}\n`, PRIVATE);
+    log(JSON.stringify(score, null, 2));
     return 0;
   }
-  console.error("Usage: validation-sample.mjs draw <run folder> | prune <run folder> | purge <run folder> --confirm <code> | score <validation-key.json> <human.csv> <agent.csv>");
+  console.error("Usage: validation-sample.mjs draw <run folder> | prune <run folder> | purge <run folder> --confirm <code> | label-manifest <run folder> <labels.csv> <human|agent> <who> | score <validation-key.json> <human.csv> <agent.csv>");
   return 2;
 }
 

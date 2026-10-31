@@ -59,6 +59,7 @@ export const resolverFailed = (r) => (r.error === "not_found" && r.netCode !== u
 
 export const MAX_RESOLVER_FAILURES = 0.2;
 
+const DETECTOR_KINDS = new Set(["ipv4", "ipv6", "email", "query", "fragment", "jwt", "longHex", "longNumber"]);
 // Amendment 3 covers this stop and no other, as the runner wrote it.
 export const PRIVACY_STOP = "a privacy scrub missed something";
 // The detector that stopped pass 2. Its file stays in legacy/, and only the finding report reads it.
@@ -83,7 +84,7 @@ export const isEligible = (r) => r.status !== "opted_out" && !NOT_ELIGIBLE.has(r
 export const pageText = (r) => [
   r.evidence?.excerpt, r.evidence?.pageExcerpt?.title, r.evidence?.pageExcerpt?.text, r.evidence?.pageExcerpt?.noscript,
   ...(r.evidence?.others ?? []).map((o) => o.excerpt),
-].filter(Boolean);
+].filter(Boolean).map((t) => (typeof t === "string" ? t : JSON.stringify(t)));
 export const pageTextMissed = (r) => pageText(r).some((t) => Object.values(scrubMisses(t)).some(Boolean));
 
 /** The audit stratum of one record, or null. */
@@ -94,16 +95,25 @@ export function stratumOf(r) {
   return c.label in STRATA ? c.label : null;
 }
 
+// Counts are all a marker may hold, so one that came from anywhere else can't carry text through.
+const cleanMarker = (m) => {
+  const kinds = {};
+  for (const [kind, n] of Object.entries(m?.kinds ?? {})) if (DETECTOR_KINDS.has(kind) && Number.isInteger(n) && n > 0) kinds[kind] = n;
+  return { kinds, fields: Number.isInteger(m?.fields) && m.fields > 0 ? m.fields : 0 };
+};
+
 /**
- * The record with all its page and error text gone, on a finding in any of it. Only those
- * five paths and the marker change, and the marker holds counts alone. Doing it twice is
- * doing it once.
+ * The record with all its page and error text gone. Only those five paths and the marker
+ * change, and the marker holds counts alone. The text decides, never a marker already there:
+ * whatever is left is scanned and removed, and a record with nothing left comes back as it was.
  */
 export function withholdText(r) {
-  if (r.evidence?.textWithheld) return r;
-  const kinds = {};
-  let fields = 0;
-  for (const text of pageText(r)) {
+  const left = pageText(r);
+  const prior = r.evidence?.textWithheld;
+  if (prior && !left.length && JSON.stringify(cleanMarker(prior)) === JSON.stringify(prior)) return r;
+  const { kinds, fields: counted } = cleanMarker(prior);
+  let fields = counted;
+  for (const text of left) {
     const found = Object.entries(scrubMisses(text)).filter(([, n]) => n);
     if (found.length) fields++;
     for (const [kind, n] of found) kinds[kind] = (kinds[kind] ?? 0) + n;
@@ -117,8 +127,12 @@ export function withholdText(r) {
   return { ...r, evidence: { ...evidence, textWithheld: { kinds, fields } } };
 }
 
-/** A record that may leave for a disk: both sides of the worker boundary run this. */
-export const safeRecord = (r) => (pageTextMissed(r) ? withholdText(r) : r);
+/** A record that may leave for a disk: both sides of the worker boundary run this. Nothing that fires ever passes. */
+export function safeRecord(r) {
+  const out = pageTextMissed(r) || r.evidence?.textWithheld ? withholdText(r) : r;
+  if (pageTextMissed(out)) throw new Error("A record still holds flagged text after withholding.");
+  return out;
+}
 
 // A group under this many sites joins `other`, as nothing in this study quotes a smaller one.
 const MIN_REPORTED_GROUP = 20;
@@ -205,7 +219,6 @@ const hash = (b) => createHash("sha256").update(b).digest("hex");
 
 export const NO_PRIVACY = "no clean privacy report";
 
-const DETECTOR_KINDS = new Set(["ipv4", "ipv6", "email", "query", "fragment", "jwt", "longHex", "longNumber"]);
 const RECORD_FIELDS = new Set(["record", "evidence", "dns", "checks", "app", "hops", "finalHost", "finalOrg", "listedHost", "listedOrg", "host", "cohorts", "robots", "platform", "dnsProviders", "error", "reason", "category", "group"]);
 const knownPath = (path) => typeof path === "string" && /^[^\s]+(?: \(a key\))?$/.test(path) && RECORD_FIELDS.has(path.replace(/ \(a key\)$/, "").split(".")[0]);
 
@@ -230,6 +243,10 @@ export function legacyProblem(report, orders) {
   if (report.reproducesStop !== reproduces) return "its summary doesn't match its findings";
   return reproduces ? null : "it does not reproduce the stop";
 }
+
+/** A JSON artifact that carries the hash of its own fields, so an edit to one field shows. It isn't keyed. */
+export const selfHashed = (fields) => ({ ...fields, selfSha256: hash(JSON.stringify(fields)) });
+export const selfHashHolds = ({ selfSha256, ...fields }) => selfSha256 === hash(JSON.stringify(fields));
 
 /** The hash a seal carries over its own fields, `passed` among them. */
 export const sealHash = ({ sealSha256: _own, ...fields }) => hash(JSON.stringify(fields));
