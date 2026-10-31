@@ -10,10 +10,10 @@ import { fileURLToPath } from "node:url";
 import { scrub, scrubMisses } from "./classify.mjs";
 import { pageTextMissed, safeRecord, selfHashed, withheldCounts, withholdText } from "./record-checks.mjs";
 import { assemble, joined, NESTED_FIELDS, nestedProblems, NOT_PRINTED, NOT_THE_RESULT, NOT_VALIDATED, PART_TWO, PRINTED_KEYS, main as report, UNDER_20 } from "./report-tables.mjs";
-import { codeFiles, studyState } from "./replicate.mjs";
-import { sha256, wilson } from "./run.mjs";
+import { codeFiles, dmarcReading, studyState } from "./replicate.mjs";
+import { sha256, statusCounts, wilson } from "./run.mjs";
 import { auditFrame, main as validation, scoreLabels, stateOf, SUPPRESSED, NO_ANSWERS } from "./validation-sample.mjs";
-import { challengeByEdge, main as analyze, industryTable, refusalShares, standardizedDiff, traitTable } from "./analyze-r.mjs";
+import { challengeByEdge, dnsCoverage, main as analyze, industryTable, outcomesOf, refusalShares, standardizedDiff, traitTable } from "./analyze-r.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const quiet = () => undefined;
@@ -39,6 +39,9 @@ function records(sizes, withheld = {}, tag = "") {
 /** Rows with checks and traits, for the Part 2 share tables: csp at about half, nosniff all, framing none, caa judged on 19, security-txt on 20, referrer at weight 0, permissions absent. */
 const withChecks = (rows) => rows.map((r, i) => ({ ...r, score: 50, checks: [{ id: "csp", weight: 14, passed: i % 2 === 0 }, { id: "nosniff", weight: 5, passed: true }, { id: "framing", weight: 5, passed: false }, { id: "referrer", weight: 0, passed: true }, ...(i < 19 ? [{ id: "caa", weight: 2, passed: true }] : []), ...(i < 20 ? [{ id: "security-txt", weight: 2, passed: true }] : [])], evidence: { ...r.evidence, traits: { login: true, payments: i < 19, shop: i < 20, securityPage: false } } }));
 
+/** DNS reads for the chain, with one strict DMARC record on most sites and the two registered variants on a few. */
+const withDns = (rows) => rows.map((r, i) => ({ ...r, dns: { listed: { exists: true, spfRecordPresent: true, dmarcReading: dmarcReading([i % 40 === 0 ? "v=DMARC1; p=reject; pct=50" : i % 40 === 1 ? "v=DMARC1; p=reject; sp=none" : "v=DMARC1; p=reject"]) } } }));
+
 /** A finished pass with a clean privacy report, under this checkout's state. */
 export function finishedRun(dir, rows) {
   mkdirSync(dir, { recursive: true });
@@ -55,9 +58,10 @@ export function finishedRun(dir, rows) {
 const labelsFor = (dir, change = (l) => l) => `id,label\n${json(join(dir, "validation-key.json")).map((k) => `${k.id},${change(RULE_TO_ANSWER[k.stratum])}`).join("\n")}\n`;
 
 /** Draw, labels, bind and score, on one run. Returns the sheet hash the kit would show. */
-export function scoredRun(dir, { resamples = 200, change } = {}) {
+export function scoredRun(dir, { resamples = 200, change, changeHuman = change, changeModel = change } = {}) {
   validation(["draw", dir], { log: quiet, fail: quiet });
-  for (const role of ["human", "model"]) writeFileSync(join(dir, `labels-${role}.csv`), labelsFor(dir, change));
+  writeFileSync(join(dir, "labels-human.csv"), labelsFor(dir, changeHuman));
+  writeFileSync(join(dir, "labels-model.csv"), labelsFor(dir, changeModel));
   const shown = json(join(dir, "prune-manifest.json")).sheetSha256;
   for (const role of ["human", "model"]) validation(["bind", dir, role, shown], { log: quiet, fail: quiet });
   validation(["score", dir], { log: quiet, fail: quiet, resamples });
@@ -79,7 +83,8 @@ export function fixtureAnalysis(dir) {
     cspControlsScripts: [claim("C1")], replicationAsE20: [claim("C1")],
     standardized: { C1: STANDARD, C3: { ...STANDARD, dropped: ["vercel", "akamai"] } }, standardizedR: { C1: STANDARD, C3: { ...STANDARD, dropped: ["vercel"] } },
     dnsBeside: { registered: [dnsClaim("C2")], declared: [dnsClaim("C6")], rejectOnly: [dnsClaim("C7")] }, dnsGradedOnlyReading: [dnsClaim("C10"), { ...claim("C8"), S: { ...VIEW, exactP: 1e-9 } }],
-    bounds: { C1: { low: 0, high: 0.2, coverageA: 0.9, coverageB: 0.9 } }, skipsByCohort: { T1k: { exclusion_list: 1 } }, dnsCoverage: { T1k: { read: 9, exists: 9, nxdomain: 0, unknown: 0 } },
+    bounds: { C1: { low: 0, high: 0.2, coverageA: 0.9, coverageB: 0.9 } }, skipsByCohort: { T1k: { exclusion_list: 1 } }, dnsCoverage: { T1k: { read: 9, exists: 9, nxdomain: 0, unknown: 0, pctUnder100: 2, spNone: 3 } },
+    outcomes: { status: { "error:tls_invalid": 4, "excluded:robots_unreachable": 5 }, tls: { invalid: 6, handshake: 7, reasons: { CERT_HAS_EXPIRED: 8 }, fellBackToHttp: 9 } },
     textWithheld: withheldCounts(rows), auditFrame: auditFrame(rows),
     provenance: { manifestSha256: sha256(readFileSync(join(dir, "manifest.json"))), rawSha256: sha256(readFileSync(join(dir, "raw.jsonl"))), state: stateOf(manifest) },
   });
@@ -147,8 +152,13 @@ export function auditRows(root, add, truth, { inputs, preregText }) {
 
   // The whole chain against the run folder.
   const chain = at("chain");
-  finishedRun(chain, withChecks(records({ ...FULL, "candidate-page": 170 }, { challenge: 1, "candidate-page": 1 }, "x")));
-  scoredRun(chain, { resamples: 20_000 });
+  const stray = (host, extra) => ({ pass: 3, order: 9000, host, cohorts: { T1k: { rank: 1 } }, ...extra });
+  finishedRun(chain, [...withDns(withChecks(records({ ...FULL, "candidate-page": 170 }, { challenge: 1, "candidate-page": 1 }, "x"))),
+    stray("tls-a.selftest.example.com", { status: "error", error: "tls_invalid", tlsReason: "CERT_HAS_EXPIRED" }),
+    stray("tls-b.selftest.example.com", { status: "ok", httpStatus: 200, httpsFailed: { error: "tls_invalid", tlsReason: "DEPTH_ZERO_SELF_SIGNED_CERT" }, platform: { edge: "other" }, evidence: { status: 200, headerNames: [], values: {}, cookieNames: [], class: STRATUM_CLASS["candidate-page"], pageExcerpt: { title: "Fine", text: "A plain page.", chars: 9 } } }),
+    stray("tls-c.selftest.example.com", { status: "error", error: "unreachable", httpsFailed: { error: "tls_handshake" } }),
+    stray("skip.selftest.example.com", { status: "excluded", reason: "robots_unreachable" })]);
+  scoredRun(chain, { resamples: 20_000, changeHuman: (l) => (l === "error" ? "unsure" : l), changeModel: (l) => (l === "challenge" ? "unsure" : l === "block" ? "page" : l) });
   // The registered command, in full, on a copy of the run with one thing changed.
   const REGISTERED = ["--pass2", inputs["Pass 1 raw"], "--e20", inputs["E20 Tranco raw"], inputs["E20 YC raw"], "--industries", inputs["Industry map"], "--e20-excluded", inputs["E20 exclusion file"]];
   const reported = (d, { args = ["--run", d, ...REGISTERED], ...deps } = {}) => {
@@ -210,6 +220,9 @@ export function auditRows(root, add, truth, { inputs, preregText }) {
   };
   for (const [name, change] of Object.entries(nestedEdits)) { const x = JSON.parse(JSON.stringify(chainAnalysis)); change(x); add(`G6: the nested guard sees ${name}`, "allowed", truth(nestedProblems(x).length > 0, nestedProblems(x)[0] ?? "nothing seen")); }
   const fieldEdits = {
+    "outcomes with no TLS": (x) => { delete x.outcomes.tls; },
+    "TLS with no reasons": (x) => { delete x.outcomes.tls.reasons; },
+    "coverage with no DMARC detail": (x) => { delete x.dnsCoverage.T1k.spNone; },
     "a new field in a claim view": (x) => { x.claims[0].S.note = 1; },
     "a new field in a real-page view": (x) => { x.claims[0].R.note = 1; },
     "a view with no equivalence": (x) => { delete x.claims[0].S.equivalence; },
@@ -252,6 +265,32 @@ export function auditRows(root, add, truth, { inputs, preregText }) {
   add("V4: a real run prints dropped too", "allowed", truth(section(finalText, "## Standardized figures", "## The E20-matched reading").includes("Strata dropped, real page"), "both columns"));
   const boundsPart = section(finalText, "## Worst-case bounds of the claims", "## Sites skipped");
   add("V5: the bounds name their scope", "allowed", truth(boundsPart.split("\n").filter((l) => /^\| C[34] \|/.test(l)).every((l) => l.endsWith("| graded |")) && boundsPart.split("\n").filter((l) => /^\| C[34] \|/.test(l)).length === 2 && boundsPart.split("\n").filter((l) => /^\| C(1|5|8|9|11) \|/.test(l)).length === 5 && boundsPart.split("\n").filter((l) => /^\| C(1|5|8|9|11) \|/.test(l)).every((l) => l.endsWith("| eligible |")), "graded for C3 and C4, eligible otherwise"));
+  // What the run reports apart: outcomes, TLS, DMARC detail, and where the two labelers stand.
+  const dnsRow = (exists, reading) => ({ cohorts: { T1k: {} }, dns: { listed: { exists, ...(reading ? { dmarcReading: dmarcReading([reading]) } : {}) } } });
+  const counted = (rows) => { const c = dnsCoverage(rows).T1k; return `${c.pctUnder100} ${c.spNone}`; };
+  for (const [name, row, want] of [["pct=50", dnsRow(true, "v=DMARC1; p=reject; pct=50"), "1 0"], ["sp=none", dnsRow(true, "v=DMARC1; p=reject; sp=none"), "0 1"], ["both", dnsRow(true, "v=DMARC1; p=reject; pct=50; sp=none"), "1 1"], ["neither", dnsRow(true, "v=DMARC1; p=reject"), "0 0"], ["no reading", dnsRow(true), "0 0"], ["pct=50 on a domain that doesn't exist", dnsRow(false, "v=DMARC1; p=reject; pct=50"), "0 0"], ["pct=50 on an unknown domain", dnsRow(null, "v=DMARC1; p=reject; pct=50"), "0 0"]]) add(`O1: DMARC detail, ${name}`, "allowed", truth(counted([row]) === want, counted([row])));
+  const tlsRows = { "invalid with no answer": { status: "error", error: "tls_invalid", tlsReason: "A" }, "invalid, then plain HTTP graded": { status: "ok", httpsFailed: { error: "tls_invalid", tlsReason: "B" } }, "invalid, then plain HTTP failed": { status: "error", error: "unreachable", httpsFailed: { error: "tls_invalid", tlsReason: "C" } }, handshake: { status: "error", error: "tls_handshake", tlsReason: "D" } };
+  for (const [name, row, want] of [[Object.keys(tlsRows)[0], Object.values(tlsRows)[0], [1, 0, "A", 0]], [Object.keys(tlsRows)[1], Object.values(tlsRows)[1], [1, 0, "B", 1]], [Object.keys(tlsRows)[2], Object.values(tlsRows)[2], [1, 0, "C", 1]], [Object.keys(tlsRows)[3], Object.values(tlsRows)[3], [0, 1, "D", 0]]]) {
+    const { tls } = outcomesOf([row]);
+    add(`O2: TLS, ${name}`, "allowed", truth(tls.invalid === want[0] && tls.handshake === want[1] && JSON.stringify(tls.reasons) === JSON.stringify({ [want[2]]: 1 }) && tls.fellBackToHttp === want[3], JSON.stringify(tls)));
+  }
+  const repeated = outcomesOf([{ status: "error", error: "tls_invalid", httpsFailed: { error: "tls_invalid", tlsReason: "A" } }]);
+  add("O2: invalid twice on one record counts once", "allowed", truth(repeated.tls.invalid === 1, "one site"));
+  add("O3: outcomes hold the aggregate's status keys, and no graded record", "allowed", truth(JSON.stringify(outcomesOf([{ status: "ok" }, { status: "error", error: "timeout" }, { status: "excluded", reason: "robots_unreachable" }, { status: "opted_out" }]).status) === JSON.stringify(statusCounts([{ status: "ok" }, { status: "error", error: "timeout" }, { status: "excluded", reason: "robots_unreachable" }, { status: "opted_out" }])) && Object.keys(outcomesOf([{ status: "error", error: "timeout" }, { status: "excluded", reason: "robots_unreachable" }, { status: "opted_out" }]).status).join() === "error:timeout,excluded:robots_unreachable,opted_out", "three keys"));
+  const chainTls = chainAnalysis.outcomes.tls;
+  add("O4: a real run counts each TLS path", "allowed", truth(chainTls.invalid === 2 && chainTls.handshake === 1 && chainTls.fellBackToHttp === 2 && chainTls.reasons.CERT_HAS_EXPIRED === 1 && chainTls.reasons.DEPTH_ZERO_SELF_SIGNED_CERT === 1 && chainAnalysis.outcomes.status["excluded:robots_unreachable"] === 1, JSON.stringify(chainTls)));
+  add("O4: the report prints each outcome and reason", "allowed", truth(finalText.indexOf("## Sites skipped") < finalText.indexOf("## Outcomes") && finalText.indexOf("## Outcomes") < finalText.indexOf("## TLS failures") && finalText.indexOf("## TLS failures") < finalText.indexOf("## DNS coverage") && Object.entries(chainAnalysis.outcomes.status).every(([k, n]) => finalText.includes(`| ${k} | ${n} |`)) && Object.entries(chainTls.reasons).every(([k, n]) => finalText.includes(`| Reason: ${k} | ${n} |`)) && finalText.includes(`| Invalid certificate | ${chainTls.invalid} |`) && finalText.includes(`| Handshake failed | ${chainTls.handshake} |`) && finalText.includes(`| Fell back to plain HTTP | ${chainTls.fellBackToHttp} |`) && finalText.includes("The aggregate file holds these per list."), "outcomes and TLS, after the skips"));
+  const coverage = chainAnalysis.dnsCoverage.T1k;
+  add("O5: a real run prints the DMARC detail per list", "allowed", truth(coverage.pctUnder100 > 0 && coverage.spNone > 0 && finalText.includes(`| T1k | ${coverage.read} | ${coverage.exists} | ${coverage.nxdomain} | ${coverage.unknown} | ${coverage.pctUnder100} | ${coverage.spNone} |`), `${coverage.pctUnder100} and ${coverage.spNone}`));
+  const chainScore = json(join(chain, "score.json")), vs = chainScore.humanVsAgent;
+  add("O6: the report prints both unsure totals", "allowed", truth(vs.humanUnsure > 0 && vs.agentUnsure > 0 && vs.humanUnsure !== vs.agentUnsure && finalText.includes(`Unsure, of ${vs.rows} rows: human ${vs.humanUnsure}, model ${vs.agentUnsure}.`), `${vs.humanUnsure} and ${vs.agentUnsure}`));
+  add("O6: and both kappas' denominators, for each comparison", "allowed", truth(vs.bothAnswered < vs.rows && finalText.includes(`on ${chainScore.rows - chainScore.unsure} rows, with unsure as disagreement`) && finalText.includes(`${chainScore.kappaUnsureAsDisagreement.toFixed(3)} on ${chainScore.rows} rows`) && finalText.includes(`on ${vs.bothAnswered} rows, with unsure as disagreement ${vs.kappaUnsureAsDisagreement.toFixed(3)} on ${vs.rows} rows`), `${vs.bothAnswered} and ${vs.rows}`));
+  add("O6: and a row for each pair", "allowed", truth(Object.keys(vs.pairs).length > 1 && Object.entries(vs.pairs).every(([k, n]) => finalText.includes(`| ${k} | ${n} |`)), `${Object.keys(vs.pairs).length} pairs`));
+  const tinyDir = at("tiny");
+  finishedRun(tinyDir, records({ "candidate-page": 10, challenge: 9 }));
+  scoredRun(tinyDir, { changeModel: (l) => (l === "challenge" ? "unsure" : l) });
+  const tiny = reportOf(tinyDir), tinyVs = json(join(tinyDir, "score.json")).humanVsAgent;
+  add("O7: under the kappa floor the kappas stay suppressed, and totals and pairs stay", "allowed", truth(tinyVs.kappa === null && tinyVs.kappaSuppressed === SUPPRESSED && tiny.text.includes(`human 0, model ${tinyVs.agentUnsure}.`) && tinyVs.agentUnsure > 0 && Object.entries(tinyVs.pairs).every(([k, n]) => tiny.text.includes(`| ${k} | ${n} |`)) && !tiny.text.includes("kappa 0."), `${tinyVs.agentUnsure} unsure, ${Object.keys(tinyVs.pairs).length} pairs`));
   const printedRow = (cells) => part.includes(`| ${cells.join(" | ")} |`);
   const hidden = Array(5).fill(UNDER_20);
   const shareCells = (s) => (s.suppressed ? hidden : [s.passed, s.judged, (s.share * 100).toFixed(1), `${(s.ci95[0] * 100).toFixed(1)} to ${(s.ci95[1] * 100).toFixed(1)}`, "naive row-level"]);
@@ -324,6 +363,10 @@ export function auditRows(root, add, truth, { inputs, preregText }) {
     "a passed count": (x) => { x.industries.fixture.shares.csp.passed += 1; },
     "a refusal interval": (x) => { x.refusals.allCi95[0] += 0.01; },
     "an original-rules interval": (x) => { x.refusals.registeredCi95[1] -= 0.01; },
+    "an outcome count": (x) => { x.outcomes.status["error:tls_invalid"] += 1; },
+    "a TLS count": (x) => { x.outcomes.tls.invalid += 1; },
+    "a TLS reason": (x) => { x.outcomes.tls.reasons.CERT_HAS_EXPIRED += 1; },
+    "the DMARC detail": (x) => { x.dnsCoverage.T1k.pctUnder100 += 1; },
     "a Newcombe difference": (x) => { x.claims[0].S.newcombe.diff = 0.42; },
     "a Newcombe interval": (x) => { x.claims[0].S.newcombe.ci95 = [0.1, 0.2]; },
     "an equivalence outcome": (x) => { x.claims[0].S.equivalence = "within the margin"; },

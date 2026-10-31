@@ -9,3 +9,5 @@ section: Docs
   Audit figures cover non-withheld records, and one bound report joins them to the claims.
   Trait, industry and refusal shares now carry counts and naive row-level Wilson intervals, a figure on
   under 20 judged sites prints `under 20`, and a live start refuses any Node but v22.23.4.
+  The report prints the claims' registered row-level figures, each run's outcomes and TLS reason codes,
+  DMARC `pct` and `sp` detail, and where the two labelers differ.

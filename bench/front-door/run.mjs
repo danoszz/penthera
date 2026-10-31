@@ -746,13 +746,19 @@ function appSection(records) {
 }
 
 /** The aggregate: counts, per-check prevalence, the score distribution, groups. No site names. */
-export function aggregate(records, meta = {}, { orgOf = registrableDomain } = {}) {
-  const ok = records.filter((r) => r.status === "ok");
+/** Every record that didn't grade, by what happened to it. */
+export function statusCounts(records) {
   const status = {};
   for (const r of records.filter((x) => x.status !== "ok")) {
     const key = r.status === "error" ? `error:${r.error}` : r.status === "excluded" ? `excluded:${r.reason}` : r.status;
     status[key] = (status[key] || 0) + 1;
   }
+  return status;
+}
+
+export function aggregate(records, meta = {}, { orgOf = registrableDomain } = {}) {
+  const ok = records.filter((r) => r.status === "ok");
+  const status = statusCounts(records);
   const scores = ok.map((r) => r.score).sort((a, b) => a - b);
   const histogram = Array.from({ length: 10 }, (_, i) => ({ from: i * 10, to: i === 9 ? 100 : i * 10 + 9, sites: 0 }));
   for (const s of scores) histogram[Math.min(9, Math.floor(s / 10))].sites++;

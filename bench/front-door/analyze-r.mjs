@@ -21,7 +21,7 @@ import { isEligible, selfHashed, unfinishedRun, withheldCounts } from "./record-
 import { PREREG_R, recordedHashR, studyState } from "./replicate.mjs";
 import { auditFrame, stateOf, stateProblem } from "./validation-sample.mjs";
 import { seeded } from "./replicate.mjs";
-import { newcombe, wilson } from "./run.mjs";
+import { newcombe, statusCounts, wilson } from "./run.mjs";
 
 // Amendment 2: C1 to C11 are the family. The ±10 margin stays because it was registered, not because it is justified.
 export const CLAIMS_R = 11;
@@ -269,7 +269,8 @@ export function dnsCoverage(records) {
   const out = {};
   for (const cohort of ["T1k", "YC-new", "YC-25", "YC-old", "T100k"]) {
     const rows = inCohort(records, cohort).filter((r) => r.dns?.listed);
-    out[cohort] = { read: rows.length, exists: rows.filter((r) => r.dns.listed.exists === true).length, nxdomain: rows.filter((r) => r.dns.listed.exists === false).length, unknown: rows.filter((r) => r.dns.listed.exists === null).length };
+    const readings = rows.filter((r) => r.dns.listed.exists === true).map((r) => r.dns.listed.dmarcReading).filter(Boolean);
+    out[cohort] = { read: rows.length, exists: rows.filter((r) => r.dns.listed.exists === true).length, nxdomain: rows.filter((r) => r.dns.listed.exists === false).length, unknown: rows.filter((r) => r.dns.listed.exists === null).length, pctUnder100: readings.filter((d) => d.partial).length, spNone: readings.filter((d) => d.spNone).length };
   }
   return out;
 }
@@ -341,6 +342,14 @@ export function secondaryCohorts(graded, all = graded) {
     const base = { cohort, against, check, source, interval: "naive row-level", judgedA: judged(a, check), judgedB: judged(b, check), orgsA: orgsJudged(a, check), orgsB: orgsJudged(b, check) };
     return base.orgsA >= MIN_SUPPORT && base.orgsB >= MIN_SUPPORT ? { ...base, ...rowLevel(a, b, check) } : { ...base, decision: "not estimable" };
   })));
+}
+
+/** What happened to every record, with the aggregate's keys, and TLS failures apart. Either failure counts when plain HTTP was then tried. */
+export function outcomesOf(all) {
+  const failed = (name) => all.filter((r) => r.error === name || r.httpsFailed?.error === name).length;
+  const reasons = {};
+  for (const reason of all.map((r) => r.tlsReason ?? r.httpsFailed?.tlsReason).filter(Boolean)) reasons[reason] = (reasons[reason] ?? 0) + 1;
+  return { status: statusCounts(all), tls: { invalid: failed("tls_invalid"), handshake: failed("tls_handshake"), reasons, fellBackToHttp: all.filter((r) => r.httpsFailed).length } };
 }
 
 /** Sites this run skipped, per cohort and reason: pilot, stopped pass and the rest. Skipped sites aren't missing at random, so each list shows its own. */
@@ -473,6 +482,7 @@ export function analysisOf(args, { fail = console.error, preregText, state = stu
   out.secondaryCohorts = secondaryCohorts(p1, all);
   out.challengeByEdge = challengeByEdge(p1);
   out.skipsByCohort = skipsByCohort(all);
+  out.outcomes = outcomesOf(all);
   out.textWithheld = withheldCounts(all);
   out.auditFrame = auditFrame(all);
   out.cspControlsScripts = cspValueClaims(p1);

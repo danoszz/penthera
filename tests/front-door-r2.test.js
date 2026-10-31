@@ -923,7 +923,7 @@ describe("the analysis", () => {
   });
   it("22: counts domains DNS couldn't answer for", () => {
     const row = (exists) => ({ cohorts: { T1k: {} }, dns: { listed: { exists } } });
-    expect(dnsCoverage([row(true), row(false), row(null), row(null)]).T1k).toEqual({ read: 4, exists: 1, nxdomain: 1, unknown: 2 });
+    expect(dnsCoverage([row(true), row(false), row(null), row(null)]).T1k).toEqual({ read: 4, exists: 1, nxdomain: 1, unknown: 2, pctUnder100: 0, spNone: 0 });
   });
   it("bounds a whole list, with ungraded sites either way", () => {
     const a = [mk("a.example.com", true), mk("b.example.com", null)], b = [mk("c.example.com", false), mk("d.example.com", null)];

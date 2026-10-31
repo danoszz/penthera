@@ -30,7 +30,7 @@ const DIGEST = /^[0-9a-f]{64}$/;
 const hash = (b) => createHash("sha256").update(b).digest("hex");
 
 // Every top-level key of analysis.json is printed or listed here with a reason. A new key needs one or the other.
-export const PRINTED_KEYS = Object.freeze(["level", "claims", "traits", "traitsByCohort", "refusals", "privacyDeviation", "primaryRefusal", "bounds", "standardized", "standardizedR", "secondaryCohorts", "challengeByEdge", "skipsByCohort", "textWithheld", "cspControlsScripts", "dnsGradedOnlyReading", "dnsBeside", "dnsCoverage", "industries", "replicationAsE20", "provenance", "selfSha256"]);
+export const PRINTED_KEYS = Object.freeze(["level", "claims", "traits", "traitsByCohort", "refusals", "privacyDeviation", "primaryRefusal", "bounds", "standardized", "standardizedR", "secondaryCohorts", "challengeByEdge", "skipsByCohort", "outcomes", "textWithheld", "cspControlsScripts", "dnsGradedOnlyReading", "dnsBeside", "dnsCoverage", "industries", "replicationAsE20", "provenance", "selfSha256"]);
 export const NOT_PRINTED = Object.freeze({
   experiment: "names the study, which the title does",
   resamples: "fixed in the code and printed in provenance as an option",
@@ -38,7 +38,7 @@ export const NOT_PRINTED = Object.freeze({
 });
 // The fields below the top level, which those lists can't see. Every open cell of a share table holds exactly these five.
 export const SHARE_FIELDS = Object.freeze(["passed", "judged", "share", "ci95", "interval"]);
-export const GROUP_FIELDS = Object.freeze({ trait: ["sites", "shares"], industry: ["sites", "median", "shares"], suppressed: ["sites", "suppressed"], edge: ["n", "share", "ci95", "interval"], refusals: ["n", "all", "allCi95", "signatureBacked", "registered", "registeredCi95", "interval"] });
+export const GROUP_FIELDS = Object.freeze({ trait: ["sites", "shares"], industry: ["sites", "median", "shares"], suppressed: ["sites", "suppressed"], edge: ["n", "share", "ci95", "interval"], refusals: ["n", "all", "allCi95", "signatureBacked", "registered", "registeredCi95", "interval"], outcomes: ["status", "tls"], tls: ["invalid", "handshake", "reasons", "fellBackToHttp"], dnsCoverage: ["read", "exists", "nxdomain", "unknown", "pctUnder100", "spNone"] });
 export const PART_TWO = "Secondary figures. Their intervals are naive row-level, with no clustering, and they corroborate nothing. The two DNS tables keep the claims' cluster bootstrap and level.";
 export const UNDER_20 = "under 20";
 // Every field of a claim view, a standardized row and a bound is printed or listed here with a reason. A new field needs one or the other.
@@ -86,6 +86,9 @@ export function nestedProblems(a) {
   const unscoped = NESTED_FIELDS.bound.printed.filter((f) => f !== "scope");
   for (const [id, b] of Object.entries(a.bounds ?? {})) exact(`bounds.${id}`, b, ["C3", "C4"].includes(id) ? listed(NESTED_FIELDS.bound) : unscoped);
   if (a.refusals?.interval !== "naive row-level") out.push("refusals doesn't say its interval is naive row-level");
+  exact("outcomes", a.outcomes, GROUP_FIELDS.outcomes);
+  exact("outcomes.tls", a.outcomes?.tls, GROUP_FIELDS.tls);
+  for (const [cohort, d] of Object.entries(a.dnsCoverage ?? {})) exact(`dnsCoverage.${cohort}`, d, GROUP_FIELDS.dnsCoverage);
   return out;
 }
 
@@ -213,8 +216,14 @@ export function assemble(a, s, { runtimeNow = null } = {}) {
   title("Sites skipped, per list and reason");
   const reasons = [...new Set(Object.values(a.skipsByCohort ?? {}).flatMap((c) => Object.keys(c)))].sort();
   table(["List", ...reasons], Object.entries(a.skipsByCohort ?? {}).map(([c, r]) => [c, ...reasons.map((k) => r[k] ?? 0)]));
+  title("Outcomes");
+  table(["Outcome", "Sites"], Object.entries(a.outcomes?.status ?? {}));
+  out.push("The aggregate file holds these per list.", "");
+  title("TLS failures");
+  const tls = a.outcomes?.tls;
+  table(["TLS", "Sites"], [["Invalid certificate", tls?.invalid ?? "n/a"], ["Handshake failed", tls?.handshake ?? "n/a"], ["Fell back to plain HTTP", tls?.fellBackToHttp ?? "n/a"], ...Object.entries(tls?.reasons ?? {}).map(([reason, n]) => [`Reason: ${reason}`, n])]);
   title("DNS coverage");
-  table(["List", "Read", "Domain exists", "No such domain", "Unknown"], Object.entries(a.dnsCoverage ?? {}).map(([c, d]) => [c, d.read, d.exists, d.nxdomain, d.unknown]));
+  table(["List", "Read", "Domain exists", "No such domain", "Unknown", "DMARC pct under 100", "DMARC sp=none"], Object.entries(a.dnsCoverage ?? {}).map(([c, d]) => [c, d.read, d.exists, d.nxdomain, d.unknown, d.pctUnder100, d.spNone]));
 
   const w = a.textWithheld;
   title("Text withheld");
@@ -233,9 +242,12 @@ export function assemble(a, s, { runtimeNow = null } = {}) {
     return [l, s.frame.labels[l].frame, cell(m, pct(m.precision)), cell(m, ci(m.precisionCi)), cell(c, pct(c.precision)), cell(m, pct(m.recall)), cell(m, ci(m.recallCi)), cell(c, pct(c.recall))];
   }));
   if (notEstimable) out.push(NOT_THE_RESULT, "");
-  const kappa = s.kappaSuppressed ?? `${num(s.kappa)}, with unsure as disagreement ${num(s.kappaUnsureAsDisagreement)}`;
-  const model = s.humanVsAgent.kappaSuppressed ?? `kappa ${num(s.humanVsAgent.kappa)}, ${s.humanVsAgent.disagreements} disagreements`;
-  out.push(`${notEstimable ? "Frame only, not the audit's result: kappa" : "Kappa"} ${kappa}. Kappa has no worst-case bound. Human against the model, ${s.humanVsAgent.bothAnswered} rows: ${model}.`, "");
+  const vs = s.humanVsAgent;
+  const kappa = s.kappaSuppressed ?? `${num(s.kappa)} on ${s.rows - s.unsure} rows, with unsure as disagreement ${num(s.kappaUnsureAsDisagreement)} on ${s.rows} rows`;
+  const model = vs.kappaSuppressed ?? `kappa ${num(vs.kappa)} on ${vs.bothAnswered} rows, with unsure as disagreement ${num(vs.kappaUnsureAsDisagreement)} on ${vs.rows} rows, ${vs.disagreements} disagreements`;
+  out.push(`${notEstimable ? "Frame only, not the audit's result: kappa" : "Kappa"} ${kappa}. Kappa has no worst-case bound. Human against the model, ${vs.bothAnswered} rows answered by both: ${model}.`, "");
+  out.push(`Unsure, of ${vs.rows} rows: human ${vs.humanUnsure}, model ${vs.agentUnsure}.`, "");
+  table(["Where they differ", "Rows"], Object.entries(vs.pairs ?? {}));
 
   if (a.privacyDeviation) { title("Privacy deviation"); out.push(`A person reviewed and recorded a false fire. Note hash \`${a.privacyDeviation.noteSha256}\`.`, ""); }
 
