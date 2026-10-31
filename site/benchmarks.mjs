@@ -419,7 +419,7 @@ ${v.b.context.map((c) => `      <li><a href="${esc(c.url)}">${esc(c.title)}</a><
   const ld = ldScript([datasetLd(v, pub, origin), crumbs(origin, [["Penthera", "/"], ["Benchmarks", "/benchmarks"], [v.c.label, path]])]);
   return frame({
     title: v.c.title(v.b), description: description(v), path, h1: v.c.h1(v.b), origin, styles, theme, ld, body, foot,
-    image: image || `${origin}/media/social/og.png`,
+    image: image || `${origin}/media/social/og-plain.png`,
     crumb: `<a href="/">Penthera</a> · <a href="/benchmarks">Benchmarks</a> · ${esc(v.c.label)}`,
   });
 }
@@ -461,7 +461,7 @@ ${views.map((v) => `      <li><a href="/benchmarks/${v.c.slug}">${esc(v.c.h1(v.b
     title: `Security tool benchmarks: Penthera and ${n} free tools on four public datasets`,
     description: `Penthera and ${n} free security tools on four public datasets: secrets, npm and PyPI malware, JavaScript injection. Every score, interval, loss and limit.`,
     path: "/benchmarks", h1: `Penthera and ${n} free security tools, on four public benchmarks`, origin, styles, theme, ld, body, foot,
-    image: image || `${origin}/media/social/og.png`,
+    image: image || `${origin}/media/social/og-plain.png`,
     crumb: `<a href="/">Penthera</a> · Benchmarks`,
   });
 }

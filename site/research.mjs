@@ -383,7 +383,7 @@ export function researchHtml(entries, { origin, pub = null, styles = "/styles.cs
   <meta property="og:description" content="${esc(description)}">
   <meta property="og:type" content="website">
   <meta property="og:url" content="${url}">
-  <meta property="og:image" content="${origin}/media/social/og.png">
+  <meta property="og:image" content="${origin}/media/social/og-plain.png">
   <meta name="twitter:card" content="summary_large_image">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="${styles}">

@@ -94,11 +94,11 @@ export function landingHtml(p, { origin, values, styles = "/styles.css", theme =
   <meta property="og:description" content="${esc(p.description)}">
   <meta property="og:type" content="article">
   <meta property="og:url" content="${url}">
-  <meta property="og:image" content="${origin}/media/social/og.png">
+  <meta property="og:image" content="${origin}/media/social/${p.cta === "contact" ? "og-plain" : "og"}.png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:image" content="${origin}/media/social/og.png">
+  <meta name="twitter:image" content="${origin}/media/social/${p.cta === "contact" ? "og-plain" : "og"}.png">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="${styles}">
   <script src="${theme}"></script>

@@ -112,8 +112,8 @@ describe("site build", () => {
     for (const tag of ['property="og:image"', 'name="twitter:card" content="summary_large_image"', 'property="og:image:width" content="1200"']) {
       expect(html, tag).toContain(tag);
     }
-    expect(html).toContain('property="og:title" content="Penthera: your open-source security agent"');
-    expect(html).toContain('name="twitter:title" content="Penthera: your open-source security agent"');
+    expect(html).toContain('property="og:title" content="Penthera: your open-source cyber security agent"');
+    expect(html).toContain('name="twitter:title" content="Penthera: your open-source cyber security agent"');
     for (const tag of ["og:description", "twitter:description"]) {
       const d = html.match(new RegExp(`(?:property|name)="${tag}" content="([^"]+)"`))[1];
       expect(d.length, tag).toBeLessThanOrEqual(155);

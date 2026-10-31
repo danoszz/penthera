@@ -2,8 +2,8 @@
 /**
  * Render the site's social images with a local headless Chrome:
  *
- *   og.png       1200 × 630   the share card (Open Graph, X, LinkedIn, Facebook):
- *                             the site's first screen, with penthera.org's own report
+ *   og.png       1200 × 630   the share card (Open Graph, X, LinkedIn, Facebook)
+ *   og-plain.png 1200 × 630   the plain card for research pages
  *   square.png   1080 × 1080  Instagram and other square feeds
  *   story.png    1080 × 1920  TikTok, Reels and Stories (9:16)
  *
@@ -173,6 +173,27 @@ h1 { font-weight: 500; font-size: ${l.h1}px; line-height: 0.98; letter-spacing: 
 liveField(document.querySelector(".field"));</script>
 </body></html>`;
 
+/**
+ * The link card: two chat bubbles on blue, over the dithered field. X lays its
+ * title bar over the bottom left, across the card at phone size, so the bottom
+ * 160 px stay clear and the logo sits at the top. No score: a number here could
+ * read as a claim about a real site.
+ */
+export const bubbleCard = () => `<!doctype html><meta charset="utf-8"><style>*{box-sizing:border-box;margin:0}html,body{width:1200px;height:630px;overflow:hidden;font-family:"Helvetica Neue",Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}body{position:relative;color:#fff}
+.lg{position:absolute;right:56px;top:62px;width:200px}.lg svg{display:block;width:100%;height:auto}
+.b{position:absolute;padding:.22em .44em .3em;font-weight:500;letter-spacing:-.035em;line-height:1.04}
+.q{left:56px;top:48px;font-size:70px;border-radius:.36em .36em .36em 0}
+.a{right:56px;top:204px;font-size:88px;max-width:930px;border-radius:.36em .36em 0 .36em}
+.bg{position:absolute;inset:0}
+</style><style>body{background:#0000ed}.f{position:absolute;left:0;right:0;top:0;bottom:0;background:url(${field}) center/1500px auto;filter:blur(1px);opacity:.55;mix-blend-mode:screen}.q{background:rgba(0,0,160,.55);border:1px solid rgba(255,255,255,.5);backdrop-filter:blur(18px)}.a{background:rgba(255,255,255,.92);color:#0000ed;backdrop-filter:blur(18px)}</style><div class="f"></div><div class="b q">yo is my app secure?</div><div class="b a">check it before<br>they wreck it</div><span class="lg">${logo}</span>`;
+
+/** The plain card for research pages: no joke beside results. */
+export const plainCard = () => `<!doctype html><meta charset="utf-8"><style>*{box-sizing:border-box;margin:0}html,body{width:1200px;height:630px;overflow:hidden;font-family:"Helvetica Neue",Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;background:#000;color:#fff}
+.strip{position:absolute;left:0;right:0;bottom:0;height:150px;background:url(${field}) left top/1100px auto repeat-x}
+h1{position:absolute;left:64px;top:132px;font-size:124px;font-weight:500;letter-spacing:-.035em;line-height:1.02;max-width:1080px}
+.lg{position:absolute;left:64px;top:48px;width:230px}.lg svg{display:block;width:100%;height:auto}</style>
+<div class="strip"></div><h1>Measured in public</h1><span class="lg">${logo}</span>`;
+
 /** The cards the site ships: og.png for link previews, square.png for square feeds, story.png for 9:16. */
 export const CARDS = [
   { file: "og.png", w: 1200, h: 630, layout: {
@@ -227,8 +248,9 @@ export function shoot(html, w, h, file, { transparent = false } = {}) {
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   mkdirSync(OUT, { recursive: true });
+  shoot(plainCard(), 1200, 630, join(OUT, "og-plain.png"));
   for (const s of CARDS) {
-    shoot(scanCard(s.w, s.h, s.layout), s.w, s.h, join(OUT, s.file));
+    shoot(s.file === "og.png" ? bubbleCard() : scanCard(s.w, s.h, s.layout), s.w, s.h, join(OUT, s.file));
     console.log(`site/media/social/${s.file} ${s.w}×${s.h}`);
   }
 }
