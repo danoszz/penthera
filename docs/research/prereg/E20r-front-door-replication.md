@@ -13,7 +13,7 @@
 | Runs | Pass 1 no earlier than 12 hours after the updated study page is live, pass 2 seven days later |
 | Amendment | **One pass only.** Amendment 1 (30 Oct 2026, before any data) replaces every mention of pass 2 below. See the end of this file |
 | Amendment 2 | **Adopted.** 31 Oct 2026, effective through the commit that merges this row to `main`. E20-R2, a prospective corrected remeasurement after the pass 1 data was seen. See the end of this file. The runner refuses a pilot or pass 2 unless this row says Adopted |
-| Amendment 3 | **Draft.** Not adopted. E20-R2 after a false stop: a detector fix, withheld text, an audit-quality rule, a stated deviation, pilot round 2, and pass 3. See the end of this file. The runner refuses pilot round 2 and pass 3 until this row says adopted. |
+| Amendment 3 | **Adopted.** 31 October 2026. E20-R2 after a false stop: a detector fix, withheld text, an audit-quality rule, a stated deviation, pilot round 2, and pass 3. See the end of this file. The runner refuses pilot round 2 and pass 3 until this row says adopted. |
 | Source address | `178.104.243.225` |
 | Prior opt-outs SHA-256 | `e25d88b24aa1d4122cd78e65af9c8febfd9f7309959ae1ae89446ccc90b07126` (`prior-optouts.txt`, 95 sites) |
 | Pass 1 raw SHA-256 | `ef791bee6c9598880af6da7f11db023e96e6d75b219670e45317ee9575e453dd` |
@@ -779,11 +779,11 @@ a third adjudicator.** The figures are reported as checked by one person.
   strata for C3 and C4 can differ for that reason.
 - SPF semantics and DMARC reporting are not validated.
 
-## Amendment 3: E20-R2 after a false stop (draft, 31 Oct 2026)
+## Amendment 3: E20-R2 after a false stop (adopted, 31 Oct 2026)
 
-**Status: draft.** Adoption changes this line and the Amendment 3 row to adopted, and takes effect
-through the commit that merges them to `main`. The runner reads both. It overrides Amendment 2 where
-they differ.
+**Status: adopted.** 31 October 2026, by Daan van der Zwaag. Adoption took effect through the commit
+that merged this line and the Amendment 3 row to `main`. The runner reads both. It overrides Amendment 2
+where they differ.
 
 **What happened.** Pass 2 stopped itself at 10:30 UTC on 31 October 2026, 2 minutes after it began.
 It had processed 188 of its 7,031 records. 177 of those were visits. The other 11 were sites on a skip
@@ -1065,8 +1065,11 @@ sites per cohort and reason, and a site keeps the first reason it was skipped.
 ### Review
 
 The outside reviewer's technical go of 31 October in Amendment 2 was given on Amendment 2. It doesn't
-cover this amendment. That reviewer gave a technical no-go on packages 6, 7 and 8.
-<GAP-REVIEW-STATUS> This is not an ethics endorsement, and no independent human ethics board reviewed
+cover this amendment. That reviewer gave a technical no-go on packages 6 to 10.
+On 31 October 2026, the outside reviewer gave a conditional technical go to adopt Amendment 3 and run
+pilot round 2, provided the two draft markers and this review record are changed together and the exact
+Node v22.23.4 preflight passes before any live request. The reviewer found no remaining technical blocker
+in package 11, but did not independently verify the private corpus or stopped-run facts. This is not an ethics endorsement, and no independent human ethics board reviewed
 this study.
 
 ### Limits
