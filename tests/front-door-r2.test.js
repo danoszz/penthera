@@ -1767,7 +1767,7 @@ describe("Amendment 3", () => {
     expect(amendment3Adopted("| Amendment 3 | **Adopted.** x |\n**Status: adopted.** x\n## Amendment 3\n**Status: draft.** x\n")).toBe(false);
     expect(amendment3Adopted("| Amendment 3 | **Adopted.** x |\n\n## Amendment 3\n\n**Status: draft.** x\n\n## Amendment 4\n\n**Status: adopted.** x\n")).toBe(false);
     expect(amendment3Adopted("| Amendment 3 | **Adopted.** x |\n\n## Amendment 3\n\n**Status: adopted.** x\n\n## Amendment 4\n\n**Status: draft.** x\n")).toBe(true);
-    expect(amendment3Adopted(readFileSync(PREREG_R, "utf8"))).toBe(false);
+    expect(amendment3Adopted(readFileSync(PREREG_R, "utf8"))).toBe(true);
     expect(PASS_SEED[3]).toBe(PASS_SEED[2]);
   });
 
