@@ -278,7 +278,7 @@ describe("site before and after", () => {
     const sec = html.slice(html.indexOf('class="ba"'), html.indexOf('id="check"'));
     const e = JSON.parse(readFileSync(join(ROOT, "site", "example.json"), "utf8"));
     expect(sec).not.toMatch(/\{\{\w+\}\}/);
-    expect(sec).toContain("yo, is my app safe?");
+    expect(sec).toContain("yo is my app secure?");
     for (const s of ["high", "medium", "low"]) if (e.counts[s]) expect(sec).toContain(`${e.counts[s]} ${s}`);
     expect(sec).toContain(`${e.checks} checks, ${e.requests} requests, all to 127.0.0.1.`);
     expect(sec).toContain(`${e.finding.title} <span class="ba-conf">${e.finding.confidence}</span>`);
@@ -450,7 +450,7 @@ describe("site story", () => {
     expect([...at].sort((a, b) => a - b)).toEqual(at);
     expect(h).toContain("AI coding tools ship faster than anyone can check.");
     expect(h).toContain('<h1 class="ask-sub" id="hero-title">Penthera: your <span class="nowrap">open-source</span> cyber security agent.</h1>');
-    expect(h).toContain('<p class="bubble">yo, is my app safe?</p>');
+    expect(h).toContain('<p class="bubble">yo is my app secure?</p>');
     expect(h).toMatch(/<h2 id="faq-title">Before you install\.<\/h2>/);
     // Merged away: no section repeats another.
     for (const gone of ['class="walk', 'class="eu"', 'class="vision', 'class="ba-counts"', "data-check", 'class="desk"', 'class="spec"']) expect(h, gone).not.toContain(gone);
@@ -510,7 +510,7 @@ describe("site story", () => {
     const h = html();
     const hero = h.slice(h.indexOf('class="hero"'), h.indexOf('id="answer"'));
     expect(h.match(/<h1[ >]/g)).toHaveLength(1);
-    expect(hero.indexOf('<p class="ask">Is your site/app safe?</p>')).toBeLessThan(hero.indexOf('id="hero-title"'));
+    expect(hero.indexOf('<p class="ask">Check it before they wreck it</p>')).toBeLessThan(hero.indexOf('id="hero-title"'));
     expect(hero.indexOf('id="hero-title"')).toBeLessThan(hero.indexOf('id="scan"'));
     // The example is the live check's own report of the test server, made at build time.
     const r = await exampleCheck();
