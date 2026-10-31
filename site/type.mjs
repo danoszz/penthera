@@ -13,7 +13,7 @@ const SCALE = [
   ["t-h3", "26 to 40", "Helvetica", "Post titles in a list", "We benchmarked ten scanners"],
   ["t-lead", "22 to 28", "Helvetica", "Standfirsts", "How do you test your own tool without fooling yourself?"],
   ["t-read", "18 to 20", "Charter", "Reading", "A tuned scanner knows the answers, so we sealed half of each dataset before anyone looked at it."],
-  ["t-text", "17", "Helvetica", "Interface text", "Find out in seconds. Then fix it with your coding agent."],
+  ["t-text", "17", "Helvetica", "Interface text", "Check your site in seconds. Then fix it with your coding agent."],
   ["t-mono", "16.5", "Departure Mono", "Section heads in a post, inline code", "npx penthera --repo ."],
   ["t-small", "15", "Helvetica", "Captions and tables", "Square: dev half, tuned. Dot: test half."],
   ["t-note", "13", "Departure Mono", "Notes and small print", "Passive. Nothing stored. Your own site only."],
