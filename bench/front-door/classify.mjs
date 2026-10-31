@@ -304,9 +304,7 @@ const opensWithOwnToken = (text) => {
 // The scrub closes `(info) @ x.y` up to `(info)@x.y`, which the token walk below can't read past the bracket.
 const BARE_AT = /(?: [([{<"'`“‘«*]*|[([{<]+)(?:at|@)(?= )|(?<=[)\]}>"'`”’»])@|(?<=[\p{L}\p{N}._%+-])@(?=[([{<"'`“‘«])/gu;
 const OWN_LOCAL = new RegExp(`(?:${[...OWN_TOKENS, "<redacted>"].join("|")})$`);
-// Before `@`, a local part may close a bracket. Before `at` only a quote: `...:1:2)` then `at Object.parse` is a stack trace.
 const ADDRESS_LOCAL = /[\p{L}\p{N}._%+-]["'`”’»)\]}>*]*$/u;
-const LOCAL_BEFORE_AT = /[\p{L}\p{N}._%+-]["'`”’»]*$/u;
 const DOMAIN_OPENING = /[([{<"'`“‘«*]*/y;
 const DOMAIN_LABEL = /[\p{L}\p{N}][\p{L}\p{N}\p{M}-]*/uy;
 const DOMAIN_DOT = / ?[.。．｡] ?| dot | ?[([{] ?dot ?[)\]}] ?/y;
@@ -371,9 +369,8 @@ export function scrubMisses(text) {
   const spaced = low.normalize("NFKC").replace(/\p{Cf}/gu, "").replace(/&nbsp;|&#0*160;|&#x0*a0;/g, " ").replace(/\s+/g, " ");
   for (const m of spaced.matchAll(BARE_AT)) {
     const after = m.index + m[0].length;
-    const before = spaced.slice(Math.max(0, m.index - 16), m.index);
-    if (OWN_LOCAL.test(before)) continue;
-    if ((m[0].endsWith("@") ? ADDRESS_LOCAL : LOCAL_BEFORE_AT).test(before) && opensDomain(spaced, spaced[after] === " " ? after + 1 : after)) out.email++;
+    if (OWN_LOCAL.test(spaced.slice(Math.max(0, m.index - 16), m.index))) continue;
+    if (ADDRESS_LOCAL.test(spaced.slice(Math.max(0, m.index - 16), m.index)) && opensDomain(spaced, spaced[after] === " " ? after + 1 : after)) out.email++;
   }
   // Ordinary pages hold many entities for quotes and dashes. Only ones that spell ASCII hide text.
   let spelled = 0;

@@ -211,10 +211,8 @@ Read coverage, skips, `textWithheld` and bounds first, then the primary endpoint
 The human and the model each label from `validation-sheet.json`, and neither sees the other's labels. The model labels first, and its file's hash is noted. Build what they get with the kit, which shows the sheet's hash, and each labeler sends that hash back with their labels:
 
 ```bash
-node bench/front-door/make-labeler-kit.mjs $RUN/validation-sheet.json ~/study/kit --expect <sampled>
+node bench/front-door/make-labeler-kit.mjs $RUN/validation-sheet.json ~/study/kit --expect <the sampled count draw printed>
 ```
-
-`<sampled>` is the number `draw` printed. It can be under 300, because a stratum with too few rows draws all it has.
 
 No other copy of the sheet is made, and every copy's path is written down so it can be deleted. The key stays on the server until both files exist. Then put the files in the run folder as `$RUN/labels-human.csv` and `$RUN/labels-model.csv`, each `id,label`, and bind each to this draw's sheet with the hash its labeler sent back. A manifest is written once, with no name in it:
 

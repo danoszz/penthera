@@ -22,7 +22,7 @@
 | Industry map SHA-256 | `78df4910d953379f21d935aeb3ef658d85cbef036539e1a31362c9ad7e26e075` |
 | E20 exclusion file SHA-256 | `246127f639968afc906d59f155f6a993982f3a33c0655718234955319ebe4c34` |
 | Legacy classifier SHA-256 | `7023106f7bd73c1e4122d80e9479f63a4a04091f1426327be70621951fe71d3b` (`bench/front-door/legacy/classify-7023106f.mjs`, the detector that stopped pass 2) |
-| Frozen classifier SHA-256 | `23f1d4d7b7351a1c8f2412bda3b9163ffa4c1d724f68fb568374af76f0f114cf` (`bench/front-door/classify.mjs`) |
+| Frozen classifier SHA-256 | `c79fd69519fb3813b11271c2a401d36d2a61ce55d80131cd3ccd9f0d3b86f324` (`bench/front-door/classify.mjs`) |
 | Public Suffix List SHA-256 | `d3e6243b51695327984abb3e2a5aa7077096867f75121e031e6a5a3840ca8bcd` (commit `9dfbe81931367b3f0af21035c36ae7eeb830dd88`, fetched 30 Oct 2026, private suffixes included) |
 | Registration commit | The commit that merges this file to `main` |
 | T1k list SHA-256 | `d670a3c1910fe7baa4883dcb8320b1ec99d7d29f9d22954b9288ae678540674e` (`tranco-ZJ8PG-top1000.csv`) |
@@ -824,21 +824,25 @@ the stopped pass no longer exists, so it can't be replayed at the final classifi
 `classify.mjs` holds both the labels and the detector, `scrubMisses`, so the fix changes its frozen
 hash. It can't sit elsewhere, because the detector is what the stop reads.
 
-- **What changed.** Inside `scrubMisses`, and nowhere else in the file. After a bare `at`, what follows counts only if it could be a domain: past an opening bracket or quote,
-  one or more labels joined by dots, or the word `dot`, ending in a label of at least two letters at a
-  token boundary. A valid label starts and ends with a letter or number, may hold hyphens inside, and
-  takes Unicode letters and numbers and punycode. `$29.`, `5:30.`, `Joe's.`, `100%.` and paths hold
-  characters no label can, and our own scrub tokens and web URLs fail the same test. A JWT
-  now has to open at a token's edge, so `keyJ.value` isn't one.
-- **What still counts.** Bracketed and quoted domains, such as `john at (example.com)`, on purpose. So
-  `Look at (example.com). Open daily` still fires. This detector is the backstop for retained addresses,
-  so it stays strict there, and a fire no longer costs a run. See "Withheld text".
+- **What changed.** Inside `scrubMisses`, the helpers it calls and the constants they use, and nowhere
+  else in the file. After a bare `at`, or an `@` set apart by spaces or brackets, what follows counts
+  only if it is a whole domain: past an opening bracket or quote, one or more labels joined by dots, the
+  word `dot` or a bracketed dot, ending at a token's edge in a label of at least two letters, or in
+  punycode. A label starts with a letter or number, ends with one or a combining mark, may hold hyphens
+  inside, and takes Unicode letters and numbers. `$29.`, `5:30.`, `Joe's.`, `100%.` and paths hold
+  characters no label can, and web URLs fail the same test. What precedes it must look like a local
+  part, and one of our own scrub tokens or `<redacted>` never does. Wide forms, invisible characters and
+  spaces spelled as entities don't break the reading. A JWT now has to open at a token's edge, so
+  `keyJ.value` isn't one.
+- **What still counts.** Bracketed and quoted domains, such as `john at (example.com)`, on purpose, and
+  anything else shaped like a whole domain. So `Look at (example.com). Open daily` still fires, and so
+  does `updated at 12.34.56.pm yesterday`, because `123.456.com` is a valid name. This detector is the
+  backstop for retained addresses, so it stays strict there, and a fire no longer costs a run. See
+  "Withheld text".
 - **Old hash.** `7023106f7bd73c1e4122d80e9479f63a4a04091f1426327be70621951fe71d3b`.
-- **New hash.** `23f1d4d7b7351a1c8f2412bda3b9163ffa4c1d724f68fb568374af76f0f114cf`.
+- **New hash.** `c79fd69519fb3813b11271c2a401d36d2a61ce55d80131cd3ccd9f0d3b86f324`.
 - **No graded result changes.** `classify`, `classifyRegistered`, `scrub`, `evidenceOf` and every other
-  export keep their source, byte for byte, so a label, a stored excerpt or a grade can't differ. The
-  detector fires less, apart from one narrow case: it now accepts any letters after the dot, where the
-  old test took ASCII. Pilot round 1 isn't regraded, and its seal isn't redone. Its raw file is pruned,
+  export keep their source, byte for byte, so a label, a stored excerpt or a grade can't differ. The detector's reach changed in both directions, so its effect was measured, below. Pilot round 1 isn't regraded, and its seal isn't redone. Its raw file is pruned,
   so a replay would read no excerpts, and we don't count one as evidence.
 - **What it departs from.** "No rule changes after pass 2 starts". This touches only what the stop check
   and the privacy reports read. The scrub and the labels are unchanged.
@@ -850,15 +854,31 @@ BrowseSafe, a public corpus of synthetic web pages, as counts only. It holds no 
 |---|---:|---:|
 | The one that stopped pass 2 | 235 | 1.38% |
 | First fix, own tokens and URLs only | 82 | 0.48% |
-| This one | 7 | 0.04% |
+| This one | 18 | 0.11% |
 
-<GAP-DETECTOR-RECOUNT>
+The last row is the frozen classifier, `c79fd69519fb3813b11271c2a401d36d2a61ce55d80131cd3ccd9f0d3b86f324`.
+Its Wilson 95% interval is 0.07% to 0.17%. Of its 18 pages, 13 fired on an email, 4 on a fragment and 1
+on a long hex run. It fires on more pages than a draft at 7, because it reads domains that draft
+missed. Most of those fires are one timestamp-like shape in a corpus template. We left that shape in,
+because narrowing it would be tuning on the corpus, and it would miss valid names.
 
-The last row was written after reading the shapes behind the second, on the same corpus, so it is
-in-sample, and the real rate may be higher. Pass 3 should see about 3,350 2xx pages. At 0.04% that is
-about 1.4 fires, and about a 1 in 4 chance of none. So a tighter detector doesn't remove the problem. A
-run that ended at the first fire would still probably not finish, and a false fire in the last pilot
-round would leave no route to pass 3.
+Over the 7,031 records and 691,594 stored strings of pass 1, this classifier and the one that stopped
+pass 2 gave 0 label differences and 0 scrub differences. This one fired less on 1 string and more on
+none. In particular, none of the 2,387 pass 1 records with a stored error excerpt fired. Pass 1 stored
+few excerpts of normal pages, so that says little about them.
+
+**What was replayed on the stopped pass.** A replay at the first fix, classifier
+`280c4633f3d003371203957774b867889e596db9bd8b716f2e0e9c1fb49efbac`, flagged 0 of 188 records. It ran before
+the prune, and it is the only replay of that page text. Classifier `c79fd695...` has never read that
+text, and can't now. It did read what the prune left of pilot round 1 and the stopped pass, 238 records
+with no page or error text, and flagged 0. That covers stored fields such as headers and DNS records,
+and says nothing about page text.
+
+The last row's rules were written after reading the shapes behind the second, on the same corpus, so it
+is in-sample, and the real rate may differ. Pass 3 should see about 3,350 2xx pages. At 0.11% that is
+about 3.5 fires, and about a 3% chance of none. So a tighter detector doesn't remove the problem. A run
+that ended at the first fire would almost certainly not finish, and a false fire in the last pilot round
+would leave no route to pass 3.
 
 ### Withheld text
 
