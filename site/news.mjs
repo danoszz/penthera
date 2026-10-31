@@ -36,7 +36,7 @@ const VIEWS = {
   articles: { href: "/blog", chip: "Articles", word: "BLOG", view: "blog", h1: "Blog", title: "Blog: how Penthera is built and measured", description: "Posts on how Penthera is built and measured, with the data behind every number." },
   release: { href: "/news?kind=release", chip: "Releases", word: "SHIP", view: "release", kind: "release", h1: "Releases", title: "Releases" },
   lesson: { href: "/news?kind=lesson", chip: "Lessons", word: "WARN", view: "lesson", kind: "lesson", h1: "Incident lessons", title: "Incident lessons" },
-  benchmark: { href: "/news?kind=benchmark", chip: "Benchmarks", word: "RANK", view: "benchmark", kind: "benchmark", h1: "Benchmarks", title: "Benchmarks" },
+  benchmark: { href: "/benchmarks", chip: "Benchmarks", word: "RANK", view: "benchmark", kind: "benchmark", h1: "Benchmarks", title: "Benchmarks" },
 };
 
 const KIND = { Study: ["research", "Research"], Result: ["research", "Research"], "Case study": ["lesson", "Incident lesson"], Benchmark: ["benchmark", "Benchmark"], Release: ["release", "Release"], Post: ["article", "Article"] };
@@ -63,13 +63,15 @@ function row(e, i, posts) {
       </li>`;
 }
 
+/** The row of chips, on every page of the hub and on /benchmarks. */
+export const hubChips = (key, blog = true) => `    <nav class="hub-chips" aria-label="Show">${Object.entries(VIEWS).filter(([k]) => blog || k !== "articles").map(([k, c]) => `<a class="hub-chip" href="${c.href}" data-chip="${k}" data-word="${c.word}" data-view="${c.view}" data-h1="${esc(c.h1)}"${c.kind ? ` data-kind="${c.kind}"` : ""}${k === key ? ' aria-current="page"' : ""}>${c.chip}</a>`).join("")}</nav>`;
+
 /** A view of the hub, as a whole page. */
 export function hubHtml(key, entries, { origin, styles, foot, script, posts, feature = "" }) {
   const v = VIEWS[key];
   const rows = entries.filter((e) => (key === "all" ? e.status !== "Draft" : key === "research" ? e.type !== "Release" && e.type !== "Benchmark" : e.type === "Post"));
   const statuses = ["Registered", "Running", "Result", "Draft"].map((s) => [s, rows.filter((e) => e.status === s).length]).filter(([, n]) => n);
-  const chips = Object.entries(VIEWS).map(([k, c]) => `<a class="hub-chip" href="${c.href}" data-chip="${k}" data-word="${c.word}" data-view="${c.view}" data-h1="${esc(c.h1)}"${c.kind ? ` data-kind="${c.kind}"` : ""}${k === key ? ' aria-current="page"' : ""}>${c.chip}</a>`).join("");
-  const body = `    <nav class="hub-chips" aria-label="Show">${chips}</nav>
+  const body = `${hubChips(key, posts.length > 0)}
 ${key === "research" ? `    <p class="hub-purpose">${smart(esc(PURPOSE))}</p>
     <nav class="hub-status" aria-label="Status">${statuses.map(([s, n]) => `<a href="/research?status=${s.toLowerCase()}" data-status="${s.toLowerCase()}">${s} ${n}</a>`).join("")}</nav>
     <form class="hub-search" action="/research" role="search"><label class="sr" for="hub-q">Search the research</label><input id="hub-q" name="q" type="search" placeholder="Search"></form>

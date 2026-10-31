@@ -209,7 +209,7 @@ const fastext = (keys) => `    <nav class="ttx-keys" aria-label="More pages">${k
 /** A post's page number. The oldest is P101, so a new post never renumbers the others. */
 const pageNumbers = (posts) => new Map(posts.map((p, i) => [p.slug, `P${100 + posts.length - i}`]));
 
-function page({ title, description, url, path, h1, crumb, ld, body, styles, theme, foot = siteFooter(), draft = false, type = "article", feed = true, number = "P100", bar = "Penthera blog", dateline = "", mast = false, article = !mast, script = "", mastHtml = "", view = "", headScript = "" }) {
+function page({ title, description, url, path, h1, crumb, ld, body, styles, theme, foot = siteFooter(), draft = false, type = "article", feed = true, number = "P100", bar = "Penthera blog", dateline = "", mast = false, article = !mast, script = "", mastHtml = "", view = "", headScript = "", image = "", headline = false, main = "" }) {
   return `<!doctype html>
 <html lang="en" data-theme="light" data-paper${view ? ` data-view="${view}"` : ""}>
 <head>
@@ -226,16 +226,21 @@ ${feed ? '  <link rel="alternate" type="application/atom+xml" href="/blog/feed.x
   <meta property="og:description" content="${esc(description)}">
   <meta property="og:type" content="${type}">
   <meta property="og:url" content="${url}">
-  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+${image ? `  <meta property="og:image" content="${image}">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:image" content="${image}">
+` : ""}  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="${styles}">
   <script src="${theme}"></script>
 ${script ? `  <script src="${script}" defer></script>\n` : ""}${headScript ? `  <script src="${headScript}"></script>\n` : ""}  ${ld}
 </head>
 <body>
   <p class="ttx-bar"><span class="ttx-page">${number}</span><span>${bar}</span><span class="ttx-date">${dateline}</span></p>
-  <main class="terms land blog${article ? " with-margin" : ""}" id="main">
+  <main class="terms land blog${main ? ` ${main}` : ""}${article ? " with-margin" : ""}" id="main">
 ${draft ? '    <p class="blog-draft">Draft: not approved, not listed and not indexed.</p>\n' : ""}    <nav class="eyebrow ttx-crumbs" aria-label="Breadcrumb">${crumb}</nav>
-    <h1>${mast ? `${mastHtml || mosaic()}<span class="sr">${esc(h1)}</span>` : smart(esc(h1))}</h1>
+    <h1>${mast ? `${mastHtml || mosaic()}<span class="${headline ? "paper-head" : "sr"}">${headline ? smart(esc(h1)) : esc(h1)}</span>` : smart(esc(h1))}</h1>
 ${body}
   </main>
   ${foot}

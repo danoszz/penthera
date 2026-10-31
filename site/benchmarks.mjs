@@ -13,7 +13,8 @@
  * prose here holds no numbers: the limits are words, and anything counted is
  * read from the file.
  */
-import { mosaic } from "./news.mjs";
+import { hubChips, mosaic } from "./news.mjs";
+import { paperPage } from "./blog.mjs";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -323,51 +324,36 @@ const crumbs = (origin, items) => ({
 
 
 /** The <head> and frame every benchmark page shares (the landing-page frame). */
-function frame({ title, description, path, h1, crumb, ld, body, origin, styles, theme, image, foot }) {
-  const url = `${origin}${path}`;
-  return `<!doctype html>
-<html lang="en" data-view="benchmark">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>${esc(title)} · Penthera</title>
-  <meta name="description" content="${esc(description)}">
-  <meta name="color-scheme" content="dark light">
-  <link rel="canonical" href="${url}">
-  <link rel="alternate" type="text/markdown" href="${path}.md">
-  <meta property="og:site_name" content="Penthera">
-  <meta property="og:title" content="${esc(h1)}">
-  <meta property="og:description" content="${esc(description)}">
-  <meta property="og:type" content="article">
-  <meta property="og:url" content="${url}">
-  <meta property="og:image" content="${image}">
-  <meta property="og:image:width" content="1200">
-  <meta property="og:image:height" content="630">
-  <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:image" content="${image}">
-  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="${styles}">
-  <script src="${theme}"></script>
-  <script src="/hub.js"></script>
-  ${ld}
-</head>
-<body>
-  <main class="terms land bm" id="main">
-    <nav class="eyebrow" aria-label="Breadcrumb">${crumb}</nav>
-    ${mosaic("RANK")}
-    <h1>${esc(h1)}</h1>
-${body}
-  </main>
-  ${foot}
-</body>
-</html>
-`;
+/** One page, on the same paper as the news hub, with its chips under the mast. */
+function frame({ title, description, path, h1, crumb, ld, body, origin, styles, theme, image, foot, pub, number, blog = true, script = "/hub.js" }) {
+  return paperPage({ title, description, url: `${origin}${path}`, path, h1, crumb, ld, body: `${hubChips("benchmark", blog)}\n${body}`, styles, theme, foot, type: "article", feed: false, number, bar: "Penthera benchmarks", dateline: longDate(pub.date), mast: true, mastHtml: mosaic("RANK"), view: "benchmark", headScript: script, image, headline: true, main: "bm" });
 }
+
+/** The answer and what to read before the numbers: side by side when both are short. */
+const opening = (answerText, limits, long = false) => `    <div class="bm-open${long ? " is-long" : ""}">
+      <p class="bm-answer">${answerText}</p>
+      <aside class="bm-limits" aria-labelledby="limits">
+        <h2 id="limits">Read this before the numbers</h2>
+        <ul>
+${limits.map((l) => `          <li>${l}</li>`).join("\n")}
+        </ul>
+      </aside>
+    </div>`;
+
+/** A scoreboard card: Penthera's place, every ranked tool, and the sentence that goes with them. */
+const boardCard = (v) => `      <li class="bm-card${v.us.rank === 1 ? "" : " is-behind"}">
+        <h3><a href="/benchmarks/${v.c.slug}">${esc(v.c.label)}</a></h3>
+        <p class="bm-set">${esc(v.c.dataset.short)}</p>
+        <p class="bm-rank"><span>${ord(v.us.rank)}</span> of ${v.b.of}</p>
+        <p class="bm-range">${esc((tiedPhrase(v.iv) || (v.close ? ", within the margin of error" : "")).replace(/^, /, "")) || "&nbsp;"}</p>
+        <ol class="pb-chart" aria-label="${esc(v.c.scoreName)}, every ranked tool">${bars(v)}</ol>
+        <p class="bm-line">${esc(rankingLine(v))}.</p>
+      </li>`;
 
 const description = (v) => `${v.c.label}: Penthera ranked ${ord(v.us.rank)} of ${v.b.of} free tools${tiedPhrase(v.iv)} on ${v.c.dataset.short}${v.close && !tiedPhrase(v.iv) ? ", within the margin of error" : ""}. Every score, interval and limit.`;
 
 /** One benchmark page. */
-export function benchmarkHtml(key, pub, { origin, styles = "/styles.css", theme = "/theme.js", image, foot = siteFooter() }) {
+export function benchmarkHtml(key, pub, { origin, styles = "/styles.css", theme = "/theme.js", image, foot = siteFooter(), blog = true }) {
   const v = view(key, pub.benchmarks[key]);
   const path = `/benchmarks/${v.c.slug}`;
   const better = betterThanUs(v);
@@ -379,13 +365,7 @@ export function benchmarkHtml(key, pub, { origin, styles = "/styles.css", theme 
     ...fieldNotes(v.key, v.b).map(esc),
     `Median score of the other free tools: ${n2(v.b.others[v.key === "secrets" ? "f1" : v.key === "library" ? "r" : "j"].median)}.`,
   ];
-  const body = `    <p class="bm-answer">${esc(answer(v, pub))}</p>
-    <aside class="bm-limits" aria-labelledby="limits">
-      <h2 id="limits">Read this before the numbers</h2>
-      <ul>
-${[...v.c.limits, ...COMMON_LIMITS].map((l) => `        <li>${esc(l)}</li>`).join("\n")}
-      </ul>
-    </aside>
+  const body = `${opening(esc(answer(v, pub)), [...v.c.limits, ...COMMON_LIMITS].map(esc), true)}
     <h2>${esc(v.c.question)}</h2>
     <p>${esc(rankingLine(v))}. Scored by ${esc(v.b.measure)}.</p>
     <figure class="bm-fig">
@@ -398,29 +378,43 @@ ${table(v)}
     <ul class="bm-notes">
 ${notes.map((n) => `      <li>${n}</li>`).join("\n")}
     </ul>
+    <div class="bm-sections">
+    <section>
     <h2>Not ranked, and why</h2>
     <ul>
 ${v.unranked.map((r) => `      <li>${esc(name(r))}: ${esc(unrankedReason(r))}. Score ${n2(r.score)}.</li>`).join("\n")}
     </ul>
+    </section>
+    <section>
     <h2>Where another tool does better than Penthera</h2>
 ${better.length ? `    <ul>
 ${better.map((x) => `      <li>${esc(x.measure)}: ${esc(said(x.tool))} ${n2(x.theirs)}, Penthera ${n2(x.ours)}. Overall, ${esc(x.tool.tool)} scored ${n2(x.overall)}.</li>`).join("\n")}
     </ul>` : "    <p>On no single measure here.</p>"}
+    </section>
+    <section>
     <h2>Tools that are not here</h2>
     <p>Paid tools (${esc(pub.paidTools.names.join(", "))}) are not here. ${esc(pub.paidTools.note)}${v.b.skipped ? ` Skipped: ${Object.entries(v.b.skipped).map(([t, why]) => `${esc(t)} (${esc(why)})`).join("; ")}.` : ""}</p>
+    </section>
+    <section>
     <h2>Published elsewhere, on other data</h2>
     <ul>
 ${v.b.context.map((c) => `      <li><a href="${esc(c.url)}">${esc(c.title)}</a></li>`).join("\n")}
     </ul>
     <p>Not comparable with the numbers above: other datasets, other scoring.</p>
+    </section>
+    <section>
     <h2>Check it yourself</h2>
     <p>The dataset is <a href="${esc(v.c.dataset.url)}">${esc(v.c.dataset.name)}</a>. The ranking rules were written down before the run: <a href="${PROTOCOL}">the protocol</a>. Every number on this page is read from <a href="${BLOB}/bench/public/published.json">published.json</a> when the site is built; <a href="${BLOB}/bench/public/RESULTS.md">the results file</a> has the method and per-family detail, and <a href="${BLOB}/bench/public/README.md">the runner's README</a> says how to reproduce it.</p>
-    <p>Measured on <time datetime="${pub.date}">${longDate(pub.date)}</time>. ${esc(pub.note)} <a href="/benchmarks">All four benchmarks</a>.</p>`;
+    <p>Measured on <time datetime="${pub.date}">${longDate(pub.date)}</time>. ${esc(pub.note)} <a href="/benchmarks">All four benchmarks</a>.</p>
+    </section>
+    </div>
+    <nav class="ttx-keys" aria-label="More pages"><a href="/benchmarks">All four benchmarks</a><a href="${BLOB}/bench/public/published.json">published.json</a><a href="${path}.md">Markdown copy</a></nav>`;
   const ld = ldScript([datasetLd(v, pub, origin), crumbs(origin, [["Penthera", "/"], ["Benchmarks", "/benchmarks"], [v.c.label, path]])]);
   return frame({
-    title: v.c.title(v.b), description: description(v), path, h1: v.c.h1(v.b), origin, styles, theme, ld, body, foot,
+    title: v.c.title(v.b), description: description(v), path, h1: v.c.h1(v.b), origin, styles, theme, ld, body, foot, pub, blog,
+    number: `P${201 + Object.keys(pub.benchmarks).indexOf(key)}`,
     image: image || `${origin}/media/social/og-plain.png`,
-    crumb: `<a href="/">Penthera</a> · <a href="/benchmarks">Benchmarks</a> · ${esc(v.c.label)}`,
+    crumb: `<a class="tag" data-f="4" data-c="0" data-t="0" href="/">Penthera</a><a class="tag" data-f="4" data-c="0" data-t="0" href="/benchmarks">Benchmarks</a><span class="tag" data-f="3" data-c="0" data-t="0">${esc(v.c.label)}</span>`,
   });
 }
 
@@ -430,43 +424,37 @@ export function benchmarkViews(pub) {
 }
 
 /** The hub, /benchmarks. */
-export function hubHtml(pub, { origin, styles = "/styles.css", theme = "/theme.js", image, foot = siteFooter() }) {
+export function hubHtml(pub, { origin, styles = "/styles.css", theme = "/theme.js", image, foot = siteFooter(), blog = true }) {
   const views = benchmarkViews(pub);
   const n = fieldTools(pub);
-  const rows = views.map((v) => `<tr><th scope="row"><a href="/benchmarks/${v.c.slug}">${esc(v.c.label)}</a> <span class="bm-ver">${esc(v.c.dataset.short)}</span></th><td>${ord(v.us.rank)} of ${v.b.of}${tiedPhrase(v.iv) || (v.close ? ", within the margin of error" : "")}</td><td>${n2(v.us.score)}</td><td>${esc(said(v.top === v.us ? v.ranked[1] : v.top))} ${n2((v.top === v.us ? v.ranked[1] : v.top).score)}</td><td>${esc(v.c.scoreName)}</td></tr>`).join("\n");
-  const body = `    <p class="bm-answer">Penthera and ${n} free open-source security tools, scored the same way on four public datasets other people built. On the sealed half of each, ${views.map((v) => `${ordRankPhrase(v)} on ${v.c.label.toLowerCase()}`).join("; ")}. Measured on ${longDate(pub.date)}.</p>
-    <aside class="bm-limits" aria-labelledby="limits">
-      <h2 id="limits">Read this before the numbers</h2>
-      <ul>
-${COMMON_LIMITS.map((l) => `        <li>${esc(l)}</li>`).join("\n")}
-        <li>Each benchmark page lists its own limits, every tool that was not ranked and why, and where another tool does better than Penthera.</li>
-      </ul>
-    </aside>
-    <h2>How does Penthera rank against the free tools?</h2>
-    <div class="cmp-scroll" role="region" aria-label="The four rankings" tabindex="0"><table class="bm-table"><thead><tr><th scope="col">Benchmark</th><th scope="col">Penthera's rank</th><th scope="col">Penthera's score</th><th scope="col">Top other free tool</th><th scope="col">Scored by</th></tr></thead>
-<tbody>
-${rows}
-</tbody></table></div>
-    <ul class="bm-hub">
-${views.map((v) => `      <li><a href="/benchmarks/${v.c.slug}">${esc(v.c.h1(v.b))}</a><span>${esc(rankingLine(v))}.</span></li>`).join("\n")}
-    </ul>
+  const body = `${opening(`Four public datasets other people built, scored the same way. Penthera ${esc(views[0].us.version)} against free tools, on the sealed half of each. Measured on ${longDate(pub.date)}.`, [...COMMON_LIMITS.map(esc), "Each benchmark page lists its own limits, every tool that was not ranked and why, and where another tool does better than Penthera."])}
+    <h2 class="bm-q">How does Penthera rank against the free tools?</h2>
+    <ol class="bm-board">
+${views.map(boardCard).join("\n")}
+    </ol>
+    <div class="bm-sections">
+    <section>
     <h2>How the benchmarks were run</h2>
     <p>Each dataset was split in half before any tuning. Penthera was improved on one half, the dev half, and scored once on the other, sealed half. The scoring and ranking rules were registered before that run: <a href="${PROTOCOL}">the protocol</a>. Every tool ran offline, on its defaults. A rank is given only where at least five other free tools were measured.</p>
     <p>Paid tools (${esc(pub.paidTools.names.join(", "))}) are not here. ${esc(pub.paidTools.note)}</p>
+    </section>
+    <section>
     <h2>Check it yourself</h2>
     <p>Every number on these pages is read from <a href="${BLOB}/bench/public/published.json">published.json</a> when the site is built. <a href="${BLOB}/bench/public/RESULTS.md">The results file</a> has the method, the leakage audit and per-family detail; <a href="${BLOB}/bench/public/README.md">the runner's README</a> says how to reproduce each run. The bundled benchmark in <a href="${BLOB}/bench/RESULTS.md">bench/RESULTS.md</a> is different: small labs we wrote ourselves, which catch regressions and do not measure accuracy.</p>
-    <p>Measured on <time datetime="${pub.date}">${longDate(pub.date)}</time>. ${esc(pub.note)}</p>`;
+    <p>Measured on <time datetime="${pub.date}">${longDate(pub.date)}</time>. ${esc(pub.note)}</p>
+    </section>
+    </div>
+    <nav class="ttx-keys" aria-label="More pages"><a href="/research">Research</a><a href="${BLOB}/bench/public/published.json">published.json</a><a href="/benchmarks.md">Markdown copy</a></nav>`;
   const ld = ldScript([hubDatasetLd(pub, origin, views), crumbs(origin, [["Penthera", "/"], ["Benchmarks", "/benchmarks"]])]);
   return frame({
     title: `Security tool benchmarks: Penthera and ${n} free tools on four public datasets`,
     description: `Penthera and ${n} free security tools on four public datasets: secrets, npm and PyPI malware, JavaScript injection. Every score, interval, loss and limit.`,
-    path: "/benchmarks", h1: `Penthera and ${n} free security tools, on four public benchmarks`, origin, styles, theme, ld, body, foot,
+    path: "/benchmarks", h1: `Penthera and ${n} free security tools, on four public benchmarks`, origin, styles, theme, ld, body, foot, pub, blog, number: "P200",
     image: image || `${origin}/media/social/og-plain.png`,
-    crumb: `<a href="/">Penthera</a> · Benchmarks`,
+    crumb: `<a class="tag" data-f="4" data-c="0" data-t="0" href="/">Penthera</a><span class="tag" data-f="3" data-c="0" data-t="0">Benchmarks</span>`,
   });
 }
 
-const ordRankPhrase = (v) => `${ord(v.us.rank)} of ${v.b.of}${tiedPhrase(v.iv) ? ` (${tiedPhrase(v.iv).slice(2)})` : v.close ? " (within the margin of error)" : ""}`;
 
 // ── Markdown, for agents ────────────────────────────────────────────────────
 
