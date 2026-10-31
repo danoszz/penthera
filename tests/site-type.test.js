@@ -13,6 +13,7 @@ describe("type system", () => {
   it("uses tokens for every font size, or a size relative to its parent", () => {
     const raw = [...rules.matchAll(/font-size:\s*([^;}]+)/g)].map((m) => m[1].trim()).filter((v) => !/^(var\(--t-|inherit$|[\d.]+em$)/.test(v));
     expect(raw).toEqual([]);
+    expect(rules).not.toMatch(/[\s{;]font:\s*\d/);
   });
 
   it("uses tokens for line height and letter spacing", () => {

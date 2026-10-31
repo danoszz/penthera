@@ -81,5 +81,5 @@ ${BREAKS.map(([rule, why]) => `      <li><h3>${rule}</h3><p>${why}</p></li>`).jo
     </ol>`;
   return paperPage({ title: "Type system", description: "The scale, faces and rules behind every page of penthera.org, adapted from The Elements of Typographic Style.",
     url: `${origin}/type`, path: "/type", h1: "Type system", ld: "", body, styles, theme: "/theme.js", foot, type: "website", feed: false, article: false, number: "P900", bar: "Penthera type",
-    crumb: '<a class="tag" href="/">Penthera</a><span class="tag">Type</span>' });
+    crumb: '<a class="tag" data-f="4" data-c="0" data-t="0" href="/">Penthera</a><span class="tag" data-f="3" data-c="0" data-t="0">Type</span>' });
 }

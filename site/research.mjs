@@ -282,7 +282,7 @@ export function researchEntries({ root, pub = null, posts = [], preregDir = join
 const statusClass = (s) => `rs-status is-${s.toLowerCase()}`;
 
 /** The featured card: the public benchmark, each rank with its interval. */
-function featured(pub) {
+export function featured(pub) {
   if (!pub?.benchmarks) return "";
   const views = benchmarkViews(pub);
   const rows = views.map((v) => `          <li class="rs-rank-row">

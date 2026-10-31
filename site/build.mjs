@@ -33,11 +33,11 @@ import { termsPage, docPage } from "./terms.mjs";
 import { publicBenchHtml } from "./public-bench.mjs";
 import { readPosts, blogFiles } from "./blog.mjs";
 import { typeHtml, typeMarkdown } from "./type.mjs";
-import { hubHtml as newsHub, releases } from "./news.mjs";
+import { hubHtml as newsHub, hubMarkdown as newsMarkdown, hubFeed as newsFeed, releases } from "./news.mjs";
 import { siteFooter, siteRail, smart, stickers, footGroups } from "./frame.mjs";
 import { benchmarkHtml, benchmarkMarkdown, benchmarkViews, cardFor, fieldTools, hubHtml, hubMarkdown } from "./benchmarks.mjs";
 import { cardRows, rowTag } from "./check/card.js";
-import { researchEntries, researchHtml, researchMarkdown } from "./research.mjs";
+import { featured, researchEntries, researchHtml, researchMarkdown } from "./research.mjs";
 
 const SITE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(SITE, "..");
@@ -497,7 +497,7 @@ export async function buildSite({ out = join(SITE, "dist"), engine, blogDir = jo
   if (engine) await bundle(join(SITE, "check", "engine.js"), resolve(engine), { minify: false });
 
   // Static files, as they are.
-  for (const f of ["styles.css", "theme.js", "track.js", "pro.js", "gopro.js", "research.js", "blog.js"]) cpSync(join(SITE, f), join(OUT, f));
+  for (const f of ["styles.css", "theme.js", "track.js", "pro.js", "gopro.js", "research.js", "blog.js", "hub.js"]) cpSync(join(SITE, f), join(OUT, f));
   // The IndexNow key file, served at /<key>.txt (scripts/indexnow.mjs).
   for (const f of readdirSync(SITE).filter((n) => /^[0-9a-f]{32}\.txt$/.test(n))) cpSync(join(SITE, f), join(OUT, f));
   cpSync(join(SITE, "media"), join(OUT, "media"), { recursive: true });
@@ -623,12 +623,15 @@ export async function buildSite({ out = join(SITE, "dist"), engine, blogDir = jo
 
   // The hub prototype: one template, three real pages (site/news.mjs).
   if (process.env.PENTHERA_HUB) {
-    cpSync(join(SITE, "hub.js"), join(OUT, "hub.js"));
     const script = `/hub.js?v=${hash(readFileSync(join(OUT, "hub.js")))}`;
     const bench = pub?.benchmarks ? benchmarkViews(pub).map((v) => ({ date: pub.date, type: "Benchmark", title: v.c.label || v.c.slug, summary: "Every tool, every interval, on the sealed half.", href: `/benchmarks/${v.c.slug}` })) : [];
     const all = [...research, ...bench, ...releases(ROOT)].sort((a, z) => (z.date || "").localeCompare(a.date || ""));
-    const hub = (k) => newsHub(k, all, { origin: ORIGIN, styles, foot, script, posts: posts.published });
+    const hub = (k) => newsHub(k, all, { origin: ORIGIN, styles, foot, script, posts: posts.published, feature: featured(pub) });
     writeFileSync(join(OUT, "news.html"), hub("all"));
+    writeFileSync(join(OUT, "news.md"), newsMarkdown(all, { origin: ORIGIN }));
+    mkdirSync(join(OUT, "news"), { recursive: true });
+    writeFileSync(join(OUT, "news", "feed.xml"), newsFeed(all, { origin: ORIGIN }));
+    writeFileSync(join(OUT, "news", "index.html"), hub("all"));
     writeFileSync(join(OUT, "research.html"), hub("research"));
     writeFileSync(join(OUT, "blog.html"), hub("articles"));
     writeFileSync(join(OUT, "blog", "index.html"), hub("articles"));

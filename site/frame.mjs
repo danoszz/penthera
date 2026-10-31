@@ -87,6 +87,23 @@ export function smart(html) {
 }
 
 /**
+ * A reading page's body: contents in the margin, the text in the reading
+ * column. Articles, terms, trust and landing pages share it, so text sits in
+ * the same place everywhere. site/blog.js marks the section being read. The
+ * "who is this page for" line stays in the Markdown copy, for agents and
+ * contributors; a reader on the page doesn't need it unless `question` is set.
+ */
+export function reading(page, { question = false } = {}) {
+  const html = question ? page : page.replace(/^\s*<p class="terms-for">.*?<\/p>\n?/, "");
+  const sections = [...html.matchAll(/<h2 id="([^"]+)">(.*?)<\/h2>/g)].map(([, id, text]) => `<li><a href="#${id}">${text}</a></li>`);
+  const toc = sections.length > 2 ? `<nav class="paper-toc" aria-label="On this page"><ol>${sections.join("")}</ol></nav>` : "";
+  return `    <aside class="paper-side" aria-label="On this page">${toc}</aside>
+    <div class="paper-body">
+${html}
+    </div>`;
+}
+
+/**
  * Stickers: every tag and eyebrow gets a finish, a cut and now and then a small
  * tilt from the page and its place on it, so a page never changes between
  * builds. A tag that already has a finish keeps it: a category always looks the

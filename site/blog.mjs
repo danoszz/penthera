@@ -233,7 +233,7 @@ ${script ? `  <script src="${script}" defer></script>\n` : ""}${headScript ? `  
 </head>
 <body>
   <p class="ttx-bar"><span class="ttx-page">${number}</span><span>${bar}</span><span class="ttx-date">${dateline}</span></p>
-  <main class="terms land blog${article ? " blog-post" : ""}" id="main">
+  <main class="terms land blog${article ? " with-margin" : ""}" id="main">
 ${draft ? '    <p class="blog-draft">Draft: not approved, not listed and not indexed.</p>\n' : ""}    <nav class="eyebrow ttx-crumbs" aria-label="Breadcrumb">${crumb}</nav>
     <h1>${mast ? `${mastHtml || mosaic()}<span class="sr">${esc(h1)}</span>` : smart(esc(h1))}</h1>
 ${body}
@@ -292,7 +292,7 @@ ${fastext([["/blog", "All posts"], next ? [`/blog/${next.slug}`, `${next.number}
     itemListElement: [["Penthera", "/"], ["Blog", "/blog"], [p.title, path]].map(([n, u], i) => ({ "@type": "ListItem", position: i + 1, name: n, item: `${origin}${u}` })),
   }]);
   return page({ title: p.title, description: p.description, url, path, h1: p.title, ld, body, styles, theme, script, foot, draft: !p.approved, number, dateline: longDate(p.date),
-    crumb: `<a class="tag" href="/">Penthera</a><a class="tag" href="/blog">Blog</a>${categoryTag(p)}` });
+    crumb: `<a class="tag" data-f="4" data-c="0" data-t="0" href="/">Penthera</a><a class="tag" data-f="4" data-c="0" data-t="0" href="/blog">Blog</a>${categoryTag(p)}` });
 }
 
 /** One post as Markdown, for agents. */

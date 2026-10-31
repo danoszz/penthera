@@ -24,7 +24,7 @@ const GLYPHS = {
 };
 const lit = (word, col, row) => col % 6 !== 5 && GLYPHS[word[Math.floor(col / 6)]].split(" ")[row][col % 6] === "1";
 
-const mosaic = (word) => {
+export const mosaic = (word) => {
   const cells = [];
   for (let y = 0; y < 7; y++) for (let x = 0; x < 23; x++) cells.push(`<rect x="${x}" y="${y}" width="1" height="1" class="r${y}${lit(word, x, y) ? " on" : ""}"/>`);
   return `<svg class="ttx-title" viewBox="0 0 23 7" preserveAspectRatio="none" aria-hidden="true" data-word="${word}" data-glyphs="${esc(JSON.stringify(GLYPHS))}">${cells.join("")}</svg>`;
@@ -56,7 +56,7 @@ function row(e, i, posts) {
   const away = /^https?:/.test(e.href);
   const meta = [label, e.status, e.id, shortDate(e.date), away ? "GitHub ↗" : ""].filter(Boolean).map(esc).join(" · ");
   const shown = post && post.category === "Benchmark" ? "benchmark" : kind;
-  return `      <li class="hub-row${fig ? " hub-article" : ""}" data-kind="${shown}" data-status="${esc((e.status || "").toLowerCase())}" data-id="r${esc((e.id || e.href).replace(/[^\w]+/g, "-"))}">
+  return `      <li class="hub-row${fig ? " hub-article" : ""}" data-kind="${shown}" data-status="${esc((e.status || "").toLowerCase())}" data-type="${esc(e.type.toLowerCase().replace(/\s+/g, "-"))}" data-id="r${esc((e.id || e.href).replace(/[^\w]+/g, "-"))}">
         <p class="hub-meta">${meta}</p>
         <h2><a href="${esc(e.href)}"${away ? ' rel="noopener"' : ""}>${smart(esc(e.headline || e.title))}</a></h2>
         ${fig ? `<img src="/blog/figures/${fig[0]}" width="${fig[1].width}" height="${fig[1].height}" alt="" loading="lazy">` : ""}
@@ -65,18 +65,42 @@ function row(e, i, posts) {
 }
 
 /** A view of the hub, as a whole page. */
-export function hubHtml(key, entries, { origin, styles, foot, script, posts }) {
+export function hubHtml(key, entries, { origin, styles, foot, script, posts, feature = "" }) {
   const v = VIEWS[key];
   const rows = entries.filter((e) => (key === "all" ? e.status !== "Draft" : key === "research" ? e.type !== "Release" && e.type !== "Benchmark" : e.type === "Post"));
   const statuses = ["Registered", "Running", "Result", "Draft"].map((s) => [s, rows.filter((e) => e.status === s).length]).filter(([, n]) => n);
   const chips = Object.entries(VIEWS).map(([k, c]) => `<a class="hub-chip" href="${c.href}" data-chip="${k}" data-word="${c.word}" data-view="${c.view}" data-h1="${esc(c.h1)}"${c.kind ? ` data-kind="${c.kind}"` : ""}${k === key ? ' aria-current="page"' : ""}>${c.chip}</a>`).join("");
   const body = `    <nav class="hub-chips" aria-label="Show">${chips}</nav>
 ${key === "research" ? `    <p class="hub-purpose">Rules decide. Every study is registered before it runs, and every change is dated.</p>
-    <nav class="hub-status" aria-label="Status">${statuses.map(([s, n]) => `<a href="/research?status=${s.toLowerCase()}" data-status="${s.toLowerCase()}">${s} ${n}</a>`).join("")}</nav>\n` : ""}    <ul class="hub-list">
+    <nav class="hub-status" aria-label="Status">${statuses.map(([s, n]) => `<a href="/research?status=${s.toLowerCase()}" data-status="${s.toLowerCase()}">${s} ${n}</a>`).join("")}</nav>
+    <form class="hub-search" action="/research" role="search"><label class="sr" for="hub-q">Search the research</label><input id="hub-q" name="q" type="search" placeholder="Search"></form>
+    <div class="rs">${feature}</div>\n` : ""}    <ul class="hub-list">
 ${rows.map((e, i) => row(e, i, posts)).join("\n")}
     </ul>
     <p class="hub-none" hidden>Nothing here yet.</p>`;
   return paperPage({ title: v.title, description: v.description, url: `${origin}${v.href}`, path: v.href, h1: v.h1, ld: "", body, styles, theme: "/theme.js", foot, type: "website", mast: true,
     mastHtml: mosaic(v.word), view: v.view, headScript: script, number: "P100", bar: "Penthera news", dateline: "",
-    crumb: `<a class="tag" href="/">Penthera</a><span class="tag">${esc(v.chip === "All" ? "News" : v.chip)}</span>` });
+    crumb: `<a class="tag" data-f="4" data-c="0" data-t="0" href="/">Penthera</a><span class="tag" data-f="3" data-c="0" data-t="0">${esc(v.chip === "All" ? "News" : v.chip)}</span>` });
+}
+
+/** /news as Markdown, for agents: every row, with kind and status in words. */
+export function hubMarkdown(entries, { origin }) {
+  const rows = entries.filter((e) => e.status !== "Draft").map((e) => `- [${e.headline || e.title}](${e.href.startsWith("/") ? origin + e.href : e.href}) (${[KIND[e.type]?.[1] || e.type, e.status, e.date].filter(Boolean).join(", ")}): ${e.summary}`);
+  return `# Penthera news\n\n> What changed at Penthera, and what does it mean for me?\n\n${rows.join("\n")}\n`;
+}
+
+/** The Atom feed of /news: all kinds except Drafts. */
+export function hubFeed(entries, { origin }) {
+  const xml = (s) => esc(s).replace(/&#39;/g, "'");
+  const rows = entries.filter((e) => e.status !== "Draft" && e.date);
+  return `<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Penthera news</title>
+  <id>${origin}/news</id>
+  <link rel="alternate" type="text/html" href="${origin}/news"/>
+  <link rel="self" type="application/atom+xml" href="${origin}/news/feed.xml"/>
+  <updated>${rows[0]?.date || "1970-01-01"}T00:00:00Z</updated>
+${rows.map((e) => `  <entry><title>${xml(e.headline || e.title)}</title><id>${xml(e.href.startsWith("/") ? origin + e.href : e.href)}</id><link href="${xml(e.href.startsWith("/") ? origin + e.href : e.href)}"/><updated>${e.date}T00:00:00Z</updated><summary>${xml(e.summary)}</summary></entry>`).join("\n")}
+</feed>
+`;
 }

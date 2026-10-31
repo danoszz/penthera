@@ -5,7 +5,7 @@
  * rows so the browser's view transition can carry them across. No dependencies,
  * tracking or fetches; only the last word is kept, for this tab.
  */
-/* global document, location, matchMedia, requestAnimationFrame, window */
+/* global document, history, location, matchMedia, requestAnimationFrame, window */
 (function () {
   "use strict";
 
@@ -18,18 +18,16 @@
 
   function filter() {
     var q = new URLSearchParams(location.search);
-    var kind = q.get("kind"), status = q.get("status");
+    var kind = q.get("kind"), status = q.get("status"), type = q.get("type"), text = (q.get("q") || "").toLowerCase();
     var rows = Array.prototype.slice.call(document.querySelectorAll(".hub-row"));
-    if (kind || status) {
-      var shown = 0;
-      rows.forEach(function (r) {
-        var on = (!kind || r.dataset.kind === kind) && (!status || r.dataset.status === status);
-        r.hidden = !on;
-        if (on) shown += 1;
-      });
-      var none = document.querySelector(".hub-none");
-      if (none) none.hidden = shown > 0;
-    }
+    var shown = 0;
+    rows.forEach(function (r) {
+      var on = (!kind || r.dataset.kind === kind) && (!status || r.dataset.status === status) && (!type || r.dataset.type === type) && (!text || r.textContent.toLowerCase().indexOf(text) >= 0);
+      r.hidden = !on;
+      if (on) shown += 1;
+    });
+    var none = document.querySelector(".hub-none");
+    if (none) none.hidden = shown > 0;
     var chip = kind && document.querySelector('.hub-chip[data-kind="' + kind + '"]');
     if (chip) {
       document.querySelectorAll(".hub-chip[aria-current]").forEach(function (c) { c.removeAttribute("aria-current"); });
@@ -41,6 +39,21 @@
     }
     var link = status && document.querySelector('.hub-status [data-status="' + status + '"]');
     if (link) link.setAttribute("aria-current", "true");
+  }
+
+  // The search filters as you type, and keeps the query in the address.
+  function search() {
+    var box = document.getElementById("hub-q");
+    if (!box) return;
+    box.value = new URLSearchParams(location.search).get("q") || "";
+    box.addEventListener("input", function () {
+      var q = new URLSearchParams(location.search);
+      if (box.value) q.set("q", box.value);
+      else q.delete("q");
+      var rest = q.toString();
+      history.replaceState(null, "", location.pathname + (rest ? "?" + rest : ""));
+      filter();
+    });
   }
 
   function title() {
@@ -95,6 +108,7 @@
     if (done) return;
     done = true;
     filter();
+    search();
     title();
     name();
   }
