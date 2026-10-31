@@ -3,21 +3,21 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Penthera: your open-source cyber security agent</title>
-  <meta name="description" content="Penthera is an open-source, offline security agent for your apps and AI coding tools, benchmarked against {{BENCH_TOOLS}} free tools. Free quick scan, nothing stored.">
+  <title>Penthera: free security scanner and fixer for your app</title>
+  <meta name="description" content="Free, open-source security scanner and fixer for your app. It checks your AI setup too. Benchmarked against {{BENCH_TOOLS}} free tools.">
   <meta name="color-scheme" content="dark light">
   <meta name="theme-color" content="#000000">
   <link rel="canonical" href="{{SITE_URL}}/">
   {{JSONLD}}
   <meta property="og:site_name" content="Penthera">
-  <meta property="og:title" content="Penthera: your open-source cyber security agent">
-  <meta property="og:description" content="Is your site/app safe? Check it with a free cyber security quick scan, then fix it with your coding agent. Open source, passive, nothing stored.">
+  <meta property="og:title" content="Penthera: make your app more secure for free">
+  <meta property="og:description" content="Check your site or code before you publish, and fix what it can with your OK. Free and open source.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="{{SITE_URL}}/">
   <meta property="og:image" content="{{OG_IMAGE}}">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
-  <meta property="og:image:alt" content="Is your site/app safe? A Penthera quick scan of penthera.org: 95 out of 100, with Prompt to fix.">
+  <meta property="og:image:alt" content="Two chat bubbles on blue. yo is my app secure? check it before they wreck it. Penthera.">
   <!-- Share image and reel URLs carry a content hash (?v=), so link previews
        (X caches cards by URL for days) fetch a changed file at once. -->
   <!-- A muted reel for link previews that play video (iMessage and others);
@@ -30,10 +30,10 @@
   <meta property="og:video:width" content="1200">
   <meta property="og:video:height" content="630">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Penthera: your open-source cyber security agent">
-  <meta name="twitter:description" content="Is your site/app safe? Check it with a free cyber security quick scan, then fix it with your coding agent. Open source, passive, nothing stored.">
+  <meta name="twitter:title" content="Penthera: make your app more secure for free">
+  <meta name="twitter:description" content="Check your site or code before you publish, and fix what it can with your OK. Free and open source.">
   <meta name="twitter:image" content="{{OG_IMAGE}}">
-  <meta name="twitter:image:alt" content="Is your site/app safe? A Penthera quick scan of penthera.org: 95 out of 100, with Prompt to fix.">
+  <meta name="twitter:image:alt" content="Two chat bubbles on blue. yo is my app secure? check it before they wreck it. Penthera.">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="alternate" type="text/plain" href="/llms.txt" title="llms.txt: Penthera for language models">
   <link rel="preload" href="/fonts/DepartureMono-Regular.woff2" as="font" type="font/woff2" crossorigin>
@@ -55,7 +55,7 @@
 
   <header class="bar">
     <a class="brand" href="/"><span class="logotype" aria-hidden="true"></span><span class="sr">Penthera, home</span></a>
-    <p class="bar-status">Penthera {{VERSION}} · MIT · Runs offline · No cookies</p>
+    <p class="bar-status">Penthera {{VERSION}} · MIT · Code scans run offline · No cookies</p>
     <button class="theme glass" type="button" role="switch" aria-checked="true" aria-label="Dark theme" data-theme-toggle hidden>
       <span class="theme-track" aria-hidden="true"><span class="theme-knob"></span></span>
     </button>
@@ -65,7 +65,7 @@
     </a>
     <a class="download glass" href="#get">
       <svg class="download-glyph" viewBox="0 0 9 10" aria-hidden="true"><path d="M4 0h1v6h1V5h1V4h1v1H7v1H6v1H5v1H4V7H3V6H2V5H1V4h1v1h1v1h1zM0 9h9v1H0z"/></svg>
-      <span>Download</span>
+      <span>Install</span>
     </a>
   </header>
 
@@ -77,14 +77,15 @@
       <img class="field" src="/media/field.png" alt="" width="360" height="225" aria-hidden="true">
       <div class="poster" data-poster>
         <div class="poster-text">
-          <p class="ask">Is your site/app safe?</p>
-          <h1 class="ask-sub" id="hero-title">Penthera: your <span class="nowrap">open-source</span> cyber security agent.</h1>
-          <p class="ask-sub">Find out in seconds. Then fix it with your coding agent.</p>
+          <p class="ask">Check it before they wreck it</p>
+          <h1 class="ask-sub" id="hero-title">Make your app more secure for free</h1>
+          <p class="ask-sub">A security scanner and fixer for your app. It checks your AI setup too.</p>
+          <p class="ask-sub">Check your site here and get a prompt to fix it, or run one command on your code.</p>
           <form class="scan" id="scan" data-scan novalidate>
-            <label class="sr" for="scan-url">Your site's address, for a free cyber security quick scan</label>
+            <label class="sr" for="scan-url">Your site's address, for a free live check</label>
             <div class="scan-row">
               <input id="scan-url" name="url" type="text" inputmode="url" autocomplete="url" autocapitalize="off" spellcheck="false" placeholder="your-site.com" required>
-              <button class="btn scan-go" data-variant="default" type="submit">Check</button>
+              <button class="btn scan-go" data-variant="default" type="submit">Check my site</button>
             </div>
             <p class="scan-note">Passive · nothing stored · your own site only · <a href="/terms">Terms</a></p>
             <noscript><p class="scan-note">The live check needs JavaScript. Or run <code>npx penthera https://your-site.com</code> on your own machine.</p></noscript>
@@ -107,13 +108,13 @@
     </section>
 
     <!-- The problem, on its own grey slab: the problem line, the pills, the
-         lede and the two ways in, then the 12-second loop. Fix mode
+         lede and the two ways in, then the film. Fix mode
          hides it with the poster (.hero[data-mode="fix"] + .slab). -->
     <section class="slab" aria-label="The problem">
       <div class="hero-text">
         <p class="problem"><span>AI coding tools ship faster than anyone can check.</span></p>
         <ul class="pills" aria-label="Open source, MIT license, works offline"><li>Open source</li><li>MIT</li><li>Offline</li></ul>
-        <p class="lede">The security review you never had time for. Offline, rule-based, and you can verify every finding yourself.</p>
+        <p class="lede">The review you never had time for. It fixes what it can with your OK. For the rest, it tells you or your coding agent how, then checks the fix.</p>
         <div class="hero-actions">
           <button class="cmd" type="button" data-copy="npx penthera" data-track="install-hero">
             <span class="cmd-prompt" aria-hidden="true">$</span>
@@ -121,14 +122,14 @@
             <span class="cmd-act" aria-hidden="true" data-js><span class="cmd-copy">Copy</span><span class="cmd-done">Copied</span></span>
             <span class="sr" aria-live="polite" data-copy-status>, copy to clipboard</span>
           </button>
-          <button class="btn btn-prompt" type="button" data-js data-track="agent-prompt" data-copy="Set up Penthera in this repo. Run `npx penthera init --dry-run` and show me what it would do. Then run `npx penthera agents` and `npx penthera deps`, and list the findings by severity, with the file for each. Do not change, commit or push anything without asking me."><svg class="tool-icon" viewBox="0 0 9 9" aria-hidden="true"><path d="M0 0h1v1h-1zM4 0h1v1h-1zM8 0h1v1h-1zM1 1h1v1h-1zM4 1h1v1h-1zM7 1h1v1h-1zM2 2h1v1h-1zM4 2h1v1h-1zM6 2h1v1h-1zM3 3h3v1h-3zM0 4h9v1h-9zM3 5h3v1h-3zM2 6h1v1h-1zM4 6h1v1h-1zM6 6h1v1h-1zM1 7h1v1h-1zM4 7h1v1h-1zM7 7h1v1h-1zM0 8h1v1h-1zM4 8h1v1h-1zM8 8h1v1h-1z"/></svg><span data-copy-label>Copy prompt for your AI coding agent</span></button>
+          <button class="btn btn-prompt" type="button" data-js data-track="agent-prompt" data-copy="Set up Penthera in this repo. Run `npx penthera init --dry-run` and show me what it would do. Then run `npx penthera --repo .`, `npx penthera agents` and `npx penthera deps`, and list the findings by severity, with the file for each. Do not change, commit or push anything without asking me."><svg class="tool-icon" viewBox="0 0 9 9" aria-hidden="true"><path d="M0 0h1v1h-1zM4 0h1v1h-1zM8 0h1v1h-1zM1 1h1v1h-1zM4 1h1v1h-1zM7 1h1v1h-1zM2 2h1v1h-1zM4 2h1v1h-1zM6 2h1v1h-1zM3 3h3v1h-3zM0 4h9v1h-9zM3 5h3v1h-3zM2 6h1v1h-1zM4 6h1v1h-1zM6 6h1v1h-1zM1 7h1v1h-1zM4 7h1v1h-1zM7 7h1v1h-1zM0 8h1v1h-1zM4 8h1v1h-1zM8 8h1v1h-1z"/></svg><span data-copy-label>Copy prompt for your coding agent</span></button>
         </div>
       </div>
       <figure class="loop">
-        <video data-loop muted loop playsinline preload="metadata" poster="/media/hero.jpg" width="960" height="526" controls aria-label="A 12-second loop: npx penthera sets up a project, an offline scan runs in the terminal, the dashboard shows the verdict, and a fix is approved">
-          <source src="/media/hero.mp4" type="video/mp4">
+        <video data-loop muted loop playsinline preload="metadata" poster="/media/film.jpg" width="1600" height="900" controls aria-label="A 30-second film on how Penthera works. You built an app, and ask what to check. Penthera looks at three things: your code, your packages and your AI setup. On a demo app the dashboard says it is not ready to ship. Written rules check each piece. The terminal finds a risky AI hook. Login, access rules and payments are not checked, so test those yourself. Runs offline. Rules decide. npx penthera.">
+          <source src="/media/film.mp4" type="video/mp4">
         </video>
-        <figcaption>12 seconds: setup, a scan, the dashboard, one fix.</figcaption>
+        <figcaption>Real Penthera 2.1.2 output on a demo app, broken on purpose. Code, package and AI setup checks make no outside connections by default. A URL scan contacts the site you name, and your coding agent is your own choice.</figcaption>
       </figure>
     </section>
 
@@ -139,7 +140,7 @@
       <div class="ba-grid">
         <figure class="ba-before">
           <figcaption class="ba-label">Before</figcaption>
-          <p class="bubble">yo, is my app safe?</p>
+          <p class="bubble">yo is my app secure?</p>
         </figure>
         <figure class="ba-after">
           <figcaption class="ba-label">After</figcaption>
@@ -161,25 +162,25 @@
         <div class="map-bar"><span class="title">npx penthera</span><span class="status"><svg class="lock" viewBox="0 0 12 14" aria-hidden="true"><use href="#i-lock"/></svg>Offline</span></div>
         <ul class="map-grid">
           <li class="map-cell map-app">
-            <p class="map-k"><span class="swatch swatch-solid" aria-hidden="true"></span>Your app</p>
+            <p class="map-k"><span class="swatch swatch-solid" aria-hidden="true"></span>Your code</p>
             <p class="map-n">{{N_SECRETS}}<span> secret and AI-key patterns</span></p>
             <p class="map-one"><strong>Secrets, risky routes, runtime versions.</strong> Keys in the repo, admin and API routes, and pinned versions with known advisories.</p>
             <p class="map-cmd"><code>penthera --repo .</code></p>
           </li>
           <li class="map-cell map-deps">
-            <p class="map-k"><span class="swatch swatch-hatch" aria-hidden="true"></span>Dependencies</p>
+            <p class="map-k"><span class="swatch swatch-hatch" aria-hidden="true"></span>Your packages</p>
             <p class="map-n">{{PKGS}}<span> package names</span></p>
             <p class="map-one"><strong>What each package can do.</strong> Shell, network and install scripts, typosquats and known-malicious versions.</p>
             <p class="map-cmd"><code>penthera deps</code></p>
           </li>
           <li class="map-cell map-ai">
-            <p class="map-k"><span class="swatch swatch-half" aria-hidden="true"></span>AI tooling</p>
-            <p class="map-n">{{N_AGENTS}}<span> AI-tooling rules</span></p>
-            <p class="map-one"><strong>What your agent may do.</strong> MCP servers, hooks, permissions, and instructions that tell an agent to do harm.</p>
+            <p class="map-k"><span class="swatch swatch-half" aria-hidden="true"></span>Your AI setup</p>
+            <p class="map-n">{{N_AGENTS}}<span> AI setup rules</span></p>
+            <p class="map-one"><strong>What your coding agent may do.</strong> MCP servers, hooks, permissions, and instructions that tell an agent to do harm.</p>
             <p class="map-cmd"><code>penthera agents --home</code></p>
           </li>
           <li class="map-cell map-url" id="about-check">
-            <p class="map-k"><span class="swatch swatch-sparse" aria-hidden="true"></span>A live URL</p>
+            <p class="map-k"><span class="swatch swatch-sparse" aria-hidden="true"></span>Your live site</p>
             <p class="map-n">{{N_URL}}<span> URL scan templates</span></p>
             <p class="map-one"><strong>Headers, TLS, cookies, exposed files.</strong> The check above does the passive part for any site; the full scan runs on sites you may test.</p>
             <p class="map-cmd"><code>penthera https://staging.example.com</code></p>
@@ -194,8 +195,8 @@
       <p class="eyebrow">02 · Can I trust it</p>
       <h2 id="trust-title">Don't take our word for it.</h2>
       <ul class="pillars">
-        <li><h3>Rules decide. Models only propose.</h3><p>Every finding comes from a readable rule and shows its evidence. A model may propose a fix or a lead; a rule, a re-scan and your tests decide. <a href="https://github.com/danoszz/penthera/blob/main/docs/METHODOLOGY.md">Methodology</a></p></li>
-        <li><h3>Offline, on your machine.</h3><p>No account, no telemetry. With <code>--offline</code> it contacts only the target you named. In the benchmark: {{BENCH_EGRESS}} requests beyond loopback. <a href="https://github.com/danoszz/penthera/blob/main/docs/privacy.md">Network use</a></p></li>
+        <li><h3>Rules decide.</h3><p>Every finding comes from a readable rule and shows its evidence. A model may propose a fix or a lead; a rule, a re-scan and your tests decide. <a href="https://github.com/danoszz/penthera/blob/main/docs/METHODOLOGY.md">Methodology</a></p></li>
+        <li><h3>Your code stays on your machine.</h3><p>No account, no telemetry. With <code>--offline</code> it contacts only the target you named. In the benchmark: {{BENCH_EGRESS}} requests beyond loopback. <a href="https://github.com/danoszz/penthera/blob/main/docs/privacy.md">Network use</a></p></li>
         <li><h3>Measured in public.</h3><p>Every release runs a benchmark and fails if precision or recall drops by more than 0.02. Experiments are pre-registered and published, good or bad. <a href="https://github.com/danoszz/penthera/blob/main/docs/vision-2.0.md">Research plan</a></p></li>
       </ul>
       {{PUBLIC_BENCH}}
@@ -280,7 +281,7 @@
           <p class="step-n"><span>3</span> Approve a fix</p>
           <figure class="shot">
             <img src="/media/tour/tour-3-fix.jpg" width="1200" height="750" loading="lazy" alt="Fix 1 of 3 waiting for approval, light theme: 'Penthera wants to change 1 file to fix this: Missing Content-Security-Policy header', a note that it changes next.config.js on a separate branch and undoes the change if the problem stays, and the diff that adds a headers function to next.config.js">
-            <figcaption>Each fix is a diff you approve. A re-scan confirms it. It never commits or pushes.</figcaption>
+            <figcaption>Each fix is a diff you approve. A re-scan checks it. Fixes stay on your machine, and nothing is pushed.</figcaption>
           </figure>
         </li>
       </ol>
@@ -328,7 +329,7 @@
             <span class="cmd-act" aria-hidden="true" data-js><span class="cmd-copy">Copy</span><span class="cmd-done">Copied</span></span>
             <span class="sr" aria-live="polite" data-copy-status>, copy to clipboard</span>
           </button>
-          <p>Teaches Claude Code, Cursor, Codex and other agents to run scans and explain them. <a href="https://github.com/danoszz/penthera/blob/main/docs/commands/skill.md">Other install routes</a></p>
+          <p>Teaches Claude Code, Cursor, Codex and other coding agents to run scans, explain them and fix what they can. <a href="https://github.com/danoszz/penthera/blob/main/docs/commands/skill.md">Other install routes</a></p>
         </li>
         <li>
           <p class="step-n"><span>C</span> As a tool your agent calls</p>
@@ -348,17 +349,17 @@
       <div class="prompts">
         <article class="prompt-card" data-copy-root>
           <h4><svg class="tool-icon" viewBox="0 0 9 9" aria-hidden="true"><path d="M0 0h1v1h-1zM4 0h1v1h-1zM8 0h1v1h-1zM1 1h1v1h-1zM4 1h1v1h-1zM7 1h1v1h-1zM2 2h1v1h-1zM4 2h1v1h-1zM6 2h1v1h-1zM3 3h3v1h-3zM0 4h9v1h-9zM3 5h3v1h-3zM2 6h1v1h-1zM4 6h1v1h-1zM6 6h1v1h-1zM1 7h1v1h-1zM4 7h1v1h-1zM7 7h1v1h-1zM0 8h1v1h-1zM4 8h1v1h-1zM8 8h1v1h-1z"/></svg>Claude Code</h4>
-          <pre data-copy-text><mark>Set up Penthera in this repo. Run `npx penthera init --dry-run` and show me what it would do. Then run `npx penthera agents` and `npx penthera deps`, and list the findings by severity, with the file for each. Do not change, commit or push anything without asking me.</mark></pre>
+          <pre data-copy-text><mark>Set up Penthera in this repo. Run `npx penthera init --dry-run` and show me what it would do. Then run `npx penthera --repo .`, `npx penthera agents` and `npx penthera deps`, and list the findings by severity, with the file for each. Do not change, commit or push anything without asking me.</mark></pre>
           <button class="btn" type="button" data-copy-from data-js>Copy prompt</button>
         </article>
         <article class="prompt-card" data-copy-root>
           <h4><svg class="tool-icon" viewBox="0 0 9 9" aria-hidden="true"><path d="M0 0h1v1h-1zM0 1h2v1h-2zM0 2h3v1h-3zM0 3h4v1h-4zM0 4h5v1h-5zM0 5h6v1h-6zM0 6h3v1h-3zM0 7h1v1h-1zM2 7h2v1h-2zM3 8h2v1h-2z"/></svg>Cursor</h4>
-          <pre data-copy-text><mark>Set up Penthera in this repo. In the terminal, run `npx penthera init --dry-run` and summarize the plan. Then run `npx penthera agents` to check .cursor/ and the MCP config, and `npx penthera deps` for the dependencies. Ask me before you change any file.</mark></pre>
+          <pre data-copy-text><mark>Set up Penthera in this repo. In the terminal, run `npx penthera init --dry-run` and summarize the plan. Then run `npx penthera --repo .` to scan the code, `npx penthera agents` to check .cursor/ and the MCP config, and `npx penthera deps` for the dependencies. Ask me before you change any file.</mark></pre>
           <button class="btn" type="button" data-copy-from data-js>Copy prompt</button>
         </article>
         <article class="prompt-card" data-copy-root>
           <h4><svg class="tool-icon" viewBox="0 0 9 9" aria-hidden="true"><path d="M0 0h9v1h-9zM0 1h1v1h-1zM8 1h1v1h-1zM0 2h1v1h-1zM2 2h1v1h-1zM8 2h1v1h-1zM0 3h1v1h-1zM3 3h1v1h-1zM8 3h1v1h-1zM0 4h1v1h-1zM2 4h1v1h-1zM8 4h1v1h-1zM0 5h1v1h-1zM8 5h1v1h-1zM0 6h1v1h-1zM4 6h3v1h-3zM8 6h1v1h-1zM0 7h1v1h-1zM8 7h1v1h-1zM0 8h9v1h-9z"/></svg>Codex</h4>
-          <pre data-copy-text><mark>Set up Penthera in this repo. Run `npx penthera init --dry-run`, then `npx penthera agents` and `npx penthera deps`. Report each finding with its severity, file and the fix Penthera suggests. Do not edit files or commit.</mark></pre>
+          <pre data-copy-text><mark>Set up Penthera in this repo. Run `npx penthera init --dry-run`, then `npx penthera --repo .`, `npx penthera agents` and `npx penthera deps`. Report each finding with its severity, file and the fix Penthera suggests. Do not edit files or commit.</mark></pre>
           <button class="btn" type="button" data-copy-from data-js>Copy prompt</button>
         </article>
       </div>
@@ -480,7 +481,7 @@
           <div class="faq-a">
             <p>On the public benchmark: precision {{BENCH_P}} (95% CI {{BENCH_P_CI}}) and recall {{BENCH_R}} (95% CI {{BENCH_R_CI}}), from {{BENCH_TP}} true positives, {{BENCH_FP}} false positives and {{BENCH_FN}} misses in labs we built ourselves. During the benchmark it made {{BENCH_EGRESS}} requests to anything other than loopback.</p>
             <p>The sample is small and the labs are ours, so these numbers catch regressions; they do not measure real-world accuracy. Measuring that on other people's code is experiment E1, <a href="https://github.com/danoszz/penthera/blob/main/docs/research/prereg/E1-real-world-accuracy.md">pre-registered</a> before any data is collected.</p>
-            <p>Every rule is readable: {{N_URL}} URL scan templates, {{N_SECRETS}} secret and AI-key patterns, {{N_CAPS}} dependency capabilities, {{N_AGENTS}} AI-tooling rules and {{N_RECIPES}} fix recipes, on {{DEPS_N}} ({{DEPS_LIST}}). <a href="https://github.com/danoszz/penthera/blob/main/bench/RESULTS.md">Benchmark results</a></p>
+            <p>Every rule is readable: {{N_URL}} URL scan templates, {{N_SECRETS}} secret and AI-key patterns, {{N_CAPS}} dependency capabilities, {{N_AGENTS}} AI setup rules and {{N_RECIPES}} fix recipes, on {{DEPS_N}} ({{DEPS_LIST}}). <a href="https://github.com/danoszz/penthera/blob/main/bench/RESULTS.md">Benchmark results</a></p>
           </div>
         </details>
         <details>
@@ -545,7 +546,7 @@
       <p class="eyebrow">08 · About</p>
       <h2 id="about-title">Why Penthera exists.</h2>
       <p class="about-text">I build Penthera in the open, at night, alongside my PhD in AI and architecture. In 15 years I designed and built more than 100 apps for startups and governments, some used by millions of people. Security was always expected of me, so I collected the tricks and scripts I run before anything ships. Penthera is that sanity check, for everyone.</p>
-      <p class="about-text">AI coding tools let far more people build. The security basics have to keep up, or apps leak data and run up credit-card bills. I believe technology does more good than harm when it is designed for people. Penthera uses research-backed methods and what I learned building agents: readable rules, free and MIT-licensed, to help builders ship safe apps.</p>
+      <p class="about-text">AI coding tools let far more people build. The security basics have to keep up, or apps leak data and run up credit-card bills. I believe technology does more good than harm when it is designed for people. Penthera uses research-backed methods and what I learned building agents: readable rules, free and MIT-licensed, to help people check what they ship.</p>
       <p class="about-contact">Questions or ideas: <a href="https://github.com/danoszz/penthera/discussions">GitHub Discussions</a>. Bugs and false positives: <a href="https://github.com/danoszz/penthera/issues">issues</a>. A vulnerability in Penthera itself: <a href="/.well-known/security.txt">security.txt</a>.</p>
       <a class="by" href="https://daanvanderzwaag.com"><span class="by-word">Made by</span><span class="dvdz" aria-hidden="true"></span><span class="sr">Daan van der Zwaag</span></a>
     </section>

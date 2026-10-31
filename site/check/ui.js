@@ -709,6 +709,16 @@ metalLight();
 heroLoop();
 tickerRest();
 dockOpen();
+
+// A landing page's form opens here with the address filled in. It stops at the
+// button: a link should never start a check on someone's behalf.
+(function prefill() {
+  const site = new URLSearchParams(location.search).get("check");
+  const form = $("[data-scan]");
+  if (!site || !form) return;
+  form.querySelector("input").value = site;
+  form.querySelector("button").focus();
+})();
 veilClear();
 liveField($(".hero .field"));
 barPalette();

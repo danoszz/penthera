@@ -28,7 +28,7 @@ The [website security check](/website-security-check) page lists every check and
 
 Most serious problems in builder apps are in the database and the backend, and those are not in the page:
 
-- **Database access rules.** Many builder apps use Supabase. Its public (anon) key is meant to be in the page; it is safe only when row level security is on for every table and the policies are right. The check has no Supabase rule and cannot read your policies. Open your Supabase dashboard and check each table.
+- **Database access rules.** Many builder apps use Supabase. Its public (anon) key is meant to be in the page; it needs row level security on for every table, with the right policies. The check has no Supabase rule and cannot read your policies. Open your Supabase dashboard and check each table.
 - **Who can see what.** Whether one user can read another user's data depends on your backend and your rules, not on the page.
 - **Server functions and other pages.** It checks one page and the files it loads. It does not log in.
 

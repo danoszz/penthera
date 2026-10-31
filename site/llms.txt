@@ -1,6 +1,6 @@
 # Penthera
 
-> Penthera is an open-source, offline cyber security agent for your apps and AI coding tools. Deterministic rules decide every finding; models only propose. It checks a repo, its dependencies, AI agent config (skills, MCP servers, hooks) and a running app you are authorized to test. MIT licensed, Node.js 22 or later, {{DEPS_N}}.
+> Penthera is a free, open-source security scanner and fixer for your app, and it checks your AI setup. Code scans run offline. Deterministic rules decide every finding; models only propose. It fixes a set of common findings with the user's approval, and never through the MCP tools. It checks a repo, its dependencies, AI agent config (skills, MCP servers, hooks) and a running app you are authorized to test. MIT licensed, Node.js 22 or later, {{DEPS_N}}.
 
 Use a pinned version in every command and config: an unpinned `npx penthera` runs whatever is newest on npm. This file is built from Penthera {{VERSION}}.
 

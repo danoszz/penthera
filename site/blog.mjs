@@ -8,6 +8,7 @@
  *   date: 2026-11-03
  *   approved: false              # Daan sets a date (YYYY-MM-DD) to publish
  *   sources: bench/public/published.json, bench/public/RESULTS.md
+ *   category: Method             # the tag above the post; one word
  *   keywords: secret scanner benchmark, gitleaks vs trufflehog
  *   ---
  *   > The one question the post answers?
@@ -42,7 +43,9 @@ import { RANK_INTERVALS, fieldTools, n2, ord } from "./benchmarks.mjs";
 
 /** F-beta: beta below 1 weighs precision more, above 1 recall. */
 const fBeta = (p, r, beta) => (p && r ? ((1 + beta * beta) * p * r) / (beta * beta * p + r) : 0);
-import { ldScript, siteFooter } from "./frame.mjs";
+import { ldScript, siteFooter, smart } from "./frame.mjs";
+
+export { smart };
 
 const REPO = "https://github.com/danoszz/penthera";
 const AUTHOR = { "@type": "Person", name: "Daan van der Zwaag", url: "https://daanvanderzwaag.com" };
@@ -178,15 +181,44 @@ const sized = (html, figures) => html.replace(/<img src="\/blog\/figures\/([^"]+
 
 // ── HTML, Markdown, Atom ────────────────────────────────────────────────────
 
-function page({ title, description, url, path, h1, crumb, ld, body, styles, theme, foot = siteFooter(), draft = false, type = "article", feed = true }) {
+/** Two words in one grid: BLOG, and DATA behind a click (site/blog.js). */
+const GLYPHS = {
+  B: "11110 10001 10001 11110 10001 10001 11110", L: "10000 10000 10000 10000 10000 10000 11111", O: "01110 10001 10001 10001 10001 10001 01110", G: "01110 10001 10000 10111 10001 10001 01111",
+  D: "11110 10001 10001 10001 10001 10001 11110", A: "01110 10001 10001 11111 10001 10001 10001", T: "11111 00100 00100 00100 00100 00100 00100",
+};
+const lit = (word, col, row) => {
+  const glyph = GLYPHS[word[Math.floor(col / 6)]];
+  return col % 6 !== 5 && glyph.split(" ")[row][col % 6] === "1";
+};
+const mosaic = () => {
+  const cells = [];
+  for (let y = 0; y < 7; y++) for (let x = 0; x < 23; x++) {
+    const blog = lit("BLOG", x, y), data = lit("DATA", x, y);
+    cells.push(`<rect x="${x}" y="${y}" width="1" height="1" class="r${y}${blog ? " on b" : ""}${data ? " d" : ""}"/>`);
+  }
+  return `<svg class="ttx-title" viewBox="0 0 23 7" preserveAspectRatio="none" aria-hidden="true">${cells.join("")}</svg>`;
+};
+
+/** A post's category tag: one finish per category, so a tag means the same everywhere. */
+const CATEGORY = { Benchmark: 0, Method: 3 };
+const categoryTag = (p) => `<span class="tag" data-f="${CATEGORY[p.category] ?? 4}" data-c="0" data-t="0">${esc(p.category || "Note")}</span>`;
+
+/** The four coloured links at the bottom of a page, teletext's Fastext keys. */
+const fastext = (keys) => `    <nav class="ttx-keys" aria-label="More pages">${keys.map(([href, text]) => `<a href="${esc(href)}">${esc(text)}</a>`).join("")}</nav>`;
+
+/** A post's page number. The oldest is P101, so a new post never renumbers the others. */
+const pageNumbers = (posts) => new Map(posts.map((p, i) => [p.slug, `P${100 + posts.length - i}`]));
+
+function page({ title, description, url, path, h1, crumb, ld, body, styles, theme, foot = siteFooter(), draft = false, type = "article", feed = true, number = "P100", bar = "Penthera blog", dateline = "", mast = false, article = !mast, script = "", mastHtml = "", view = "", headScript = "" }) {
   return `<!doctype html>
-<html lang="en">
+<html lang="en" data-theme="light" data-paper${view ? ` data-view="${view}"` : ""}>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${esc(title)} · Penthera</title>
   <meta name="description" content="${esc(description)}">
-  <meta name="color-scheme" content="dark light">
+  <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#0000ed">
 ${draft ? '  <meta name="robots" content="noindex, nofollow">\n' : ""}  <link rel="canonical" href="${url}">
   <link rel="alternate" type="text/markdown" href="${path}.md">
 ${feed ? '  <link rel="alternate" type="application/atom+xml" href="/blog/feed.xml" title="Penthera blog">\n' : ""}  <meta property="og:site_name" content="Penthera">
@@ -197,12 +229,13 @@ ${feed ? '  <link rel="alternate" type="application/atom+xml" href="/blog/feed.x
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="${styles}">
   <script src="${theme}"></script>
-  ${ld}
+${script ? `  <script src="${script}" defer></script>\n` : ""}${headScript ? `  <script src="${headScript}"></script>\n` : ""}  ${ld}
 </head>
 <body>
-  <main class="terms land blog" id="main">
-${draft ? '    <p class="blog-draft">Draft: not approved, not listed and not indexed.</p>\n' : ""}    <nav class="eyebrow" aria-label="Breadcrumb">${crumb}</nav>
-    <h1>${esc(h1)}</h1>
+  <p class="ttx-bar"><span class="ttx-page">${number}</span><span>${bar}</span><span class="ttx-date">${dateline}</span></p>
+  <main class="terms land blog${article ? " with-margin" : ""}" id="main">
+${draft ? '    <p class="blog-draft">Draft: not approved, not listed and not indexed.</p>\n' : ""}    <nav class="eyebrow ttx-crumbs" aria-label="Breadcrumb">${crumb}</nav>
+    <h1>${mast ? `${mastHtml || mosaic()}<span class="sr">${esc(h1)}</span>` : smart(esc(h1))}</h1>
 ${body}
   </main>
   ${foot}
@@ -210,6 +243,8 @@ ${body}
 </html>
 `;
 }
+
+export { page as paperPage };
 
 /** Make site paths absolute, for the Markdown copy and the feed. */
 const absolute = (md, origin) => md.replace(/\]\(\/(?!\/)/g, `](${origin}/`);
@@ -238,18 +273,26 @@ export function postLd(p, origin) {
 }
 
 /** One post as HTML. */
-export function postHtml(p, { origin, styles = "/styles.css", theme = "/theme.js", foot }) {
+export function postHtml(p, { origin, styles = "/styles.css", theme = "/theme.js", script = "/blog.js", foot, number = "P100", next }) {
   const path = `/blog/${p.slug}`;
   const url = `${origin}${path}`;
-  const body = `    <p class="blog-meta"><time datetime="${p.date}">${longDate(p.date)}</time> · ${esc(AUTHOR.name)}</p>
-${sized(renderMarkdown(p.md), p.figures)}
-    <p class="blog-src">Sources: ${sourceLinks(p)}.</p>`;
+  const minutes = Math.max(1, Math.round(p.md.split(/\s+/).length / 220));
+  const html = smart(sized(renderMarkdown(p.md), p.figures)).replace(/<h2 id=/g, '<h2 class="sticker" id=');
+  const sections = [...html.matchAll(/<h2 class="sticker" id="([^"]+)">(.*?)<\/h2>/g)].map(([, id, text]) => `<li><a href="#${id}">${text}</a></li>`);
+  const body = `    <aside class="paper-side" aria-label="About this post">
+      <p class="blog-meta"><span><time datetime="${p.date}">${longDate(p.date)}</time></span><span>${esc(AUTHOR.name)}</span><span>${minutes} min read</span></p>
+${sections.length > 2 ? `      <nav class="paper-toc" aria-label="In this post"><ol>${sections.join("")}</ol></nav>\n` : ""}    </aside>
+    <div class="paper-body">
+${html}
+    </div>
+    <p class="blog-src">Sources: ${sourceLinks(p)}.</p>
+${fastext([["/blog", "All posts"], next ? [`/blog/${next.slug}`, `${next.number} ${next.nav || next.title}`] : ["/benchmarks", "Benchmarks"], ["/blog/feed.xml", "Atom feed"], [`${path}.md`, "Markdown copy"]])}`;
   const ld = ldScript([postLd(p, origin), {
     "@type": "BreadcrumbList",
     itemListElement: [["Penthera", "/"], ["Blog", "/blog"], [p.title, path]].map(([n, u], i) => ({ "@type": "ListItem", position: i + 1, name: n, item: `${origin}${u}` })),
   }]);
-  return page({ title: p.title, description: p.description, url, path, h1: p.title, ld, body, styles, theme, foot, draft: !p.approved,
-    crumb: `<a href="/">Penthera</a> · <a href="/blog">Blog</a>` });
+  return page({ title: p.title, description: p.description, url, path, h1: p.title, ld, body, styles, theme, script, foot, draft: !p.approved, number, dateline: longDate(p.date),
+    crumb: `<a class="tag" data-f="4" data-c="0" data-t="0" href="/">Penthera</a><a class="tag" data-f="4" data-c="0" data-t="0" href="/blog">Blog</a>${categoryTag(p)}` });
 }
 
 /** One post as Markdown, for agents. */
@@ -257,19 +300,26 @@ export function postMarkdown(p, { origin }) {
   return `# ${p.title}\n\n${absolute(p.md, origin).trimEnd()}\n\n${p.date} · ${AUTHOR.name} · Sources: ${p.sources.map((s) => `${REPO}/blob/main/${s}`).join(", ")}\n`;
 }
 
+/** The blog index's structured data. */
+export const blogLd = (posts, origin) => ldScript([{
+  "@type": "Blog", "@id": `${origin}/blog#blog`, url: `${origin}/blog`, name: "Penthera blog", author: AUTHOR,
+  blogPost: posts.map((p) => ({ "@id": `${origin}/blog/${p.slug}#post` })),
+}]);
+
 /** /blog: the published posts, newest first. */
-export function blogIndexHtml(posts, { origin, styles = "/styles.css", theme = "/theme.js", foot }) {
-  const body = `    <p class="terms-for">How Penthera is built and measured, with the data behind each number.</p>
-    <ul class="bm-hub">
-${posts.map((p) => `      <li><a href="/blog/${p.slug}">${esc(p.title)}</a><span><time datetime="${p.date}">${longDate(p.date)}</time>. ${esc(p.description)}</span></li>`).join("\n")}
+export function blogIndexHtml(posts, { origin, styles = "/styles.css", theme = "/theme.js", script = "/blog.js", foot }) {
+  const numbers = pageNumbers(posts);
+  const figure = (p) => {
+    const name = Object.keys(p.figures || {})[0];
+    return name ? `<img src="/blog/figures/${name}" width="${p.figures[name].width}" height="${p.figures[name].height}" alt="" loading="lazy">` : "";
+  };
+  const body = `    <ul class="ttx-front">
+${posts.map((p) => `      <li><p class="ttx-line">${categoryTag(p)}<span class="ttx-when">${numbers.get(p.slug)} · <time datetime="${p.date}">${longDate(p.date)}</time></span></p><h2><a href="/blog/${p.slug}">${smart(esc(p.title))}</a></h2>${figure(p)}<p class="ttx-deck">${smart(esc(p.description))}</p></li>`).join("\n")}
     </ul>
-    <p><a href="/blog/feed.xml">Atom feed</a></p>`;
-  const ld = ldScript([{
-    "@type": "Blog", "@id": `${origin}/blog#blog`, url: `${origin}/blog`, name: "Penthera blog", author: AUTHOR,
-    blogPost: posts.map((p) => ({ "@id": `${origin}/blog/${p.slug}#post` })),
-  }]);
+${fastext([["/benchmarks", "Benchmarks"], ["/research", "Research"], ["/blog/feed.xml", "Atom feed"], ["/blog.md", "Markdown copy"]])}`;
+  const ld = blogLd(posts, origin);
   return page({ title: "Blog: how Penthera is built and measured", description: "Posts on how Penthera is built and measured, with the data and the protocol behind every number.",
-    url: `${origin}/blog`, path: "/blog", h1: "Blog", ld, body, styles, theme, foot, type: "website", crumb: `<a href="/">Penthera</a> · Blog` });
+    url: `${origin}/blog`, path: "/blog", h1: "Blog", ld, body, styles, theme, foot, type: "website", mast: true, script, dateline: posts[0] ? longDate(posts[0].date) : "", crumb: `<a class="tag" href="/">Penthera</a><span class="tag">Blog</span>` });
 }
 
 /** /blog.md */
@@ -308,17 +358,21 @@ ${posts.map((p) => `  <entry>
  * The files the blog adds to the site, as site path to content. Nothing when
  * no post is approved; drafts only with `drafts: true` (a local preview).
  */
-export function blogFiles(posts, { origin, styles, drafts = false, foot }) {
+export function blogFiles(posts, { origin, styles, script, drafts = false, foot }) {
   const out = {};
   if (posts.published.length) {
-    const index = blogIndexHtml(posts.published, { origin, styles, foot });
+    const index = blogIndexHtml(posts.published, { origin, styles, script, foot });
     out["blog.html"] = index;
     out["blog/index.html"] = index;
     out["blog.md"] = blogIndexMarkdown(posts.published, { origin });
     out["blog/feed.xml"] = atomFeed(posts.published, { origin });
   }
+  const numbers = pageNumbers(posts.published);
   for (const p of [...posts.published, ...(drafts ? posts.drafts : [])]) {
-    out[`blog/${p.slug}.html`] = postHtml(p, { origin, styles, foot });
+    const at = posts.published.indexOf(p);
+    const after = at < 0 ? null : posts.published[(at + 1) % posts.published.length];
+    const next = after && after !== p ? { ...after, number: numbers.get(after.slug) } : null;
+    out[`blog/${p.slug}.html`] = postHtml(p, { origin, styles, script, foot, number: numbers.get(p.slug) || "Draft", next });
     if (p.approved) out[`blog/${p.slug}.md`] = postMarkdown(p, { origin });
   }
   return out;

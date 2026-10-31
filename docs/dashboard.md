@@ -1,12 +1,12 @@
 ---
 title: "The local dashboard: penthera ui"
 sidebarTitle: "Dashboard"
-description: "penthera ui opens Penthera in your browser: whether your app is safe to ship, what to fix first, in plain words, and the fix loop that proposes a change and waits for your OK."
+description: "penthera ui opens Penthera in your browser: whether your app is ready to ship, what to fix first, in plain words, and the fix loop that proposes a change and waits for your OK."
 ---
 
 > **Starter.** For "can I see it all in one place?"
 
-`penthera ui` opens Penthera in your browser: whether your app is safe to
+`penthera ui` opens Penthera in your browser: whether your app is ready to
 ship, what to fix first, in plain words, and the fix loop that proposes a
 change and waits for your OK. It looks like a small 1-bit computer: a menu
 bar over three windows. It runs on `127.0.0.1` only, reads only the folders
@@ -46,7 +46,7 @@ it again from **Penthera ▸ Set up…**):
 
 1. What Penthera does, in two sentences, and the rule: only check apps you own
    or have written permission to test.
-2. **Simple** or **Advanced**. Simple answers "is my app safe, and what do I
+2. **Simple** or **Advanced**. Simple answers "is my app secure, and what do I
    do?" in plain words with one button at a time. Advanced shows everything.
    Switch any time in the Penthera menu or Settings; the choice is remembered
    in this browser.
@@ -130,7 +130,7 @@ does too. A tap outside closes them.
 
 | Story | Where it lives |
 |---|---|
-| *As someone who is not a programmer, I want to know if my app is safe without learning security words.* | Simple mode: the verdict sentence, problems as Critical, Serious, Worth fixing or Minor, and one button at a time. |
+| *As someone who is not a programmer, I want to know if my app is secure without learning security words.* | Simple mode: the verdict sentence, problems as Critical, Serious, Worth fixing or Minor, and one button at a time. |
 | *As a solo founder before launch, I want one sentence that says whether I can ship.* | The verdict at the top of every project. |
 | *As a first-time user, I want to be walked through setting up my project.* | The three-screen setup on the first visit. ![First run](https://github.com/danoszz/penthera/raw/main/assets/dashboard/ui-start.jpg) |
 | *As a founder with no security engineer, I want fixes applied only when I approve them.* | The approval window: Apply, Skip or Stop on every change; verified fixes land as local commits on a separate branch, failed ones are undone, nothing is pushed. |

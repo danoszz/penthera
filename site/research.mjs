@@ -282,7 +282,7 @@ export function researchEntries({ root, pub = null, posts = [], preregDir = join
 const statusClass = (s) => `rs-status is-${s.toLowerCase()}`;
 
 /** The featured card: the public benchmark, each rank with its interval. */
-function featured(pub) {
+export function featured(pub) {
   if (!pub?.benchmarks) return "";
   const views = benchmarkViews(pub);
   const rows = views.map((v) => `          <li class="rs-rank-row">
@@ -298,9 +298,22 @@ function featured(pub) {
 ${rows}
       </ol>
       <p class="rs-feature-note">Where a range follows the rank, Penthera's rank fell in that range in 95% of bootstrap redraws.</p>
-      <p class="rs-feature-cta"><a class="btn-steel" href="/benchmarks">Every tool, interval and limit</a></p>
+      <p class="rs-feature-cta"><a class="btn btn-steel" href="/benchmarks">Every tool, interval and limit</a></p>
     </section>`;
 }
+
+/** The page's structured data, the same on /research however it is drawn. */
+export const researchLd = (entries, { url, origin, description }) => ldScript([
+    {
+      "@type": "CollectionPage", "@id": `${url}#page`, url, name: "Penthera research", description, author: AUTHOR,
+      isPartOf: { "@type": "WebSite", "@id": `${origin}/#website`, url: `${origin}/`, name: "Penthera" },
+      mainEntity: {
+        "@type": "ItemList", itemListOrder: "https://schema.org/ItemListOrderDescending", numberOfItems: entries.length,
+        itemListElement: entries.map((e, i) => ({ "@type": "ListItem", position: i + 1, name: e.headline || e.title, url: e.href.startsWith("/") ? `${origin}${e.href}` : e.href })),
+      },
+    },
+    { "@type": "BreadcrumbList", itemListElement: [["Penthera", "/"], ["Research", "/research"]].map(([n, p], i) => ({ "@type": "ListItem", position: i + 1, name: n, item: `${origin}${p}` })) },
+  ]);
 
 /** Escape, and keep a flag such as --giants on one line. */
 const text = (s) => esc(s).replace(/(--[a-z][\w-]*)/g, '<span class="nowrap">$1</span>');
@@ -357,17 +370,7 @@ export function researchHtml(entries, { origin, pub = null, styles = "/styles.cs
   const count = (t) => entries.filter((e) => e.type === t).length;
   const tally = TYPES.map((t) => [t, count(t)]).filter(([, n]) => n).map(([t, n]) => `${n} ${({ Study: ["study", "studies"], Result: ["result", "results"], "Case study": ["case study", "case studies"], Post: ["post", "posts"] })[t][n === 1 ? 0 : 1]}`).join(" · ");
   const description = "Penthera's research: every study registered before it runs, its status and result, the case studies and posts, newest first, each dated.";
-  const ld = ldScript([
-    {
-      "@type": "CollectionPage", "@id": `${url}#page`, url, name: "Penthera research", description, author: AUTHOR,
-      isPartOf: { "@type": "WebSite", "@id": `${origin}/#website`, url: `${origin}/`, name: "Penthera" },
-      mainEntity: {
-        "@type": "ItemList", itemListOrder: "https://schema.org/ItemListOrderDescending", numberOfItems: entries.length,
-        itemListElement: entries.map((e, i) => ({ "@type": "ListItem", position: i + 1, name: e.headline || e.title, url: e.href.startsWith("/") ? `${origin}${e.href}` : e.href })),
-      },
-    },
-    { "@type": "BreadcrumbList", itemListElement: [["Penthera", "/"], ["Research", "/research"]].map(([n, p], i) => ({ "@type": "ListItem", position: i + 1, name: n, item: `${origin}${p}` })) },
-  ]);
+  const ld = researchLd(entries, { url, origin, description });
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -383,7 +386,7 @@ export function researchHtml(entries, { origin, pub = null, styles = "/styles.cs
   <meta property="og:description" content="${esc(description)}">
   <meta property="og:type" content="website">
   <meta property="og:url" content="${url}">
-  <meta property="og:image" content="${origin}/media/social/og.png">
+  <meta property="og:image" content="${origin}/media/social/og-plain.png">
   <meta name="twitter:card" content="summary_large_image">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="${styles}">
@@ -404,7 +407,7 @@ ${tools(entries)}
 ${entries.map(item).join("\n")}
     </ol>
     <p class="rs-none" hidden>Nothing matches. <button type="button" class="rs-reset">Clear the search and filters</button></p>
-    <p class="rs-all" data-js hidden><button type="button" class="btn-steel" aria-controls="rs-items">Show all ${entries.length}</button></p>
+    <p class="rs-all" data-js hidden><button type="button" class="btn btn-steel" aria-controls="rs-items">Show all ${entries.length}</button></p>
     <p class="rs-how">A study is registered by the commit that merges its protocol, and the protocol lists any data seen before that. Changes after that are logged in its deviations section, with the date and the reason. Everything here is read from <a href="${REPO}/tree/main/docs/research">docs/research</a>, <a href="${REPO}/tree/main/bench">bench</a> and the blog when the site is built.</p>
   </main>
   ${foot}

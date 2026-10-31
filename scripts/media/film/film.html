@@ -1,0 +1,172 @@
+<!doctype html><meta charset="utf-8"><title>film</title>
+<style>
+@font-face { font-family: "Departure Mono"; src: url(DepartureMono-Regular.woff2); }
+* { box-sizing: border-box; margin: 0; }
+html, body { width: 1600px; height: 900px; overflow: hidden; background: #fdfdfa; font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased; }
+.layer { position: absolute; inset: 0; opacity: 0; }
+#stage { background: #e6e6e1; overflow: hidden; }
+#cam { position: absolute; left: 0; top: 0; width: 1280px; height: 800px; transform-origin: 0 0; }
+#cam img { position: absolute; inset: 0; width: 1280px; height: 800px; opacity: 0; }
+#cur { position: absolute; left: 0; top: 0; width: 26px; height: 34px; opacity: 0; transform-origin: 3px 3px; }
+#card { display: flex; align-items: center; padding: 0 96px; color: #fff; background: #0000ed; }
+#say b { display: inline-block; font-weight: 500; }
+#tag { position: absolute; left: 40px; bottom: 36px; padding: 8px 12px 7px; font: 22px "Departure Mono", monospace; color: #fff; background: #12151a; }
+#sub { margin-top: 28px; font-size: 44px !important; font-weight: 400 !important; letter-spacing: -0.015em !important; opacity: .7; }
+#agent { display: grid; grid-template-columns: 340px 1fr; background: #fdfdfa; color: #12151a; }
+#tree { list-style: none; padding: 72px 40px; background: #e6e6e1; font: 22px/44px "Departure Mono", monospace; }
+#tree li:first-child { font-weight: 400; color: #0000ed; }
+#pane { padding: 72px 72px; }
+#ask { min-height: 300px; font-size: 34px; line-height: 1.32; letter-spacing: -0.01em; }
+#runs { margin-top: 24px; font: 24px/38px "Departure Mono", monospace; color: #12151a; }
+#label { position: absolute; left: 100px; bottom: 44px; padding: 10px 18px; transform-origin: left bottom; font-size: 44px; font-weight: 500; letter-spacing: -0.02em; opacity: 0; }
+#what { position: absolute; left: 96px; bottom: 150px; font-size: 54px; font-weight: 500; line-height: 1.12; letter-spacing: -0.025em; color: #fff; }
+#free { position: absolute; left: 96px; bottom: 88px; font: 26px "Departure Mono", monospace; color: rgba(255,255,255,.82); }
+.sc { background: #fdfdfa; color: #12151a; padding: 96px 112px; }
+.sc h2 { font-size: 84px; font-weight: 500; line-height: 1.04; letter-spacing: -0.035em; max-width: 1300px; }
+.sc h3 { margin-top: 14px; font-size: 44px; font-weight: 400; letter-spacing: -0.015em; opacity: 0; color: #0000ed; }
+.bub { position: absolute; display: inline-block; padding: .24em .46em .32em; font-size: 100px; font-weight: 500; line-height: 1.04; letter-spacing: -0.035em; border: 2px solid #12151a; border-radius: .36em .36em .36em 0; white-space: nowrap; }
+#b1 { left: 112px; top: 150px; }
+#b2 { right: 112px; top: 430px; white-space: normal; max-width: 1040px; color: #fff; background: #0000ed; border-color: #0000ed; border-radius: .36em .36em 0 .36em; }
+.row { display: flex; gap: 72px; margin-top: 64px; }
+.row figure { margin: 0; }
+.row figcaption { margin-top: 22px; font-size: 42px; font-weight: 500; letter-spacing: -0.02em; }
+.t { display: block; width: 330px; height: 330px; }
+.t.solid { background: #12151a; }
+.t.hatch { background: repeating-linear-gradient(45deg, #12151a 0 8px, transparent 8px 18px); }
+.t.half { background: conic-gradient(#12151a 25%, transparent 0 50%, #12151a 0 75%, transparent 0) 0 0 / 22px 22px; }
+.ghost .t { height: 220px; border: 2px dashed #12151a; }
+#gate { position: absolute; left: 790px; top: 400px; width: 12px; height: 420px; background: #12151a; }
+#gate b { position: absolute; left: -38px; top: -46px; font: 26px "Departure Mono", monospace; }
+#bits { position: absolute; inset: 0; }
+#bits i { position: absolute; left: 0; top: 0; width: 34px; height: 34px; background: #12151a; }
+#bits i.stop { background: #0000ed; }
+#bits span { position: absolute; font: 24px "Departure Mono", monospace; color: #fff; background: #0000ed; padding: 2px 8px; }
+#s9 { background: #000; color: #fff; }
+#big { position: absolute; left: 112px; top: 200px; font-size: 136px; font-weight: 500; line-height: 1.04; letter-spacing: -0.035em; }
+#box { position: absolute; left: 112px; top: 610px; padding: 22px 600px 22px 22px; border: 3px solid #7a7aff; }
+#box span { position: absolute; left: 470px; top: 50%; transform: translateY(-50%); font: 34px "Departure Mono", monospace; color: #fff; white-space: nowrap; }
+.mini { display: flex; gap: 20px; }
+.mini .t { width: 120px; height: 120px; filter: invert(1); }
+#card p { font-size: 176px; font-weight: 500; line-height: 1.02; letter-spacing: -0.035em; max-width: 1300px; }
+#term { background: #000; color: #e9e9e4; font: 23px/31px "Departure Mono", monospace; overflow: hidden; }
+#lines { position: absolute; left: 112px; right: 60px; top: 0; white-space: pre; }
+#end { background: radial-gradient(70% 90% at 16% 8%, #3a3aff 0, transparent 60%), radial-gradient(70% 100% at 96% 100%, #0000a8 0, transparent 66%), #0000ed; color: #fff; }
+#elogo { position: absolute; left: 96px; top: 104px; width: 1408px; height: auto; filter: brightness(0) invert(1); }
+#ecmd { position: absolute; right: 96px; bottom: 112px; font: 46px "Departure Mono", monospace; color: #0000ed; background: #fff; padding: 26px 40px 24px; border-radius: 28px 28px 0 28px; }
+
+/* The site's system: grey paper, stickers, the footer's ramp and wordmark. */
+.sc { background: #e6e6e1 !important; }
+#s2.sc { background: #fdfdfa !important; }
+#s9.sc { background: #000 !important; }
+.eb { display: inline-block; margin-bottom: 18px; padding: 7px 12px 6px; font: 22px "Departure Mono", monospace; color: #fff; background: #0000ed; clip-path: polygon(0 3px, 3px 3px, 3px 0, calc(100% - 6px) 0, calc(100% - 6px) 2px, 100% 2px, 100% calc(100% - 4px), calc(100% - 3px) calc(100% - 4px), calc(100% - 3px) 100%, 5px 100%, 5px calc(100% - 2px), 0 calc(100% - 2px)); }
+.eb.steel { color: #0a0a0a; background: linear-gradient(180deg, #dfe3e9 0%, #b9c0ca 40%, #9aa3b0 54%, #e4e8ed 72%, #aab2bd 100%); }
+.eb.ink { background: linear-gradient(180deg, #5d6572 0%, #2b2f36 44%, #15171b 58%, #4a515c 100%); }
+#say b { display: inline-block; overflow: hidden; vertical-align: bottom; padding-bottom: .12em; margin-bottom: -.12em; font-weight: 500; }
+#say i { display: inline-block; font-style: normal; }
+#big p { overflow: hidden; padding-bottom: .1em; }
+#big i { display: block; font-style: normal; }
+#label { color: #fff !important; background: #0000ed !important; }
+#end { background: #000 !important; color: #fff; }
+#stat { position: absolute; left: 96px; top: 72px; display: flex; align-items: center; gap: 16px; font: 24px "Departure Mono", monospace; letter-spacing: .04em; text-transform: uppercase; color: rgba(255,255,255,.82); }
+#stat u { width: 16px; height: 16px; background: linear-gradient(180deg, #8a8aff, #0000ed 60%, #0000b8); }
+#what { position: absolute !important; left: 96px; top: 150px !important; bottom: auto !important; color: #fff !important; font-size: 54px !important; }
+#ecmd { position: absolute; right: 96px; top: 176px !important; bottom: auto !important; color: #fff !important; background: #0000ed !important; }
+#ramp { position: absolute; left: 96px; right: 96px; top: 396px; height: 64px; display: grid; grid-template-columns: repeat(8, 1fr); --d: conic-gradient(from 270deg at 2px 2px, #fff 25%, transparent 0); }
+#ramp i:nth-child(1) { background: linear-gradient(180deg, #5a5aff, #0000ed 55%, #0000b8); }
+#ramp i:nth-child(2) { background: conic-gradient(#fff 25%, transparent 0 50%, #fff 0 75%, transparent 0) 0 0 / 6px 6px; }
+#ramp i:nth-child(3) { background: var(--d) 0 0 / 5px 5px; } #ramp i:nth-child(4) { background: var(--d) 0 0 / 7px 7px; } #ramp i:nth-child(5) { background: var(--d) 0 0 / 9px 9px; } #ramp i:nth-child(6) { background: var(--d) 0 0 / 12px 12px; } #ramp i:nth-child(7) { background: var(--d) 0 0 / 16px 16px; } #ramp i:nth-child(8) { background: var(--d) 0 0 / 22px 22px; }
+#elogo { top: 500px !important; }
+</style>
+<div class="layer" id="stage"><div id="cam"><img id="a" src="s3-verdict.png"><img id="b" src="s4-first.png"></div>
+<span id="tag">Demo app · 127.0.0.1</span>
+<svg id="cur" viewBox="0 0 13 17"><path fill="#000" stroke="#fff" stroke-width="1" d="M1 1v13l3-3 2.5 5 2.5-1-2.5-5H10z"/></svg></div>
+<div class="layer" id="term"><div id="lines"></div></div>
+<div class="layer sc" id="s2"><p class="bub" id="b1">yo what should I check?</p><p class="bub me" id="b2">Ask your agent or run one command</p></div>
+<div class="layer sc" id="s3"><p class="eb" id="e3">How it works</p><h2 id="s3h">It looks at three things</h2><div class="row"><figure><i class="t solid"></i><figcaption>Your code</figcaption></figure><figure><i class="t hatch"></i><figcaption>Your packages</figcaption></figure><figure><i class="t half"></i><figcaption>Your AI setup</figcaption></figure></div></div>
+<div class="layer sc" id="s6"><p class="eb steel" id="e6">How it decides</p><h2 id="s6h">Written rules check each one</h2><h3 id="s6b">If one fails, you see why</h3><div id="gate"><b>Rules</b></div><div id="bits"></div></div>
+<div class="layer sc" id="s8"><p class="eb ink" id="e8">Limits</p><h2 id="s8h">Not checked: login, access rules, payments</h2><h3 id="s8b">Test those yourself</h3><div class="row ghost"><figure><i class="t"></i><figcaption>Login</figcaption></figure><figure><i class="t"></i><figcaption>Access rules</figcaption></figure><figure><i class="t"></i><figcaption>Payments</figcaption></figure></div></div>
+<div class="layer sc" id="s9"><div id="big"><p><i>Runs offline</i></p><p><i>Rules decide</i></p></div><div id="box"><span>These checks stay here</span><div class="mini"><i class="t solid"></i><i class="t hatch"></i><i class="t half"></i></div></div></div>
+<div class="layer" id="card"><div><p id="say"></p></div></div>
+<div class="layer" id="end"><p id="stat"><u></u>Built from Penthera 2.1.2. Runs offline. Rules decide.</p><p id="what">Checks your app and your AI setup<br>before you publish</p><code id="ecmd">npx penthera</code><div id="ramp"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><img id="elogo" src="logo.svg" alt=""></div>
+<div id="label"></div>
+<script>
+const R = JSON.parse(document.currentScript.dataset.r || "{}");
+const W = 1600, H = 900, FPS = 30;
+const $ = (id) => document.getElementById(id);
+const clamp = (x) => Math.max(0, Math.min(1, x));
+const io = (x) => { x = clamp(x); return x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2; };
+const out = (x) => 1 - Math.pow(1 - clamp(x), 3);
+const span = (t, a, b) => clamp((t - a) / (b - a));
+const lerp = (a, b, x) => a + (b - a) * x;
+const view = (a, b, x) => ({ x: lerp(a.x, b.x, x), y: lerp(a.y, b.y, x), w: lerp(a.w, b.w, x) });
+// Motion spec: film-motion-research.md. Springs from Apple's response and
+// damping, closed form, so any frame can be drawn on its own.
+const spring = (t, response, zeta) => { if (t <= 0) return 0; const w = 2 * Math.PI / response; if (zeta >= 1) return 1 - Math.exp(-w * t) * (1 + w * t); const wd = w * Math.sqrt(1 - zeta * zeta); return 1 - Math.exp(-zeta * w * t) * (Math.cos(wd * t) + (zeta * w / wd) * Math.sin(wd * t)); };
+const bez = (x1, y1, x2, y2) => (x) => { x = clamp(x); let a = 0, b = 1, u = x; for (let i = 0; i < 18; i++) { u = (a + b) / 2; const v = 3 * (1 - u) * (1 - u) * u * x1 + 3 * (1 - u) * u * u * x2 + u * u * u; if (v < x) a = u; else b = u; } return 3 * (1 - u) * (1 - u) * u * y1 + 3 * (1 - u) * u * u * y2 + u * u * u; };
+const expo = bez(.16, 1, .3, 1), glide = bez(.4, 0, .6, 1);
+const FULL = { x: 0, y: 0, w: 1280 }, VERDICT = { x: 300, y: 124, w: 590 }, INSPECT = { x: 870, y: 40, w: 410 };
+const BITS = [];
+for (let r = 0; r < 6; r++) for (let c = 0; c < 9; c++) BITS.push({ r, c, stop: (r === 1 || r === 4) && c === 0 });
+let pages = {}, shown = "";
+window.setup = (rows) => { pages = rows; $("bits").innerHTML = BITS.map((b) => `<i class="${b.stop ? "stop" : ""}"></i>`).join("") + `<span id="why1">why</span><span id="why2">why</span>`; };
+const show = (id, t, a, b) => { const on = t >= a && t < b; $(id).style.opacity = on ? 1 : 0; return on; };
+// Type rises through a mask: 10 frames, expo out, no overshoot.
+const rise = (el, t, at) => { const k = expo((t - at) / .34); el.style.opacity = clamp((t - at) / .1); el.style.transform = `translateY(${(1 - k) * 34}px)`; };
+const mask = (el, t, at) => { el.firstElementChild.style.transform = `translateY(${(1 - expo((t - at) / .34)) * 112}%)`; };
+// A bubble is sent: it springs out of its tail.
+const bubble = (el, t, at, origin) => { const k = spring(t - at, .26, .78); el.style.transformOrigin = origin; el.style.opacity = clamp((t - at) / .05); el.style.transform = `scale(${lerp(.3, 1, k)})`; };
+// A tile is set down: it wipes from its base, critically damped.
+const wipe = (el, t, at, side) => { const k = clamp(spring(t - at, .28, 1)); el.style.opacity = t >= at ? 1 : 0; el.style.clipPath = side === "left" ? `inset(0 ${(1 - k) * 100}% 0 0)` : `inset(${(1 - k) * 100}% 0 0 0)`; };
+window.render = (t) => {
+  if (show("card", t, 0, 1.5)) { if (!$("say").children.length) $("say").innerHTML = "You built an app".split(" ").map((w) => `<b><i>${w}</i></b>`).join(" "); [...$("say").children].forEach((w, i) => mask(w, t, .08 + i * .1)); }
+  if (show("s2", t, 1.5, 4.2)) { bubble($("b1"), t, 1.6, "0% 100%"); bubble($("b2"), t, 2.4, "100% 100%"); }
+  if (show("s3", t, 4.2, 7.2)) { rise($("e3"), t, 4.25); rise($("s3h"), t, 4.3); [...$("s3").querySelectorAll("figure")].forEach((f, i) => { wipe(f.querySelector(".t"), t, 4.65 + i * .13); rise(f.querySelector("figcaption"), t, 4.85 + i * .13); }); }
+  const dash = show("stage", t, 7.2, 13);
+  if (dash) {
+    let v, img = "a";
+    if (t < 10.7) v = view(FULL, VERDICT, glide(span(t, 7.4, 8.9)));
+    else { img = "b"; v = view(VERDICT, INSPECT, glide(span(t, 10.8, 11.9))); }
+    for (const id of "ab") $(id).style.opacity = id === img ? 1 : 0;
+    const s = W / v.w;
+    $("cam").style.transform = `scale(${s}) translate(${-v.x}px, ${-v.y}px)`;
+    const f = R.first, cur = t >= 9.5 && t < 10.7;
+    $("cur").style.opacity = cur ? 1 : 0;
+    if (cur) {
+      const c = glide(span(t, 9.5, 10.2)), tx = f[0] + f[2] / 2, ty = f[1] + f[3] / 2;
+      const x = lerp(tx + 120, tx, c), y = lerp(ty + 70, ty, c), press = t > 10.35 && t < 10.5 ? .86 : 1;
+      $("cur").style.transform = `translate(${(x - v.x) * s}px, ${(y - v.y) * s}px) scale(${press})`;
+    }
+  }
+  if (show("s6", t, 13, 16.6)) {
+    rise($("e6"), t, 13.05); rise($("s6h"), t, 13.1);
+    const k = (t - 13.2) * 1.9, nodes = $("bits").children;
+    BITS.forEach((b, i) => {
+      const x0 = 112 + b.c * 74 - 300 + k * 260, gate = 738, x = b.stop && x0 > gate ? gate : x0;
+      nodes[i].style.transform = `translate(${x}px, ${410 + b.r * 70}px)`;
+      nodes[i].style.opacity = x < -40 ? 0 : 1;
+    });
+    const tag = (el, b) => { const at = 13.2 + (738 - (112 + b.c * 74 - 300)) / (260 * 1.9); el.style.left = "664px"; el.style.top = `${410 + b.r * 70}px`; bubble(el, t, at, "100% 100%"); };
+    tag($("why1"), BITS[9]); tag($("why2"), BITS[36]);
+    rise($("s6b"), t, 15);
+  }
+  if (show("term", t, 16.6, 21)) {
+    const from = 16.6, cmd = "npx penthera agents .";
+    if (shown !== "agents") { shown = "agents"; $("lines").innerHTML = `<div id="prompt"></div><div> </div>` + pages.agents.map((l) => `<div>${l || " "}</div>`).join(""); }
+    $("prompt").innerHTML = `<span style="opacity:.55">demo-app $</span> ${cmd.slice(0, Math.floor(span(t, from + .08, from + .5) * cmd.length))}${t < from + .55 ? "█" : ""}`;
+    const nodes = $("lines").children, n = Math.floor(lerp(0, pages.agents.length, span(t, from + .55, from + 1.05)));
+    for (let i = 2; i < nodes.length; i++) nodes[i].style.visibility = i - 2 < n ? "visible" : "hidden";
+    $("lines").style.transformOrigin = "0 300px";
+    $("lines").style.transform = `translateY(56px) scale(${lerp(1, 1.5, glide(span(t, from + 1.5, from + 3)))})`;
+  }
+  const lab = t >= 17 && t < 21;
+  $("label").style.opacity = lab ? 1 : 0;
+  if (lab) { $("label").textContent = "Your AI setup too"; wipe($("label"), t, 17, "left"); }
+  if (show("s8", t, 21, 24.2)) { rise($("e8"), t, 21.05); rise($("s8h"), t, 21.1); [...$("s8").querySelectorAll("figure")].forEach((f, i) => wipe(f, t, 21.5 + i * .13)); rise($("s8b"), t, 22.2); }
+  if (show("s9", t, 24.2, 26.6)) { const [a, b] = $("big").children; mask(a, t, 24.3); mask(b, t, 24.6); wipe($("box"), t, 25.1, "left"); }
+  if (show("end", t, 26.6, 99)) {
+    rise($("stat"), t, 26.7); rise($("what"), t, 26.8); bubble($("ecmd"), t, 27.05, "100% 100%");
+    [...$("ramp").children].forEach((c, i) => wipe(c, t, 26.75 + i * .04));
+    wipe($("elogo"), t, 26.75, "left");
+  }
+};
+</script>

@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="site/media/social/og.png" alt="Penthera. Is your site/app safe? Check it with a free cyber security quick scan: the scan field and a report of penthera.org, 95 out of 100, with Prompt to fix" width="840">
+<img src="site/media/social/og.png" alt="Two chat bubbles on blue. yo is my app secure? check it before they wreck it. Penthera." width="840">
 
 <br/><br/>
 
@@ -415,7 +415,7 @@ it is published. Details, safety rules and the policy key:
 
 | You want to know | Read |
 |---|---|
-| Is my app safe to ship? | [I'm new](docs/index.md#1-im-new), then [scan](docs/commands/scan.md) |
+| Is my app secure? | [I'm new](docs/index.md#1-im-new), then [scan](docs/commands/scan.md) |
 | Is this package or MCP server safe? | [deps](docs/commands/deps.md), [install](docs/commands/install.md), [agents](docs/commands/agents.md) |
 | How do I use it from my coding agent? | [MCP server](docs/commands/mcp.md), [skill](docs/commands/skill.md), [agents safely](docs/agents-safely.md) |
 | How do I put it in CI? | [The GitHub Action](docs/commands/action.md), [scan in CI](docs/commands/scan.md#ci-integration) |
