@@ -106,37 +106,59 @@ cat $R/e20r-pilot-1/pilot-sites.txt $R/e20r-pilot-2/pilot-sites.txt | sort | uni
 
 ## After the stopped pass 2 (Amendment 3)
 
-Pass 2 stopped at 188 of 7,031 sites. Work through this in order. The steps that reach other hosts need Amendment 3 adopted and the new code deployed from the tip of `main`.
+Pass 2 stopped at 188 of 7,031 sites. Work through this in order, with the new code deployed. Nothing here reaches another host until pilot round 2, which needs Amendment 3 adopted.
 
-Count what the new detector flags in those records. It prints counts only:
+**1. Before any prune**, run the frozen detector over the original raw file. It writes the private `legacy-findings.json`, and prints counts only:
+
+```bash
+node bench/front-door/pilot-report.mjs --legacy-findings $R/e20r-pass2
+```
+
+Exit 1, or `reproducesStop: false`: the stop isn't reproduced. Amendment 3 doesn't apply. Purge, with the printed `purgeConfirm`:
+
+```bash
+node bench/front-door/validation-sample.mjs purge $R/e20r-pass2 --confirm <purgeConfirm>
+```
+
+**2.** Count what the new detector flags. It prints counts only:
 
 ```bash
 node bench/front-door/pilot-report.mjs --replay $R/e20r-pass2/raw.jsonl
 ```
 
-A person reviews the flagged record as in [A privacy miss](#a-privacy-miss), on the server only. Record the review with that person's name. The note says what was checked, with no flagged text in it:
+**3.** A person reads `findings` in `$R/e20r-pass2/legacy-findings.json`. It gives record order and field path, never text. That person opens only those records, on the server, with `<order>` from the report. Nothing goes to a chat, a ticket, a shared log or a hosted model:
+
+```bash
+grep '^{"pass":2,"order":<order>,' $R/e20r-pass2/raw.jsonl | less -S
+```
+
+A real address: purge as above. Amendment 3 doesn't apply.
+
+**4.** A false fire: write what was checked in a private note, with no flagged text. Record the review. It binds to the legacy report:
 
 ```bash
 node bench/front-door/pilot-report.mjs --privacy $R/e20r-pass2 --false-fire /srv/e20/false-fire-note.txt --reviewer <who>
 ```
 
-Then prune the stopped pass, and check it prints `"verified":true`:
+**5.** Prune the stopped pass, and check it prints `"verified":true`:
 
 ```bash
 node bench/front-door/validation-sample.mjs prune $R/e20r-pass2
 ```
 
-If the review finds a real address, stop here and purge. Amendment 3 no longer applies.
+**6.** Pilot round 2 is required, because the code changed. Run the two-round block above from "Its sites go on the dropped list", with an explanation in round 1's folder only if round 1 failed. The runner skips the stopped pass's sites itself.
 
-Pilot round 2 is required, because the code changed. Run the two-round block below from "Its sites go on the dropped list", with an explanation in round 1's folder only if round 1 failed. The runner skips the stopped pass's sites itself.
-
-Then pass 3. It takes the dropped list of both rounds, and skips the 188 sites itself:
+**7.** Pass 3. It takes the dropped list of both rounds, and skips the 188 sites itself. It runs once:
 
 ```bash
 node bench/front-door/replicate.mjs --pass 3 --pilot-dropped /srv/e20/pilot-sites-all.txt $COMMON
 ```
 
-Everything below that names `e20r-pass2` holds for `e20r-pass3`: the stop file, the privacy report, the draw, the analysis and failure recovery. Pass 3 runs once.
+**8.** Set the run folder for every command in sections 4 and Failure recovery:
+
+```bash
+export RUN=$R/e20r-pass3
+```
 
 ## 3. Pass 2
 
@@ -150,22 +172,24 @@ To stop it between sites, for a complaint or anything else that can't wait:
 touch ~/.penthera-e20r2-stop
 ```
 
-## 4. After a whole pass 2
+## 4. After a whole pass
+
+`RUN` is the run you are working on: `$R/e20r-pass3` under Amendment 3, as set above. Every command from here down uses it.
 
 The order matters: the privacy report reads text the draw deletes.
 
 ```bash
-node bench/front-door/pilot-report.mjs --privacy $R/e20r-pass2
+node bench/front-door/pilot-report.mjs --privacy $RUN
 ```
 
 ```bash
-node bench/front-door/validation-sample.mjs draw $R/e20r-pass2
+node bench/front-door/validation-sample.mjs draw $RUN
 ```
 
 The analysis takes pass 2 as `--pass1`, under Amendment 2. Its other inputs are private files whose hashes are frozen in the protocol:
 
 ```bash
-node bench/front-door/analyze-r.mjs --pass1 $R/e20r-pass2/raw.jsonl --pass2 /srv/e20/pass1/raw.jsonl --e20 /srv/e20/e20/tranco/raw.jsonl /srv/e20/e20/yc/raw.jsonl --industries /srv/e20/industries.csv --e20-excluded /srv/e20/e20-health-excluded.txt --out analysis.json
+node bench/front-door/analyze-r.mjs --pass1 $RUN/raw.jsonl --pass2 /srv/e20/pass1/raw.jsonl --e20 /srv/e20/e20/tranco/raw.jsonl /srv/e20/e20/yc/raw.jsonl --industries /srv/e20/industries.csv --e20-excluded /srv/e20/e20-health-excluded.txt --out analysis.json
 ```
 
 ## Failure recovery
@@ -182,35 +206,35 @@ Every failed run ends in a prune or a purge. A prune reads the file back and pri
 | Prune refuses, or the privacy report isn't clean | 3 or 1 | Stop. A person reviews the flagged fields first (below). |
 
 ```bash
-node bench/front-door/validation-sample.mjs prune $R/e20r-pass2
+node bench/front-door/validation-sample.mjs prune $RUN
 ```
 
 ### A privacy miss
 
-This holds for a pilot round and for pass 2. Write the run's folder for `$R/e20r-pass2`. A false fire must not cost the run, so nobody purges yet. If there is no privacy report yet, write it:
+This holds for a pilot round and for pass 3. For a pilot round, `export RUN=$R/e20r-pilot-<k>` first. A false fire must not cost the run, so nobody purges yet. If there is no privacy report yet, write it:
 
 ```bash
-node bench/front-door/pilot-report.mjs --privacy $R/e20r-pass2
+node bench/front-door/pilot-report.mjs --privacy $RUN
 ```
 
-1. A person reads `flaggedFields` in `$R/e20r-pass2/privacy-report.json`. It names fields and counts, never text.
+1. A person reads `flaggedFields` in `$RUN/privacy-report.json`. It names fields and counts, never text.
 2. That person opens the flagged records on the server only. Nothing goes to a chat, a ticket, a shared log, the terminal scrollback of a shared session, or a hosted model.
 3. A confirmed false fire: write what was checked in a private note, with no flagged text in it, then record it. The analysis reports it as a deviation.
 
 ```bash
-node bench/front-door/pilot-report.mjs --privacy $R/e20r-pass2 --false-fire /srv/e20/false-fire-note.txt --reviewer <who>
+node bench/front-door/pilot-report.mjs --privacy $RUN --false-fire /srv/e20/false-fire-note.txt --reviewer <who>
 ```
 
 4. A real miss: purge, with the `purgeConfirm` code the report printed. Report a pass 2 as partial. A pilot round needs a seal first if it has a finished manifest, and pass 2 refuses it without a verified purge or a recorded false fire.
 
 ```bash
-node bench/front-door/validation-sample.mjs purge $R/e20r-pass2 --confirm <purgeConfirm>
+node bench/front-door/validation-sample.mjs purge $RUN --confirm <purgeConfirm>
 ```
 
 - `purge` refuses without that code, the first 12 characters of the raw file's hash. The report's code holds until the file changes. After a prune, or for a crashed run with no report, take it from the file:
 
 ```bash
-sha256sum $R/e20r-pass2/raw.jsonl | cut -c1-12
+sha256sum $RUN/raw.jsonl | cut -c1-12
 ```
 
 - `purge` deletes the whole per-site raw file and writes `purge-manifest.json` with the original hash and the disposition. It works on finished, partial, crashed and privacy-failed runs, and it can't be undone. The run can't be analyzed afterward. There is no field-level cleaning.

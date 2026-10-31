@@ -17,12 +17,13 @@ import { classify, classifyRegistered, cookieNames, cspEvidence, evidenceOf, loo
 import { authorize, exclusionFor, percentDecoded, globMatch, ipv4Lookup, percentForm, platformOf, readExclusions, robotsAccess, robotsBinary, robotsVerdict, strictRobots, visit, wholeSiteStop } from "../bench/front-door/run.mjs";
 import { optedOut } from "../api/_lib/page.mjs";
 import { CheckError, resolvePublic } from "../api/_lib/guard.mjs";
-import { amendment3Adopted, MAX_LIVE_ROUNDS, PASS_SEED, PREREG_R, recordedHashR, STUDY_PAGE, caaTree, checkPilotDropped, codeFiles, codeHash, dmarcReading, mergeCohorts, PILOT_MIN, ROLLING_WINDOW, siteDns, normalizeHost, pilotRounds, readDomain, readHostList, readRemovals, runPass, NO_DNS, unmatchedHosts, V2_LIMITS, visitInWorker } from "../bench/front-door/replicate.mjs";
+import { amendment3Adopted, mergeSkips, MAX_LIVE_ROUNDS, PASS_SEED, PREREG_R, recordedHashR, STUDY_PAGE, caaTree, checkPilotDropped, codeFiles, codeHash, dmarcReading, mergeCohorts, PILOT_MIN, ROLLING_WINDOW, siteDns, normalizeHost, pilotRounds, readDomain, readHostList, readRemovals, runPass, NO_DNS, unmatchedHosts, V2_LIMITS, visitInWorker } from "../bench/front-door/replicate.mjs";
 import { orgDomain, publicSuffix, PSL_VERSION, pslSha256, siteKey, siteOrg } from "../bench/front-door/psl.mjs";
 import { claims, clusterDiff, combine, coverageBounds, decide, diffClaim, dnsCoverage, e20Index, fisherExact, intervalOutcomes, isEligible, standardizedDiff, traitsByCohort } from "../bench/front-door/analyze-r.mjs";
+import { legacyFindings } from "../bench/front-door/legacy-findings.mjs";
 import { decidePilot, replayRaw, main as reportMain, pilotReport, sealPilot, stopRules, privacyReport } from "../bench/front-door/pilot-report.mjs";
-import { falseFireReviewed, MIN_ELIGIBLE, MIN_GRADED, NO_PRIVACY, pageTextMissed, purgeState, recordMisses, resolverFailed, unfinishedRun } from "../bench/front-door/record-checks.mjs";
-import { main as analyzeMain, challengeByEdge, secondaryCohorts } from "../bench/front-door/analyze-r.mjs";
+import { falseFireReviewed, LEGACY_CLASSIFIER_SHA256, PRIVACY_STOP, MIN_ELIGIBLE, MIN_GRADED, NO_PRIVACY, pageTextMissed, purgeState, recordMisses, resolverFailed, unfinishedRun } from "../bench/front-door/record-checks.mjs";
+import { main as analyzeMain, challengeByEdge, secondaryCohorts, skipsByCohort } from "../bench/front-door/analyze-r.mjs";
 import { main as validationMain, purgeRun, blindSheet, drawSample, parseLabels, pruneExcerpt, prunePilot, rewriteRun, scoreLabels, stratumOf, weightedMetrics } from "../bench/front-door/validation-sample.mjs";
 import { runAcceptance } from "../bench/front-door/acceptance.mjs";
 import { passiveReport } from "../api/_lib/tier1.mjs";
@@ -1072,8 +1073,8 @@ describe("acceptance", () => {
   it("every stop condition refuses pass 2, for its own reason, and a clean pilot is allowed", async () => {
     const rows = await runAcceptance();
     expect(rows.filter((r) => !r.pass)).toEqual([]);
-    expect(rows.length).toBeGreaterThanOrEqual(190);
-  }, 240_000);
+    expect(rows.length).toBeGreaterThanOrEqual(220);
+  }, 300_000);
 });
 
 describe("limits", () => {
@@ -1442,13 +1443,41 @@ describe("Amendment 3", () => {
   it("the detector leaves our own tokens alone, at any sentence ending", () => {
     for (const text of [
       "Reach us at <email>.", "Reach us at <email>", "Reach us at <email>, or call.", "Reach us at <email>; we reply.", "Reach us at <email>! Thanks.", "Reach us at <email>? Yes.",
-      "Reach us (at <email>).", "Write to us at (<email>). We reply.", "Reach us at [<email>]. Thanks.", "Reach us at \"<email>\". Thanks.", "Our server is at <ip>. It is fine.", "Call us at <number>. We answer.",
+      "Reach us at <email>. Open daily", "Reach us (at <email>).", "Write to us at (<email>). We reply.", "Reach us at [<email>]. Thanks.", "Reach us at \"<email>\". Thanks.", "Our server is at <ip>. It is fine.", "Call us at <number>. We answer.",
       "(at) <email>", "(at) <email>.", "us (at) <email>, thanks", "[at] <email>.", "{at} <email>.", "( at ) <email>.", "us (at)<email>.",
     ]) expect(email(text), text).toBe(0);
   });
 
   it("the detector is as strict as before for anything else", () => {
-    for (const text of ["john at example.com", "john at example .com", "john at example . com", "john at example dot com", "john (at) home.nl", "(at) home", "sales [at] 3m.com", "at (at) example.com", "john at emailx.com", "(at) <emailx.com"]) expect(email(text), text).toBeGreaterThan(0);
+    for (const text of ["john at example.com", "john at example .com", "john at example . com", "john at example dot com", "john (at) home.nl", "(at) home", "sales [at] 3m.com", "at (at) example.com", "john at emailx.com", "(at) <emailx.com", "john at <emailx.com", "john at <email.com"]) expect(email(text), text).toBeGreaterThan(0);
+  });
+
+  it("a bracketed or quoted domain survives the scrub and is always found: the reviewer's matrix", () => {
+    const locals = ["john", "a.b", "first+tag", "jan_de-vries"];
+    const shapes = [(d) => `(${d})`, (d) => `[${d}]`, (d) => `{${d}}`, (d) => `"${d}"`, (d) => `'${d}'`];
+    const domains = ["example.com", "example dot com", "example . com"];
+    let forms = 0;
+    for (const local of locals) for (const shape of shapes) for (const domain of domains) {
+      const text = `${local} at ${shape(domain)}`;
+      expect(email(scrub(text)), text).toBeGreaterThan(0);
+      forms++;
+    }
+    expect(forms).toBe(60);
+  });
+
+  it("each exemption has both sides", () => {
+    // Our own tokens: no finding.
+    for (const text of ["Reach us at <email>. Open daily", "(at) <email>. Open daily", "[at] <ip>. Open daily", "Reach at (<email>). Open daily", 'Reach at "<email>". Open daily', "Reach at '<number>'. Open daily"]) expect(email(text), text).toBe(0);
+    // One character off a token: a finding.
+    for (const text of ["Reach us at <emails>. Open daily", "Reach us at <mail>. Open daily", "(at) <emails>. Open daily", "Reach at (<emails>). Open daily"]) expect(email(text), text).toBeGreaterThan(0);
+    // Web URLs, on their own rule: no finding.
+    for (const text of ["Available at https://example.com. Open daily", "Docs at http://docs.example.com/a.html", "Mirror at ftp://example.com/a.zip", "See at (https://example.com). Open daily"]) expect(email(text), text).toBe(0);
+    // Anything short of a web URL: a finding.
+    for (const text of ["john at https.example.com", "john at mailto://example.com", "john at //example.com"]) expect(email(text), text).toBeGreaterThan(0);
+  });
+
+  it("the price of strictness: paths and prose that look like a bracketed domain can stop a run", () => {
+    for (const text of ["See it at /docs/guide.html. Open daily", "Look at (example.com). Open daily", 'Look at "example.com". Open daily']) expect(email(text), text).toBeGreaterThan(0);
   });
 
   it("the token list is the detector's own, and the scrub stays as strict", () => {
@@ -1465,9 +1494,9 @@ describe("Amendment 3", () => {
       "Reach us at info@example.com. Or at sales@example.com.", "Contact: info@example.com (sales), billing@example.com (billing).", "Mail ons op info@voorbeeld.nl.", "Schrijf naar info (at) voorbeeld.nl.",
       "Kontakt: info[at]beispiel.de.", "contact [at] example.fr", "Écrivez-nous à contact@exemple.fr.", "Our server 192.0.2.10 is at capacity.", "Your IP is 203.0.113.7.", "Order 123456789012 shipped.",
       "Open at 9. Closed at 5.", "Look at this. Then look at that.", "Our rate is at 4.5 percent.", "Reach us at: info@example.com.", "Contact at info@example.com, sales at sales@example.com.", "Reach us at INFO@EXAMPLE.COM.",
-      "Read more at https://example.com.", "Docs at http://docs.example.com/guide.html.", "Available at ftp://example.com/a.zip.", "See it at /docs/guide.html.", "Starts at 9.30 a.m. sharp.", "Priced at $4.99. Buy now.",
+      "Read more at https://example.com.", "Docs at http://docs.example.com/guide.html.", "Available at ftp://example.com/a.zip.", "Starts at 9.30 a.m. sharp.", "Priced at $4.99. Buy now.",
       "Located at No. 5 High St.", "Arrives at 10 a.m. today.", "Sold at Amazon.com and eBay.", "Look at Node.js today.", "Built at Acme Inc. in 2020.", "Treated at St. Mary's Hospital.", "Download it at report.pdf.",
-      "We're at it. Again.", "Stay at home. Stay safe.", "Sign in at app.example.com/login.", "Look at (example.com).", "At Example.com we care.", "Good at Python. Good at Rust.", "Get it at the App Store. Free.",
+      "We're at it. Again.", "Stay at home. Stay safe.", "Sign in at app.example.com/login.", "At Example.com we care.", "Good at Python. Good at Rust.", "Get it at the App Store. Free.",
       "He is at work . Back soon.", "Mail to: a.b@c.de (a.b@c.de)", "Support: help@example.com | Sales: sales@example.com | Press: press@example.com",
     ];
     for (const text of corpus) {
@@ -1487,20 +1516,78 @@ describe("Amendment 3", () => {
     expect(printed.join()).not.toMatch(/a\.org|b\.org|jan@|server/);
   });
 
-  it("a review holds under a detector that no longer flags the record, and only with a person named", () => {
+  const stoppedRun = (text = "Reach us at <email>. Open daily") => {
     const dir = folder();
-    const raw = `${JSON.stringify({ status: "ok", evidence: { pageExcerpt: { text: "Reach us at <email>." } } })}\n`;
+    const raw = `${JSON.stringify({ pass: 2, order: 7, host: "a.org", status: "ok", evidence: { pageExcerpt: { text } } })}\n`;
     writeFileSync(join(dir, "raw.jsonl"), raw);
-    writeFileSync(join(dir, "manifest.json"), JSON.stringify({ kind: "pass", finishedAt: "x", partial: true, rawSha256: createHash("sha256").update(raw).digest("hex") }));
-    const report = privacyReport(dir, { falseFire: Buffer.from("checked"), reviewer: "a person" });
+    writeFileSync(join(dir, "manifest.json"), JSON.stringify({ kind: "pass", pass: 2, finishedAt: "x", partial: true, stoppedFor: PRIVACY_STOP, records: 1, rawSha256: createHash("sha256").update(raw).digest("hex") }));
+    return dir;
+  };
+
+  it("the frozen detector is kept under its hash, reproduces the stop, and reports place and no text", () => {
+    expect(createHash("sha256").update(readFileSync(join(import.meta.dirname, "..", "bench", "front-door", "legacy", "classify-7023106f.mjs"))).digest("hex")).toBe(LEGACY_CLASSIFIER_SHA256);
+    expect(recordedHashR(readFileSync(PREREG_R, "utf8"), "Legacy classifier")).toBe(LEGACY_CLASSIFIER_SHA256);
+    const dir = stoppedRun();
+    const report = legacyFindings(dir);
+    expect(report).toMatchObject({ records: 1, reproducesStop: true, legacyDetectorSha256: LEGACY_CLASSIFIER_SHA256 });
+    expect(report.findings).toEqual([{ order: 7, path: "evidence.pageExcerpt.text", kind: "email", count: 1 }]);
+    expect(readFileSync(join(dir, "legacy-findings.json"), "utf8")).not.toMatch(/Reach|Open daily|a\.org/);
+    const printed = [];
+    expect(reportMain(["--legacy-findings", dir], { log: (m) => printed.push(m) })).toBe(0);
+    expect(printed.join()).not.toMatch(/evidence|a\.org/);
+  });
+
+  it("the old trigger needs the period and a word after it, and the new detector is quiet on it", () => {
+    const dir = stoppedRun("Reach us at <email>.");
+    expect(legacyFindings(dir).findings).toEqual([]);
+    expect(reportMain(["--legacy-findings", dir], { log: () => undefined })).toBe(1);
+    expect(email("Reach us at <email>. Open daily")).toBe(0);
+  });
+
+  it("a legacy report needs the original raw file", () => {
+    const dir = stoppedRun();
+    writeFileSync(join(dir, "raw.jsonl"), "{}\n");
+    expect(() => legacyFindings(dir)).toThrow(/original raw file/);
+  });
+
+  it("a clean scan can't be a false fire without a legacy finding for this run", () => {
+    const dir = stoppedRun("Nothing here.");
+    expect(() => privacyReport(dir, { falseFire: Buffer.from("checked"), reviewer: "a person" })).toThrow(/nothing to call a false fire/);
+    legacyFindings(dir);
+    expect(() => privacyReport(dir, { falseFire: Buffer.from("checked"), reviewer: "a person" })).toThrow(/nothing to call a false fire/);
+    const found = stoppedRun();
+    legacyFindings(found);
+    const bytes = readFileSync(join(found, "legacy-findings.json"));
+    const report = privacyReport(found, { falseFire: Buffer.from("checked"), reviewer: "a person" });
     expect(report.clean).toBe(true);
-    expect(falseFireReviewed(dir)).toBe(true);
+    expect(report.reviewed.legacyFindingsSha256).toBe(createHash("sha256").update(bytes).digest("hex"));
+    expect(falseFireReviewed(found)).toBe(true);
+  });
+
+  it("prune refuses a privacy stop before the review, even when the new detector is clean", () => {
+    const dir = stoppedRun();
+    expect(() => prunePilot(dir)).toThrow(/before any prune/);
+    legacyFindings(dir);
+    privacyReport(dir, { falseFire: Buffer.from("checked"), reviewer: "a person" });
+    expect(prunePilot(dir).verified).toBe(true);
+  });
+
+  it("a site keeps the first reason it was skipped", () => {
+    const merged = mergeSkips(new Map([["a.org", "stopped-pass"], ["b.org", "stopped-pass"]]), new Map([["a.org", "opted-out-earlier"]]), new Map([["c.org", "pilot"]]));
+    expect(Object.fromEntries(merged)).toEqual({ "a.org": "opted-out-earlier", "b.org": "stopped-pass", "c.org": "pilot" });
+  });
+
+  it("skipped sites are reported per cohort and reason", () => {
+    const skipped = (cohort, category) => ({ reason: "exclusion_list", category, cohorts: { [cohort]: {} } });
+    expect(skipsByCohort([skipped("T1k", "stopped-pass"), skipped("T1k", "pilot"), skipped("YC-new", "pilot"), { status: "ok", cohorts: { T1k: {} } }])).toEqual({ T1k: { "stopped-pass": 1, pilot: 1 }, "YC-new": { pilot: 1 } });
   });
 
   it("pass 3 needs its own amendment, in both places", () => {
     expect(amendment3Adopted("| Amendment 3 | **Adopted.** x |\n## Amendment 3\n**Status: adopted.** x\n")).toBe(true);
     expect(amendment3Adopted("| Amendment 3 | **Draft.** x |\n## Amendment 3\n**Status: adopted.** x\n")).toBe(false);
     expect(amendment3Adopted("| Amendment 3 | **Adopted.** x |\n**Status: adopted.** x\n## Amendment 3\n**Status: draft.** x\n")).toBe(false);
+    expect(amendment3Adopted("| Amendment 3 | **Adopted.** x |\n\n## Amendment 3\n\n**Status: draft.** x\n\n## Amendment 4\n\n**Status: adopted.** x\n")).toBe(false);
+    expect(amendment3Adopted("| Amendment 3 | **Adopted.** x |\n\n## Amendment 3\n\n**Status: adopted.** x\n\n## Amendment 4\n\n**Status: draft.** x\n")).toBe(true);
     expect(amendment3Adopted(readFileSync(PREREG_R, "utf8"))).toBe(false);
     expect(PASS_SEED[3]).toBe(PASS_SEED[2]);
   });
@@ -1508,6 +1595,6 @@ describe("Amendment 3", () => {
   it("the page and the run sheet say what happened", () => {
     expect(readFileSync(STUDY_PAGE, "utf8")).toContain("each site is visited once in the run itself");
     const sheet = readFileSync(join(import.meta.dirname, "..", "bench", "front-door", "run-sheet.md"), "utf8");
-    for (const step of ["--pass 3", "--replay", "--false-fire /srv/e20/false-fire-note.txt --reviewer <who>"]) expect(sheet).toContain(step);
+    for (const step of ["--pass 3", "--replay", "--legacy-findings", "--false-fire /srv/e20/false-fire-note.txt --reviewer <who>", "export RUN=$R/e20r-pass3", "--privacy $RUN", "draw $RUN", "prune $RUN", "purge $RUN", "--pass1 $RUN/raw.jsonl"]) expect(sheet).toContain(step);
   });
 });

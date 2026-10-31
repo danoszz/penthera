@@ -21,7 +21,8 @@
 | E20 YC raw SHA-256 | `b5a98cc266b232e63eee8864198dc961ffe21133fdbf43a51069acf2fcaf0391` |
 | Industry map SHA-256 | `78df4910d953379f21d935aeb3ef658d85cbef036539e1a31362c9ad7e26e075` |
 | E20 exclusion file SHA-256 | `246127f639968afc906d59f155f6a993982f3a33c0655718234955319ebe4c34` |
-| Frozen classifier SHA-256 | `0dc0cbc32ece5f55e9aa9a5e80c70539b07d9837780f5c327518edbe3edb35c1` (`bench/front-door/classify.mjs`) |
+| Legacy classifier SHA-256 | `7023106f7bd73c1e4122d80e9479f63a4a04091f1426327be70621951fe71d3b` (`bench/front-door/legacy/classify-7023106f.mjs`, the detector that stopped pass 2) |
+| Frozen classifier SHA-256 | `280c4633f3d003371203957774b867889e596db9bd8b716f2e0e9c1fb49efbac` (`bench/front-door/classify.mjs`) |
 | Public Suffix List SHA-256 | `d3e6243b51695327984abb3e2a5aa7077096867f75121e031e6a5a3840ca8bcd` (commit `9dfbe81931367b3f0af21035c36ae7eeb830dd88`, fetched 30 Oct 2026, private suffixes included) |
 | Registration commit | The commit that merges this file to `main` |
 | T1k list SHA-256 | `d670a3c1910fe7baa4883dcb8320b1ec99d7d29f9d22954b9288ae678540674e` (`tranco-ZJ8PG-top1000.csv`) |
@@ -787,16 +788,23 @@ they differ.
 **What happened.** Pass 2 stopped itself at 188 of 7,031 sites at 10:30 UTC on 31 October 2026. Its
 in-flight check flagged an email in `evidence.pageExcerpt.text` of one record.
 
-**The false fire.** The scrub had worked. It had replaced an address, leaving text such as
-`at <email>.` The detector then read `at`, our own token and the period as a spaced address. Without
-the period it doesn't fire. So the stop came from the detector reading the scrub's own output, not
-from an address in stored text. This is the finding of the code review, and a person must confirm it
-on the record, as below.
+**The suspected false fire.** The scrub replaces an address and leaves `at <email>.` The frozen
+detector joins the words after a bare `at`, so `Reach us at <email>. Open daily` reads `<email>. Open`
+as a name and a top-level domain. The exact trigger needs both the period and an alphabetic word after
+it: `Reach us at <email>.` alone doesn't fire. This is a finding of code review on a synthetic string.
+Nobody has yet confirmed it on the real record.
 
-**A person's review.** A named person reviews the flagged record on the server, printing it to no
-shared place, and records the review with a note whose hash is kept. Only then is the text pruned.
-If the review finds a real address, this amendment doesn't apply: the stopped pass goes to purge, and
-a further run needs a new amendment.
+**The legacy finding.** The frozen detector is kept under its hash, and is used for this alone. Before
+any prune, `pilot-report.mjs --legacy-findings` scans the original raw file and writes a private
+report, bound to the manifest and the raw hash, with record order and field path and no flagged text.
+
+**A person's review.** A named person inspects those records on the server, printing them to no shared
+place, and records the review with a note. The review is bound to the finding report's hash. A clean
+scan can't be called a false fire without that report. Only then is the text pruned; `prune` refuses
+this stop before the review.
+
+**If it doesn't hold.** If the legacy scan doesn't reproduce the stop, or the person finds a real
+address, this amendment doesn't apply. Pass 2 goes to purge, and a further run needs a new amendment.
 
 **The partial run.** It is reported as a partial run with its coverage, and it decides no claim. Its
 records aren't pooled with any other run.
@@ -804,14 +812,21 @@ records aren't pooled with any other run.
 **The change.** `classify.mjs` holds both the labels and the detector, `scrubMisses`, so the fix
 changes its frozen hash. It can't sit elsewhere, because the detector is what the stop reads.
 
-- **What changed.** Inside `scrubMisses`, and nowhere else in the file. A bracketed `at` no longer counts
-  when its next word is one of our own tokens, from a new list in the detector. A bare `at` counts only
-  before a word that opens with a letter or digit and isn't a URL.
-- **Why.** `at <email>.` is the scrub's own output. A corpus of contact sentences written for this fix
-  found the same false fire on `at https://...`, `at /path.html` and `at (name.com)`, which any page could
-  have held, so another stop was likely.
+- **What changed.** Inside `scrubMisses`, and nowhere else in the file. A bracketed `at`, or a bare `at`
+  before something with a dot, no longer counts when what follows opens with one of our own scrub tokens,
+  from the detector's own list. A bare `at` also doesn't count before a web URL, as a separate case:
+  a scheme can't open an address, and such text is common on pages.
+- **What still counts.** Everything else, on purpose, for a bare `at`: bracketed and quoted domains, such
+  as `john at (example.com)`, and paths. So ordinary prose such as `Look at (example.com). Open daily` can
+  stop a run again. This detector is the backstop for retained addresses, so it takes the false stop
+  over the missed address. Across the 685,712 stored strings of pass 1 that aren't hashes, after the
+  scrub, these forms appear 0 times, and the detector fires 0 times. That says little: pass 1 stored only
+  2,413 page excerpts, nearly all from error pages, while pass 2 stored normal pages and fired once in
+  188 sites. `--replay` over those 188 records gives the better count.
+- **Why.** The stop reads this detector, so the fix can't sit elsewhere. Exempting only our own tokens is
+  the smallest change that answers the stop.
 - **Old hash.** `7023106f7bd73c1e4122d80e9479f63a4a04091f1426327be70621951fe71d3b`.
-- **New hash.** `0dc0cbc32ece5f55e9aa9a5e80c70539b07d9837780f5c327518edbe3edb35c1`.
+- **New hash.** `280c4633f3d003371203957774b867889e596db9bd8b716f2e0e9c1fb49efbac`.
 - **No graded result changes.** `classify`, `classifyRegistered`, `scrub`, `evidenceOf` and every other
   export keep their source, byte for byte, so a label, a stored excerpt or a grade can't differ. The
   change only adds conditions that skip a count, so the detector can fire less, never more. A pilot round
@@ -829,8 +844,12 @@ full, and pass 3 refuses unless it started after the stopped pass.
 **Pass 3.** A new pass replaces pass 2 under the rules of Amendment 2, with `--pass 3`, in its own
 fixed folder `e20r-pass3`, with pass 2's seed, 2021, because nothing here needs another. Everything
 Amendment 2 says of pass 2 as the run that decides claims applies to pass 3. It runs once. The lock on
-pass 2 stays, so pass 2 can't start again. Pass 3 refuses unless the stopped pass has a finished,
-partial manifest, a recorded review by a named person, and a prune proof that matches its raw file.
+pass 2 stays, so pass 2 can't start again. Pilot round 2 and pass 3 refuse unless the stopped pass is
+pass 2 itself, real and unchanged at its end, stopped for exactly this registered privacy reason, with
+its original raw hash and count, a legacy report with a finding at the place the stop reads, a named
+review bound to that report and to the manifest and original raw hash, and a prune proof that matches
+its raw file. Any other partial run is not covered: SIGTERM, resolver failures, the stop file or a
+changed source address need a new amendment.
 
 **Nobody gets a second visit.** Pass 3 skips the 50 sites of pilot round 1 and all 188 sites of the
 stopped pass, and they are counted. The sites come from the pruned raw file of the stopped pass, so a
@@ -838,9 +857,11 @@ purged pass can't be followed by pass 3.
 
 **Precision.** That is 238 of 7,031 sites, or 3.4%, out of pass 3. Pilot round 2 takes up to 50 more,
 which are dropped for good too, so pass 3 can have 288 sites fewer, or 4.1%, and 6,743 sites. Intervals
-widen by about 2% at that size. The stopped pass's sites are the start of a seeded shuffle, so their
-removal is not tied to what they answered. Pilot sites are drawn evenly across the claim lists, so the
-smaller lists lose a larger share, and the report gives coverage per list.
+widen by about 2% at that size. The order of the stopped pass was fixed before collection, by the seed.
+Its stopping position was outcome-dependent: the last record is in because of what it held, and the
+number of sites before it depends on earlier responses. So the removal isn't claimed to be at random.
+Pilot sites are drawn evenly across the claim lists, so the smaller lists lose a larger share. The
+analysis reports skipped sites per cohort and reason, and a site keeps the first reason it was skipped.
 
 **Limits.** Sites in the stopped pass were visited under Amendment 2 and aren't in the claims. The
 decision to run again came after the stop. The scrub's forms and the detector's other limits don't

@@ -27,10 +27,11 @@ function* storedStrings(value, path = "") {
   }
 }
 
-function eachMiss(r, visit) {
+/** Every finding of a detector in one record. Takes the detector, so the frozen one can walk the same paths. */
+export function eachMiss(r, visit, detector = scrubMisses) {
   for (const [path, text, isKey] of storedStrings(r)) {
     if (!isKey && HASH_PATHS.has(path) && DIGEST.test(text)) continue;
-    for (const [kind, n] of Object.entries(scrubMisses(text))) if (n && (isKey || !SPF_PATHS.has(path) || !ADDRESS_KINDS.has(kind))) visit(path, isKey, kind, n);
+    for (const [kind, n] of Object.entries(detector(text))) if (n && (isKey || !SPF_PATHS.has(path) || !ADDRESS_KINDS.has(kind))) visit(path, isKey, kind, n);
   }
 }
 
@@ -57,6 +58,13 @@ export const resolverFailed = (r) => (r.error === "not_found" && r.netCode !== u
   || [r.dns?.listed, r.dns?.final].filter(Boolean).some((d) => Object.values(d.outcomes ?? {}).some(failedOutcome) || (d.queries ?? []).some((q) => failedOutcome(q.outcome)));
 
 export const MAX_RESOLVER_FAILURES = 0.2;
+
+// Amendment 3 covers this stop and no other, as the runner wrote it.
+export const PRIVACY_STOP = "a privacy scrub missed something";
+// The detector that stopped pass 2. Its file stays in legacy/, and only the finding report reads it.
+export const LEGACY_CLASSIFIER_SHA256 = "7023106f7bd73c1e4122d80e9479f63a4a04091f1426327be70621951fe71d3b";
+// Where the in-flight stop looks, so a legacy finding can be shown to be that stop.
+export const PAGE_PATHS = Object.freeze(["evidence.excerpt", "evidence.pageExcerpt.title", "evidence.pageExcerpt.text", "evidence.pageExcerpt.noscript", "evidence.others.excerpt"]);
 
 /** Sites a whole-list bound counts. A stop of ours stays in; only an owner's choice or our exclusion leaves. */
 const NOT_ELIGIBLE = new Set(["exclusion_list", "robots_disallow_all", "robots_disallow_path", "not_a_homepage"]);

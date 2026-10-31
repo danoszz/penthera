@@ -24,7 +24,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { dispositionOf, falseFireReviewed, NO_PRIVACY, PURGED_FILES, recordMisses, unfinishedRun } from "./record-checks.mjs";
+import { dispositionOf, falseFireReviewed, NO_PRIVACY, PRIVACY_STOP, PURGED_FILES, recordMisses, unfinishedRun } from "./record-checks.mjs";
 import { holdsText, PASS_SEED, seeded, shuffled } from "./replicate.mjs";
 
 // Rows per stratum, frozen in the amendment.
@@ -211,7 +211,9 @@ export function rewriteRun(dir, records, kind, extra = {}) {
 
 /** All text out, for a pilot or for a pass that stopped, and read back to prove it. */
 export function prunePilot(dir) {
-  const { kind } = JSON.parse(readFileSync(join(dir, "manifest.json"), "utf8"));
+  const { kind, stoppedFor } = JSON.parse(readFileSync(join(dir, "manifest.json"), "utf8"));
+  // A later detector may not flag what stopped the run, so the stop itself asks for the review.
+  if (stoppedFor === PRIVACY_STOP && !falseFireReviewed(dir)) throw new Error("Refused: this run stopped on a privacy finding. A person reviews it first, before any prune. A real miss goes to purge.");
   const records = readRaw(join(dir, "raw.jsonl"));
   // Pruning takes excerpts. A miss can sit in a field it leaves, so it needs a person, then a purge.
   if (records.some((r) => Object.values(recordMisses(r)).some(Boolean)) && !falseFireReviewed(dir)) throw new Error("Refused: this run stores a privacy miss, which prune can't clear. A person reviews it. A real miss goes to purge; a false fire is recorded with --false-fire.");

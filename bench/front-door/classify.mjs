@@ -291,8 +291,14 @@ export const scrub = (text) => scrubAddresses(stripFields(capped(String(text ?? 
 
 // What a scrub leaves behind, listed here on its own so a change to the scrub can't hide in the detector.
 const OWN_TOKENS = Object.freeze(["<email>", "<ip>", "<token>", "<id>", "<number>", "<query>", "<fragment>", "<input>"]);
-/** Does this text open with one of our tokens? */
-const opensWithOwnToken = (text) => OWN_TOKENS.some((t) => text.startsWith(t));
+/** Does this text open with one of our tokens, past an opening bracket or quote? Our output, so no address can start there. */
+const opensWithOwnToken = (text) => {
+  let i = 0;
+  while (i < text.length && "([{\"'".includes(text[i])) i++;
+  return OWN_TOKENS.some((t) => text.startsWith(t, i));
+};
+// A web URL after `at` is common page text, and a scheme can't open an address. Named on its own, so it stays narrow.
+const opensWithUrl = (text) => /^[([{"']*(?:https?|ftp):\/\//.test(text);
 
 /**
  * What should never survive a scrub. This walks tokens with its own tests and
@@ -317,11 +323,11 @@ export function scrubMisses(text) {
       if (!opensWithOwnToken(low.slice(k, k + 16))) out.email++;
     }
   }
-  // A bare `at` before something with a dot. A domain opens with a letter or digit, which leaves out
-  // our own tokens, paths and bracketed words, and a URL isn't an address.
+  // A bare `at` before something with a dot. Only our own tokens and a web URL are left out, so
+  // a bracketed or quoted domain counts, and so does prose that looks like one.
   const words = low.split(/\s+/);
   for (let i = 1; i < words.length; i++) {
-    if (words[i] !== "at" || !/[\p{L}\p{N}._%+-]$/u.test(words[i - 1]) || !/^[\p{L}\p{N}]/u.test(words[i + 1] ?? "") || words[i + 1].includes("://")) continue;
+    if (words[i] !== "at" || !/[\p{L}\p{N}._%+-]$/u.test(words[i - 1]) || opensWithOwnToken(words[i + 1] ?? "") || opensWithUrl(words[i + 1] ?? "")) continue;
     if (/^[^\s.]+(?:\s*\.\s*|\s+dot\s+)[a-z]{2,}\b/.test(words.slice(i + 1, i + 5).join(" "))) out.email++;
   }
   // Ordinary pages hold many entities for quotes and dashes. Only ones that spell ASCII hide text.

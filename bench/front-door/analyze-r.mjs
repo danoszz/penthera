@@ -342,6 +342,13 @@ export function secondaryCohorts(graded, all = graded) {
   })));
 }
 
+/** Sites this run skipped, per cohort and reason: pilot, stopped pass and the rest. Skipped sites aren't missing at random, so each list shows its own. */
+export function skipsByCohort(all) {
+  const out = {};
+  for (const r of all.filter((x) => x.reason === "exclusion_list")) for (const c of Object.keys(r.cohorts ?? {})) ((out[c] ||= {})[r.category] = (out[c][r.category] ?? 0) + 1);
+  return out;
+}
+
 /** A Wilson 95% interval, row-level like the table it sits in. */
 function wilson(k, n, z = 1.96) {
   const p = k / n, d = 1 + z * z / n, mid = (p + z * z / (2 * n)) / d, half = z * Math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / d;
@@ -452,6 +459,7 @@ export function main(args, { fail = console.error, preregText } = {}) {
   out.standardizedR.C4 = standardizedDiff(edge(inCohort(p1, "T1k"), false).filter(isPage), edge(inCohort(p1, "YC-new"), false).filter(isPage), "https+hsts");
   out.secondaryCohorts = secondaryCohorts(p1, all);
   out.challengeByEdge = challengeByEdge(p1);
+  out.skipsByCohort = skipsByCohort(all);
   out.cspControlsScripts = cspValueClaims(p1);
   if (all.some((r) => r.dns?.listed)) {
     const decided = dnsClaims(all);

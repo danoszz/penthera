@@ -22,6 +22,7 @@ The scrub removes patterns. These get through, and neither it nor its detector w
 
 - Names, street addresses and postal codes in page text. These are why unsampled text is deleted.
 - Addresses written in words with no bracket and no dot, such as `john at example`. They read like "Meet me at home".
+- `john at (example.com)` and quoted forms. The scrub keeps them, and the detector stops the run, which is why these aren't silent.
 - Addresses split over markup or across lines beyond the small gaps it allows.
 - Addresses in images, in scripts built at run time, or in encodings it doesn't decode, such as base64.
 - Phone numbers under 9 digits, national ID numbers and similar identifiers.
@@ -53,9 +54,10 @@ The audit sheet goes to one labeler and to a hosted model. The 12-month deletion
 ## After the stopped pass 2
 
 - The detector now skips a bracketed `at` whose next word is one of our own tokens. Stored text is scrubbed, so that neighbour is ours unless a page itself prints such a token.
-- A bare `at` counts only before a word that opens with a letter or digit and isn't a URL. So `john at (example.com)` and `john at "example.com"` get past both the scrub and the detector.
+- The detector skips our own tokens after a bare or bracketed `at`, and a web URL after a bare `at`. It still finds `john at (example.com)`, which the scrub leaves in place, and it can't tell that form from prose. So `Look at (example.com). Open daily` can stop a run again.
+- The frozen detector in `legacy/` runs only for the legacy finding report. That report names record order and field path, so it stays on the server.
 - Pass 3 learns which sites to skip from the stopped pass's pruned raw file. A purge deletes that file, so a purged pass 2 can't be followed by pass 3.
-- A false-fire review rests on one named person's note, and only its hash is kept with the run.
+- A false-fire review rests on one named person's note. Only its hash is kept with the run, bound to the legacy finding report.
 - The realistic corpus in the tests is hand-written. It finds common sentence forms, and it says nothing about forms nobody wrote down.
 
 ## Stops
