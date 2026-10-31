@@ -303,6 +303,7 @@ const opensWithOwnToken = (text) => {
 // and paths hold characters no label can, and our own tokens and web URLs fail the same test.
 // The scrub closes `(info) @ x.y` up to `(info)@x.y`, which the token walk below can't read past the bracket.
 const BARE_AT = /(?: [([{<"'`“‘«*]*|[([{<]+)(?:at|@)(?= )|(?<=[)\]}>"'`”’»])@|(?<=[\p{L}\p{N}._%+-])@(?=[([{<"'`“‘«])/gu;
+const OWN_LOCAL = new RegExp(`(?:${[...OWN_TOKENS, "<redacted>"].join("|")})$`);
 const ADDRESS_LOCAL = /[\p{L}\p{N}._%+-]["'`”’»)\]}>*]*$/u;
 const DOMAIN_OPENING = /[([{<"'`“‘«*]*/y;
 const DOMAIN_LABEL = /[\p{L}\p{N}][\p{L}\p{N}\p{M}-]*/uy;
@@ -368,6 +369,7 @@ export function scrubMisses(text) {
   const spaced = low.normalize("NFKC").replace(/\p{Cf}/gu, "").replace(/&nbsp;|&#0*160;|&#x0*a0;/g, " ").replace(/\s+/g, " ");
   for (const m of spaced.matchAll(BARE_AT)) {
     const after = m.index + m[0].length;
+    if (OWN_LOCAL.test(spaced.slice(Math.max(0, m.index - 16), m.index))) continue;
     if (ADDRESS_LOCAL.test(spaced.slice(Math.max(0, m.index - 16), m.index)) && opensDomain(spaced, spaced[after] === " " ? after + 1 : after)) out.email++;
   }
   // Ordinary pages hold many entities for quotes and dashes. Only ones that spell ASCII hide text.
