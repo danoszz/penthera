@@ -128,7 +128,8 @@ export function agentFiles({ root, site, version, origin, values, pub = null, po
   // llms.txt: the template, plus when to reach for Penthera (before the docs),
   // the landing pages (after them) and the live check's spec (with the other
   // machine-readable files).
-  const landing = landingPages(site);
+  // An unlisted page keeps its URL, and stays out of every list.
+  const landing = landingPages(site).filter((p) => !p.unlisted);
   // /contact is a landing page for the build, but it is no question for the check.
   const asked = landing.filter((p) => p.slug !== "contact");
   const questions = asked.length ? `## Questions the live check answers\n\n${asked.map((p) => `- [${p.h1}](${origin}/${p.slug}.md): ${p.description}`).join("\n")}\n\n` : "";

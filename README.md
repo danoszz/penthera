@@ -487,15 +487,6 @@ you can [sponsor its maintenance](https://github.com/sponsors/danoszz).
 Sponsorship pays for maintainer time and buys no influence over findings
 ([tiers](docs/funding/sponsor-tiers.md)).
 
-**An open question: is the free tool enough?** One person maintains Penthera
-part-time. To keep it going, and to pay independent reviewers and outside
-experts to critique its rules, I'm running a small experiment called
-[Pro](https://penthera.org/pro). It measures whether teams need anything beyond
-the free agent, such as a record kept for them and checks on a schedule. It is
-not for sale, and no check will ever move behind a paywall. If there is no
-need, the free tool is the whole product, and that's a fine answer
-([governance](GOVERNANCE.md#money)).
-
 ## License
 
 MIT. See [LICENSE](LICENSE). Report vulnerabilities in Penthera itself through

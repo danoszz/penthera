@@ -5,6 +5,7 @@ description: Pro is an experiment, not a sale. Penthera stays free; this asks wh
 eyebrow: Pro
 cta: waitlist
 layout: pro
+unlisted: true
 ---
 # Penthera Pro
 
