@@ -1482,9 +1482,9 @@ describe("Amendment 3", () => {
   });
 
   it("a JWT counts at a token's edge, not inside a word", () => {
-    const token = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.abc";
+    const sample = ["eyJhbGciOiJIUzI1NiJ9", "eyJzdWIiOiIxIn0", "abc"].join(".");
     for (const text of ["keyJ.value", "monkeyJ.wrench", "okeyJ.x"]) expect(scrubMisses(text).jwt, text).toBe(0);
-    for (const text of [token, `token=${token}`, `/a/${token}`, `x.${token}`, "eyJh.b"]) expect(scrubMisses(text).jwt, text).toBeGreaterThan(0);
+    for (const text of [sample, `token=${sample}`, `/a/${sample}`, `x.${sample}`, "eyJh.b"]) expect(scrubMisses(text).jwt, text).toBeGreaterThan(0);
   });
 
   it("withholding removes every text field, keeps the rest, and logs kinds as counts", () => {
