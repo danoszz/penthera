@@ -302,6 +302,19 @@ ${rows}
     </section>`;
 }
 
+/** The page's structured data, the same on /research however it is drawn. */
+export const researchLd = (entries, { url, origin, description }) => ldScript([
+    {
+      "@type": "CollectionPage", "@id": `${url}#page`, url, name: "Penthera research", description, author: AUTHOR,
+      isPartOf: { "@type": "WebSite", "@id": `${origin}/#website`, url: `${origin}/`, name: "Penthera" },
+      mainEntity: {
+        "@type": "ItemList", itemListOrder: "https://schema.org/ItemListOrderDescending", numberOfItems: entries.length,
+        itemListElement: entries.map((e, i) => ({ "@type": "ListItem", position: i + 1, name: e.headline || e.title, url: e.href.startsWith("/") ? `${origin}${e.href}` : e.href })),
+      },
+    },
+    { "@type": "BreadcrumbList", itemListElement: [["Penthera", "/"], ["Research", "/research"]].map(([n, p], i) => ({ "@type": "ListItem", position: i + 1, name: n, item: `${origin}${p}` })) },
+  ]);
+
 /** Escape, and keep a flag such as --giants on one line. */
 const text = (s) => esc(s).replace(/(--[a-z][\w-]*)/g, '<span class="nowrap">$1</span>');
 
@@ -357,17 +370,7 @@ export function researchHtml(entries, { origin, pub = null, styles = "/styles.cs
   const count = (t) => entries.filter((e) => e.type === t).length;
   const tally = TYPES.map((t) => [t, count(t)]).filter(([, n]) => n).map(([t, n]) => `${n} ${({ Study: ["study", "studies"], Result: ["result", "results"], "Case study": ["case study", "case studies"], Post: ["post", "posts"] })[t][n === 1 ? 0 : 1]}`).join(" · ");
   const description = "Penthera's research: every study registered before it runs, its status and result, the case studies and posts, newest first, each dated.";
-  const ld = ldScript([
-    {
-      "@type": "CollectionPage", "@id": `${url}#page`, url, name: "Penthera research", description, author: AUTHOR,
-      isPartOf: { "@type": "WebSite", "@id": `${origin}/#website`, url: `${origin}/`, name: "Penthera" },
-      mainEntity: {
-        "@type": "ItemList", itemListOrder: "https://schema.org/ItemListOrderDescending", numberOfItems: entries.length,
-        itemListElement: entries.map((e, i) => ({ "@type": "ListItem", position: i + 1, name: e.headline || e.title, url: e.href.startsWith("/") ? `${origin}${e.href}` : e.href })),
-      },
-    },
-    { "@type": "BreadcrumbList", itemListElement: [["Penthera", "/"], ["Research", "/research"]].map(([n, p], i) => ({ "@type": "ListItem", position: i + 1, name: n, item: `${origin}${p}` })) },
-  ]);
+  const ld = researchLd(entries, { url, origin, description });
   return `<!doctype html>
 <html lang="en">
 <head>

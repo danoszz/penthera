@@ -37,6 +37,7 @@ export function footGroups({ pages = [], benchmarks = [], posts = [] } = {}) {
       { href: REPO, text: "GitHub" },
     ] },
     { id: "research", label: "Research", links: [
+      { href: "/news", text: "News" },
       { href: "/research", text: "Research" },
       ...research.map(page),
       { href: "/benchmarks", text: "Benchmarks" },
@@ -144,8 +145,8 @@ const RAIL = [
 export function siteRail({ url = "/", stars = "", blog = true, header = process.env.PENTHERA_NAV_H || "1" } = {}) {
   const home = url === "/";
   const seg = url.split("/")[1] || "";
-  // The hub prototype: News in the Blog slot, current on /blog too.
-  const rail = process.env.PENTHERA_HUB ? RAIL.map((r) => (r.match === "blog" ? { text: "News", href: "/news", match: "news" } : r)) : RAIL;
+  // News takes the Blog slot, current on /blog too.
+  const rail = RAIL.map((r) => (r.match === "blog" ? { text: "News", href: "/news", match: "news" } : r));
   const links = rail.filter((r) => blog || r.match !== "blog").map((r) => {
     const on = seg === r.match || (r.match === "research" && seg.startsWith("research-")) || (r.match === "news" && seg === "blog");
     return `<a href="${r.href}"${on ? ` aria-current="${url === r.href ? "page" : "true"}"` : ""}>${r.text}</a>`;

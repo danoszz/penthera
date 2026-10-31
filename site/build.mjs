@@ -621,8 +621,8 @@ export async function buildSite({ out = join(SITE, "dist"), engine, blogDir = jo
     writeFileSync(join(OUT, f), text);
   }
 
-  // The hub prototype: one template, three real pages (site/news.mjs).
-  if (process.env.PENTHERA_HUB) {
+  // The hub: one template, three real pages (site/news.mjs).
+  {
     const script = `/hub.js?v=${hash(readFileSync(join(OUT, "hub.js")))}`;
     const bench = pub?.benchmarks ? benchmarkViews(pub).map((v) => ({ date: pub.date, type: "Benchmark", title: v.c.label || v.c.slug, summary: "Every tool, every interval, on the sealed half.", href: `/benchmarks/${v.c.slug}` })) : [];
     const all = [...research, ...bench, ...releases(ROOT)].sort((a, z) => (z.date || "").localeCompare(a.date || ""));
@@ -633,8 +633,10 @@ export async function buildSite({ out = join(SITE, "dist"), engine, blogDir = jo
     writeFileSync(join(OUT, "news", "feed.xml"), newsFeed(all, { origin: ORIGIN }));
     writeFileSync(join(OUT, "news", "index.html"), hub("all"));
     writeFileSync(join(OUT, "research.html"), hub("research"));
-    writeFileSync(join(OUT, "blog.html"), hub("articles"));
-    writeFileSync(join(OUT, "blog", "index.html"), hub("articles"));
+    if (posts.published.length) {
+      writeFileSync(join(OUT, "blog.html"), hub("articles"));
+      writeFileSync(join(OUT, "blog", "index.html"), hub("articles"));
+    }
   }
 
   // /type: the type system, drawn with itself (site/type.mjs).

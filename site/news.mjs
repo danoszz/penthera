@@ -3,13 +3,12 @@
  * each URL as real HTML with its filter applied, so every link works without a
  * script and each page keeps its own title and canonical. site/hub.js and the
  * browser's view transitions make switching feel like one page.
- *
- * Prototype, built only with PENTHERA_HUB=1.
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { paperPage } from "./blog.mjs";
+import { blogLd, paperPage } from "./blog.mjs";
 import { smart } from "./frame.mjs";
+import { PURPOSE, researchLd } from "./research.mjs";
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const shortDate = (d) => (d ? new Date(`${d}T00:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }) : "");
@@ -60,7 +59,7 @@ function row(e, i, posts) {
         <p class="hub-meta">${meta}</p>
         <h2><a href="${esc(e.href)}"${away ? ' rel="noopener"' : ""}>${smart(esc(e.headline || e.title))}</a></h2>
         ${fig ? `<img src="/blog/figures/${fig[0]}" width="${fig[1].width}" height="${fig[1].height}" alt="" loading="lazy">` : ""}
-        <p class="hub-line">${smart(esc(e.summary))}</p>
+        ${e.type === "Study" && e.headline ? `<p class="hub-sub">${smart(esc(e.title))}</p>` : ""}<p class="hub-line">${smart(esc(e.summary))}${e.type === "Study" && e.result ? ` <a class="hub-more" href="${esc(e.result)}">Read the result</a>` : ""}</p>${(e.notes || []).map((n) => `<p class="hub-note">${smart(esc(n.text))} <a class="hub-more" href="${esc(n.href)}">Read the re-run</a></p>`).join("")}
       </li>`;
 }
 
@@ -71,14 +70,16 @@ export function hubHtml(key, entries, { origin, styles, foot, script, posts, fea
   const statuses = ["Registered", "Running", "Result", "Draft"].map((s) => [s, rows.filter((e) => e.status === s).length]).filter(([, n]) => n);
   const chips = Object.entries(VIEWS).map(([k, c]) => `<a class="hub-chip" href="${c.href}" data-chip="${k}" data-word="${c.word}" data-view="${c.view}" data-h1="${esc(c.h1)}"${c.kind ? ` data-kind="${c.kind}"` : ""}${k === key ? ' aria-current="page"' : ""}>${c.chip}</a>`).join("");
   const body = `    <nav class="hub-chips" aria-label="Show">${chips}</nav>
-${key === "research" ? `    <p class="hub-purpose">Rules decide. Every study is registered before it runs, and every change is dated.</p>
+${key === "research" ? `    <p class="hub-purpose">${smart(esc(PURPOSE))}</p>
     <nav class="hub-status" aria-label="Status">${statuses.map(([s, n]) => `<a href="/research?status=${s.toLowerCase()}" data-status="${s.toLowerCase()}">${s} ${n}</a>`).join("")}</nav>
     <form class="hub-search" action="/research" role="search"><label class="sr" for="hub-q">Search the research</label><input id="hub-q" name="q" type="search" placeholder="Search"></form>
     <div class="rs">${feature}</div>\n` : ""}    <ul class="hub-list">
 ${rows.map((e, i) => row(e, i, posts)).join("\n")}
     </ul>
-    <p class="hub-none" hidden>Nothing here yet.</p>`;
-  return paperPage({ title: v.title, description: v.description, url: `${origin}${v.href}`, path: v.href, h1: v.h1, ld: "", body, styles, theme: "/theme.js", foot, type: "website", mast: true,
+    <p class="hub-none" hidden>Nothing here yet.</p>
+    <nav class="ttx-keys" aria-label="More pages"><a href="/benchmarks">Benchmarks</a><a href="/news/feed.xml">Atom feed</a><a href="${v.href}.md">Markdown copy</a></nav>`;
+  const ld = key === "research" ? researchLd(rows, { url: `${origin}/research`, origin, description: v.description }) : key === "articles" ? blogLd(posts, origin) : "";
+  return paperPage({ title: v.title, description: v.description, url: `${origin}${v.href}`, path: v.href, h1: v.h1, ld, body, styles, theme: "/theme.js", foot, type: "website", mast: true,
     mastHtml: mosaic(v.word), view: v.view, headScript: script, number: "P100", bar: "Penthera news", dateline: "",
     crumb: `<a class="tag" data-f="4" data-c="0" data-t="0" href="/">Penthera</a><span class="tag" data-f="3" data-c="0" data-t="0">${esc(v.chip === "All" ? "News" : v.chip)}</span>` });
 }

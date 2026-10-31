@@ -9,3 +9,4 @@ section: Changed
 - **One spacing scale and one sticker.** Margins, padding and gaps take `--sp-*`
   tokens, the hero pills share the sticker styles, and the steel button is a
   `.btn`. The square and story cards use the blue bubbles, without a score.
+- **News is one page with Research and the blog.** `/news`, `/research` and `/blog` share a list with filters, a search and a feed at `/news/feed.xml`, and every view is a real page that works without a script.

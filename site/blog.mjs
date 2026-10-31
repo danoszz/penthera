@@ -300,6 +300,12 @@ export function postMarkdown(p, { origin }) {
   return `# ${p.title}\n\n${absolute(p.md, origin).trimEnd()}\n\n${p.date} · ${AUTHOR.name} · Sources: ${p.sources.map((s) => `${REPO}/blob/main/${s}`).join(", ")}\n`;
 }
 
+/** The blog index's structured data. */
+export const blogLd = (posts, origin) => ldScript([{
+  "@type": "Blog", "@id": `${origin}/blog#blog`, url: `${origin}/blog`, name: "Penthera blog", author: AUTHOR,
+  blogPost: posts.map((p) => ({ "@id": `${origin}/blog/${p.slug}#post` })),
+}]);
+
 /** /blog: the published posts, newest first. */
 export function blogIndexHtml(posts, { origin, styles = "/styles.css", theme = "/theme.js", script = "/blog.js", foot }) {
   const numbers = pageNumbers(posts);
@@ -311,10 +317,7 @@ export function blogIndexHtml(posts, { origin, styles = "/styles.css", theme = "
 ${posts.map((p) => `      <li><p class="ttx-line">${categoryTag(p)}<span class="ttx-when">${numbers.get(p.slug)} · <time datetime="${p.date}">${longDate(p.date)}</time></span></p><h2><a href="/blog/${p.slug}">${smart(esc(p.title))}</a></h2>${figure(p)}<p class="ttx-deck">${smart(esc(p.description))}</p></li>`).join("\n")}
     </ul>
 ${fastext([["/benchmarks", "Benchmarks"], ["/research", "Research"], ["/blog/feed.xml", "Atom feed"], ["/blog.md", "Markdown copy"]])}`;
-  const ld = ldScript([{
-    "@type": "Blog", "@id": `${origin}/blog#blog`, url: `${origin}/blog`, name: "Penthera blog", author: AUTHOR,
-    blogPost: posts.map((p) => ({ "@id": `${origin}/blog/${p.slug}#post` })),
-  }]);
+  const ld = blogLd(posts, origin);
   return page({ title: "Blog: how Penthera is built and measured", description: "Posts on how Penthera is built and measured, with the data and the protocol behind every number.",
     url: `${origin}/blog`, path: "/blog", h1: "Blog", ld, body, styles, theme, foot, type: "website", mast: true, script, dateline: posts[0] ? longDate(posts[0].date) : "", crumb: `<a class="tag" href="/">Penthera</a><span class="tag">Blog</span>` });
 }

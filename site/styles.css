@@ -1579,6 +1579,8 @@ h1, h2, h3 { text-wrap: balance; }
 .hub-row h2 a::after { content: ""; position: absolute; inset: 0; }
 .blog .hub-row h2 a:hover, .blog .hub-row:hover h2 a { color: var(--text-1); background: none; }
 .hub-row h2 a:focus-visible { outline: none; }
+.hub-sub, .hub-note { margin: 0; color: var(--text-2); }
+.hub-more { position: relative; z-index: 1; }
 .hub-row img { display: block; width: 6rem; height: auto; }
 .terms.blog .hub-row .hub-line { max-width: 34em; margin: 0; font-family: var(--read); font-size: var(--t-text); line-height: var(--lh-ui); color: var(--text-1); text-wrap: pretty; }
 @media (min-width: 62.5rem) {

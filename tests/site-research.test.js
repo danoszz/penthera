@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import { buildSite } from "../site/build.mjs";
 import { benchmarkViews, ord, tiedPhrase } from "../site/benchmarks.mjs";
 import { readPosts } from "../site/blog.mjs";
-import { FILTERS, FIRST, PURPOSE, STATUSES, TYPES, e11bHeadline, inFilter, parsePrereg, researchEntries, studyStatus } from "../site/research.mjs";
+import { FILTERS, PURPOSE, STATUSES, TYPES, e11bHeadline, inFilter, parsePrereg, researchEntries, studyStatus } from "../site/research.mjs";
 
 const ROOT = join(import.meta.dirname, "..");
 const ORIGIN = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")).homepage.replace(/\/+$/, "");
@@ -43,7 +43,7 @@ const inline = (html) => unesc((html.includes("<body>") ? html.slice(html.indexO
 /** GitHub's heading anchor for a Markdown heading. */
 const slug = (h) => h.trim().toLowerCase().replace(/[^\w\- ]/g, "").replace(/ /g, "-");
 /** The <li> of each entry on the page. */
-const items = (html) => [...html.matchAll(/<li class="rs-item"[\s\S]*?<\/li>/g)].map((m) => m[0]);
+const items = (html) => [...html.matchAll(/<li class="hub-row[\s\S]*?<\/li>/g)].map((m) => m[0]);
 
 describe("/research", () => {
   it("builds as HTML and Markdown, with one h1, the purpose line, and is in the sitemap, llms.txt and the footer", () => {
@@ -60,7 +60,7 @@ describe("/research", () => {
     const scripts = [...html.matchAll(/<script(?![^>]*type="application\/ld\+json")[^>]*>/g)].map((m) => m[0]);
     expect(scripts).toHaveLength(2);
     expect(scripts[0]).toBe('<script src="/theme.js">');
-    expect(scripts[1]).toMatch(/^<script src="\/research\.js\?v=[\w-]+" defer>$/);
+    expect(scripts[1]).toMatch(/^<script src="\/hub\.js\?v=[\w-]+">$/);
     expect(html).not.toMatch(/<script>[^<]|\son[a-z]+="/);
     const d = unesc(html.match(/<meta name="description" content="([^"]+)">/)[1]);
     expect(d.length).toBeLessThanOrEqual(160);
@@ -70,51 +70,30 @@ describe("/research", () => {
     const html = read("research.html");
     const lis = items(html);
     expect(lis).toHaveLength(entries.length);
-    expect(entries.length).toBeGreaterThan(FIRST);
     // No entry is hidden in the HTML; the controls are hidden until a script runs.
     for (const li of lis) expect(li).not.toMatch(/<[^>]*\shidden[\s>=]/);
-    expect(html).toMatch(/<div class="rs-tools" id="rs-tools" data-js /);
-    expect(html).toMatch(/<p class="rs-all" data-js hidden><button[^>]*>Show all \d+<\/button>/);
-    expect(read("styles.css")).toContain("html:not(.js) [data-js] { display: none !important; }");
     // Every dated entry also reaches the Markdown that agents read.
     expect(read("research.md").split("\n").filter((l) => l.startsWith("- 20"))).toHaveLength(entries.filter((e) => e.date).length);
-    const js = read("research.js");
-    expect(js).toBe(readFileSync(join(ROOT, "site", "research.js"), "utf8"));
-    expect(js).not.toMatch(/\bimport\b|require\(|fetch\(|XMLHttpRequest|sendBeacon|localStorage|sessionStorage|document\.cookie/);
-    // Accessible controls: a labelled search, pressed state on chips, a live count.
-    expect(html).toMatch(/<label for="rs-q">[^<]+<\/label>/);
-    expect(html).toMatch(/<input id="rs-q"[^>]*type="search"/);
-    expect(html).toMatch(/<p class="rs-count" id="rs-count" aria-live="polite">/);
-    for (const b of html.match(/<button type="button" class="rs-chip"[^>]*>/g)) expect(b).toMatch(/aria-pressed="(true|false)"/);
+    const js = read("hub.js");
+    expect(js).toBe(readFileSync(join(ROOT, "site", "hub.js"), "utf8"));
+    expect(js).not.toMatch(/\bimport\b|require\(|fetch\(|XMLHttpRequest|sendBeacon|localStorage|document\.cookie/);
+    // Accessible controls: a labelled search, and links that work without a script.
+    expect(html).toMatch(/<label class="sr" for="hub-q">[^<]+<\/label>/);
+    expect(html).toMatch(/<input id="hub-q"[^>]*type="search"/);
+    for (const k of ["/news", "/research", "/blog"]) expect(html).toContain(`href="${k}" data-chip`);
   });
 
-  it("offers a filter for every entry type, with counts that match the list", () => {
+  it("offers a link for every status, with counts that match the list", () => {
     const html = read("research.html");
-    const chips = [...html.matchAll(/data-filter="([^"]*)" aria-pressed="\w+">([^<]+)<span class="rs-n">(\d+)<\/span>/g)].map((m) => ({ key: m[1], label: m[2].trim(), n: Number(m[3]) }));
-    expect(chips[0]).toEqual({ key: "", label: "All", n: entries.length });
-    expect(FILTERS.map((f) => f.type).sort()).toEqual([...TYPES].sort());
-    for (const f of FILTERS) {
-      const c = chips.find((x) => x.key === f.key);
-      const n = entries.filter((e) => inFilter(e, f)).length;
-      if (!n) { expect(c, f.key).toBeUndefined(); continue; }
-      expect(c, f.key).toBeTruthy();
-      expect(c.label).toBe(f.label);
-      expect(c.n, f.key).toBe(n);
-    }
-    // Each entry carries the filters it is in, the keys the chips use.
-    for (const li of items(html)) {
-      const keys = li.match(/data-filters="([^"]*)"/)[1].split(" ").filter(Boolean);
-      expect(keys.length).toBeGreaterThan(0);
-      for (const k of keys) expect(chips.map((c) => c.key)).toContain(k);
-    }
-    // Status chips, studies only, with their counts.
-    const st = [...html.matchAll(/data-status="([a-z]+)" aria-pressed="\w+">(\w+) <span class="rs-n">(\d+)/g)];
+    const st = [...html.matchAll(/href="\/research\?status=([a-z]+)" data-status="\1">(\w+) (\d+)</g)];
     expect(st.length).toBeGreaterThan(0);
     for (const [, key, label, n] of st) {
       expect(STATUSES).toContain(label);
       expect(key).toBe(label.toLowerCase());
-      expect(Number(n)).toBe(entries.filter((e) => e.type === "Study" && e.status === label).length);
+      expect(Number(n)).toBe(entries.filter((e) => e.status === label).length);
     }
+    // Every entry carries its kind and type, the keys the filters use.
+    for (const li of items(html)) expect(li).toMatch(/data-kind="[a-z]+"[^>]*data-type="[a-z-]+"/);
   });
 
   it("lists each study once: E17 is one entry, with its re-run as a note", () => {
@@ -124,7 +103,7 @@ describe("/research", () => {
     expect(e17[0]).toMatchObject({ type: "Study", status: "Result" });
     expect(e17[0].headline).toMatch(/macOS and Ubuntu/);
     expect(e17[0].notes.map((n) => n.text).join(" ")).toMatch(/Re-run 29 Oct.*verdict unchanged/);
-    const li = items(html).filter((l) => l.includes(">E17<"));
+    const li = items(html).filter((l) => l.includes('data-id="rE17"'));
     expect(li).toHaveLength(1);
     expect(li[0]).toContain("#registered-run-28-oct-2026");
     expect(li[0]).toContain("#deviation-the-normaliser-29-oct-2026");
@@ -203,10 +182,10 @@ describe("/research", () => {
       const e = entries.find((x) => x.type === "Study" && x.id === p.id);
       expect(e.status, p.id).toBe("Draft");
       expect(e.headline, p.id).toBeUndefined();
-      const li = items(html).find((l) => l.includes(`/prereg/`) && l.includes(`>${p.id}<`));
+      const li = items(html).find((l) => l.includes(`data-id="r${p.id}"`));
       expect(li, p.id).toBeTruthy();
-      expect(li, p.id).toContain('data-status="Draft"');
-      expect(li, p.id).not.toMatch(/is-registered|is-result|>Registered<|>Result</);
+      expect(li, p.id).toContain('data-status="draft"');
+      expect(li, p.id).not.toMatch(/data-status="(registered|result)"| · Registered · | · Result · /);
     }
     // The rule itself, on wordings the protocols use.
     for (const s of ["Draft, not registered. Registration is the maintainer's written acceptance", "draft for review, not registered. It is registered by the commit that merges it", "Registered draft", ""]) {
