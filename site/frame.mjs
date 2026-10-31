@@ -25,7 +25,8 @@ export const ldScript = (graph) => `<script type="application/ld+json">${JSON.st
  * @returns {{ id: string, label: string, links: {href: string, text: string, sub?: boolean, rel?: string, track?: string}[] }[]}
  */
 export function footGroups({ pages = [], benchmarks = [], posts = [] } = {}) {
-  const page = (p) => ({ href: `/${p.slug}`, text: p.nav || p.h1 });
+  // The study page's source is frozen by its protocol, so its public name lives here.
+  const page = (p) => ({ href: `/${p.slug}`, text: p.slug === "research-e20" ? "State of the Web" : p.nav || p.h1 });
   const research = pages.filter((p) => p.eyebrow === "Research");
   const contact = pages.filter((p) => p.slug === "contact");
   const product = pages.filter((p) => p.eyebrow !== "Research" && p.slug !== "contact");

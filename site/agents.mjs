@@ -132,7 +132,7 @@ export function agentFiles({ root, site, version, origin, values, pub = null, po
   const landing = landingPages(site).filter((p) => !p.unlisted);
   // /contact is a landing page for the build, but it is no question for the check.
   const asked = landing.filter((p) => p.slug !== "contact");
-  const questions = asked.length ? `## Questions the live check answers\n\n${asked.map((p) => `- [${p.h1}](${origin}/${p.slug}.md): ${p.description}`).join("\n")}\n\n` : "";
+  const questions = asked.length ? `## Questions the live check answers\n\n${asked.map((p) => (p.slug === "research-e20" ? `- [State of the Web 2026](${origin}/${p.slug}.md): what the study's crawler, User-Agent Penthera-Research/E20, requests from a homepage, and how to opt out or be removed. Published as totals.` : `- [${p.h1}](${origin}/${p.slug}.md): ${p.description}`)).join("\n")}\n\n` : "";
   out["llms.txt"] = fill(readFileSync(join(site, "llms.txt"), "utf8"), { ...values, ORIGIN: origin }, "llms.txt")
     .replace(/^## Docs$/m, (m) => `${benchmarkBlock(pub, origin)}${whenToUse({ version, origin })}\n${m}`)
     .replace(/^## Trust$/m, (m) => `${questions}${blogList(posts, origin)}${m}`)

@@ -53,7 +53,7 @@ function row(e, i, posts) {
   const post = e.type === "Post" ? posts.find((p) => `/blog/${p.slug}` === e.href) : null;
   const fig = post && Object.entries(post.figures || {})[0];
   const away = /^https?:/.test(e.href);
-  const meta = [label, e.status, e.id, shortDate(e.date), away ? "GitHub ↗" : ""].filter(Boolean).map(esc).join(" · ");
+  const meta = [label, e.status, e.tag || e.id, shortDate(e.date), away ? "GitHub ↗" : ""].filter(Boolean).map(esc).join(" · ");
   const shown = post && post.category === "Benchmark" ? "benchmark" : kind;
   return `      <li class="hub-row${fig ? " hub-article" : ""}" data-kind="${shown}" data-status="${esc((e.status || "").toLowerCase())}" data-type="${esc(e.type.toLowerCase().replace(/\s+/g, "-"))}" data-id="r${esc((e.id || e.href).replace(/[^\w]+/g, "-"))}">
         <p class="hub-meta">${meta}</p>
