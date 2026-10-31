@@ -9,11 +9,11 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { scrub, scrubMisses } from "./classify.mjs";
 import { pageTextMissed, safeRecord, selfHashed, withheldCounts, withholdText } from "./record-checks.mjs";
-import { assemble, joined, NOT_PRINTED, NOT_THE_RESULT, NOT_VALIDATED, PART_TWO, PRINTED_KEYS, main as report } from "./report-tables.mjs";
+import { assemble, joined, nestedProblems, NOT_PRINTED, NOT_THE_RESULT, NOT_VALIDATED, PART_TWO, PRINTED_KEYS, main as report, UNDER_20 } from "./report-tables.mjs";
 import { codeFiles, studyState } from "./replicate.mjs";
-import { sha256 } from "./run.mjs";
+import { sha256, wilson } from "./run.mjs";
 import { auditFrame, main as validation, scoreLabels, stateOf, SUPPRESSED, NO_ANSWERS } from "./validation-sample.mjs";
-import { main as analyze } from "./analyze-r.mjs";
+import { challengeByEdge, main as analyze, industryTable, refusalShares, traitTable } from "./analyze-r.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const quiet = () => undefined;
@@ -35,6 +35,9 @@ function records(sizes, withheld = {}, tag = "") {
     evidence: { status: 200, headerNames: ["server"], values: {}, cookieNames: [], class: STRATUM_CLASS[stratum], ...(i < (withheld[stratum] ?? 0) ? { pageExcerpt: { chars: 9 }, textWithheld: { kinds: { email: 1 }, fields: 1 } } : { pageExcerpt: { title: "Fine", text: `A plain page, ${tag}${i}.`, chars: 9 } }) },
   })));
 }
+
+/** Rows with checks and traits, for the Part 2 share tables: csp at about half, nosniff all, framing none, caa judged on 19, security-txt on 20, referrer at weight 0, permissions absent. */
+const withChecks = (rows) => rows.map((r, i) => ({ ...r, score: 50, checks: [{ id: "csp", weight: 14, passed: i % 2 === 0 }, { id: "nosniff", weight: 5, passed: true }, { id: "framing", weight: 5, passed: false }, { id: "referrer", weight: 0, passed: true }, ...(i < 19 ? [{ id: "caa", weight: 2, passed: true }] : []), ...(i < 20 ? [{ id: "security-txt", weight: 2, passed: true }] : [])], evidence: { ...r.evidence, traits: { login: true, payments: i < 19, shop: i < 20, securityPage: false } } }));
 
 /** A finished pass with a clean privacy report, under this checkout's state. */
 export function finishedRun(dir, rows) {
@@ -69,7 +72,7 @@ export function fixtureAnalysis(dir) {
   const rows = readFileSync(join(dir, "raw.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
   const claim = (id) => ({ id, label: "x minus y", check: "csp", predicted: "-", S: VIEW, R: VIEW, decision: "supported" });
   return selfHashed({
-    experiment: "E20-R", level: 0.9954, primaryRefusal: { n: rows.length, share: 0.1, ci: [0.05, 0.15] }, refusals: { all: 0.2, registered: 0.15 },
+    experiment: "E20-R", level: 0.9954, primaryRefusal: { n: rows.length, share: 0.1, ci: [0.05, 0.15] }, refusals: { all: 0.2, allCi95: [0.15, 0.25], registered: 0.15, registeredCi95: [0.1, 0.2], interval: "naive row-level" },
     claims: [claim("C1"), claim("C2"), { id: "C6", label: "DNS", check: "spf+dmarc", predicted: "-", S: VIEW, decision: "not estimable" }, { id: "C12", label: "share", n: 9, diff: 0.1, ci: [0.05, 0.15] }],
     cspControlsScripts: [claim("C1")], standardized: { C1: { diff: 0.1, ci: [0, 0.2] } }, standardizedR: { C1: { diff: 0.1, ci: [0, 0.2] } }, replicationAsE20: [claim("C1")],
     bounds: { C1: { low: 0, high: 0.2, coverageA: 0.9, coverageB: 0.9 } }, skipsByCohort: { T1k: { exclusion_list: 1 } }, dnsCoverage: { T1k: { read: 9, exists: 9, nxdomain: 0, unknown: 0 } },
@@ -139,7 +142,7 @@ export function auditRows(root, add, truth, { inputs, preregText }) {
 
   // The whole chain against the run folder.
   const chain = at("chain");
-  finishedRun(chain, records({ ...FULL, "candidate-page": 170 }, { challenge: 1, "candidate-page": 1 }, "x"));
+  finishedRun(chain, withChecks(records({ ...FULL, "candidate-page": 170 }, { challenge: 1, "candidate-page": 1 }, "x")));
   scoredRun(chain, { resamples: 20_000 });
   // The registered command, in full, on a copy of the run with one thing changed.
   const REGISTERED = ["--pass2", inputs["Pass 1 raw"], "--e20", inputs["E20 Tranco raw"], inputs["E20 YC raw"], "--industries", inputs["Industry map"], "--e20-excluded", inputs["E20 exclusion file"]];
@@ -173,12 +176,109 @@ export function auditRows(root, add, truth, { inputs, preregText }) {
   const partOrder = ["## Secondary cohorts", "## Checks by site trait", "## Checks by industry", "## Challenge share by edge", "## DNS beside the decision", "## Graded-only DNS reading"].map((h) => part.indexOf(h));
   add("G3: Part 2 opens with the registered line, after the rest, in order", "allowed", truth(finalText.indexOf("## The audit's detail") < finalText.indexOf(PART_TWO) && partOrder.every((n, i) => n > 0 && (i === 0 || n > partOrder[i - 1])) && part.includes("Decides nothing."), partOrder.join(" ")));
   const secondaryRows = (chainAnalysis.secondaryCohorts ?? []).length;
-  add("G4: Part 2 prints every secondary row", "allowed", truth(secondaryRows > 0 && part.split("\n").filter((l) => l.includes("naive row-level") && l.startsWith("|")).length >= secondaryRows, `${secondaryRows} rows`));
+  const secondaryPart = part.slice(part.indexOf("## Secondary cohorts"), part.indexOf("## Checks by site trait"));
+  add("G4: Part 2 prints every secondary row", "allowed", truth(secondaryRows > 0 && secondaryPart.split("\n").filter((l) => l.includes("naive row-level") && l.startsWith("|")).length === secondaryRows, `${secondaryRows} rows`));
+  // Below the top level. The fixture has open and suppressed rows in each table, so these can't pass on an empty one.
+  const open = (table) => Object.entries(table ?? {}).filter(([, g]) => g?.shares);
+  const { suppressedGroups: hiddenGroups, ...chainIndustries } = chainAnalysis.industries ?? {};
+  const openCells = (table) => open(table).flatMap(([, g]) => Object.values(g.shares).filter((s) => !s.suppressed));
+  const chainTables = [chainAnalysis.traits, chainAnalysis.traitsByCohort?.T1k, chainIndustries];
+  add("G5: every unsuppressed cell of a real analysis holds all five fields, and every nested row its listed fields", "allowed", truth(!nestedProblems(chainAnalysis).length && chainTables.every((t) => openCells(t).length > 0) && openCells(chainAnalysis.traits).every((s) => ["passed", "judged", "share", "ci95", "interval"].every((f) => s[f] !== undefined && s[f] !== null)) && open(chainAnalysis.traits).length === 2 && open(chainIndustries).length === 1 && hiddenGroups === 1 && Object.keys(chainAnalysis.challengeByEdge).length > 0, nestedProblems(chainAnalysis).join("; ") || `${chainTables.reduce((n, t) => n + openCells(t).length, 0)} open cells`));
+  const nestedEdits = {
+    "an interval removed from a trait": (x) => { delete x.traits.login.shares.csp.ci95; },
+    "an interval removed from a list's trait": (x) => { delete x.traitsByCohort.T1k.login.shares.csp.ci95; },
+    "an interval removed from an industry": (x) => { delete x.industries.fixture.shares.csp.ci95; },
+    "a judged count removed": (x) => { delete x.traits.login.shares.csp.judged; },
+    "a passed count removed": (x) => { delete x.industries.fixture.shares.csp.passed; },
+    "a share removed": (x) => { delete x.traits.login.shares.csp.share; },
+    "a label removed": (x) => { delete x.traits.login.shares.csp.interval; },
+    "a label changed": (x) => { x.traits.login.shares.csp.interval = "clustered"; },
+    "a bare share, the old shape": (x) => { x.traits.login.shares.csp = 0.5; },
+    "an unlisted field in a cell": (x) => { x.industries.fixture.shares.csp.note = 1; },
+    "an unlisted field in a group": (x) => { x.traits.login.note = 1; },
+    "an unlisted field in an edge row": (x) => { x.challengeByEdge.other.note = 1; },
+    "a number on a suppressed group": (x) => { x.traits.payments.shares = {}; },
+    "a number on a suppressed cell": (x) => { x.traits.login.shares.referrer.judged = 19; },
+    "a cell under 20 judged with figures": (x) => { x.traits.login.shares.caa = { passed: 19, judged: 19, share: 1, ci95: [0.8, 1], interval: "naive row-level" }; },
+    "a refusal interval removed": (x) => { delete x.refusals.allCi95; },
+    "a refusal label removed": (x) => { delete x.refusals.interval; },
+  };
+  for (const [name, change] of Object.entries(nestedEdits)) { const x = JSON.parse(JSON.stringify(chainAnalysis)); change(x); add(`G6: the nested guard sees ${name}`, "allowed", truth(nestedProblems(x).length > 0, nestedProblems(x)[0] ?? "nothing seen")); }
+  const printedRow = (cells) => part.includes(`| ${cells.join(" | ")} |`);
+  const hidden = Array(5).fill(UNDER_20);
+  const shareCells = (s) => (s.suppressed ? hidden : [s.passed, s.judged, (s.share * 100).toFixed(1), `${(s.ci95[0] * 100).toFixed(1)} to ${(s.ci95[1] * 100).toFixed(1)}`, "naive row-level"]);
+  const checksPrinted = (rows, cellsOf) => rows.flatMap(([name, g]) => Object.entries(g.shares).map(([check, s]) => printedRow(cellsOf(name, g, check, s))));
+  const traitPrinted = (table) => checksPrinted(open(table), (name, g, check, s) => [name, g.sites, check, ...shareCells(s)]);
+  add("G7: Part 2 prints each trait cell, open or suppressed", "allowed", truth(traitPrinted(chainAnalysis.traits).length === 18 && traitPrinted(chainAnalysis.traits).every(Boolean), "2 groups, 9 checks"));
+  add("G7: and each trait cell of a list", "allowed", truth(traitPrinted(chainAnalysis.traitsByCohort.T1k).length === 18 && traitPrinted(chainAnalysis.traitsByCohort.T1k).every(Boolean), "2 groups, 9 checks"));
+  const industryPrinted = checksPrinted(open(chainIndustries), (name, g, check, s) => [name, g.sites, g.median, check, ...shareCells(s)]);
+  add("G7: and each industry cell", "allowed", truth(industryPrinted.length === 9 && industryPrinted.every(Boolean), "1 group, 9 checks"));
+  const groupRow = ["payments", UNDER_20, "all", ...hidden];
+  add("G8: a group of 19 prints no size and no figure", "allowed", truth(printedRow(groupRow) && chainAnalysis.traits.payments.shares === undefined && !/\| payments \| 19 /.test(part), "under 20 in every column"));
+  add("G9: 19 and 20 sites sit either side of the group floor in the report", "allowed", truth(printedRow(groupRow) && printedRow(["shop", 20, "csp", ...shareCells(chainAnalysis.traits.shop.shares.csp)]), "payments 19, shop 20"));
+  const sitesNow = chainAnalysis.traits.login.sites;
+  add("G9: 19 and 20 judged sit either side of the cell floor in the report", "allowed", truth(chainAnalysis.traits.login.shares.caa.suppressed === true && printedRow(["login", sitesNow, "caa", ...hidden]) && chainAnalysis.traits.login.shares["security-txt"].judged === 20 && printedRow(["login", sitesNow, "security-txt", ...shareCells(chainAnalysis.traits.login.shares["security-txt"])]), "caa 19, security-txt 20"));
+  const noDigit = (check) => { const line = part.split("\n").find((l) => l.startsWith(`| login | ${sitesNow} | ${check} |`)); return line?.split("|").slice(4, 9).every((c) => c.trim() === UNDER_20) && !/[0-9]/.test(line.split("|").slice(4, 9).join("").replaceAll(UNDER_20, "")); };
+  add("G10: a weight-zero or absent check prints no figure", "allowed", truth(["referrer", "permissions"].every((c) => JSON.stringify(chainAnalysis.traits.login.shares[c]) === '{"suppressed":true}' && noDigit(c)), "weight 0 and absent"));
+  add("G11: Part 2's share tables carry the label on every open cell", "allowed", truth(part.startsWith(PART_TWO) && part.slice(part.indexOf("## Checks by site trait"), part.indexOf("## Challenge share by edge")).split("\n").filter((l) => l.endsWith("| naive row-level |")).length === chainTables.reduce((n, t) => n + openCells(t).length, 0), "one line per open cell"));
+  const r = chainAnalysis.refusals;
+  add("G12: the primary table prints the refusal intervals and their label", "allowed", truth(Array.isArray(r.allCi95) && Array.isArray(r.registeredCi95) && finalText.includes(`${(r.allCi95[0] * 100).toFixed(1)} to ${(r.allCi95[1] * 100).toFixed(1)}`) && finalText.includes(`${(r.registeredCi95[0] * 100).toFixed(1)} to ${(r.registeredCi95[1] * 100).toFixed(1)}`) && finalText.split("## Claims C1")[0].includes("| naive row-level |"), "all and original rules"));
+  add("G13: Part 2 says the two DNS tables keep the claims' bootstrap", "allowed", truth(PART_TWO.includes("The two DNS tables keep the claims' cluster bootstrap and level.") && finalText.includes(PART_TWO), "the preface"));
+
+  // The share tables on their own, at each boundary. Hosts are distinct sites, so a group is its rows.
+  const site = (i, checks, traits = { login: true }) => ({ host: `s${i}.org`, status: "ok", score: 50, checks, evidence: { traits } });
+  const sites = (n, make) => Array.from({ length: n }, (_, i) => site(i, make(i)));
+  const csp = (passed) => [{ id: "csp", weight: 14, passed }];
+  const both = (rows) => { const map = new Map(rows.map((x) => [x.host, "x"])); return { trait: traitTable(rows, ["csp"]).login, industry: industryTable(rows, map, ["csp"]).x }; };
+  const near = (got, want) => Math.abs(got - want) < 0.0001;
+  for (const [name, passes, passed, low, high] of [["0 of 20", () => false, 0, 0, 0.1611], ["10 of 20", (i) => i < 10, 10, 0.2993, 0.7007], ["20 of 20", () => true, 20, 0.8389, 1]]) {
+    const { trait, industry } = both(sites(20, (i) => csp(passes(i))));
+    for (const [table, g] of [["trait", trait], ["industry", industry]]) {
+      const s = g.shares.csp;
+      add(`T1: ${table} at ${name}`, "allowed", truth(g.sites === 20 && s.judged === 20 && s.passed === passed && s.share === passed / 20 && near(s.ci95[0], low) && near(s.ci95[1], high) && s.ci95[0] >= 0 && s.ci95[1] <= 1 && s.interval === "naive row-level", `${s.ci95?.join(" to ")}`));
+    }
+  }
+  const twenty = traitTable(sites(20, () => csp(true)), ["csp"]), nineteen = traitTable(sites(19, () => csp(true)), ["csp"]);
+  add("T2: a trait group of 19 is suppressed, with no share and no interval", "allowed", truth(JSON.stringify(nineteen.login) === JSON.stringify({ sites: 19, suppressed: true }), "sites only"));
+  add("T2: a trait group of 20 speaks", "allowed", truth(twenty.login.shares.csp.judged === 20 && !twenty.login.suppressed, "20 judged"));
+  const industryAt = (n) => { const rows = sites(n, () => csp(true)); return industryTable(rows, new Map(rows.map((x) => [x.host, "x"])), ["csp"]); };
+  add("T2: an industry of 19 is counted, and nothing of it stays", "allowed", truth(JSON.stringify(industryAt(19)) === JSON.stringify({ suppressedGroups: 1 }), "a count only"));
+  add("T2: an industry of 20 speaks", "allowed", truth(industryAt(20).suppressedGroups === 0 && industryAt(20).x.shares.csp.judged === 20, "20 judged"));
+  const judgedOn = (n) => both(sites(25, (i) => (i < n ? csp(true) : [])));
+  for (const [table, of19, of20] of [["trait", judgedOn(19).trait, judgedOn(20).trait], ["industry", judgedOn(19).industry, judgedOn(20).industry]]) {
+    add(`T3: ${table}, a group of 25 with 19 judged`, "allowed", truth(JSON.stringify(of19.shares.csp) === '{"suppressed":true}', "no number"));
+    add(`T3: ${table}, a group of 25 with 20 judged`, "allowed", truth(of20.shares.csp.judged === 20 && of20.shares.csp.passed === 20, "20 of 20"));
+  }
+  const missing = { "no such check": () => [], "weight zero": () => [{ id: "csp", weight: 0, passed: true }] };
+  for (const [name, checks] of Object.entries(missing)) {
+    const { trait, industry } = both(sites(20, checks));
+    for (const [table, g] of [["trait", trait], ["industry", industry]]) add(`T4: ${table}, ${name} on every row`, "allowed", truth(JSON.stringify(g.shares.csp) === '{"suppressed":true}' && g.sites === 20, "no number anywhere in the cell"));
+  }
+  const partial = both(sites(28, (i) => (i < 5 ? [] : i < 8 ? [{ id: "csp", weight: 0, passed: true }] : csp(i % 2 === 0))));
+  for (const [table, g] of [["trait", partial.trait], ["industry", partial.industry]]) add(`T4: ${table}, the denominator is the judged rows, not the sites`, "allowed", truth(g.sites === 28 && g.shares.csp.judged === 20 && g.shares.csp.passed === 10 && g.shares.csp.share === 0.5, "10 of 20, of 28 sites"));
+  const edgeRows = Array.from({ length: 20 }, (_, i) => ({ platform: { edge: "other" }, evidence: { class: { label: i < 10 ? "challenge" : "candidate-page" } } }));
+  const { lo, hi } = wilson(10, 20);
+  add("T5: one z value, in the edge table and the shares", "allowed", truth(Object.values(challengeByEdge(edgeRows))[0].ci95.join() === [lo, hi].join() && both(sites(20, (i) => csp(i < 10))).trait.shares.csp.ci95.join() === [lo, hi].join(), `${lo} to ${hi}`));
+  const refusalRows = Array.from({ length: 20 }, (_, i) => ({ evidence: { class: { label: i < 10 ? "block" : "candidate-page", rule: "signature" }, classRegistered: { label: i < 5 ? "block" : "page" } } }));
+  const shares = refusalShares(refusalRows);
+  add("T6: the refusal shares carry Wilson intervals", "allowed", truth(shares.all === 0.5 && shares.allCi95.join() === [lo, hi].join() && shares.registered === 0.25 && near(shares.registeredCi95[0], wilson(5, 20).lo) && shares.interval === "naive row-level", "10 and 5 of 20"));
+  add("T6: no graded rows give no interval", "allowed", truth(refusalShares([]).allCi95 === null && refusalShares([]).registeredCi95 === null, "null"));
 
   const freshAnalysis = (d, change) => { const { selfSha256: _s, ...fields } = json(join(d, "analysis.json")); const next = JSON.parse(JSON.stringify(fields)); change(next); put(join(d, "analysis.json"), selfHashed(next)); };
   refused("A1: a claim's decision edited, with a fresh self-hash", untouched(chain, (d) => freshAnalysis(d, (x) => { x.claims[0].decision = "supported, by hand"; })), /analysis doesn't follow from its inputs/);
   refused("A1: an effect edited, with a fresh self-hash", untouched(chain, (d) => freshAnalysis(d, (x) => { x.claims[0].S = { ...x.claims[0].S, diff: 0.42 }; })), /analysis doesn't follow from its inputs/);
   refused("A1: a secondary row edited, with a fresh self-hash", untouched(chain, (d) => freshAnalysis(d, (x) => { x.secondaryCohorts[0] = { ...x.secondaryCohorts[0], judgedA: 9999 }; })), /analysis doesn't follow from its inputs/);
+  for (const [name, change] of Object.entries({
+    "a trait's interval": (x) => { x.traits.login.shares.csp.ci95[0] += 0.01; },
+    "a list's trait interval": (x) => { x.traitsByCohort.T1k.login.shares.csp.ci95[1] -= 0.01; },
+    "an industry's interval": (x) => { x.industries.fixture.shares.csp.ci95[0] += 0.01; },
+    "a judged count": (x) => { x.traits.login.shares.csp.judged += 1; },
+    "a passed count": (x) => { x.industries.fixture.shares.csp.passed += 1; },
+    "a refusal interval": (x) => { x.refusals.allCi95[0] += 0.01; },
+    "an original-rules interval": (x) => { x.refusals.registeredCi95[1] -= 0.01; },
+    "a suppressed cell lifted": (x) => { x.traits.login.shares.caa = { passed: 19, judged: 19, share: 1, ci95: [0.8, 1], interval: "naive row-level" }; },
+    "a suppressed group lifted": (x) => { x.traits.payments = { sites: 19, shares: { csp: { passed: 9, judged: 19, share: 9 / 19, ci95: [0.3, 0.7], interval: "naive row-level" } } }; },
+  })) refused(`A1: ${name} edited, with a fresh self-hash`, untouched(chain, (d) => freshAnalysis(d, change)), /analysis doesn't follow from its inputs/);
   refused("A1: a field added, with a fresh self-hash", untouched(chain, (d) => freshAnalysis(d, (x) => { x.note = "by hand"; })), /analysis doesn't follow from its inputs/);
   refused("A1: an analysis edited, self-hash left", untouched(chain, (d) => bump(join(d, "analysis.json"), (x) => { x.claims[0].decision = "by hand"; })), /changed after/);
   const noRun = copied();

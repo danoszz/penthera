@@ -1,6 +1,6 @@
 # E20-R2 known limits
 
-For an outside reviewer. These are the gaps that remain in the runner and its gate after nine reviews. The protocol is `docs/research/prereg/E20r-front-door-replication.md`, Amendment 2.
+For an outside reviewer. These are the gaps that remain in the runner and its gate. The protocol is `docs/research/prereg/E20r-front-door-replication.md`, Amendments 2 and 3.
 
 ## The gate proves what a run recorded, not what a person did
 
@@ -10,7 +10,7 @@ For an outside reviewer. These are the gaps that remain in the runner and its ga
 - **Label manifests record what the operator says.** `bind` takes the hash the kit showed the labeler, so a mix-up is refused. It can't show the labeler saw that sheet.
 - **Prune proofs, seals, privacy reports, the validation key, score and analysis** are bound to the run by plain hashes. Each binding catches a mix-up between runs. None catches an operator who rewrites both sides. `report-tables.mjs` rebuilds the frame, sheet, key, score and analysis from the run and the private inputs, so an edit to one file with a fresh self-hash fails. Someone who rewrites the raw file, manifest and proof together still passes.
 - **Registered analysis inputs are checked by hash only.** The files stay private, so a reader can't recompute the hashes.
-- **The repeat lock lives on one machine.** A fresh clone has no `e20r-pass2` folder, so a second start from there would revisit sites.
+- **The repeat lock lives on one machine.** A fresh clone has no `e20r-pass3` folder, so a second start from there would revisit sites.
 - **The commit check trusts GitHub and a clean tree.** It proves the checkout is the tip of `main` at the start, not what the Node process loaded afterwards.
 
 ## The address check reads local interfaces
@@ -38,7 +38,7 @@ The detector shares no pattern with the scrub, but it was written by the same au
 - What a browser would have received. Only one declared client from one address was tested.
 - Why a site refused. Identity, fingerprint and address can't be told apart.
 - That a `candidate-page` is a page. The audit samples 150 of them, with one human.
-- The rule changes on data they haven't seen, until the audit of pass 2.
+- The rule changes on data they haven't seen, until the audit of pass 3.
 - SPF semantics: includes, redirects and lookup limits aren't followed.
 
 ## Data that leaves the machine
@@ -65,7 +65,7 @@ The audit sheet goes to one labeler and to a hosted model. The 12-month deletion
 - A bare `at` needs a local part in the 16 characters before it. Spelled forms other than `dot`, such as `john at example d0t com`, aren't read.
 - The frozen detector in `legacy/` runs only for the legacy finding report. That report names record order and field path, so it stays on the server.
 - Pass 3 learns which sites to skip from the stopped pass's pruned raw file. A purge deletes that file, so a purged pass 2 can't be followed by pass 3.
-- A false-fire review rests on one named person's note. Only its hash is kept with the run, bound to the legacy finding report.
+- A false-fire review rests on one named person's note. That person is the maintainer, so it isn't an independent check. Only its hash is kept with the run, bound to the legacy finding report.
 - The realistic corpus in the tests is hand-written. It finds common sentence forms, and it says nothing about forms nobody wrote down.
 
 ## Stated deviations
@@ -76,7 +76,7 @@ The audit sheet goes to one labeler and to a hosted model. The 12-month deletion
 
 - A signal or the stop file takes effect between sites, so visits in flight finish, up to the 30-second hard cap each.
 - The final hashing and git reads stay synchronous and block signal delivery while they run. Handlers stay on, the loop is yielded after them, and the last stop check, just before the rename, is the semantic boundary. A signal handled by that check makes the run partial, so a signal in finalization is late, not lost. Any later signal is post-run, even one that arrives before the rename finishes.
-- SIGKILL, a crash or a full disk leave no end manifest. The run counts as interrupted, and the prune is a step on the run sheet that nothing enforces for pass 2.
+- SIGKILL, a crash or a full disk leave no end manifest. The run counts as interrupted, and the prune is a step on the run sheet that nothing enforces for a full pass.
 - The privacy report scans every stored string, with the same detector as the scrub limits above. Its exceptions are hashes, and addresses in SPF records. After a miss a person reviews it. A false fire is a recorded deviation that rests on that one person's note, and a real miss ends in `purge`, which ends the run's data.
 - The source-address check reads local interfaces between sites, so it shares the address check's limit.
 
@@ -84,5 +84,6 @@ The audit sheet goes to one labeler and to a hosted model. The 12-month deletion
 
 - The audit covers the response class. Grader header outcomes rest on the test suite, and no human audits them.
 - Secondary intervals are naive row-level, with no clustering, and corroborate nothing.
+- `report-tables.mjs` has run on fixtures only. A fault that shows only on a real run stays unknown until pass 3's report.
 - Provider explanations, the YC trend, origin headers and challenge cookies are not built. Anything on them would be post hoc.
 - Kappa between the human and the model is on rows where neither is unsure, which can leave out the hardest rows.

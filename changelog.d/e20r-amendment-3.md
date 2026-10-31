@@ -7,3 +7,5 @@ section: Docs
   prune. It skips those sites. From pilot round 2, text that fires the detector is withheld before
   anything is written and counted per kind, so a fire no longer stops a run.
   Audit figures cover non-withheld records, and one bound report joins them to the claims.
+  Trait, industry and refusal shares now carry counts and naive row-level Wilson intervals, a figure on
+  under 20 judged sites prints `under 20`, and a live start refuses any Node but v22.23.4.

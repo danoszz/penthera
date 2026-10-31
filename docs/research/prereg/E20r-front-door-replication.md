@@ -971,7 +971,9 @@ stratum, and no change to this rule.
 audit. It is part of the study's frozen code. It works the score and the analysis out again from the
 run's own files and the registered inputs, and writes nothing if either differs from what it was given.
 The headline stands above the claims, and when the audit is not estimable, every real-page view it
-prints says so. The same file holds the registered secondary figures, which corroborate nothing. MX and
+prints says so. The same file holds the registered secondary figures, which corroborate nothing.
+A trait or industry figure resting on under 20 judged sites prints `under 20`, with no count, share or
+interval. MX and
 NS counts stay in the run's aggregate file. The chain from the run to that report is bound by hashes:
 the manifest and post-draw raw file, the audit frame, sheet and key, each labeler's labels, the score and
 the analysis.
@@ -981,6 +983,7 @@ else: code, classifier, protocol, study page, suffix list, lockfile and Node ver
 run's manifest. So this file doesn't change between the start of pass 3 and the final report. Dated notes
 go on `main` after that. A laptop's Node binary can't match the server's, so the version is compared and
 the two binaries' hashes are only printed.
+The live run uses Node v22.23.4, and the runner refuses any other version before its first request.
 
 ### Text copies
 
@@ -1073,3 +1076,4 @@ again came after the stop. This changes a stop rule after a stop. It was written
 with no claim's data read, it stores less than the rule it replaces, and it can't move a label or a grade.
 The scrub's forms and the detector's other limits don't change. Rates for the detector come from a
 synthetic corpus and one real fire, and the tightened detector was fitted on that corpus.
+The final report has run on fixtures only, never on a real run.

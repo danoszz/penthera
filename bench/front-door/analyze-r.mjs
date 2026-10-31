@@ -21,7 +21,7 @@ import { isEligible, selfHashed, unfinishedRun, withheldCounts } from "./record-
 import { PREREG_R, recordedHashR, studyState } from "./replicate.mjs";
 import { auditFrame, stateOf, stateProblem } from "./validation-sample.mjs";
 import { seeded } from "./replicate.mjs";
-import { newcombe } from "./run.mjs";
+import { newcombe, wilson } from "./run.mjs";
 
 // Amendment 2: C1 to C11 are the family. The ±10 margin stays because it was registered, not because it is justified.
 export const CLAIMS_R = 11;
@@ -351,9 +351,12 @@ export function skipsByCohort(all) {
 }
 
 /** A Wilson 95% interval, row-level like the table it sits in. */
-function wilson(k, n, z = 1.96) {
-  const p = k / n, d = 1 + z * z / n, mid = (p + z * z / (2 * n)) / d, half = z * Math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / d;
-  return [Math.max(0, mid - half), Math.min(1, mid + half)];
+const interval = (k, n) => { const { lo, hi } = wilson(k, n); return n ? [lo, hi] : null; };
+
+/** One check in one group: its counts, its share and its interval. Under the floor of judged sites, including none, it holds no number. */
+function checkShare(rows, id, min) {
+  const n = judged(rows, id), k = rows.filter((r) => pass(r, id)).length;
+  return n < min ? { suppressed: true } : { passed: k, judged: n, share: k / n, ci95: interval(k, n), interval: "naive row-level" };
 }
 
 /** The challenge share by edge, among graded responses, for edges with at least 20 sites, with a naive row-level 95% interval. */
@@ -362,7 +365,7 @@ export function challengeByEdge(rows) {
   for (const stratum of new Set(rows.map(edgeStratum))) {
     const here = rows.filter((r) => edgeStratum(r) === stratum);
     const k = here.filter((r) => r.evidence?.class?.label === "challenge").length;
-    if (here.length >= MIN_SUPPORT) out[stratum] = { n: here.length, share: k / here.length, ci95: wilson(k, here.length), interval: "naive row-level" };
+    if (here.length >= MIN_SUPPORT) out[stratum] = { n: here.length, share: k / here.length, ci95: interval(k, here.length), interval: "naive row-level" };
   }
   return out;
 }
@@ -371,7 +374,8 @@ export function challengeByEdge(rows) {
 export function refusalShares(rows) {
   const n = rows.length;
   const refused = rows.filter(isRefused);
-  return { n, all: n ? refused.length / n : NaN, signatureBacked: n ? refused.filter((r) => r.evidence.class.rule !== "unrecognized-403").length / n : NaN, registered: n ? rows.filter((r) => ["challenge", "block"].includes(r.evidence?.classRegistered?.label)).length / n : NaN };
+  const registered = rows.filter((r) => ["challenge", "block"].includes(r.evidence?.classRegistered?.label));
+  return { n, all: n ? refused.length / n : NaN, allCi95: interval(refused.length, n), signatureBacked: n ? refused.filter((r) => r.evidence.class.rule !== "unrecognized-403").length / n : NaN, registered: n ? registered.length / n : NaN, registeredCi95: interval(registered.length, n), interval: "naive row-level" };
 }
 
 /** The primary refusal endpoint with a cluster-bootstrap 95% interval. */
@@ -400,7 +404,7 @@ export function industryTable(rows, industries, checks = KAPPA_CHECKS, min = 20)
   const out = { suppressedGroups: 0 };
   for (const [i, g] of Object.entries(by)) {
     if (g.length < min) { out.suppressedGroups++; continue; }
-    out[i] = { sites: g.length, median: median(g.map((r) => r.score)), shares: Object.fromEntries(checks.map((c) => [c, share(g, c)])) };
+    out[i] = { sites: g.length, median: median(g.map((r) => r.score)), shares: Object.fromEntries(checks.map((c) => [c, checkShare(g, c, min)])) };
   }
   return out;
 }
@@ -411,7 +415,7 @@ export function traitTable(rows, checks = KAPPA_CHECKS, min = 20) {
   for (const trait of ["login", "payments", "shop", "securityPage"]) {
     const g = rows.filter((r) => r.evidence?.traits?.[trait] === true);
     if (g.length < min) { out[trait] = { sites: g.length, suppressed: true }; continue; }
-    out[trait] = { sites: g.length, shares: Object.fromEntries(checks.map((c) => [c, share(g, c)])) };
+    out[trait] = { sites: g.length, shares: Object.fromEntries(checks.map((c) => [c, checkShare(g, c, min)])) };
   }
   return out;
 }

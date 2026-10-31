@@ -24,7 +24,7 @@ import { robotsVerdict, sha256, strictRobots, wholeSiteStop } from "./run.mjs";
 import { claims, main as analyze, secondaryCohorts } from "./analyze-r.mjs";
 import { main as reportMain } from "./pilot-report.mjs";
 import { pageTextMissed, PRIVACY_STOP, recordMisses, resolverFailed, safeRecord, sealHash, stopRules, withholdText } from "./record-checks.mjs";
-import { CLAIM_COHORTS, main as replicate, mergeCohorts, PREREG_R, recordedHashR, R_COHORTS, runPass, visitInWorker } from "./replicate.mjs";
+import { CLAIM_COHORTS, liveNodeProblem, main as replicate, mergeCohorts, PREREG_R, recordedHashR, R_COHORTS, runPass, STUDY_NODE, visitInWorker } from "./replicate.mjs";
 import { auditFrame, drawSample, main as validation, scoreLabels, stateOf, worstCaseBounds } from "./validation-sample.mjs";
 import { auditRows as auditChainRows } from "./audit-acceptance.mjs";
 import { main as tables, NOT_VALIDATED } from "./report-tables.mjs";
@@ -39,6 +39,8 @@ const DNS = { mx: stub, ns: stub, resolveTxt: stub, resolveCaa: stub };
 const rawOf = (dir) => readFileSync(join(dir, "raw.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
 const quiet = () => undefined;
 const truth = (holds, said) => ({ code: holds ? 0 : 3, said });
+// One industry of 25 and one of 19, by host, for the report's chain.
+const INDUSTRY_MAP = `domain,industry\n${Array.from({ length: 25 }, (_, i) => `xcandidate-page-${i}.selftest.example.com,fixture\n`).join("")}${Array.from({ length: 19 }, (_, i) => `xchallenge-${i}.selftest.example.com,small\n`).join("")}`;
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SHEET = join(HERE, "run-sheet.md");
 const INPUTS = Object.freeze(["Pass 1 raw", "E20 Tranco raw", "E20 YC raw", "Industry map", "E20 exclusion file"]);
@@ -61,7 +63,7 @@ function fixture(root) {
   const prior = file("prior.txt", "old.selftest.example.com\n");
   const manyRemovals = file("many-removals.txt", `${Array.from({ length: 5 }, (_, i) => `s${i}.t1k.selftest.example.com`).join("\n")}\n`);
   const otherExclude = file("other-exclusions.txt", "bad.org adult\n");
-  const inputs = Object.fromEntries(INPUTS.map((label, i) => [label, file(`input-${i}.txt`, label === "Industry map" ? "domain,industry\n" : "\n")]));
+  const inputs = Object.fromEntries(INPUTS.map((label, i) => [label, file(`input-${i}.txt`, label === "Industry map" ? INDUSTRY_MAP : "\n")]));
   const prereg = `| Status | **Registered.** Accepted |
 | Amendment 2 | **Adopted.** Merged |
 | Source address | \`${IP}\` |
@@ -319,6 +321,14 @@ export async function runAcceptance() {
     const stops = async (condition, because, change, manifest) => { const v = variant(fx, change, manifest); close(fx, v.runDir); add(condition, "refused", await gate(v), because); };
 
     add("clean pilot, sealed and pruned", "allowed", await gate(clean()), /authorized/);
+    const noNode = () => ({ ...fx, results: join(root, "no-node"), roundsLog: join(root, "no-node.log") });
+    const wrongNode = { loopbackPort: undefined, nodeVersion: "v26.0.0" };
+    add("N1: a pilot round on another Node never starts", "refused", await run(noNode(), pilotArgs(), wrongNode), /Refused: live runs need Node v22\.23\.4, and this is v26\.0\.0/);
+    add("N1: a pass on another Node never starts", "refused", await run(noNode(), [...fx.common, "--pass", "3", "--pilot-dropped", fx.removals], wrongNode), /Refused: live runs need Node v22\.23\.4, and this is v26\.0\.0/);
+    add("N1: pass 2 on another Node never starts", "refused", await run(noNode(), [...fx.common, "--pass", "2", "--pilot-dropped", fx.removals], { ...wrongNode, nodeVersion: "v22.23.3" }), /Refused: live runs need Node v22\.23\.4, and this is v22\.23\.3/);
+    add("N1: the refusal comes before anything is written", "allowed", truth(!existsSync(join(root, "no-node")) && !existsSync(join(root, "no-node.log")), "no folder, no log"));
+    add("N2: the exact version passes that check", "allowed", truth(liveNodeProblem("v22.23.4") === null && liveNodeProblem(STUDY_NODE) === null, STUDY_NODE));
+    add("N2: loopback stays free of it", "allowed", await run({ ...fx, results: join(root, "no-node-2"), roundsLog: join(root, "no-node-2.log") }, pilotArgs(), { nodeVersion: "v26.0.0", stopBeforeRun: true }), /authorized/);
     add("no pilot at all", "refused", await run({ ...fx, results: join(root, "nothing"), roundsLog: join(root, "no-rounds.log") }, [...fx.common, "--pass", "2", "--pilot-dropped", fx.removals], { stopBeforeRun: true }), /No pilot manifest/);
 
     await stops("privacy scrub miss", /privacy scrub/, (r) => ({ ...r, evidence: { ...r.evidence, excerpt: "you are 203.0.113.7" } }));

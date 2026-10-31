@@ -261,6 +261,14 @@ describe("E20-R site traits", () => {
     expect(t.login.sites).toBe(25);
     expect(t.payments).toEqual({ sites: 3, suppressed: true });
   });
+  it("gives each trait check its counts, a Wilson interval and the label", () => {
+    const rows = Array.from({ length: 20 }, (_, i) => ({ checks: [{ id: "csp", passed: i < 10, weight: 14 }, { id: "framing", passed: true, weight: 0 }], evidence: { traits: { login: true } } }));
+    const { csp, framing } = traitTable(rows, ["csp", "framing"]).login.shares;
+    expect(csp).toMatchObject({ passed: 10, judged: 20, share: 0.5, interval: "naive row-level" });
+    expect(csp.ci95[0]).toBeCloseTo(0.2993, 3);
+    expect(csp.ci95[1]).toBeCloseTo(0.7007, 3);
+    expect(framing).toEqual({ suppressed: true });
+  });
 });
 
 describe("E20-R order and cohorts", () => {
@@ -653,6 +661,8 @@ describe("E20-R analysis", () => {
     expect(t.Healthcare.sites).toBe(22);
     expect(t.Fintech).toBeUndefined();
     expect(t.suppressedGroups).toBe(1);
+    expect(t.Healthcare.shares.csp).toMatchObject({ passed: 22, judged: 22, share: 1, interval: "naive row-level" });
+    expect(t.Healthcare.shares.csp.ci95[1]).toBe(1);
   });
   it("repeats C1 to C4 without the hosts E20 excluded", () => {
     const mk = (cohort, n) => Array.from({ length: n }, (_, i) => site(`${cohort.toLowerCase()}${i}.org`, i % 2 === 0, { cohorts: { [cohort]: { rank: i, group: "x" } }, platform: { edge: "vercel" } }));
@@ -690,7 +700,8 @@ describe("E20-R analysis", () => {
   it("gives the refusal share with and without bare 403s", () => {
     const r = (label, rule, registered = "page") => ({ host: `${label}${rule}.example.com`, evidence: { class: { label, rule }, classRegistered: { label: registered } } });
     const rows = [r("candidate-page", "status"), r("block", "unrecognized-403"), r("block", "body", "block"), r("challenge", "body", "challenge")];
-    expect(refusalShares(rows)).toEqual({ n: 4, all: 0.75, signatureBacked: 0.5, registered: 0.5 });
+    expect(refusalShares(rows)).toMatchObject({ n: 4, all: 0.75, signatureBacked: 0.5, registered: 0.5, interval: "naive row-level" });
+    expect(refusalShares(rows).allCi95).toHaveLength(2);
     expect(primaryRefusal(rows, { resamples: 200 })).toMatchObject({ n: 4, share: 0.5 });
   });
   it("reports C14 and C15 as not run with one pass", () => {

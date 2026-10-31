@@ -36,9 +36,41 @@ export const NOT_PRINTED = Object.freeze({
   resamples: "fixed in the code and printed in provenance as an option",
   auditFrame: "must equal the score's frame, which the audit's detail prints",
 });
-export const PART_TWO = "Secondary figures. Their intervals are naive row-level, with no clustering, and they corroborate nothing.";
+// The fields below the top level, which those lists can't see. Every open cell of a share table holds exactly these five.
+export const SHARE_FIELDS = Object.freeze(["passed", "judged", "share", "ci95", "interval"]);
+export const GROUP_FIELDS = Object.freeze({ trait: ["sites", "shares"], industry: ["sites", "median", "shares"], suppressed: ["sites", "suppressed"], edge: ["n", "share", "ci95", "interval"], refusals: ["n", "all", "allCi95", "signatureBacked", "registered", "registeredCi95", "interval"] });
+export const PART_TWO = "Secondary figures. Their intervals are naive row-level, with no clustering, and they corroborate nothing. The two DNS tables keep the claims' cluster bootstrap and level.";
+export const UNDER_20 = "under 20";
 
 const refuse = (why) => { throw new Error(`Refused: ${why}.`); };
+
+/** What is wrong with the nested rows of an analysis: a field missing, an unlisted field, a figure under the floor, or an interval that doesn't fit its counts. */
+export function nestedProblems(a) {
+  const out = [];
+  const exact = (at, row, fields) => {
+    const names = row !== null && typeof row === "object" ? Object.keys(row) : [];
+    for (const f of fields) if (!names.includes(f)) out.push(`${at} has no ${f}`);
+    for (const f of names) if (!fields.includes(f)) out.push(`${at} has the unlisted field ${f}`);
+  };
+  const group = (at, g, fields) => {
+    if (g.suppressed) return exact(at, g, GROUP_FIELDS.suppressed);
+    exact(at, g, fields);
+    for (const [check, s] of Object.entries(g.shares ?? {})) {
+      if (s?.suppressed) { exact(`${at}.${check}`, s, ["suppressed"]); continue; }
+      exact(`${at}.${check}`, s, SHARE_FIELDS);
+      if (s?.interval !== "naive row-level") out.push(`${at}.${check} doesn't say its interval is naive row-level`);
+      if (!(s?.judged >= 20) || !Array.isArray(s?.ci95) || s?.ci95.length !== 2 || typeof s?.share !== "number") out.push(`${at}.${check} has a figure that doesn't fit its counts`);
+    }
+  };
+  for (const [name, g] of Object.entries(a.traits ?? {})) group(`traits.${name}`, g, GROUP_FIELDS.trait);
+  for (const [cohort, table] of Object.entries(a.traitsByCohort ?? {})) for (const [name, g] of Object.entries(table)) group(`traitsByCohort.${cohort}.${name}`, g, GROUP_FIELDS.trait);
+  const { suppressedGroups: _hidden, ...industries } = a.industries ?? {};
+  for (const [name, g] of Object.entries(industries)) group(`industries.${name}`, g, GROUP_FIELDS.industry);
+  for (const [edge, g] of Object.entries(a.challengeByEdge ?? {})) exact(`challengeByEdge.${edge}`, g, GROUP_FIELDS.edge);
+  exact("refusals", a.refusals, GROUP_FIELDS.refusals);
+  if (a.refusals?.interval !== "naive row-level") out.push("refusals doesn't say its interval is naive row-level");
+  return out;
+}
 
 /** The headline a frame's own counts give, by the exact test. */
 const headlineOf = (frame) => (Object.values(frame.strata).some((g) => overWithheldLimit(g.withheld, g.eligible)) ? "not estimable" : "stands, on its frame");
@@ -131,7 +163,7 @@ export function assemble(a, s, { runtimeNow = null } = {}) {
   out.push(SCOPE_LINE, "");
 
   title("Primary refusal endpoint");
-  table(["Graded", "Signature-backed", "95% interval", "All refusals", "Original rules"], [[a.primaryRefusal?.n ?? "n/a", pct(a.primaryRefusal?.share), ci(a.primaryRefusal?.ci), pct(a.refusals?.all), pct(a.refusals?.registered)]]);
+  table(["Graded", "Signature-backed", "95% interval", "All refusals", "95% interval", "Original rules", "95% interval", "Interval of the last two"], [[a.primaryRefusal?.n ?? "n/a", pct(a.primaryRefusal?.share), ci(a.primaryRefusal?.ci), pct(a.refusals?.all), ci(a.refusals?.allCi95), pct(a.refusals?.registered), ci(a.refusals?.registeredCi95), a.refusals?.interval ?? "n/a"]]);
 
   title(`Claims C1 to C11, on ${(a.level * 100).toFixed(2)}% intervals`);
   table(["Claim", "Comparison", "Check", "Predicted", "Served", "Real page", "Decision"], a.claims.filter((c) => c.S).map((c) => [c.id, c.label, `\`${c.check}\``, c.predicted, view(c.S), realView(c.R), c.decision]));
@@ -187,20 +219,22 @@ export function assemble(a, s, { runtimeNow = null } = {}) {
     const keys = [...new Set(rows.flatMap((r) => Object.keys(r)))];
     table(keys, rows.map((r) => keys.map((k) => cellOf(r[k]))));
   };
-  const traitRows = (head, group) => {
-    const checks = [...new Set(Object.values(group).flatMap((g) => Object.keys(g.shares ?? {})))];
-    table([head, "Sites", ...checks], Object.entries(group).map(([name, g]) => [name, g.sites, ...checks.map((c) => (g.suppressed ? "under 20" : pct(g.shares[c])))]));
+  // One row per check, with its counts, share, interval and the interval's label. A suppressed group or cell shows no figure.
+  const shareRows = (head, group, extraHead = [], extra = () => []) => {
+    const hidden = Array(5).fill(UNDER_20);
+    table([head, "Sites", ...extraHead, "Check", "Passed", "Judged", "Share, %", "95% interval, %", "Interval"], Object.entries(group).flatMap(([name, g]) => (g.suppressed
+      ? [[name, UNDER_20, ...extraHead.map(() => UNDER_20), "all", ...hidden]]
+      : Object.entries(g.shares).map(([check, s]) => [name, g.sites, ...extra(g), check, ...(s.suppressed ? hidden : [s.passed, s.judged, pct(s.share), ci(s.ci95), s.interval])]))));
   };
   title("Secondary cohorts");
   fields(a.secondaryCohorts ?? []);
   title("Checks by site trait");
-  traitRows("Trait", a.traits ?? {});
-  for (const [cohort, group] of Object.entries(a.traitsByCohort ?? {})) { out.push(`List: ${cohort}`, ""); traitRows("Trait", group); }
+  shareRows("Trait", a.traits ?? {});
+  for (const [cohort, group] of Object.entries(a.traitsByCohort ?? {})) { out.push(`List: ${cohort}`, ""); shareRows("Trait", group); }
   title("Checks by industry");
   const { suppressedGroups = 0, ...industries } = a.industries ?? {};
   out.push(`Groups under 20, not shown: ${suppressedGroups}.`, "");
-  const industryChecks = [...new Set(Object.values(industries).flatMap((g) => Object.keys(g.shares ?? {})))];
-  table(["Industry", "Sites", "Median score", ...industryChecks], Object.entries(industries).map(([name, g]) => [name, g.sites, cellOf(g.median), ...industryChecks.map((c) => pct(g.shares[c]))]));
+  shareRows("Industry", industries, ["Median score"], (g) => [cellOf(g.median)]);
   title("Challenge share by edge");
   fields(Object.entries(a.challengeByEdge ?? {}).map(([edge, g]) => ({ edge, ...g })));
   title("DNS beside the decision");

@@ -364,6 +364,12 @@ export const amendment3Adopted = (preregText) => {
   return /^\*\*Status: adopted\.\*\*/m.test(end < 0 ? rest : rest.slice(0, end));
 };
 
+/** The Node version of the live run, on the server. Score, analysis and report compare against the manifest, which records it. */
+export const STUDY_NODE = "v22.23.4";
+
+/** Why this Node can't start a live run, or null. Loopback runs and tests don't ask. */
+export const liveNodeProblem = (version) => (version === STUDY_NODE ? null : `Refused: live runs need Node ${STUDY_NODE}, and this is ${version}.`);
+
 /** Throws unless this pass may leave loopback. */
 export function authorizeR({ loopback, registered, pass, listHashes = {}, excludeHash, homepageOnlyHash, preregText, pageText = "", tree = {}, sourceIps = [], removals, priorOptOuts, pilot, classifierHash, pslHash }) {
   if (loopback) return { mode: "loopback" };
@@ -912,6 +918,10 @@ export async function main(args, deps = {}) {
   if (flag(args, "--out")) { console.error("A registered run has one fixed output folder; --out is for no run."); return 2; }
   if (!(Number.isInteger(round) && round >= 1 && round <= 9)) { say("--pilot-round takes 1 to 9."); return 2; }
   if (pilot !== null && !(Number.isInteger(pilot) && pilot >= PILOT_MIN && pilot <= PILOT_MAX)) { say(`--pilot takes exactly ${PILOT_MAX} sites.`); return 2; }
+  if (!deps.loopbackPort) {
+    const wrongNode = liveNodeProblem(deps.nodeVersion ?? process.version);
+    if (wrongNode) { say(wrongNode); return 3; }
+  }
   const excludeBytes = flag(args, "--exclude") ? readFileSync(flag(args, "--exclude")) : null;
   const homepageBytes = flag(args, "--homepage-only") ? readFileSync(flag(args, "--homepage-only")) : null;
   const bytes = Object.fromEntries(Object.entries(R_COHORTS).map(([c, { file }]) => [c, existsSync(join(dir, file)) ? readFileSync(join(dir, file)) : null]));
