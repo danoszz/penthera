@@ -853,29 +853,27 @@ BrowseSafe, a public corpus of synthetic web pages, as counts only. It holds no 
 |---|---:|---:|
 | The one that stopped pass 2 | 235 | 1.38% |
 | First fix, own tokens and URLs only | 82 | 0.48% |
-| This one | 18 | 0.11% |
+| This one | 17 | 0.10% |
 
-The last row is the frozen classifier, `c79fd69519fb3813b11271c2a401d36d2a61ce55d80131cd3ccd9f0d3b86f324`.
-Its Wilson 95% interval is 0.07% to 0.17%. Of its 18 pages, 13 fired on an email, 4 on a fragment and 1
+The last row is the frozen classifier, `ffd44cf9df79d0de10079cbe9e367420226c5034a0ee4a78461cd474419a8ed7`.
+Its Wilson 95% interval is 0.06% to 0.16%. Of its 17 pages, 12 fired on an email, 4 on a fragment and 1
 on a long hex run. It fires on more pages than a draft at 7, because it reads domains that draft
 missed. Most of those fires are one timestamp-like shape in a corpus template. We left that shape in,
 because narrowing it would be tuning on the corpus, and it would miss valid names.
 
 Over the 7,031 records and 691,594 stored strings of pass 1, this classifier and the one that stopped
-pass 2 gave 0 label differences and 0 scrub differences. This one fired less on 1 string and more on
-none. In particular, none of the 2,387 pass 1 records with a stored error excerpt fired. Pass 1 stored
+pass 2 gave 0 label differences and 0 scrub differences. This one gave fewer findings on 1 string and more on none. In particular, none of the 2,387 pass 1 records with a stored error excerpt fired. Pass 1 stored
 few excerpts of normal pages, so that says little about them.
 
 **What was replayed on the stopped pass.** A replay at the first fix, classifier
 `280c4633f3d003371203957774b867889e596db9bd8b716f2e0e9c1fb49efbac`, flagged 0 of 188 records. It ran before
-the prune, and it is the only replay of that page text. Classifier `c79fd695...` has never read that
+the prune, and it is the only replay of that page text. Classifier `ffd44cf9...` has never read that
 text, and can't now. It did read what the prune left of pilot round 1 and the stopped pass, 238 records
 with no page or error text, and flagged 0. That covers stored fields such as headers and DNS records,
 and says nothing about page text.
 
 The last row's rules were written after reading the shapes behind the second, on the same corpus, so it
-is in-sample, and the real rate may differ. Pass 3 should see about 3,350 2xx pages. At 0.11% that is
-about 3.5 fires, and about a 3% chance of none. So a tighter detector doesn't remove the problem. A run
+is in-sample, and the real rate may differ. Pass 3 should see about 3,350 2xx pages. At 0.10% that is about 3.3 fires, and about a 4% chance of none. So a tighter detector doesn't remove the problem. A run
 that ended at the first fire would almost certainly not finish, and a false fire in the last pilot round
 would leave no route to pass 3.
 
