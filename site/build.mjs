@@ -446,7 +446,7 @@ export function readNews(file = join(SITE, "news.json")) {
 function tickerHtml(items) {
   const fmt = (d) => new Date(`${d}T00:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
   const list = (hidden) => `<ul class="ticker-list"${hidden ? ' aria-hidden="true"' : ""}>${items.map((n) =>
-    `<li><svg class="lock" viewBox="0 0 12 14" aria-hidden="true"><use href="#i-lock"/></svg><time datetime="${n.date}">${fmt(n.date)}</time> <a href="${esc(n.source)}"${hidden ? ' tabindex="-1"' : ""}>${esc(n.text)}</a></li>`).join("")}</ul>`;
+    `<li><svg class="lock" viewBox="0 0 12 14" aria-hidden="true"><use href="#i-lock"/></svg><time datetime="${n.date}">${fmt(n.date)}</time> <a href="${esc(n.source)}" tabindex="-1">${esc(n.text)}</a></li>`).join("")}</ul>`;
   return `<div class="ticker" role="region" aria-label="Security news"><div class="ticker-track">${list(false)}${list(true)}</div></div>`;
 }
 
@@ -504,6 +504,7 @@ export async function buildSite({ out = join(SITE, "dist"), engine, blogDir = jo
   // The dashboard's own font and marks, so the site and penthera ui match.
   const UI = join(ROOT, "src", "ui", "static");
   for (const f of ["favicon.svg", "logo.svg"]) cpSync(join(UI, f), join(OUT, f));
+  cpSync(join(SITE, "media", "apple-touch-icon.png"), join(OUT, "apple-touch-icon.png"));
   mkdirSync(join(OUT, "fonts"), { recursive: true });
   for (const f of ["DepartureMono-Regular.woff2", "DepartureMono-LICENSE.txt"]) cpSync(join(UI, "fonts", f), join(OUT, "fonts", f));
   // The walkthrough is no longer on the page; it stays at its URL for links shared before.
@@ -588,12 +589,12 @@ export async function buildSite({ out = join(SITE, "dist"), engine, blogDir = jo
   if (pub) {
     const image = (slug) => { const f = cardFor(SITE, pubText, slug); return f ? `${ORIGIN}/${f}?v=${hash(readFileSync(join(SITE, f)))}` : undefined; };
     mkdirSync(join(OUT, "benchmarks"), { recursive: true });
-    const hub = hubHtml(pub, { origin: ORIGIN, styles, image: image("hub"), foot });
+    const hub = hubHtml(pub, { origin: ORIGIN, styles, image: image("hub"), foot, blog: posts.published.length > 0 });
     writeFileSync(join(OUT, "benchmarks.html"), hub);
     writeFileSync(join(OUT, "benchmarks", "index.html"), hub);
     writeFileSync(join(OUT, "benchmarks.md"), hubMarkdown(pub, { origin: ORIGIN }));
     for (const v of benchmarkViews(pub)) {
-      writeFileSync(join(OUT, "benchmarks", `${v.c.slug}.html`), benchmarkHtml(v.key, pub, { origin: ORIGIN, styles, image: image(v.c.slug), foot }));
+      writeFileSync(join(OUT, "benchmarks", `${v.c.slug}.html`), benchmarkHtml(v.key, pub, { origin: ORIGIN, styles, image: image(v.c.slug), foot, blog: posts.published.length > 0 }));
       writeFileSync(join(OUT, "benchmarks", `${v.c.slug}.md`), benchmarkMarkdown(v.key, pub, { origin: ORIGIN }));
     }
   }

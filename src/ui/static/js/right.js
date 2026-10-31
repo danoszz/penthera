@@ -9,6 +9,14 @@ import { EMPTY, KEYS, SEV_WORD, AI, VERIFY } from "./copy.js";
 
 let seq = 0;
 
+/** The prompt for a problem with no automatic fix: what, where, how, and how to check it. */
+async function copyPrompt(btn, d, x) {
+  const text = [`Fix this security problem in my app. Change only what it needs, and show me the change first.`, "", `Problem: ${d.title}`, d.location ? `Where: ${d.location}` : null, d.description ? `What is wrong: ${d.description}` : null, d.remediation || x.fixText ? `What to do: ${d.remediation || x.fixText}` : null, "", "Then run `npx penthera --repo .` and check that this problem is gone."].filter((l) => l !== null).join("\n");
+  const was = btn.textContent;
+  try { await navigator.clipboard.writeText(text); btn.textContent = "Copied. Paste it into your coding agent."; } catch { btn.textContent = "Could not copy"; }
+  setTimeout(() => { btn.textContent = was; }, 2200);
+}
+
 export async function renderRight(el, ctx) {
   const my = ++seq;
   if (state.right === "finding" && state.finding) return findingView(el, ctx, my);
@@ -58,22 +66,26 @@ async function findingView(el, ctx, my) {
   const section = (label, ...body) => h("section", {}, h("p", { class: "label" }, label), ...body);
   const canFix = d.fix && f.project.startsWith("/");
   if (simple()) {
+    const isNote = d.severity === "info";
     // Plain words first, one action, the detail folded away.
     const sure = { confirmed: "Penthera is sure about this one.", likely: "Penthera is fairly sure; worth checking.", "needs-human-review": "Penthera cannot be sure; a person should look." }[d.confidence] || "";
     clear(el).append(
-      head("Problem", ctx),
+      head(isNote ? "Note" : "Problem", ctx),
       h("div", { class: "pane-body detail" },
         h("div", {}, h("span", { class: `sev sev-${d.severity}` }, SEV_WORD[d.severity] || d.severity)),
         h("h2", { tabindex: "-1" }, d.title),
         h("div", { class: "plain plate", "aria-label": "In plain words" },
-          d.description ? h("p", {}, h("b", {}, "What is wrong :: "), d.description) : null,
-          h("p", {}, h("b", {}, "How sure :: "), sure),
-          x.fixText || d.remediation ? h("p", {}, h("b", {}, "What to do :: "), x.fixText || d.remediation) : null,
-          h("p", {}, h("b", {}, "Check the fix :: "), VERIFY)),
+          d.description ? h("p", {}, h("b", {}, isNote ? "What it found :: " : "What is wrong :: "), d.description) : null,
+          isNote ? null : h("p", {}, h("b", {}, "How sure :: "), sure),
+          isNote ? null : d.remediation || x.fixText ? h("p", {}, h("b", {}, "What to do :: "), d.remediation || x.fixText) : null,
+          isNote ? null : h("p", {}, h("b", {}, "Check the fix :: "), VERIFY)),
         canFix
           ? h("div", { class: "actions start" }, h("button", { type: "button", class: "btn primary", onclick: () => ctx.newScan("loop", f.project) }, "Fix it for me…"),
             h("p", { class: "muted prose" }, "You will see the change and approve it first."))
-          : h("p", { class: "muted prose" }, "Penthera has no automatic fix for this one. The steps above say what to change; a developer can do it in minutes."),
+          : isNote ? h("p", { class: "muted prose" }, "This is a note, not a problem. There is nothing to fix.")
+          : h("div", { class: "actions start" },
+            h("button", { type: "button", class: "btn primary", onclick: (e) => copyPrompt(e.currentTarget, d, x) }, "Copy prompt for your coding agent"),
+            h("p", { class: "muted prose" }, "Penthera can't fix this one by itself. Paste the prompt into your coding agent, then check again.")),
         h("details", { class: "more" }, h("summary", {}, "Show the details"),
           h("dl", { class: "kv" },
             h("dt", {}, "where"), h("dd", {}, d.location || "-"),
@@ -83,6 +95,8 @@ async function findingView(el, ctx, my) {
           d.sources?.length ? section("Read more", h("ul", { class: "mini" }, d.sources.map((s) => h("li", {}, h("a", { href: s.url, target: "_blank", rel: "noopener noreferrer" }, s.cite))))) : null),
       ),
     );
+    // Asked for from the verdict: take the keyboard to the panel too.
+    if (state.focusPanel) { state.focusPanel = false; el.querySelector("h2")?.focus(); }
     return;
   }
   clear(el).append(

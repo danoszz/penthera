@@ -1,38 +1,39 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 376" width="640" height="376" role="img" aria-labelledby="t d" font-family="Helvetica, Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 428" width="640" height="428" role="img" aria-labelledby="t d" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif">
 <title id="t">Penthera's score on the tuned dev half and the sealed test half</title>
 <desc id="d">For four benchmarks, Penthera's score on the dev half after tuning, and on the sealed test half in final run 1 and final run 2. Secrets, F1: dev 0.81, test run 1 0.74, test run 2 0.74; JS injection, share found: dev 0.88, test run 1 0.63, test run 2 0.70; npm malware, Youden's J: dev 0.83, test run 1 0.71, test run 2 0.71; PyPI malware, Youden's J: dev 0.92, test run 1 0.75, test run 2 0.82. Every test score is below its dev score.</desc>
-<rect width="640" height="376" fill="#ffffff"/>
-<text x="12" y="22" font-size="16" font-weight="bold" fill="#000000">Penthera on the half it was tuned on, and on the sealed half</text>
-<line x1="196" y1="48" x2="196" y2="308" stroke="#ebebeb"/><text x="196" y="325" font-size="13" fill="#4d4d4d" text-anchor="middle">0.5</text>
-<line x1="280.79999999999995" y1="48" x2="280.79999999999995" y2="308" stroke="#ebebeb"/><text x="280.79999999999995" y="325" font-size="13" fill="#4d4d4d" text-anchor="middle">0.6</text>
-<line x1="365.59999999999997" y1="48" x2="365.59999999999997" y2="308" stroke="#ebebeb"/><text x="365.59999999999997" y="325" font-size="13" fill="#4d4d4d" text-anchor="middle">0.7</text>
-<line x1="450.40000000000003" y1="48" x2="450.40000000000003" y2="308" stroke="#ebebeb"/><text x="450.40000000000003" y="325" font-size="13" fill="#4d4d4d" text-anchor="middle">0.8</text>
-<line x1="535.2" y1="48" x2="535.2" y2="308" stroke="#ebebeb"/><text x="535.2" y="325" font-size="13" fill="#4d4d4d" text-anchor="middle">0.9</text>
-<line x1="620" y1="48" x2="620" y2="308" stroke="#ebebeb"/><text x="620" y="325" font-size="13" fill="#4d4d4d" text-anchor="middle">1.0</text>
-<rect x="196" y="48" width="424" height="260" fill="none" stroke="#bfbfbf"/>
-<text x="408" y="342" font-size="14" fill="#4d4d4d" text-anchor="middle">Score, 0 to 1 (axis starts at 0.5)</text>
-<text x="12" y="78" font-size="14" fill="#000000">Secrets, F1</text>
-<line x1="399.52" y1="74" x2="458.88000000000005" y2="74" stroke="#bfbfbf" stroke-width="1"/>
-<g><title>Secrets, F1: dev 0.81, test run 1 0.74, test run 2 0.74</title><rect x="454.4" y="69.5" width="9" height="9" fill="#7A7AFF"/><circle cx="399.5" cy="74" r="6.5" fill="none" stroke="#8c8c8c" stroke-width="1.5"/><circle cx="399.5" cy="74" r="4" fill="#0000ED"/></g>
-<text x="399.5" y="92" font-size="13" fill="#0000ED" text-anchor="middle">0.74</text>
-<text x="389.5" y="78" font-size="13" fill="#0000ED" text-anchor="end">test, runs 1 and 2</text>
-<text x="468.9" y="78" font-size="13" fill="#4d4d4d" text-anchor="start">0.81 dev</text>
-<text x="12" y="142" font-size="14" fill="#000000">JS injection, share found</text>
-<line x1="365.59999999999997" y1="138" x2="518.24" y2="138" stroke="#bfbfbf" stroke-width="1"/>
-<g><title>JS injection, share found: dev 0.88, test run 1 0.63, test run 2 0.70</title><rect x="513.7" y="133.5" width="9" height="9" fill="#7A7AFF"/><circle cx="306.2" cy="138" r="6.5" fill="none" stroke="#8c8c8c" stroke-width="1.5"/><circle cx="365.6" cy="138" r="4" fill="#0000ED"/></g>
-<text x="365.6" y="156" font-size="13" fill="#0000ED" text-anchor="middle">0.70</text>
-<text x="306.2" y="127" font-size="13" fill="#4d4d4d" text-anchor="middle">run 1: 0.63</text>
-<text x="528.2" y="142" font-size="13" fill="#4d4d4d" text-anchor="start">0.88</text>
-<text x="12" y="206" font-size="14" fill="#000000">npm malware, Youden's J</text>
-<line x1="374.08" y1="202" x2="475.84" y2="202" stroke="#bfbfbf" stroke-width="1"/>
-<g><title>npm malware, Youden's J: dev 0.83, test run 1 0.71, test run 2 0.71</title><rect x="471.3" y="197.5" width="9" height="9" fill="#7A7AFF"/><circle cx="374.1" cy="202" r="6.5" fill="none" stroke="#8c8c8c" stroke-width="1.5"/><circle cx="374.1" cy="202" r="4" fill="#0000ED"/></g>
-<text x="374.1" y="220" font-size="13" fill="#0000ED" text-anchor="middle">0.71</text>
-<text x="485.8" y="206" font-size="13" fill="#4d4d4d" text-anchor="start">0.83</text>
-<text x="12" y="270" font-size="14" fill="#000000">PyPI malware, Youden's J</text>
-<line x1="467.35999999999996" y1="266" x2="552.1600000000001" y2="266" stroke="#bfbfbf" stroke-width="1"/>
-<g><title>PyPI malware, Youden's J: dev 0.92, test run 1 0.75, test run 2 0.82</title><rect x="547.7" y="261.5" width="9" height="9" fill="#7A7AFF"/><circle cx="408.0" cy="266" r="6.5" fill="none" stroke="#8c8c8c" stroke-width="1.5"/><circle cx="467.4" cy="266" r="4" fill="#0000ED"/></g>
-<text x="467.4" y="284" font-size="13" fill="#0000ED" text-anchor="middle">0.82</text>
-<text x="408.0" y="255" font-size="13" fill="#4d4d4d" text-anchor="middle">0.75</text>
-<text x="562.2" y="270" font-size="13" fill="#4d4d4d" text-anchor="start">0.92</text>
-<text x="12" y="368" font-size="12" fill="#737373">Square: dev half, tuned. Dot: test, run 2. Ring: test, run 1. Data: bench/public/RESULTS.md, 2026-10-25</text>
+<rect x="0.5" y="0.5" width="639" height="427" fill="#fdfdfa" stroke="#12151a"/>
+<text x="12" y="32" font-size="21" font-weight="500" letter-spacing="-0.4" fill="#12151a">Penthera on the half it was tuned on, and on the sealed half</text>
+<line x1="222" y1="66" x2="222" y2="326" stroke="#ebebe6"/><text x="222" y="343" font-size="15" fill="#3a3d42" text-anchor="middle">0.5</text>
+<line x1="300.79999999999995" y1="66" x2="300.79999999999995" y2="326" stroke="#ebebe6"/><text x="300.79999999999995" y="343" font-size="15" fill="#3a3d42" text-anchor="middle">0.6</text>
+<line x1="379.59999999999997" y1="66" x2="379.59999999999997" y2="326" stroke="#ebebe6"/><text x="379.59999999999997" y="343" font-size="15" fill="#3a3d42" text-anchor="middle">0.7</text>
+<line x1="458.40000000000003" y1="66" x2="458.40000000000003" y2="326" stroke="#ebebe6"/><text x="458.40000000000003" y="343" font-size="15" fill="#3a3d42" text-anchor="middle">0.8</text>
+<line x1="537.2" y1="66" x2="537.2" y2="326" stroke="#ebebe6"/><text x="537.2" y="343" font-size="15" fill="#3a3d42" text-anchor="middle">0.9</text>
+<line x1="616" y1="66" x2="616" y2="326" stroke="#ebebe6"/><text x="616" y="343" font-size="15" fill="#3a3d42" text-anchor="middle">1.0</text>
+<rect x="222" y="66" width="394" height="260" fill="none" stroke="#bfbfbf"/>
+<text x="419" y="360" font-size="16" fill="#3a3d42" text-anchor="middle">Score, 0 to 1 (axis starts at 0.5)</text>
+<text x="16" y="97" font-size="16" fill="#12151a">Secrets, F1</text>
+<line x1="411.12" y1="92" x2="466.28000000000003" y2="92" stroke="#bfbfbf" stroke-width="1"/>
+<g><title>Secrets, F1: dev 0.81, test run 1 0.74, test run 2 0.74</title><rect x="461.8" y="87.5" width="9" height="9" fill="#7A7AFF"/><circle cx="411.1" cy="92" r="6.5" fill="none" stroke="#8c8c8c" stroke-width="1.5"/><circle cx="411.1" cy="92" r="4" fill="#0000ED"/></g>
+<text x="411.1" y="114" font-size="15" fill="#0000ED" text-anchor="middle">0.74</text>
+<text x="401.1" y="96" font-size="15" fill="#0000ED" text-anchor="end">test, runs 1 and 2</text>
+<text x="476.3" y="96" font-size="15" fill="#3a3d42" text-anchor="start">0.81 dev</text>
+<text x="16" y="161" font-size="16" fill="#12151a">JS injection, share found</text>
+<line x1="379.59999999999997" y1="156" x2="521.44" y2="156" stroke="#bfbfbf" stroke-width="1"/>
+<g><title>JS injection, share found: dev 0.88, test run 1 0.63, test run 2 0.70</title><rect x="516.9" y="151.5" width="9" height="9" fill="#7A7AFF"/><circle cx="324.4" cy="156" r="6.5" fill="none" stroke="#8c8c8c" stroke-width="1.5"/><circle cx="379.6" cy="156" r="4" fill="#0000ED"/></g>
+<text x="379.6" y="178" font-size="15" fill="#0000ED" text-anchor="middle">0.70</text>
+<text x="324.4" y="145" font-size="15" fill="#3a3d42" text-anchor="middle">run 1: 0.63</text>
+<text x="531.4" y="160" font-size="15" fill="#3a3d42" text-anchor="start">0.88</text>
+<text x="16" y="225" font-size="16" fill="#12151a">npm malware, Youden's J</text>
+<line x1="387.47999999999996" y1="220" x2="482.03999999999996" y2="220" stroke="#bfbfbf" stroke-width="1"/>
+<g><title>npm malware, Youden's J: dev 0.83, test run 1 0.71, test run 2 0.71</title><rect x="477.5" y="215.5" width="9" height="9" fill="#7A7AFF"/><circle cx="387.5" cy="220" r="6.5" fill="none" stroke="#8c8c8c" stroke-width="1.5"/><circle cx="387.5" cy="220" r="4" fill="#0000ED"/></g>
+<text x="387.5" y="242" font-size="15" fill="#0000ED" text-anchor="middle">0.71</text>
+<text x="492.0" y="224" font-size="15" fill="#3a3d42" text-anchor="start">0.83</text>
+<text x="16" y="289" font-size="16" fill="#12151a">PyPI malware, Youden's J</text>
+<line x1="474.15999999999997" y1="284" x2="552.96" y2="284" stroke="#bfbfbf" stroke-width="1"/>
+<g><title>PyPI malware, Youden's J: dev 0.92, test run 1 0.75, test run 2 0.82</title><rect x="548.5" y="279.5" width="9" height="9" fill="#7A7AFF"/><circle cx="419.0" cy="284" r="6.5" fill="none" stroke="#8c8c8c" stroke-width="1.5"/><circle cx="474.2" cy="284" r="4" fill="#0000ED"/></g>
+<text x="474.2" y="306" font-size="15" fill="#0000ED" text-anchor="middle">0.82</text>
+<text x="419.0" y="273" font-size="15" fill="#3a3d42" text-anchor="middle">0.75</text>
+<text x="563.0" y="288" font-size="15" fill="#3a3d42" text-anchor="start">0.92</text>
+<text x="16" y="398" font-size="13.5" fill="#6b6e73">Square: dev half, tuned. Dot: test, run 2. Ring: test, run 1.</text>
+<text x="16" y="416" font-size="13.5" fill="#6b6e73">Data: bench/public/RESULTS.md, 2026-10-25</text>
 </svg>

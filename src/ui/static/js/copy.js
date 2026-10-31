@@ -75,7 +75,7 @@ export const SEV_WORD = { critical: "Critical", high: "Serious", medium: "Worth 
 
 export const SIMPLE_KINDS = [
   { kind: "scan", title: "Check my app", body: "Looks at your app and code for security problems. Takes a minute or two.", button: "Check my app" },
-  { kind: "loop", title: "Fix problems for me", body: "Proposes a fix for each problem it knows how to fix. You approve every change; nothing is published.", button: "Start fixing" },
+  { kind: "loop", title: "Fix problems for me", body: "Proposes a fix for each problem it knows how to fix. You approve every change; nothing is published. The rest stay on your list, with a prompt for your coding agent.", button: "Start fixing" },
 ];
 
 export const SETUP = {

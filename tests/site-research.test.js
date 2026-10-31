@@ -196,6 +196,19 @@ describe("/research", () => {
     expect(studyStatus("Completed 2026-10-25. Approved by Daan")).toBe("Registered");
   });
 
+  it("uses the public name for State of the Web, with the id kept out of what readers see", () => {
+    const li = items(read("research.html")).filter((l) => /data-id="rE20r?"/.test(l));
+    expect(li).toHaveLength(2);
+    for (const l of li) {
+      expect(l).toContain("State of the Web 2026");
+      expect(l).toContain('data-status="registered"');
+      expect(l.replace(/<[^>]+>/g, " ")).not.toMatch(/\bE20|\bsafe\b/i);
+    }
+    for (const f of ["research.md", "news.md"]) expect(read(f)).not.toMatch(/\[E20|Study E20/);
+    expect(read("llms.txt")).toContain("[State of the Web 2026](");
+    expect(read("index.html")).toContain('<a href="/research-e20">State of the Web</a>');
+  });
+
   it("reads a new protocol's status from its own file: a draft lands as Draft", () => {
     const d = join(dir, "prereg");
     mkdirSync(d, { recursive: true });

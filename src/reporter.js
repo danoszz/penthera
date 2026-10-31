@@ -540,6 +540,14 @@ function printSummaryLine(result, w) {
     w(`  ${parts.join(c.dim(" \u00b7 "))}`);
   }
   if (note) w(`  ${c.red(printable(note))}`);
+  // A person at a terminal gets the same next step the brief gives an agent.
+  const first = findings.find((f) => f.severity === "critical") || findings.find((f) => f.severity === "high");
+  if (first) {
+    w("");
+    w(`  ${c.bold("Fix first:")} ${printable(first.title)}`);
+    if (first.remediation) w(`  ${printable(first.remediation)}`);
+    w(`  ${c.dim("Next:")} npx penthera ui --open ${c.dim("walks you through every problem")}`);
+  }
   const other = result.giants?.findings || [];
   if (other.length) {
     const o = { critical: 0, high: 0, medium: 0, low: 0, info: 0 };

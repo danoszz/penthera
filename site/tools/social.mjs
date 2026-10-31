@@ -130,7 +130,7 @@ h1{position:absolute;left:64px;top:132px;font-size:124px;font-weight:500;letter-
 /** The feed cards. story.png keeps the top 220 px and bottom 360 px clear of the apps' own buttons and captions. */
 export const FEEDS = [
   { file: "square.png", w: 1080, h: 1080, layout: { field: 1728, fade: [0, 12, 88, 100], logoTop: 64, logoW: 240, top: 340, gap: 186, q: 76, a: 110 } },
-  { file: "story.png", w: 1080, h: 1920, layout: { field: 2400, fade: [10, 24, 76, 90], logoTop: 240, logoW: 280, top: 700, gap: 220, q: 84, a: 124 } },
+  { file: "story.png", w: 1080, h: 1920, layout: { field: 3000, fade: [8, 20, 84, 96], logoTop: 240, logoW: 280, top: 640, gap: 220, q: 84, a: 124 } },
 ];
 
 /**

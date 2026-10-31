@@ -11,3 +11,9 @@ section: Changed
   `.btn`. The square and story cards use the blue bubbles, without a score.
 - **News is one page with Research and the blog.** `/news`, `/research` and `/blog` share a list with filters, a search and a feed at `/news/feed.xml`, and every view is a real page that works without a script.
 - **Penthera says what it is.** The site calls it a free, open-source security scanner and fixer for your app, with "Make your app more secure for free" under the headline. The field button reads Check my site, the dock reads Install, and the home page now says fixes stay on your machine and nothing is pushed.
+- **Benchmarks sit with News and Research.** `/benchmarks` opens on four scoreboard cards with every ranked tool, and the detail pages use the same paper, with limits beside the answer. Every score, interval and loss stays on the page.
+- The web measurement study is now called State of the Web 2026 in the footer, on `/news` and `/research`, and in `llms.txt`.
+- Every page has a share image now, including news, research, the blog and its posts. iPhones get a home-screen icon.
+- Benchmark share cards use the paper look, with each rank and its range large enough to read in a feed.
+- Fixed the live check's prompt button, which said "Copy failed" after copying. Localhost and other addresses the check can't reach now say what to run instead, before the consent step. The consent slider is clear by keyboard, and a network failure gets a plain message.
+- Trust, Terms, Contact and the landing pages now use the same paper as the news, research and blog pages. Research lists the studies first.

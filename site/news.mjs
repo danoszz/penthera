@@ -36,7 +36,7 @@ const VIEWS = {
   articles: { href: "/blog", chip: "Articles", word: "BLOG", view: "blog", h1: "Blog", title: "Blog: how Penthera is built and measured", description: "Posts on how Penthera is built and measured, with the data behind every number." },
   release: { href: "/news?kind=release", chip: "Releases", word: "SHIP", view: "release", kind: "release", h1: "Releases", title: "Releases" },
   lesson: { href: "/news?kind=lesson", chip: "Lessons", word: "WARN", view: "lesson", kind: "lesson", h1: "Incident lessons", title: "Incident lessons" },
-  benchmark: { href: "/news?kind=benchmark", chip: "Benchmarks", word: "RANK", view: "benchmark", kind: "benchmark", h1: "Benchmarks", title: "Benchmarks" },
+  benchmark: { href: "/benchmarks", chip: "Benchmarks", word: "RANK", view: "benchmark", kind: "benchmark", h1: "Benchmarks", title: "Benchmarks" },
 };
 
 const KIND = { Study: ["research", "Research"], Result: ["research", "Research"], "Case study": ["lesson", "Incident lesson"], Benchmark: ["benchmark", "Benchmark"], Release: ["release", "Release"], Post: ["article", "Article"] };
@@ -53,31 +53,33 @@ function row(e, i, posts) {
   const post = e.type === "Post" ? posts.find((p) => `/blog/${p.slug}` === e.href) : null;
   const fig = post && Object.entries(post.figures || {})[0];
   const away = /^https?:/.test(e.href);
-  const meta = [label, e.status, e.id, shortDate(e.date), away ? "GitHub ↗" : ""].filter(Boolean).map(esc).join(" · ");
+  const meta = [label, e.status, e.tag || e.id, shortDate(e.date), away ? "GitHub ↗" : ""].filter(Boolean).map(esc).join(" · ");
   const shown = post && post.category === "Benchmark" ? "benchmark" : kind;
   return `      <li class="hub-row${fig ? " hub-article" : ""}" data-kind="${shown}" data-status="${esc((e.status || "").toLowerCase())}" data-type="${esc(e.type.toLowerCase().replace(/\s+/g, "-"))}" data-id="r${esc((e.id || e.href).replace(/[^\w]+/g, "-"))}">
         <p class="hub-meta">${meta}</p>
         <h2><a href="${esc(e.href)}"${away ? ' rel="noopener"' : ""}>${smart(esc(e.headline || e.title))}</a></h2>
         ${fig ? `<img src="/blog/figures/${fig[0]}" width="${fig[1].width}" height="${fig[1].height}" alt="" loading="lazy">` : ""}
-        ${e.type === "Study" && e.headline ? `<p class="hub-sub">${smart(esc(e.title))}</p>` : ""}<p class="hub-line">${smart(esc(e.summary))}${e.type === "Study" && e.result ? ` <a class="hub-more" href="${esc(e.result)}">Read the result</a>` : ""}</p>${(e.notes || []).map((n) => `<p class="hub-note">${smart(esc(n.text))} <a class="hub-more" href="${esc(n.href)}">Read the re-run</a></p>`).join("")}
+        ${e.type === "Study" && e.headline ? `<p class="hub-sub">${smart(esc(e.title))}</p>` : ""}${e.type === "Release" ? "" : `<p class="hub-line">${smart(esc(e.summary))}${e.type === "Study" && e.result ? ` <a class="hub-more" href="${esc(e.result)}">Read the result</a>` : ""}</p>`}${(e.notes || []).map((n) => `<p class="hub-note">${smart(esc(n.text))} <a class="hub-more" href="${esc(n.href)}">Read the re-run</a></p>`).join("")}
       </li>`;
 }
+
+/** The row of chips, on every page of the hub and on /benchmarks. */
+export const hubChips = (key, blog = true) => `    <nav class="hub-chips" aria-label="Show">${Object.entries(VIEWS).filter(([k]) => blog || k !== "articles").map(([k, c]) => `<a class="hub-chip" href="${c.href}" data-chip="${k}" data-word="${c.word}" data-view="${c.view}" data-h1="${esc(c.h1)}"${c.kind ? ` data-kind="${c.kind}"` : ""}${k === key ? ' aria-current="page"' : ""}>${c.chip}</a>`).join("")}</nav>`;
 
 /** A view of the hub, as a whole page. */
 export function hubHtml(key, entries, { origin, styles, foot, script, posts, feature = "" }) {
   const v = VIEWS[key];
   const rows = entries.filter((e) => (key === "all" ? e.status !== "Draft" : key === "research" ? e.type !== "Release" && e.type !== "Benchmark" : e.type === "Post"));
   const statuses = ["Registered", "Running", "Result", "Draft"].map((s) => [s, rows.filter((e) => e.status === s).length]).filter(([, n]) => n);
-  const chips = Object.entries(VIEWS).map(([k, c]) => `<a class="hub-chip" href="${c.href}" data-chip="${k}" data-word="${c.word}" data-view="${c.view}" data-h1="${esc(c.h1)}"${c.kind ? ` data-kind="${c.kind}"` : ""}${k === key ? ' aria-current="page"' : ""}>${c.chip}</a>`).join("");
-  const body = `    <nav class="hub-chips" aria-label="Show">${chips}</nav>
+  const body = `${hubChips(key, posts.length > 0)}
 ${key === "research" ? `    <p class="hub-purpose">${smart(esc(PURPOSE))}</p>
     <nav class="hub-status" aria-label="Status">${statuses.map(([s, n]) => `<a href="/research?status=${s.toLowerCase()}" data-status="${s.toLowerCase()}">${s} ${n}</a>`).join("")}</nav>
     <form class="hub-search" action="/research" role="search"><label class="sr" for="hub-q">Search the research</label><input id="hub-q" name="q" type="search" placeholder="Search"></form>
-    <div class="rs">${feature}</div>\n` : ""}    <ul class="hub-list">
+` : ""}    <ul class="hub-list">
 ${rows.map((e, i) => row(e, i, posts)).join("\n")}
     </ul>
-    <p class="hub-none" hidden>Nothing here yet.</p>
-    <nav class="ttx-keys" aria-label="More pages"><a href="/benchmarks">Benchmarks</a><a href="/news/feed.xml">Atom feed</a><a href="${v.href}.md">Markdown copy</a></nav>`;
+    <p class="hub-none" role="status" hidden>Nothing matches this.</p>
+${key === "research" ? `    <div class="rs">${feature}</div>\n` : ""}    <nav class="ttx-keys" aria-label="More pages"><a href="/benchmarks">Benchmarks</a><a href="/news/feed.xml">Atom feed</a><a href="${v.href}.md">Markdown copy</a></nav>`;
   const ld = key === "research" ? researchLd(rows, { url: `${origin}/research`, origin, description: v.description }) : key === "articles" ? blogLd(posts, origin) : "";
   return paperPage({ title: v.title, description: v.description, url: `${origin}${v.href}`, path: v.href, h1: v.h1, ld, body, styles, theme: "/theme.js", foot, type: "website", mast: true,
     mastHtml: mosaic(v.word), view: v.view, headScript: script, number: "P100", bar: "Penthera news", dateline: "",
