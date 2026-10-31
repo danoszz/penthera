@@ -156,7 +156,7 @@ describe("benchmark pages", () => {
     expect(ds["@id"]).toBe(`${ORIGIN}/benchmarks#dataset`);
     expect(ds.hasPart.map((p) => p["@id"])).toEqual(views.map((v) => `${ORIGIN}/benchmarks/${v.c.slug}#dataset`));
     // The homepage's SoftwareApplication points at it.
-    const app = ld(read("index.html")).find((x) => x["@type"] === "SoftwareApplication");
+    const app = ld(read("index.html")).flatMap((x) => x["@graph"] || [x]).find((x) => x["@type"] === "SoftwareApplication");
     expect(app.subjectOf["@id"]).toBe(`${ORIGIN}/benchmarks#dataset`);
   });
 
@@ -220,7 +220,7 @@ describe("benchmark pages, linked and listed", () => {
     const home = read("index.html");
     const title = home.match(/<title>([^<]+)<\/title>/)[1];
     expect(title.length).toBeLessThanOrEqual(60);
-    expect(title).toMatch(/^Penthera: open-source security agent/);
+    expect(title).toBe("Penthera: your open-source cyber security agent");
     const d = unesc(home.match(/<meta name="description" content="([^"]+)">/)[1]);
     expect(d.length).toBeLessThanOrEqual(160);
     expect(d).toContain(`benchmarked against ${fieldTools(pub)} free tools`);

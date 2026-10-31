@@ -21,6 +21,25 @@ penthera agents ./some-skill    # vet a downloaded skill before you install it
 penthera agents --pin           # write penthera.lock; later runs flag anything that changed
 ```
 
+A folder you name with `SKILL.md` at its root, in any casing, is read as one
+skill. Its scripts and other files get the same rules as a skill under
+`skills/<name>/`. A file or folder Penthera could not read, or a file over the
+size limit, gets a high finding, so such a skill never grades A. `node_modules`
+and virtual environment packages are not read: they are listed under Not read
+and do not lower the grade, so check them with `penthera deps`. In `--json`,
+`agents.skillTarget` is true when the run read the folder as one named skill.
+You can also pass the `SKILL.md` itself, and Penthera reads its folder. Any
+other file is an error.
+
+Your working folder is a project scan, whether you write `penthera agents`,
+`penthera agents .` or its full path. So a `SKILL.md` at the root of your repo
+does not change a CI run. To vet the skill you are standing in, pass `SKILL.md`,
+or name the folder from its parent. A folder that only holds skills further
+down, such as `./skills`, reports `Nothing to assess`: name one skill, or the
+project above it. With `--pin`, `penthera.lock` goes inside the folder you named
+and is left out of the skill's hash. Penthera does not read or write a
+`penthera.lock` that is a symbolic link.
+
 It is **offline and deterministic**: no LLM judge, no registry lookups, nothing
 leaves your machine, and it never modifies the config it reads. Every verdict
 is a rule you can read in [`lib/agents/`](https://github.com/danoszz/penthera/tree/main/lib/agents), so a skill can't talk
@@ -91,13 +110,15 @@ npx penthera hook install
     mode: agents
 ```
 
-Or copy one file that runs `npx --yes penthera@2.1.1 agents` on every pull request and uploads SARIF: [`github-actions-agents.yml`](https://github.com/danoszz/penthera/blob/main/docs/examples/github-actions-agents.yml) ([details](action.md#the-agent-config-check-in-one-file)).
+Or copy one file that runs `npx --yes penthera@2.1.2 agents` on every pull request and uploads SARIF: [`github-actions-agents.yml`](https://github.com/danoszz/penthera/blob/main/docs/examples/github-actions-agents.yml) ([details](action.md#the-agent-config-check-in-one-file)).
 
 The rules in [Rules for auto-run, registries and environment](#rules-for-auto-run-registries-and-environment), the Not checked line and the skill-folder changes shipped in 2.1.0. Penthera 2.0.0 does not have them. They run once you pin 2.1.0 or later.
 
 ## What you get
 
-From Penthera's own test fixture of a deliberately bad setup (abridged):
+From Penthera's own test fixture of a deliberately bad setup (abridged). This
+is the terminal report. Piped output is the shorter [agent brief](brief.md),
+which has no grade line; `--json` and `-o` hold the grade.
 
 ```
   Grade       F  (0/100)

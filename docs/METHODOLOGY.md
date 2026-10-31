@@ -32,7 +32,7 @@ software. The metadata are in [CITATION.cff](https://github.com/danoszz/penthera
 renders as "Cite this repository".
 
 ```text
-van der Zwaag, D. (2026). Penthera: An offline security scanner for web apps and AI-built code (Version 2.1.1) [Computer software]. https://github.com/danoszz/penthera
+van der Zwaag, D. (2026). Penthera: An offline security scanner for web apps and AI-built code (Version 2.1.2) [Computer software]. https://github.com/danoszz/penthera
 ```
 
 ```bibtex
@@ -40,7 +40,7 @@ van der Zwaag, D. (2026). Penthera: An offline security scanner for web apps and
   author  = {van der Zwaag, Daan},
   title   = {Penthera: An Offline Security Scanner for Web Apps and {AI}-Built Code},
   year    = {2026},
-  version = {2.1.1},
+  version = {2.1.2},
   license = {MIT},
   url     = {https://github.com/danoszz/penthera}
 }

@@ -16,6 +16,7 @@
 import { cleanText } from "../mcp/results.js";
 import { mdInline } from "./md-escape.js";
 import { footerLines } from "./footer.js";
+import { exitCodeOf, exitReason, isSevere } from "./exit.js";
 
 export const BRIEF_SCHEMA = "penthera.brief/1";
 // Exit 0 is not "safe to publish". Penthera tests these from outside; a pass shows
@@ -64,10 +65,11 @@ function whereOf(f) {
 }
 
 /** Which bucket a finding goes in, and for noise, why. First match wins. */
-export function bucketOf(f) {
+export function bucketOf(f, { skillTarget = false } = {}) {
   const p = pathOf(f) || "";
   if (f.localOnly) return { bucket: "noise", reason: "local-only" };
-  if (GENERATED.test(p)) return { bucket: "noise", reason: "generated" };
+  // A skill ships its dist/ and build/, so in a named skill those are real code.
+  if (!skillTarget && GENERATED.test(p)) return { bucket: "noise", reason: "generated" };
   if (FIXTURE.test(p)) return { bucket: "noise", reason: "fixture" };
   if (f.severity === "info") return { bucket: "info" };
   if (["potential", "needs-human-review"].includes(f.confidence)) return { bucket: "check" };
@@ -149,6 +151,7 @@ function noiseGroup(group, reason) {
     label: text(label, 200),
     text: NOISE_REASONS[reason],
     count: group.length,
+    severe: group.filter(isSevere).length,
     where: paths.slice(0, MAX_EXAMPLES).map((p) => text(p, 300)),
     more: Math.max(0, paths.length - MAX_EXAMPLES),
     rules: [...new Set(group.map(ruleOf))].map((r) => text(r, 120)),
@@ -194,8 +197,8 @@ export function buildBrief(results, { reports = [], notRunCommand = (n) => Strin
 
   const by = { act: [], check: [], noise: [], info: [] };
   const noiseReason = new Map();
-  for (const f of findings) {
-    const b = bucketOf(f);
+  for (const r of list) for (const f of r.findings || []) {
+    const b = bucketOf(f, { skillTarget: !!r.agents?.skillTarget });
     by[b.bucket].push(f);
     if (b.reason) noiseReason.set(f, b.reason);
   }
@@ -227,11 +230,15 @@ export function buildBrief(results, { reports = [], notRunCommand = (n) => Strin
   if (!actHigh && modes.some((m) => m === "repo" || m === "url")) notChecked.unshift(NOT_PROVEN_NOTE);
   // A null grade means the agents audit read nothing: no finding there is no result.
   const nothingRead = list.length > 0 && !findings.length && list.every((r) => r.agents?.grade === null);
-  const verdict = actHigh ? VERDICTS.fix : act.length || check.length ? VERDICTS.review : nothingRead ? VERDICTS.none : VERDICTS.clean;
+  // The verdict never reads as clean on a run that fails: it and the exit code agree.
+  const exitCode = Math.max(0, ...list.map(exitCodeOf));
+  const verdict = actHigh ? VERDICTS.fix : act.length || check.length || exitCode ? VERDICTS.review : nothingRead ? VERDICTS.none : VERDICTS.clean;
 
   return {
     schema: BRIEF_SCHEMA,
     verdict,
+    exit_code: exitCode,
+    exit_reason: exitCode === 2 || !actHigh ? exitReason(list) : null,
     target: text(targets.join(", "), 500),
     scanned: modes,
     counts: {
@@ -275,6 +282,7 @@ export function formatBrief(b, { footer = false } = {}) {
   if (c.info) parts.push(`${c.info} info in the full report`);
   const scanned = b.scanned.length ? ` Scanned: ${b.scanned.map((m) => MODE_NAMES[m] || m).join(", ")}.` : "";
   L.push(`**Penthera: ${b.verdict}.** ${parts.join(", ")}.${scanned}`, "");
+  if (b.exit_reason) L.push(md(b.exit_reason), "");
 
   if (b.act_on.length) {
     L.push("### Act on", "");
@@ -300,7 +308,8 @@ export function formatBrief(b, { footer = false } = {}) {
     L.push("### Likely noise", "");
     for (const g of b.likely_noise.slice(0, MAX_ITEMS)) {
       const where = whereText(g);
-      L.push(`- ${g.count} × ${md(g.label)}, ${g.text}${where ? `: ${where}` : ""}.`);
+      const severe = g.severe ? ` (${g.severe} critical or high)` : "";
+      L.push(`- ${g.count} × ${md(g.label)}${severe}, ${g.text}${where ? `: ${where}` : ""}.`);
     }
     L.push("");
   }

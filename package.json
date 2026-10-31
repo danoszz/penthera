@@ -1,6 +1,6 @@
 {
   "name": "penthera",
-  "version": "2.1.1",
+  "version": "2.1.2",
   "type": "module",
   "description": "Offline cyber security agent for your apps and AI coding tools. Open R&D: measured in public, improved every release.",
   "repository": {
@@ -62,6 +62,8 @@
     "rules:build": "node scripts/rules/build-pack.mjs",
     "rules:check": "node scripts/rules/check-bundled.mjs",
     "audit:internal": "node scripts/audit/run.mjs",
+    "e20r:acceptance": "node bench/front-door/acceptance.mjs",
+    "e20r:preflight": "npm test && npm run e20r:acceptance && node bench/front-door/replicate.mjs --self-test",
     "bench:public": "node bench/public/run.mjs"
   },
   "keywords": [

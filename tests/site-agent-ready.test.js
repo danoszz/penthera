@@ -1,8 +1,9 @@
 /**
  * penthera.org for agents: the homepage as Markdown (/index.md, linked from
- * "/"), Markdown 404s, JSON-LD, the live check's OpenAPI spec and the "When to
- * use" section of llms.txt. The preview server (site/serve.mjs) applies the
- * same rewrites as vercel.json, so the 404s are tested here.
+ * "/"), Markdown and JSON 404s, JSON-LD, the live check's OpenAPI spec, the MCP
+ * manifest, /contact and the "When to use" section of llms.txt. The preview
+ * server (site/serve.mjs) applies the same rewrites as vercel.json, so the 404s
+ * are tested here.
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { mkdtempSync, rmSync, readFileSync, readdirSync, statSync, existsSync } from "node:fs";
@@ -94,8 +95,13 @@ describe("homepage as Markdown", () => {
     await html.text();
   });
 
-  it("vercel.json has no Routing Middleware", () => {
+  it("vercel.json has no Routing Middleware, so / stays a static file with no Vary", async () => {
     expect(vercel.proxy).toBeUndefined();
+    for (const f of ["proxy.js", "middleware.js", "middleware.ts"]) expect(existsSync(join(ROOT, f)), f).toBe(false);
+    const res = await fetch(`${base}/`, { headers: { accept: "text/markdown" } });
+    expect(res.headers.get("content-type")).toMatch(/^text\/html/);
+    expect(res.headers.get("vary")).toBeNull();
+    await res.text();
   });
 });
 
@@ -127,13 +133,51 @@ describe("404 for agents", () => {
   });
 });
 
+describe("JSON errors on the API", () => {
+  it("answers an unknown API path with a JSON 404, whatever the Accept header", async () => {
+    for (const [path, init] of [["/api", {}], ["/api/", {}], ["/api/nope", {}], ["/api/check/extra", {}], ["/api/nope", { method: "POST" }], ["/api/nope", { headers: { accept: "text/markdown" } }]]) {
+      const res = await fetch(`${base}${path}`, init);
+      expect(res.status, path).toBe(404);
+      expect(res.headers.get("content-type"), path).toBe("application/json; charset=utf-8");
+      expect(res.headers.get("content-security-policy"), path).toContain("default-src 'none'");
+      const { error } = await res.json();
+      expect(error.code, path).toBe("unknown_endpoint");
+      expect(error.message.length, path).toBeGreaterThan(10);
+      expect(error.hint, path).toContain(`${ORIGIN}/openapi.json`);
+    }
+  });
+
+  it("leaves the real route alone", async () => {
+    const res = await fetch(`${base}/api/check`);
+    expect(res.status).toBe(405);
+    expect(res.headers.get("allow")).toBe("POST");
+    expect(res.headers.get("content-type")).toBe("application/json; charset=utf-8");
+    const { error } = await res.json();
+    expect(error).toMatchObject({ code: "method_not_allowed" });
+    expect(error.hint).toContain("/openapi.json");
+  });
+
+  it("the function's origin is the package homepage", async () => {
+    const { NO_ROUTE } = await import("../api/no-route.mjs");
+    expect(NO_ROUTE.error.hint).toContain(`${ORIGIN}/api/check`);
+  });
+});
+
 describe("JSON-LD", () => {
-  it("is one ld+json data block for the SoftwareApplication, with no contact details", () => {
+  it("is one ld+json data block with an Organization and the SoftwareApplication, and no address", () => {
     const tag = values.JSONLD;
     expect(tag).toMatch(/^<script type="application\/ld\+json">[^<]*<\/script>$/);
-    const data = JSON.parse(tag.replace(/^<script[^>]*>|<\/script>$/g, ""));
-    expect(data["@context"]).toBe("https://schema.org");
-    expect(data["@type"]).toBe("SoftwareApplication");
+    const ld = JSON.parse(tag.replace(/^<script[^>]*>|<\/script>$/g, ""));
+    expect(ld["@context"]).toBe("https://schema.org");
+    expect(ld["@graph"].map((n) => n["@type"])).toEqual(["Organization", "SoftwareApplication"]);
+    const [org, data] = ld["@graph"];
+    expect(org).toMatchObject({
+      "@id": `${ORIGIN}/#organization`, name: "Penthera", url: ORIGIN,
+      contactPoint: { "@type": "ContactPoint", email: "daan@penthera.org", url: `${ORIGIN}/contact` },
+    });
+    expect(org.description).toBe(data.description);
+    expect(org.sameAs).toContain("https://github.com/danoszz/penthera");
+    expect(data.publisher).toEqual({ "@id": org["@id"] });
     expect(data).toMatchObject({
       name: "Penthera", url: ORIGIN, applicationCategory: "SecurityApplication",
       softwareVersion: pkg.version, downloadUrl: "https://www.npmjs.com/package/penthera",
@@ -145,7 +189,9 @@ describe("JSON-LD", () => {
     expect(data.operatingSystem).toBeTruthy();
     // The approved short line from site/BRIEF.md.
     expect(readFileSync(join(ROOT, "site", "BRIEF.md"), "utf8").replace(/\s+/g, " ")).toContain(data.description);
-    expect(tag).not.toMatch(/address|telephone|email|@gaia|@gmail/i);
+    // Privacy: the public address is the one contact detail. No street address, no phone.
+    expect(tag).not.toMatch(/address|telephone|faxNumber|geo"|@gaia|@gmail/i);
+    expect([...tag.matchAll(/[\w.+-]+@[\w-]+\.[\w.-]+/g)].map((m) => m[0])).toEqual(["daan@penthera.org"]);
   });
 
   it("escapes < so a value cannot close the script element", () => {
@@ -184,6 +230,41 @@ describe("OpenAPI for the live check", () => {
     expect(JSON.stringify(spec)).not.toMatch(/"deep"|ownership token/i);
   });
 
+  it("fits LLM function-calling formats: a short id and description, typed fields", () => {
+    const op = spec.paths["/api/check"].post;
+    expect(op.operationId).toMatch(/^[a-zA-Z0-9_-]{1,64}$/);
+    expect(op.description.length).toBeLessThanOrEqual(1024);
+    const typed = (schema, where) => {
+      if (schema.$ref) return;
+      expect(schema.type, where).toBeTruthy();
+      for (const [k, v] of Object.entries(schema.properties || {})) typed(v, `${where}.${k}`);
+      if (schema.items) typed(schema.items, `${where}[]`);
+    };
+    for (const [name, schema] of Object.entries(spec.components.schemas)) typed(schema, name);
+  });
+
+  it("states the limits api/check.mjs enforces, Retry-After and the versioning policy", async () => {
+    const { LIMITS } = await import("../api/check.mjs");
+    expect(LIMITS.map((l) => [l.key, l.window, l.max])).toEqual([["ip", 60_000, 6], ["ip", 86_400_000, 40], ["host", 3_600_000, 30]]);
+    expect(spec.info.description).toContain("6 checks a minute and 40 a day per client address, and 30 an hour per target site");
+    expect(spec.info.description).toContain("Breaking changes and deprecations are listed in the changelog");
+    expect(spec.info.description).toContain("in memory, for up to a day");
+    expect(spec.info.description).toContain("A rate_limited 429 carries Retry-After");
+    expect(spec.info.description).toContain("unknown_endpoint");
+    expect(spec.info.description).toContain("/robots.txt");
+    const res429 = spec.paths["/api/check"].post.responses[429];
+    expect(res429.headers["Retry-After"].schema.type).toBe("integer");
+    expect(res429.headers["Retry-After"].description).toContain("not with `budget`");
+    expect(res429.description).toContain("`budget`");
+  });
+
+  it("says what the handler does with a large body and with extra fields", () => {
+    const req = spec.components.schemas.CheckRequest;
+    expect(req.additionalProperties).toBeUndefined();
+    expect(req.description).toContain("ignores any other field");
+    expect(spec.paths["/api/check"].post.responses[413].description).toContain("may not fire");
+  });
+
   it("describes the report fields api/check.mjs documents", () => {
     // The contract in api/check.mjs's header comment.
     const contract = readFileSync(join(ROOT, "api", "check.mjs"), "utf8").match(/^\/\*\*[\s\S]*?\*\//)[0];
@@ -217,9 +298,53 @@ describe("OpenAPI for the live check", () => {
     if (existsSync(join(ROOT, "docs", "live-check-terms.md"))) expect(terms.status).toBe(200);
     await terms.text();
     expect(read("llms.txt")).toContain(`(${ORIGIN}/openapi.json)`);
-    for (const u of ["openapi.json", "index.md"]) expect(read("sitemap.xml")).toContain(`<loc>${ORIGIN}/${u}</loc>`);
+    for (const u of ["openapi.json", "server.json", "index.md", "contact"]) expect(read("sitemap.xml")).toContain(`<loc>${ORIGIN}/${u}</loc>`);
     const termsPage = existsSync(join(ROOT, "docs", "live-check-terms.md"));
     expect(read("sitemap.xml").includes(`<loc>${ORIGIN}/terms</loc>`)).toBe(termsPage);
+  });
+});
+
+describe("MCP manifest", () => {
+  it("publishes the repo's server.json, a local stdio package with no hosted endpoint", async () => {
+    const res = await fetch(`${base}/server.json`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toMatch(/^application\/json/);
+    expect(await res.text()).toBe(readFileSync(join(ROOT, "server.json"), "utf8"));
+    const manifest = JSON.parse(read("server.json"));
+    expect(manifest.packages.map((p) => p.transport.type)).toEqual(["stdio"]);
+    expect(manifest.remotes).toBeUndefined();
+  });
+
+  it("claims no hosted server: no card, no HTTP transport in what the site says", () => {
+    for (const f of [".well-known/mcp/server-card.json", ".well-known/mcp.json"]) expect(existsSync(join(out, f)), f).toBe(false);
+    for (const f of ["llms.txt", "index.md"]) expect(read(f), f).not.toMatch(/streamable[- ]http/i);
+    expect(read("llms.txt")).toContain(`(${ORIGIN}/server.json)`);
+    expect(read("llms.txt")).toContain("There is no hosted MCP endpoint.");
+  });
+});
+
+describe("/contact", () => {
+  it("is a page in the site's frame with at least 500 characters of public contact", async () => {
+    const res = await fetch(`${base}/contact`);
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain('<main class="terms land"');
+    expect(html).toContain('class="rail"');
+    expect(html).toContain("mailto:daan@penthera.org");
+    expect(html).toContain("/security/advisories/new");
+    const main = html.slice(html.indexOf("<main"), html.indexOf("</main>")).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+    expect(main.length).toBeGreaterThanOrEqual(500);
+    expect(read("contact.md")).toContain("# Contact Penthera");
+    // Public contact only.
+    expect(html.slice(html.indexOf("<main"), html.indexOf("</main>"))).not.toMatch(/telephone|\+\d{2}[ \d]{6,}|straat|street|@gaia|@gmail/i);
+  });
+
+  it("is in the footer under Trust and in llms.txt, not among the check's questions", () => {
+    expect(read("trust.html")).toContain('href="/contact"');
+    const llms = read("llms.txt");
+    expect(llms).toContain(`(${ORIGIN}/contact.md)`);
+    const q = llms.indexOf("## Questions the live check answers");
+    expect(llms.slice(q, llms.indexOf("## Trust"))).not.toContain("/contact");
   });
 });
 
@@ -235,6 +360,12 @@ describe("llms.txt", () => {
     expect(section).toContain(`${ORIGIN}/terms`);
     expect(section).not.toMatch(/"action"|token|deep/);
     expect(section).not.toContain("—");
+    expect(section).toContain("What it does not do:");
+    expect(section).toContain("IDOR/BOLA results are heuristics a human must confirm.");
+    expect(section).not.toContain("authorization flaws");
+    expect(read("index.md")).not.toContain("authorization flaws");
+    expect(section).toContain("npx skills add danoszz/penthera");
+    expect(section).toContain("over stdio");
     const pins = [...llms.matchAll(/penthera@(\d[\w.-]*)/g)].map((m) => m[1]);
     expect(new Set(pins)).toEqual(new Set([SITE_V]));
   });

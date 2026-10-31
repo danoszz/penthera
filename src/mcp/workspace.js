@@ -10,7 +10,7 @@
  *          The scan's egress context holds that line on every redirect hop.
  */
 import { realpathSync, statSync } from "node:fs";
-import { isAbsolute, relative, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export class ToolInputError extends Error {}
@@ -50,10 +50,13 @@ function inside(root, real) {
 }
 
 /**
- * Resolve a tool's `path` inside the workspace roots.
- * @returns {{ real: string, root: string, display: string }}
+ * Resolve a tool's `path` inside the workspace roots. With `skillFile`, a
+ * SKILL.md resolves to its folder. The check runs on the file's real path
+ * first, so a link cannot pull a folder outside the roots into the scan.
+ * `named`: the caller pointed at something other than the root itself.
+ * @returns {{ real: string, root: string, display: string, named: boolean }}
  */
-export function confinePath(path, roots) {
+export function confinePath(path, roots, { skillFile = false } = {}) {
   if (!roots.length) throw new ToolInputError("No workspace root is available. Start the server in your project folder or pass --root <dir>.");
   const asked = path === undefined || path === "" ? roots[0] : isAbsolute(path) ? path : resolve(roots[0], path);
   let real;
@@ -66,8 +69,13 @@ export function confinePath(path, roots) {
   if (!root) {
     throw new ToolInputError(`${path} is outside the workspace this server may read (${roots.join(", ")}). Ask the user to add it as a root (--root) if it should be scanned.`);
   }
-  if (!statSync(real).isDirectory()) throw new ToolInputError(`${path} is not a directory. Pass the project folder.`);
-  return { real, root, display: relative(root, real) || "." };
+  if (!statSync(real).isDirectory()) {
+    if (!skillFile) throw new ToolInputError(`${path} is not a directory. Pass the project folder.`);
+    if (basename(real).toLowerCase() !== "skill.md") throw new ToolInputError(`${path} is not a directory or a SKILL.md file. Pass the project folder or the skill folder.`);
+    real = dirname(real);
+    return { real, root, display: relative(root, real) || ".", named: true };
+  }
+  return { real, root, display: relative(root, real) || ".", named: real !== root };
 }
 
 const IPV4 = /^\d{1,3}(?:\.\d{1,3}){3}$/;

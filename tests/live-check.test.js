@@ -170,6 +170,23 @@ describe("live check endpoint", () => {
     // www. is stripped: the bare name shares the same limit.
     const res = await post({ url: "limited.example.org", consent: true }, "203.0.113.200");
     expect(res.status).toBe(429);
+    const wait = Number(res.headers.get("retry-after"));
+    expect(Number.isInteger(wait)).toBe(true);
+    expect(wait).toBeGreaterThan(0);
+    expect(wait).toBeLessThanOrEqual(3600);
+  });
+
+  it("waits for the slowest full limit, not the first one it finds", async () => {
+    const { limited } = await import("../api/check.mjs");
+    const minute = { window: 60_000, max: 1, hint: "Wait a minute." };
+    const day = { window: 86_400_000, max: 1, hint: "Come back tomorrow." };
+    const rules = [["wait:m", minute], ["wait:d", day]];
+    expect(limited(rules, 0)).toBeNull();
+    const rule = limited(rules, 7_000);
+    expect(rule.retryAfter).toBe(86_393);
+    expect(rule.hint).toBe("Come back tomorrow.");
+    // Once the minute has passed, the day still holds.
+    expect(limited(rules, 61_000).retryAfter).toBe(86_339);
   });
 
   it("CheckError carries an HTTP status", () => {

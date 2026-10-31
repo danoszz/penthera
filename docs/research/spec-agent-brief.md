@@ -43,8 +43,11 @@ Six sections, always in this order. An empty section is left out, except
 ### Verdict
 
 - `Fix now`: at least one finding in **Act on** at high or critical.
-- `Review`: anything in **Act on** below high, or anything in **Check first**.
-- `Nothing to fix`: both empty. Still followed by **Not checked**.
+- `Review`: anything in **Act on** below high, anything in **Check first**, or a
+  run that exits 1 or 2 with nothing high in **Act on**. A line then gives the
+  reason, and the JSON has `exit_code`, `exit_reason` and
+  `likely_noise[].severe`.
+- `Nothing to fix`: both empty and exit 0. Still followed by **Not checked**.
 - `Nothing to assess`: an agents audit that found no agent config. It has no
   grade. Still followed by **Not checked**.
 
@@ -125,7 +128,7 @@ before bucketing.
 
 A short reply contract, in SKILL.md and in the MCP server instructions:
 
-1. Pass the brief on in its order. Keep the verdict line and the section names.
+1. Pass the brief on in its order. Keep the verdict line, the reason line under it when there is one, and the section names.
 2. Do not move a finding between sections, change a severity or drop a group.
 3. If you checked something yourself (you opened the file and saw `pass:` is a
    CSS class map), say so under a last section, **My read**, and name what you

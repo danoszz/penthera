@@ -60,7 +60,7 @@
   //    and the scroll bar all work as usual. A sideways trackpad swipe scrolls
   //    the page too. Tabbing to a control or following #join scrolls to its
   //    panel. Without this script the panels stack vertically.
-  const outer = document.querySelector("[data-h]");
+  const outer = document.querySelector(".pro-h[data-h]");
   if (outer && window.CSS?.supports?.("position", "sticky")) {
     const sticky = outer.querySelector(".pro-sticky");
     const track = outer.querySelector(".pro-track");

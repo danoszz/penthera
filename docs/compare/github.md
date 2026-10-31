@@ -54,7 +54,7 @@ Keep Dependabot and code scanning on. Add Penthera's action for the capability
 diff ([docs/commands/action.md](../commands/action.md)) and upload its SARIF:
 
 ```yaml
-- run: npx penthera@2.1.1 "$PREVIEW_URL" --sarif reports/scan.sarif
+- run: npx penthera@2.1.2 "$PREVIEW_URL" --sarif reports/scan.sarif
 - uses: github/codeql-action/upload-sarif@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
   with:
     sarif_file: reports/scan.sarif

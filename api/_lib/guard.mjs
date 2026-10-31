@@ -87,8 +87,8 @@ export async function resolvePublic(host, { lookup = dnsLookup, allowPrivate = f
   let answers;
   try {
     answers = await lookup(host, { all: true, verbatim: true });
-  } catch {
-    throw new CheckError("not_found", `${host} does not resolve to an address.`, 422, "Check the spelling of the domain.");
+  } catch (e) {
+    throw Object.assign(new CheckError("not_found", `${host} does not resolve to an address.`, 422, "Check the spelling of the domain."), { netCode: e?.code });
   }
   if (!answers.length) throw new CheckError("not_found", `${host} does not resolve to an address.`, 422, "Check the spelling of the domain.");
   // Every answer must be public, so a mixed record cannot smuggle in an internal one.
@@ -127,24 +127,28 @@ export async function fetchHeaders(start, { maxRedirects = 4, timeout = 6000, lo
  * GET a URL and read its body, up to maxBytes, as a browser would load it.
  * Same guard as fetchHeaders: every hop resolved, checked and pinned again.
  * `onHop` runs before each request (the caller's request budget); it may
- * throw to stop. The body is decoded as UTF-8; a compressed body (which we
+ * be async, and it may throw to stop. The body is decoded as UTF-8; a compressed body (which we
  * never ask for) is left empty. Nothing is logged. `userAgent` replaces the
- * live check's User-Agent (the E20 study names itself, bench/front-door).
+ * live check's User-Agent (the E20 study names itself, bench/front-door), and
+ * `meter` (study only) counts requests, bytes read and redirects.
  */
-export async function fetchBody(start, { maxRedirects = 4, timeout = 6000, maxBytes = 1_500_000, accept, onHop, lookup, allowPrivate = false, anyPort = false, userAgent } = {}) {
+export async function fetchBody(start, { maxRedirects = 4, timeout = 6000, maxBytes = 1_500_000, accept, onHop, lookup, allowPrivate = false, anyPort = false, userAgent, meter } = {}) {
   let url = start;
   const hops = [];
   for (let i = 0; i <= maxRedirects; i++) {
-    onHop?.(url);
+    await onHop?.(url);
     const host = url.hostname.replace(/^\[|\]$/g, "");
     const { address, family } = await resolvePublic(host, { lookup, allowPrivate });
-    const res = await requestOnce(url, address, family, timeout, { maxBytes, accept, userAgent });
+    if (meter) { meter.requests++; meter.hosts?.push(url.hostname); }
+    const res = await requestOnce(url, address, family, timeout, { maxBytes, accept, userAgent, meter });
+    meter?.tick?.(true);
     hops.push({ url: url.href, status: res.status });
     const location = res.headers.location;
     if (res.status >= 300 && res.status < 400 && location) {
       let next;
       try { next = new URL(location, url); } catch { break; }
       url = parseTarget(next.href, { anyPort });
+      if (meter) meter.redirects++;
       continue;
     }
     return { ...res, url: url.href, hops };
@@ -169,8 +173,21 @@ function requestOnce(url, address, family, timeout, body = null) {
       const redirect = res.statusCode >= 300 && res.statusCode < 400;
       const encoded = res.headers["content-encoding"] && !/^identity$/i.test(res.headers["content-encoding"]);
       if (!body || redirect || encoded) {
-        resolve({ status: res.statusCode, headers: res.headers, tls, ...(body ? { body: "", truncated: false } : {}) });
-        return res.destroy();
+        const answer = { status: res.statusCode, headers: res.headers, tls, ...(body ? { body: "", truncated: false } : {}) };
+        if (!body?.meter) {
+          resolve(answer);
+          return res.destroy();
+        }
+        // Study only: these bodies are never kept, but the traffic count should hold them.
+        // A redirect is followed at its headers, as in pass 1; what follows is counted as it comes.
+        if (redirect) resolve(answer);
+        let read = 0;
+        const stop = () => { clearTimeout(limit); resolve(answer); res.destroy(); };
+        const limit = setTimeout(stop, redirect ? Math.min(timeout, 1000) : timeout);
+        res.on("data", (c) => { read += c.length; body.meter.bytes += c.length; body.meter.tick?.(); if (read >= body.maxBytes) stop(); });
+        res.on("end", stop);
+        res.on("error", stop);
+        return undefined;
       }
       // Read up to maxBytes, then stop; the whole read must fit the timeout.
       const chunks = [];
@@ -185,6 +202,7 @@ function requestOnce(url, address, family, timeout, body = null) {
       };
       const timer = setTimeout(() => finish(true), timeout);
       res.on("data", (c) => {
+        if (body.meter) { body.meter.bytes += c.length; body.meter.tick?.(); }
         const room = body.maxBytes - size;
         chunks.push(c.length > room ? c.subarray(0, room) : c);
         size += Math.min(c.length, room);
@@ -197,9 +215,9 @@ function requestOnce(url, address, family, timeout, body = null) {
     req.on("error", (e) => {
       if (e instanceof CheckError) return reject(e);
       if (/CERT|SELF_SIGNED|UNABLE_TO_VERIFY|ERR_TLS/i.test(e.code || "")) {
-        return reject(new CheckError("tls_invalid", `The certificate for ${url.hostname} is not valid (${e.code}).`, 422, "Renew or reissue the certificate; browsers show a warning for this site."));
+        return reject(Object.assign(new CheckError("tls_invalid", `The certificate for ${url.hostname} is not valid (${e.code}).`, 422, "Renew or reissue the certificate; browsers show a warning for this site."), { tlsReason: e.code }));
       }
-      reject(new CheckError("unreachable", `Could not connect to ${url.hostname}.`, 502, "Check that the site is up, or run npx penthera from your own machine."));
+      reject(Object.assign(new CheckError("unreachable", `Could not connect to ${url.hostname}.`, 502, "Check that the site is up, or run npx penthera from your own machine."), { netCode: e.code }));
     });
     req.end();
   });

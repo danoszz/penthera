@@ -12,7 +12,7 @@ Add this to `cline_mcp_settings.json`:
   "mcpServers": {
     "penthera": {
       "command": "npx",
-      "args": ["-y", "penthera@2.1.1", "mcp"],
+      "args": ["-y", "penthera@2.1.2", "mcp"],
       "disabled": false,
       "autoApprove": []
     }

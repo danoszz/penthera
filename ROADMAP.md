@@ -16,11 +16,24 @@ here.
 
 | npm tag | Version | Install |
 |---|---|---|
-| `latest` | 2.1.1 (2026-10-30) | `npx penthera` |
+| `latest` | 2.1.2 (2026-10-31) | `npx penthera` |
 
-## Now: 2.1.1
+## Now: 2.1.2
 
-2.1.1 is on npm's `latest` tag since 2026-10-30. It's a patch release.
+2.1.2 is on npm's `latest` tag since 2026-10-31. It's a patch release.
+
+| In 2.1.2 | What it means for you |
+|---|---|
+| `penthera agents ./some-skill` scans the skill | A folder you name with `SKILL.md` at its root gets the same rules and findings as a skill under `skills/<name>/`. It used to report `Nothing to assess` and read nothing ([docs](docs/commands/agents.md)) |
+| A run that fails no longer reads as clean | The exit codes stay the same. The reports now say why a run fails when Penthera's own findings do not explain it ([docs](docs/commands/brief.md)) |
+| A run that read no agent config no longer looks clean | The terminal and Markdown reports say this is not a clean result |
+| `--repo <missing path>` exits 2 | It used to read as clean and exit 0 |
+| `penthera.lock` is never read or written through a symbolic link | A linked lock is reported as a corrupt lock, and `--pin` refuses to follow it |
+| `--help` keeps escape codes off a pipe | The help of every command honors `NO_COLOR` and uses color only on a terminal |
+
+## Before: 2.1.1
+
+2.1.1 was on npm's `latest` tag from 2026-10-30. It's a patch release.
 
 | In 2.1.1 | What it means for you |
 |---|---|

@@ -37,6 +37,7 @@ const SPAWN_HEAVY = [
   "tests/pentest-recon.test.js",
   "tests/ui.test.js",
   "tests/validate-report.test.js",
+  "tests/verdict-exit-help.test.js",
 ];
 
 const shared = {

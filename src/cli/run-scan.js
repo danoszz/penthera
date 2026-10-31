@@ -1,6 +1,7 @@
 /**
  * Shared scan execution, used by CLI and interactive onboarding.
  */
+import { exitCodeOf } from "../report/exit.js";
 import { resolve, join } from "node:path";
 import { existsSync, mkdirSync } from "node:fs";
 import { scanUrl } from "../scan-url.js";
@@ -140,7 +141,7 @@ export async function executeScan(config) {
     profileOpts,
     paths: { json: jsonPath, markdown: mdPath, sarif: sarifPath },
     mdOpts,
-    hasSevere: merged.findings.some((f) => f.severity === "critical" || f.severity === "high"),
+    hasSevere: exitCodeOf(merged) !== 0,
   };
 }
 

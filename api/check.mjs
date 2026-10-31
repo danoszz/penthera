@@ -22,19 +22,26 @@ import { parseTarget, CheckError } from "./_lib/guard.mjs";
 import { passiveReport } from "./_lib/tier1.mjs";
 
 const MINUTE = 60_000, HOUR = 60 * MINUTE, DAY = 24 * HOUR;
-const LIMITS = [
+export const LIMITS = [
   { key: "ip", window: MINUTE, max: 6, hint: "Wait a minute." },
   { key: "ip", window: DAY, max: 40, hint: "Come back tomorrow." },
   { key: "host", window: HOUR, max: 30, hint: "This site was checked often in the last hour; try again later." },
 ];
 const hits = new Map();
 
-/** True when one more hit for this key would pass a limit. Records the hit otherwise. */
-function limited(entries, now = Date.now()) {
+/**
+ * The rule one more hit would pass, with the seconds until every rule lets it
+ * through: the largest wait when several are full. Records the hit otherwise.
+ */
+export function limited(entries, now = Date.now()) {
+  let worst = null;
   for (const [key, rule] of entries) {
     const list = (hits.get(key) || []).filter((t) => now - t < rule.window);
-    if (list.length >= rule.max) return rule;
+    if (list.length < rule.max) continue;
+    const retryAfter = Math.ceil((list[0] + rule.window - now) / 1000);
+    if (!worst || retryAfter > worst.retryAfter) worst = { ...rule, retryAfter };
   }
+  if (worst) return worst;
   for (const [key, rule] of entries) {
     const list = (hits.get(key) || []).filter((t) => now - t < rule.window);
     list.push(now);
@@ -92,6 +99,7 @@ export function createHandler(opts = {}) {
       const rule = limited([
         [`ip:m:${ip}`, LIMITS[0]], [`ip:d:${ip}`, LIMITS[1]], [`host:${host}`, LIMITS[2]],
       ], opts.now);
+      if (rule) res.setHeader?.("Retry-After", String(rule.retryAfter));
       if (rule) throw new CheckError("rate_limited", "Too many checks.", 429, `${rule.hint} Or run npx penthera <url> on your own machine.`);
       return send(res, 200, await passiveReport(target, { ...opts, typed }));
     } catch (e) {

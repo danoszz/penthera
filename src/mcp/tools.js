@@ -165,9 +165,9 @@ export const TOOLS = [
     inputSchema: { type: "object", properties: { path: PATH, max_findings: MAX }, additionalProperties: false },
     annotations: { title: "Audit AI agent config", ...READ_ONLY },
     async run(args, ctx) {
-      const { real, display } = confinePath(args.path, await ctx.roots());
+      const { real, display, named } = confinePath(args.path, await ctx.roots(), { skillFile: true });
       const { scanAgents } = await import("../../lib/agents/index.js");
-      const raw = await scanAgents(real, { home: false, pin: false });
+      const raw = await scanAgents(real, { home: false, pin: false, skillTarget: named });
       const a = raw.agents || {};
       return buildResult({
         tool: "audit_ai_tooling", target: display, findings: stampProvenance(raw.findings, raw.timestamp), limits: AGENTS_LIMITS, maxFindings: args.max_findings,

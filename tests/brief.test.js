@@ -96,7 +96,7 @@ describe("agent brief: verdict", () => {
     expect(buildBrief(MONOREPO).verdict).toBe(VERDICTS.fix);
     expect(buildBrief({ findings: [f({ severity: "medium" })] }).verdict).toBe(VERDICTS.review);
     expect(buildBrief({ findings: [f({ confidence: "potential" })] }).verdict).toBe(VERDICTS.review);
-    expect(buildBrief({ findings: [f({ localOnly: true })] }).verdict).toBe(VERDICTS.clean);
+    expect(buildBrief({ findings: [f({ localOnly: true, severity: "medium" })] }).verdict).toBe(VERDICTS.clean);
     const clean = buildBrief({ findings: [] });
     expect(clean.verdict).toBe(VERDICTS.clean);
     expect(clean.not_checked[0]).toMatch(/not proof of safety/);

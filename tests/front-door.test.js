@@ -19,7 +19,6 @@ import { optedOut } from "../api/_lib/page.mjs";
 
 const HASH = sha256("1,example.com\n");
 const EX = sha256("gov government\n");
-const OTHER = "0".repeat(64);
 const prereg = ({ status = "**Registered.** Accepted", tranco = HASH, yc = "pending", ex = EX } = {}) => `
 | | |
 |---|---|
@@ -31,52 +30,29 @@ const prereg = ({ status = "**Registered.** Accepted", tranco = HASH, yc = "pend
 const reg = (o = {}) => ({ loopback: false, registered: "E20", cohort: "tranco", listHash: HASH, excludeHash: EX, preregText: prereg(), ...o });
 
 describe("E20 guard", () => {
-  it("allows a loopback run without registration", () => {
-    expect(authorize({ loopback: true, preregText: "" })).toEqual({ mode: "loopback" });
+  it("allows a loopback run", () => {
+    expect(authorize({ loopback: true })).toEqual({ mode: "loopback" });
   });
 
-  it("refuses a non-loopback run without --registered E20", () => {
-    expect(() => authorize({ loopback: false, cohort: "tranco", listHash: HASH, preregText: prereg() })).toThrow(/--registered E20/);
-    expect(() => authorize({ loopback: false, registered: "E19", cohort: "tranco", listHash: HASH, preregText: prereg() })).toThrow(/--registered E20/);
+  it("B6: refuses every run that would leave loopback, even one with the registered flag and hashes", () => {
+    expect(() => authorize(reg())).toThrow(/E20 is closed/);
+    expect(() => authorize({})).toThrow(/E20 is closed/);
   });
 
-  it("refuses when the list file's hash does not match the prereg", () => {
-    expect(() => authorize({ loopback: false, registered: "E20", cohort: "tranco", listHash: OTHER, preregText: prereg() })).toThrow(/does not match/);
-  });
-
-  it("refuses while the prereg is a draft or records no hash for the cohort", () => {
-    expect(() => authorize({ loopback: false, registered: "E20", cohort: "tranco", listHash: HASH, preregText: prereg({ status: "**Draft, not registered.**" }) })).toThrow(/not Registered/);
-    expect(() => authorize({ loopback: false, registered: "E20", cohort: "yc", listHash: HASH, preregText: prereg() })).toThrow(/no YC list SHA-256/);
-  });
-
-  it("allows a registered run only when flag, status and both hashes match", () => {
-    expect(authorize(reg())).toEqual({ mode: "registered" });
-  });
-
-  it("refuses a registered run without the exclusion list, or with one that differs from the prereg", () => {
-    expect(() => authorize(reg({ excludeHash: undefined }))).toThrow(/needs --exclude/);
-    expect(() => authorize(reg({ excludeHash: OTHER }))).toThrow(/exclusion list's SHA-256/);
-    expect(() => authorize(reg({ preregText: prereg({ ex: "pending" }) }))).toThrow(/no Exclusion list SHA-256/);
-  });
-
-  it("fixes the rate on a registered run: 4 at a time, 1 s per worker, no rate flags", () => {
+  it("keeps the registered rate", () => {
     expect(LIMITS.concurrency).toBe(4);
     expect(LIMITS.delayMs).toBe(1000);
-    expect(() => authorize(reg({ rateFlags: ["--concurrency"] }))).toThrow(/cannot be set on a registered run/);
-    expect(() => authorize(reg({ rateFlags: ["--delay", "--limit"] }))).toThrow(/--delay, --limit/);
-    expect(authorize({ loopback: true, rateFlags: ["--delay"], preregText: "" })).toEqual({ mode: "loopback" });
   });
 
-  it("the prereg records the hashes of the lists in the repo, and refuses real runs until it says Registered", () => {
+  it("the prereg records the hashes of the lists in the repo", () => {
     const root = join(__dirname, "..");
     const text = readFileSync(join(root, "docs", "research", "prereg", "E20-front-door.md"), "utf8");
     const sha = (f) => createHash("sha256").update(readFileSync(join(root, "bench", "front-door", "lists", f))).digest("hex");
     expect(recordedHash(text, "tranco")).toBe(sha("tranco-ZJ8PG-top1000.csv"));
     expect(recordedHash(text, "yc")).toBe(sha("yc-fall2026-summer2026-2026-10-29.csv"));
     expect(recordedHash(text, "exclusions")).toBe(sha("exclusions.txt"));
-    if (!isRegistered(text)) {
-      expect(() => authorize({ loopback: false, registered: "E20", cohort: "tranco", listHash: sha("tranco-ZJ8PG-top1000.csv"), preregText: text })).toThrow(/Refused/);
-    }
+    expect(isRegistered(text)).toBe(true);
+    expect(recordedHash(prereg(), "tranco")).toBe(HASH);
   });
 });
 
@@ -319,7 +295,6 @@ describe("E20 sub-measure B, adopted (§ 4.2)", () => {
     expect(appPageAdopted(text)).toBe(true);
     expect(appPageAdopted("| Sub-measure B (app page) | **Pending the maintainer's decision.** |")).toBe(false);
     expect(appPageAdopted("| Sub-measure B (app page) | **Adopted** 1 Nov |")).toBe(true);
-    expect(() => authorize(reg({ rateFlags: ["--app-page"] }))).toThrow(/sub-measures are fixed/);
   });
 
   it("finds one same-site login or app link, never an outside sign-in provider or the homepage", () => {

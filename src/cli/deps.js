@@ -10,6 +10,7 @@ import { printReport, printFindings, writeJsonReport, writeSarifReport, createPr
 import { writeMarkdownReport, markdownPathFromJson } from "../report/markdown.js";
 import { wantBrief, briefReports } from "./brief.js";
 import { buildBrief, formatBrief } from "../report/brief.js";
+import { exitCodeOf } from "../report/exit.js";
 import { prepareReportOptions, customReport, writeEvidence } from "./report-outputs.js";
 import { compareWithBaseline } from "./baseline.js";
 
@@ -156,6 +157,5 @@ export async function runDeps(args, opts, { version }) {
   if (opts.output || opts.markdown || opts.sarif || opts["pr-comment"] || opts.evidence) note("\n");
 
   // exitCode, not exit(): large --json output to a pipe must drain first.
-  const hasSevere = merged.findings.some((f) => f.severity === "critical" || f.severity === "high");
-  process.exitCode = hasSevere ? 1 : 0;
+  process.exitCode = exitCodeOf(merged);
 }

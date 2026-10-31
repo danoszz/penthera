@@ -646,7 +646,7 @@ app.listen(3000);
   .prompt { color: ${BLUE}; } .foot { grid-column: 1 / -1; font-family: ${MONO}; font-size: 16px; color: ${GREY}; display: flex; justify-content: space-between; }`;
   const body = `<div class="head"><img src="logo.svg" alt="Penthera"><span>Real output of penthera 2.0.0 on a two-bug example app (excerpt)</span></div>
   <div class="win"><div class="bar"><b></b><b></b><b></b><em>src/server.js</em></div><div class="code">${lines}</div></div>
-  <div class="win"><div class="bar"><b></b><b></b><b></b><em>~/my-app — zsh</em></div><pre><span class="prompt">$</span> npx penthera@2.1.1 --repo . --offline
+  <div class="win"><div class="bar"><b></b><b></b><b></b><em>~/my-app — zsh</em></div><pre><span class="prompt">$</span> npx penthera@2.1.2 --repo . --offline
 
 ${ansiToHtml(text)}</pre></div>
   <div class="foot"><span>Offline · nothing uploaded · every finding names its rule</span><span>penthera.org</span></div>`;
@@ -679,7 +679,7 @@ function phpShot() {
   const body = `<div class="head"><img src="logo.svg" alt="Penthera"><span>Real output of penthera 2.0.0 (excerpt)</span></div>
   <div class="win"><div class="bar"><b></b><b></b><b></b><em>Dockerfile</em></div><div class="code">${lines}</div>
   <p class="note">PHP fixed two remote code execution flaws in October 2026 (CVE-2026-109618 and CVE-2026-109619, CVSS 9.2). Fixed in 8.2.35, 8.3.36, 8.4.27 and 8.5.12.</p></div>
-  <div class="win"><div class="bar"><b></b><b></b><b></b><em>~/php-site — zsh</em></div><pre><span class="prompt">$</span> npx penthera@2.1.1 --repo . --offline
+  <div class="win"><div class="bar"><b></b><b></b><b></b><em>~/php-site — zsh</em></div><pre><span class="prompt">$</span> npx penthera@2.1.2 --repo . --offline
 
 ${ansiToHtml(text)}</pre></div>
   <div class="foot"><span>Offline · nothing uploaded · every finding names its rule</span><span>penthera.org</span></div>`;

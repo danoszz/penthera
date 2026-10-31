@@ -55,7 +55,7 @@ jobs:
         working-directory: ${{ runner.temp }}
         run: |
           set +e
-          npx --yes penthera@2.1.1 agents "$GITHUB_WORKSPACE" --sarif "$RUNNER_TEMP/penthera-agents.sarif"
+          npx --yes penthera@2.1.2 agents "$GITHUB_WORKSPACE" --sarif "$RUNNER_TEMP/penthera-agents.sarif"
           code=$?
           set -e
           echo "code=$code" >> "$GITHUB_OUTPUT"

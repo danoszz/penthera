@@ -9,8 +9,8 @@
  *                                file above, each with the date it last changed
  *   /robots.txt                  everyone allowed, pointing at the sitemap
  *   /.well-known/security.txt    RFC 9116, pointing at SECURITY.md
- *   /index.md, /openapi.json     the homepage as Markdown and the live check's spec
- *                                (site/agent-ready.mjs)
+ *   /index.md, /openapi.json,    the homepage as Markdown, the live check's spec and
+ *   /server.json                 the MCP Registry manifest (site/agent-ready.mjs)
  *
  * Every npm pin in a mirrored page (`penthera@1.2.3`) is rewritten to the
  * package's own version, so an agent that copies a command gets a version
@@ -128,8 +128,11 @@ export function agentFiles({ root, site, version, origin, values, pub = null, po
   // llms.txt: the template, plus when to reach for Penthera (before the docs),
   // the landing pages (after them) and the live check's spec (with the other
   // machine-readable files).
-  const landing = landingPages(site);
-  const questions = landing.length ? `## Questions the live check answers\n\n${landing.map((p) => `- [${p.h1}](${origin}/${p.slug}.md): ${p.description}`).join("\n")}\n\n` : "";
+  // An unlisted page keeps its URL, and stays out of every list.
+  const landing = landingPages(site).filter((p) => !p.unlisted);
+  // /contact is a landing page for the build, but it is no question for the check.
+  const asked = landing.filter((p) => p.slug !== "contact");
+  const questions = asked.length ? `## Questions the live check answers\n\n${asked.map((p) => `- [${p.h1}](${origin}/${p.slug}.md): ${p.description}`).join("\n")}\n\n` : "";
   out["llms.txt"] = fill(readFileSync(join(site, "llms.txt"), "utf8"), { ...values, ORIGIN: origin }, "llms.txt")
     .replace(/^## Docs$/m, (m) => `${benchmarkBlock(pub, origin)}${whenToUse({ version, origin })}\n${m}`)
     .replace(/^## Trust$/m, (m) => `${questions}${blogList(posts, origin)}${m}`)
@@ -151,7 +154,7 @@ export function agentFiles({ root, site, version, origin, values, pub = null, po
     ...landing.map((p) => [p.slug, `site/pages/${p.slug}.md`]),
     // Approved posts only: a draft is never built, so never listed.
     ...(posts.length ? [["blog", posts[0].date], ...posts.map((p) => [`blog/${p.slug}`, p.date])] : []),
-    ["llms.txt", "site/llms.txt"], ["llms-full.txt", null], ["openapi.json", null], ...pages.map((p) => [p, p]),
+    ["llms.txt", "site/llms.txt"], ["llms-full.txt", null], ["openapi.json", null], ["server.json", "server.json"], ...pages.map((p) => [p, p]),
   ];
   const lastmod = (src) => (src == null ? null : /^\d{4}-\d{2}-\d{2}$/.test(src) ? src : lastChanged(root, src));
   out["sitemap.xml"] = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.map(([u, src]) => {

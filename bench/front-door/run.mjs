@@ -9,11 +9,7 @@
  *   node bench/front-door/run.mjs --list <file> --loopback <port> [--cohort tranco|yc]
  *       Loopback only: every name resolves to 127.0.0.1:<port>, DNS records
  *       come from a stub. Nothing leaves the machine.
- *   node bench/front-door/run.mjs --list <file> --cohort tranco|yc --exclude <file> --registered E20
- *       The registered run. Refused unless the prereg says Registered, and the
- *       list file's and the exclusion list's SHA-256 match the hashes recorded
- *       there. Rate, concurrency and limit are fixed (§ 4): passing
- *       --concurrency, --delay or --limit is refused.
+ *   Any other run is refused: E20 is closed, and E20-R2 runs from replicate.mjs.
  *   node bench/front-door/run.mjs --compare <a/aggregate.json> <b/aggregate.json>
  *       The difference per check between two cohorts, offline.
  *
@@ -44,10 +40,14 @@ import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync, mkdirSync, appendFileSync, existsSync } from "node:fs";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { lookup as dnsLookup } from "node:dns/promises";
 import { passiveReport } from "../../api/_lib/tier1.mjs";
 import { parseTarget, fetchBody, CheckError } from "../../api/_lib/guard.mjs";
+import { scrub } from "./classify.mjs";
+import { isIP } from "node:net";
+import { siteOrg } from "./psl.mjs";
 import { grade } from "../../api/_lib/grade.mjs";
-import { makeBudget, optedOut } from "../../api/_lib/page.mjs";
+import { makeBudget } from "../../api/_lib/page.mjs";
 import { registrableDomain } from "../../src/utils/url.js";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -57,6 +57,7 @@ export const PREREG = join(ROOT, "docs", "research", "prereg", "E20-front-door.m
 export const USER_AGENT = "Penthera-Research/E20 (+https://penthera.org/research/e20; opt out: robots.txt User-agent: Penthera-Research)";
 export const OPT_OUT_TOKENS = ["penthera-research", "penthera-quickcheck"];
 export const LIMITS = Object.freeze({
+  siteRequests: 20,
   concurrency: 4, maxConcurrency: 8,
   delayMs: 1000,
   siteBudgetMs: 8000, siteHardCapMs: 20_000,
@@ -93,28 +94,14 @@ export const isRegistered = (preregText) => /^\|\s*Status\s*\|\s*\*\*Registered\
 export const appPageAdopted = (preregText) => /^\|\s*Sub-measure B \(app page\)\s*\|\s*\*\*Adopted/m.test(preregText);
 
 /**
- * Throws unless this run may send anything. Loopback runs (every name pinned
- * to 127.0.0.1, DNS stubbed) always may. Anything else needs all of:
- * --registered E20, a prereg whose status is Registered, a list file whose
- * SHA-256 equals the one the prereg records for the cohort, an exclusion
- * list whose SHA-256 equals the one recorded for it, and no rate flags.
+ * E20 ran on 30 October 2026 and is closed. This file stays a library for E20-R2
+ * (replicate.mjs, which holds the locks) and runs on loopback only: a registered
+ * E20 run could leave from any machine, and the study's rule is that the
+ * maintainer's home connection never touches a study site.
  */
-export function authorize({ loopback, registered, cohort, listHash, excludeHash, rateFlags = [], preregText }) {
+export function authorize({ loopback } = {}) {
   if (loopback) return { mode: "loopback" };
-  if (registered !== "E20") {
-    throw new Error("Refused: this run would reach hosts other than loopback. It needs --registered E20, and only after Daan accepted the protocol (AGENTS.md rule 6).");
-  }
-  if (!COHORTS[cohort]) throw new Error(`Refused: --cohort must be one of ${Object.keys(COHORTS).join(", ")}.`);
-  if (!isRegistered(preregText)) throw new Error("Refused: the prereg's status is not Registered.");
-  const recorded = recordedHash(preregText, cohort);
-  if (!recorded) throw new Error(`Refused: the prereg records no ${COHORTS[cohort].label} SHA-256 yet.`);
-  if (recorded !== listHash) throw new Error(`Refused: the list file's SHA-256 (${listHash}) does not match the one in the prereg (${recorded}).`);
-  const recordedEx = recordedHash(preregText, "exclusions");
-  if (!recordedEx) throw new Error(`Refused: the prereg records no ${EXCLUSION_LABEL} SHA-256 yet.`);
-  if (!excludeHash) throw new Error("Refused: a registered run needs --exclude <the exclusion list>.");
-  if (recordedEx !== excludeHash) throw new Error(`Refused: the exclusion list's SHA-256 (${excludeHash}) does not match the one in the prereg (${recordedEx}).`);
-  if (rateFlags.length) throw new Error(`Refused: ${rateFlags.join(", ")} cannot be set on a registered run; rate, concurrency, limit and sub-measures are fixed by the prereg (§ 4).`);
-  return { mode: "registered" };
+  throw new Error("Refused: E20 is closed. This runner is loopback only; a real run goes through replicate.mjs.");
 }
 
 /** A hostname from a list cell: "Example.com", "https://www.example.com/about" → example.com, www.example.com. */
@@ -176,7 +163,7 @@ export function readExclusions(text) {
 
 /** The category that excludes a host: the host itself or any parent domain is listed ("gov" covers every .gov host). */
 export function exclusionFor(host, exclusions) {
-  const labels = String(host).toLowerCase().split(".");
+  const labels = String(host).toLowerCase().replace(/\.+$/, "").split(".");
   for (let i = 0; i < labels.length; i++) {
     const c = exclusions.get(labels.slice(i).join("."));
     if (c) return c;
@@ -198,7 +185,97 @@ export const STUB_DNS = { resolveTxt: enodata, resolveCaa: enodata };
 export const redact = (text) => String(text || "").replace(/[A-Z0-9._%+-]+@([A-Z0-9.-]+\.[A-Z]{2,})/gi, "<redacted>@$1");
 
 /** What a raw record keeps of a check: no fix text, evidence capped and redacted. */
-const slim = (c) => ({ id: c.id, passed: c.passed, severity: c.severity, weight: c.weight, evidence: redact(c.evidence).slice(0, 300) });
+// The grader cuts evidence at 120 to 200 characters, so a long one may end inside an
+// address. Drop that last token: a cut address no longer looks like one.
+const EVIDENCE_CUT = 118;
+const dropCutToken = (e) => { const t = String(e || ""); return t.length < EVIDENCE_CUT ? t : t.slice(0, Math.max(...[" ", ",", ";"].map((c) => t.lastIndexOf(c)), 0)); };
+// A malformed Set-Cookie puts its value where the grader expects a name, so no cookie text is stored.
+export const slim = (c) => ({ id: c.id, passed: c.passed, severity: c.severity, weight: c.weight, evidence: c.id === "cookies" ? "" : scrub(redact(dropCutToken(c.evidence))).slice(0, 300) });
+
+/**
+ * RFC 9309 § 2.3.1, as the study applies it (Amendment 2). A 2xx is parsed. A
+ * 4xx means no rules. A 5xx, an unreachable file or a spent budget means
+ * complete disallow. 429 is a 4xx in the RFC; the study treats it as a request
+ * to stay away. A 2xx that can't be read to its end proves nothing, so a
+ * compressed or cut-off file counts as unavailable, and so does a 3xx with no
+ * Location, which no client can follow.
+ */
+export const robotsAccess = ({ status, error, encoded, truncated, binary }) => (error || status === 429 || status >= 500 || (status >= 300 && status < 400) || ((encoded || truncated || binary) && status < 300) ? "disallow" : "allow");
+/** NUL, or the two bad bytes a UTF-16 BOM decodes to: a file we can't read as text, whatever it says. */
+export const robotsBinary = (body) => String(body ?? "").includes("\0") || String(body ?? "").startsWith("\uFFFD\uFFFD");
+export const ROBOTS_REDIRECTS = 5;
+// RFC 9309 § 2.5 asks a crawler to read at least 500 KiB.
+export const ROBOTS_MAX_BYTES = 512_000;
+// These say what happened to the origin, not what its robots.txt says, so the
+// visit ends with the same outcome the homepage would have given. Nothing
+// more is sent to that origin.
+const ROBOTS_KEEP_OUTCOME = new Set(["not_found", "unreachable", "tls_invalid", "timeout", "not_public"]);
+// Nothing answered at all. A reset can be a refusal, and a refusal gets no retry.
+const NO_ANSWER = new Set(["ECONNREFUSED", "EHOSTUNREACH", "ENETUNREACH", "ETIMEDOUT", "EADDRNOTAVAIL"]);
+const AFTER_TLS = new Set(["unreachable", "timeout", "not_found"]);
+// No TLS session could be set up: old versions, or plain HTTP on the TLS port. An alert
+// that says access is denied is a refusal, though, and a refusal gets no fallback.
+const TLS_HANDSHAKE = /^(?:EPROTO$|ERR_SSL_(?!.*ACCESS_DENIED))/;
+const tlsFailed = (e) => e.code === "tls_invalid" || TLS_HANDSHAKE.test(e.netCode ?? "");
+/** The outcome a record names. A handshake failure is its own, not `unreachable`. */
+const outcomeOf = (e) => (!(e instanceof CheckError) ? "internal" : TLS_HANDSHAKE.test(e.netCode ?? "") ? "tls_handshake" : e.code);
+
+/** IPv4 only, so one published address accounts for every request (§ 5). */
+export const ipv4Lookup = (host, opts = {}) => dnsLookup(host, { ...opts, family: 4 });
+
+const robotsStop = (reason) => Object.assign(new CheckError("robots_stop", "robots.txt stops this visit.", 403, ""), { reason });
+
+/**
+ * The study's rules for hops, robots.txt and fallbacks, for one visit.
+ * `outcomes` keeps what each origin answered. Every hop must stay off the
+ * exclusion list, off a literal IP address, out of an origin whose robots.txt
+ * failed, and inside the rules of its origin. A fallback runs only when nothing
+ * from the listed origin has answered.
+ */
+export function strictRobots({ exclude = new Map(), outcomes = [], listedHost } = {}) {
+  const bodies = new Map();
+  const failed = new Set();
+  let answered = false;
+  const refuseHost = (u) => {
+    if (exclusionFor(u.hostname, exclude)) throw robotsStop("exclusion_redirect");
+    if (u.hostname.startsWith("[")) throw robotsStop("ipv6_literal");
+    if (isIP(u.hostname)) throw robotsStop("ipv4_literal");
+    if (failed.has(u.origin)) throw robotsStop("robots_unavailable");
+  };
+  return {
+    robotsRedirects: ROBOTS_REDIRECTS,
+    robotsMaxBytes: ROBOTS_MAX_BYTES,
+    // The early check asks the real matcher, so an Allow that beats `Disallow: /` counts here too.
+    optedOut: (body, tokens) => wholeSiteStop(body, OPT_OUT_TOKENS, tokens.includes("*")),
+    robotsHop: refuseHost,
+    onAnswered() { answered = true; },
+    onRobots({ origin, status, error, body, headers, truncated, cause }) {
+      if (status !== undefined) answered = true;
+      const encoding = headers?.["content-encoding"];
+      const encoded = Boolean(encoding) && !/^identity$/i.test(encoding);
+      const binary = robotsBinary(body);
+      const access = robotsAccess({ status, error, encoded, truncated, binary });
+      outcomes.push({ status: status ?? null, error: error ?? null, access, ...(encoded ? { encoded } : {}), ...(truncated ? { truncated } : {}), ...(binary ? { binary } : {}) });
+      if (access === "disallow") failed.add(origin);
+      if (cause?.code === "robots_stop" || (cause instanceof CheckError && ROBOTS_KEEP_OUTCOME.has(cause.code))) throw cause;
+      if (access === "disallow") throw robotsStop("robots_unavailable");
+      if (status >= 200 && status < 300) bodies.set(origin, body);
+    },
+    onHopUrl(u) {
+      refuseHost(u);
+      const body = bodies.get(u.origin);
+      if (body === undefined) return;
+      const verdict = robotsVerdict(body, u.pathname + u.search);
+      if (verdict === "opted_out") throw Object.assign(new CheckError("opted_out", "This site's owner opted out.", 403, ""), { redirectedTo: u.hostname });
+      // Another organization's rule is theirs: the listed site didn't ask to be left out.
+      if (verdict === "disallowed") throw robotsStop(listedHost && siteOrg(u.hostname) !== siteOrg(listedHost) ? "redirect_disallow_path" : "robots_disallow_path");
+    },
+    allowFallback: (e) => !answered && (tlsFailed(e) || NO_ANSWER.has(e.netCode)),
+    allowWww: () => !answered,
+    // A bad certificate stays the outcome when plain http has nothing either.
+    fallbackError: (https, http) => (tlsFailed(https) && (AFTER_TLS.has(http.code) || http.reason === "robots_unavailable") ? https : http),
+  };
+}
 
 /**
  * One site, one visit. Loopback: http://<host>:<port>/ with the name pinned
@@ -206,13 +283,21 @@ const slim = (c) => ({ id: c.id, passed: c.passed, severity: c.severity, weight:
  * http when https does not connect); when the name does not resolve, one try
  * at www.<host>.
  */
-export async function visit(row, { loopbackPort, now, appPage = false, exclude = new Map(), lookup, evidence } = {}) {
+export async function visit(row, { loopbackPort, now, appPage = false, exclude = new Map(), lookup, evidence, strict = false, budgetMs = LIMITS.siteBudgetMs, hardCapMs = LIMITS.siteHardCapMs, meter: given } = {}) {
   let page = null;
+  let httpsFailed = null;
   const responses = [];
+  const robots = [];
+  const rules = strict ? strictRobots({ exclude, outcomes: robots, listedHost: row.host }) : null;
+  const meter = strict ? (given ?? { requests: 0, bytes: 0, redirects: 0, hosts: [] }) : undefined;
   const base = {
     userAgent: USER_AGENT, optOutTokens: OPT_OUT_TOKENS, optOutAll: true, assets: false, secrets: false,
-    budgetMs: LIMITS.siteBudgetMs, now, lookup, onPage: (p) => { page = p; }, onResponse: (kind, res) => responses.push({ kind, res }),
+    budgetMs, now, lookup, onPage: (p) => { page = p; }, onResponse: (kind, res) => responses.push({ kind, res }),
+    onFallback: (e) => { httpsFailed = { error: outcomeOf(e), ...(e.tlsReason ? { tlsReason: e.tlsReason } : {}), ...(e.netCode ? { netCode: e.netCode } : {}) }; },
+    ...rules, meter, ...(strict ? { budget: makeBudget({ requests: LIMITS.siteRequests, budgetMs }), skipDns: true } : {}),
   };
+  const counters = () => ({ requests: meter.requests, bytes: meter.bytes, redirects: meter.redirects });
+  const withRobots = (r) => (strict ? { ...r, robots, counters: counters(), hops: [...meter.hosts], ...(httpsFailed ? { httpsFailed } : {}) } : r);
   const opts = loopbackPort
     ? { ...base, lookup: loopbackLookup, allowPrivate: true, anyPort: true, dns: STUB_DNS }
     : base;
@@ -225,7 +310,7 @@ export async function visit(row, { loopbackPort, now, appPage = false, exclude =
   };
   const capped = (p) => {
     let timer;
-    return Promise.race([p, new Promise((_, reject) => { timer = setTimeout(() => reject(new CheckError("timeout", "Hard cap", 504, "")), LIMITS.siteHardCapMs); })])
+    return Promise.race([p, new Promise((_, reject) => { timer = setTimeout(() => reject(new CheckError("timeout", "Hard cap", 504, "")), hardCapMs); })])
       .finally(() => clearTimeout(timer));
   };
   try {
@@ -233,25 +318,29 @@ export async function visit(row, { loopbackPort, now, appPage = false, exclude =
     try {
       report = await capped(attempt(row.host));
     } catch (e) {
-      if (loopbackPort || !(e instanceof CheckError) || e.code !== "not_found" || row.host.startsWith("www.")) throw e;
+      if (loopbackPort || !(e instanceof CheckError) || e.code !== "not_found" || row.host.startsWith("www.") || rules?.allowWww() === false) throw e;
       report = await capped(attempt(`www.${row.host}`));
     }
-    const record = {
+    const record = withRobots({
       ...row, at, status: "ok",
       finalHost: new URL(report.url).hostname, httpStatus: report.status, redirects: report.redirects.length,
       score: report.score, checks: report.checks.map(slim),
       platform: page ? platformOf(page.headers, page.html) : { edge: "unknown", builder: "unknown" },
-    };
+    });
     // E20-R only: what the response carried, for the classifier (replicate.mjs).
     if (evidence && page) record.evidence = evidence(page, responses);
     // § 4.2, pending: one app or login page, only when B is on.
-    if (appPage) record.app = await capped(visitAppPage(page, { loopbackPort, now, exclude, lookup })).catch((e) => ({ status: "error", error: e instanceof CheckError ? e.code : "internal" }));
+    // Amendment 2: the app page is never requested under the strict rules.
+    if (appPage && !strict) record.app = await capped(visitAppPage(page, { loopbackPort, now, exclude, lookup })).catch((e) => ({ status: "error", error: e instanceof CheckError ? e.code : "internal" }));
     return record;
   } catch (e) {
     // § 5, decided 29 Oct: a `*` group with Disallow: / is an opt-out for E20, counted as excluded.
-    if (e instanceof CheckError && e.code === "opted_out" && e.all) return { ...row, at, status: "excluded", reason: "robots_disallow_all" };
-    if (e instanceof CheckError && e.code === "opted_out") return { ...row, at, status: "opted_out" };
-    return { ...row, at, status: "error", error: e instanceof CheckError ? e.code : "internal" };
+    // An opt-out by the organization a redirect led to is theirs, not the listed site's: its DNS is still read.
+    if (e instanceof CheckError && e.code === "opted_out" && e.redirectedTo && siteOrg(e.redirectedTo) !== siteOrg(row.host)) return withRobots({ ...row, at, status: "excluded", reason: "redirect_opted_out" });
+    if (e instanceof CheckError && e.code === "opted_out" && e.all) return withRobots({ ...row, at, status: "excluded", reason: "robots_disallow_all" });
+    if (e instanceof CheckError && e.code === "opted_out") return withRobots({ ...row, at, status: "opted_out" });
+    if (e instanceof CheckError && e.code === "robots_stop") return withRobots({ ...row, at, status: "excluded", reason: e.reason });
+    return withRobots({ ...row, at, status: "error", error: outcomeOf(e), ...(e?.tlsReason ? { tlsReason: e.tlsReason } : {}), ...(e?.netCode ? { netCode: e.netCode } : {}) });
   }
 }
 
@@ -268,7 +357,7 @@ export const EDGE_RULES = Object.freeze([
   ["cloudflare", (h) => "cf-ray" in h || /cloudflare/i.test(h.server || "")],
   ["cloudfront", (h) => "x-amz-cf-id" in h || /cloudfront/i.test(h.via || "")],
   ["fastly", (h) => "x-fastly-request-id" in h || /fastly|cache-[a-z]{3}\d/i.test((h["x-served-by"] || "") + (h.via || ""))],
-  ["akamai", (h) => /akamai/i.test(h.server || "")],
+  ["akamai", (h) => "x-akamai-transformed" in h || "akamai-grn" in h || /akamai/i.test(h.server || "")],
   ["github-pages", (h) => /^github\.com$/i.test(h.server || "")],
   ["google", (h) => /^(gws|esf|gse|google frontend)$/i.test(h.server || "")],
 ]);
@@ -328,38 +417,111 @@ export function findAppLink(html, pageUrl) {
   return null;
 }
 
+const UNRESERVED = /[A-Za-z0-9\-._~]/;
+const URL_ENCODES = new Set(['"', "<", ">", "`", "{", "}", " ", "^", "|", "\\"]);
+
 /**
- * What robots.txt says about one path for us (RFC 9309): the groups naming
- * one of our tokens or, when none does, the `*` group. The longest matching
- * rule wins; on a tie, Allow wins. "opted_out" when a group naming us
- * disallows "/", "disallowed" when the winning rule is a Disallow, else
- * "allowed". `*` and a trailing `$` in rules are supported.
+ * RFC 9309 § 2.2.2: rule and path compare in one form. Octets of unreserved characters
+ * are decoded, other escapes keep upper-case hex, and anything a URL parser encodes is
+ * encoded. `*` and `$` stay. A malformed `%` stays literal, so it matches only itself:
+ * a rule we can't read can still stop a visit, and a path can't dodge a rule by it.
  */
-export function robotsVerdict(robots, path, tokens = OPT_OUT_TOKENS) {
-  if (optedOut(robots, tokens)) return "opted_out";
+export function percentForm(text) {
+  const s = String(text);
+  let out = "";
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (ch === "%" && /^[0-9a-f]{2}$/i.test(s.slice(i + 1, i + 3))) {
+      const hex = s.slice(i + 1, i + 3).toUpperCase();
+      const plain = String.fromCharCode(parseInt(hex, 16));
+      out += UNRESERVED.test(plain) ? plain : `%${hex}`;
+      i += 2;
+    } else if (ch.charCodeAt(0) >= 128) {
+      const whole = String.fromCodePoint(s.codePointAt(i));
+      out += Buffer.from(whole, "utf8").toString("hex").toUpperCase().replace(/../g, (b) => `%${b}`);
+      i += whole.length - 1;
+    } else {
+      out += URL_ENCODES.has(ch) ? `%${ch.charCodeAt(0).toString(16).toUpperCase().padStart(2, "0")}` : ch;
+    }
+  }
+  return out;
+}
+
+/** Every valid escape decoded once, so `%2F` and `/` meet. Bytes stay bytes: only ASCII is decoded. */
+export const percentDecoded = (text) => String(text).replace(/%([0-7][0-9A-F])/g, (_m, hex) => String.fromCharCode(parseInt(hex, 16)));
+
+/**
+ * A robots rule against a path, with no regex: `*` is any run, a final `$` ends
+ * the path, and a rule is otherwise a prefix. Each part is found once, left to
+ * right, so a line of stars can't cost more than one pass per part.
+ */
+export function globMatch(rule, path) {
+  const anchored = rule.endsWith("$");
+  const parts = (anchored ? rule.slice(0, -1) : rule).split("*");
+  if (!path.startsWith(parts[0])) return false;
+  let at = parts[0].length;
+  const middle = parts.slice(1, anchored ? -1 : undefined);
+  for (const part of middle) {
+    const found = path.indexOf(part, at);
+    if (found < 0) return false;
+    at = found + part.length;
+  }
+  if (!anchored) return true;
+  if (parts.length === 1) return path === parts[0];
+  const last = parts.at(-1);
+  return path.length - last.length >= at && path.endsWith(last);
+}
+
+// The rules that take out a whole site.
+const WHOLE_SITE = new Set(["/", "/*"]);
+
+/** The rule that decides one path (RFC 9309), and whether a group names us. The longest match wins; on a tie, Allow. */
+function robotsRule(robots, path, tokens) {
   const names = tokens.map((t) => t.toLowerCase());
   const groups = [];
   let cur = null;
-  for (const raw of String(robots || "").split(/\r?\n/)) {
+  for (const raw of String(robots || "").replace(/^\uFEFF/, "").split(/\r\n|\r|\n/)) {
     const m = /^([a-z-]+)\s*:\s*(.*)$/i.exec(raw.replace(/#.*/, "").trim());
     if (!m) continue;
     const key = m[1].toLowerCase();
     const value = m[2].trim();
     if (key === "user-agent") {
       if (!cur || cur.rules.length) groups.push(cur = { agents: [], rules: [] });
-      cur.agents.push(value.split("/")[0].trim().toLowerCase());
+      cur.agents.push(value.split(/[/\s]/)[0].toLowerCase());
     } else if ((key === "allow" || key === "disallow") && cur) cur.rules.push({ allow: key === "allow", value });
   }
   const ours = groups.filter((g) => g.agents.some((a) => names.includes(a)));
   const rules = (ours.length ? ours : groups.filter((g) => g.agents.includes("*"))).flatMap((g) => g.rules).filter((r) => r.value);
   let best = null;
+  const target = percentForm(path);
+  const plain = percentDecoded(target);
   for (const r of rules) {
-    const anchored = r.value.endsWith("$");
-    const body = (anchored ? r.value.slice(0, -1) : r.value).replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*");
-    if (!new RegExp(`^${body}${anchored ? "$" : ""}`).test(path)) continue;
-    if (!best || r.value.length > best.value.length || (r.value.length === best.value.length && r.allow)) best = r;
+    const value = percentForm(r.value);
+    // A Disallow also matches on the decoded form, so a reserved character can't slip past it.
+    if (!globMatch(value, target) && (r.allow || !globMatch(percentDecoded(value), plain))) continue;
+    if (!best || value.length > best.value.length || (value.length === best.value.length && r.allow)) best = { allow: r.allow, value };
   }
-  return best && !best.allow ? "disallowed" : "allowed";
+  return { ours: ours.length > 0, best };
+}
+
+/**
+ * Does the rule that decides the homepage take the whole site out? It asks of a
+ * group naming us or, with `star`, of the `*` group that stands in when none does.
+ */
+export function wholeSiteStop(robots, tokens = OPT_OUT_TOKENS, star = false) {
+  const { ours, best } = robotsRule(robots, "/", tokens);
+  return Boolean(best && !best.allow && WHOLE_SITE.has(best.value)) && ours === !star;
+}
+
+/**
+ * What robots.txt says about one path for us: "opted_out" when a Disallow wins and
+ * a group naming us takes out the whole site, "disallowed" for any other winning
+ * Disallow, else "allowed". `*` and a trailing `$` in rules are supported.
+ */
+export function robotsVerdict(robots, path, tokens = OPT_OUT_TOKENS) {
+  const { best } = robotsRule(robots, path, tokens);
+  if (!best || best.allow) return "allowed";
+  return wholeSiteStop(robots, tokens) ? "opted_out" : "disallowed";
 }
 
 /**
@@ -584,7 +746,7 @@ function appSection(records) {
 }
 
 /** The aggregate: counts, per-check prevalence, the score distribution, groups. No site names. */
-export function aggregate(records, meta = {}) {
+export function aggregate(records, meta = {}, { orgOf = registrableDomain } = {}) {
   const ok = records.filter((r) => r.status === "ok");
   const status = {};
   for (const r of records.filter((x) => x.status !== "ok")) {
@@ -603,7 +765,7 @@ export function aggregate(records, meta = {}) {
   // § 6.3, sensitivity: one record per registrable domain the homepage ended on, first by rank.
   const seenSite = new Set();
   const dedup = ok.filter((r) => {
-    const site = registrableDomain(r.finalHost || r.host);
+    const site = orgOf(r.finalHost || r.host);
     if (seenSite.has(site)) return false;
     seenSite.add(site);
     return true;
@@ -810,7 +972,7 @@ async function main(args) {
   }
   const listFile = flag(args, "--list");
   if (!listFile) {
-    console.error("Usage: node bench/front-door/run.mjs --self-test | --list <file> (--loopback <port> [--app-page] | --cohort tranco|yc --registered E20) | --compare <a/aggregate.json> <b/aggregate.json>");
+    console.error("Usage: node bench/front-door/run.mjs --self-test | --list <file> --loopback <port> [--app-page] | --compare <a/aggregate.json> <b/aggregate.json>");
     return 2;
   }
   const cohort = flag(args, "--cohort") || "tranco";

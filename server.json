@@ -8,13 +8,13 @@
     "url": "https://github.com/danoszz/penthera",
     "source": "github"
   },
-  "version": "2.1.1",
+  "version": "2.1.2",
   "packages": [
     {
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "penthera",
-      "version": "2.1.1",
+      "version": "2.1.2",
       "runtimeHint": "npx",
       "transport": {
         "type": "stdio"

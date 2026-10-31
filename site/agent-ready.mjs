@@ -4,10 +4,12 @@
  *
  *   /index.md       the homepage as Markdown, linked from "/" (Link: rel=alternate)
  *   /openapi.json   OpenAPI 3.1 for POST /api/check; error codes read from api/
- *   JSONLD          a SoftwareApplication block for the page's <head>
+ *   /server.json    the MCP Registry manifest, copied from the repo: a local stdio package
+ *   JSONLD          Organization and SoftwareApplication for the page's <head>
  *   llms.txt        a "When to use Penthera" section, added by agents.mjs
  *
- * Unknown paths asked for as Markdown get api/not-found.mjs (a 404 in Markdown).
+ * Unknown paths asked for as Markdown get api/not-found.mjs (a 404 in Markdown),
+ * and unknown /api paths get api/no-route.mjs (a 404 in JSON).
  */
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
@@ -20,30 +22,51 @@ export const DESCRIPTION = "Offline cyber security agent for your apps and AI co
 
 // ── JSON-LD ─────────────────────────────────────────────────────────────────
 
+/** The public contact address, the one on /contact and /pro. */
+export const CONTACT_MAIL = "daan@penthera.org";
+
 /**
- * The SoftwareApplication record. A personal project: the author is a name and
- * a website, with no address, phone or email.
+ * The Organization and SoftwareApplication records. A personal project: the
+ * author is a name and a website, and the one contact detail is the public
+ * address. No street address and no phone, on purpose: privacy comes first.
  */
 export function jsonLdData({ version, origin }) {
+  const org = `${origin}/#organization`;
+  const sameAs = [REPO, NPM, "https://x.com/penthera_org"];
   return {
     "@context": "https://schema.org",
-    "@type": "SoftwareApplication",
-    name: "Penthera",
-    description: DESCRIPTION,
-    url: origin,
-    applicationCategory: "SecurityApplication",
-    operatingSystem: "macOS, Linux, Windows",
-    softwareRequirements: "Node.js 22 or later",
-    softwareVersion: version,
-    license: "https://spdx.org/licenses/MIT.html",
-    isAccessibleForFree: true,
-    offers: { "@type": "Offer", price: "0", priceCurrency: "EUR" },
-    downloadUrl: NPM,
-    installUrl: NPM,
-    sameAs: [REPO, NPM],
-    // The public benchmark's Dataset on /benchmarks.
-    subjectOf: { "@id": `${origin}/benchmarks#dataset` },
-    author: { "@type": "Person", name: "Daan van der Zwaag", url: "https://daanvanderzwaag.com" },
+    "@graph": [
+      {
+        "@type": "Organization",
+        "@id": org,
+        name: "Penthera",
+        description: DESCRIPTION,
+        url: origin,
+        logo: `${origin}/logo.svg`,
+        sameAs,
+        contactPoint: { "@type": "ContactPoint", contactType: "general", email: CONTACT_MAIL, url: `${origin}/contact` },
+      },
+      {
+        "@type": "SoftwareApplication",
+        name: "Penthera",
+        description: DESCRIPTION,
+        url: origin,
+        applicationCategory: "SecurityApplication",
+        operatingSystem: "macOS, Linux, Windows",
+        softwareRequirements: "Node.js 22 or later",
+        softwareVersion: version,
+        license: "https://spdx.org/licenses/MIT.html",
+        isAccessibleForFree: true,
+        offers: { "@type": "Offer", price: "0", priceCurrency: "EUR" },
+        downloadUrl: NPM,
+        installUrl: NPM,
+        sameAs,
+        // The public benchmark's Dataset on /benchmarks.
+        subjectOf: { "@id": `${origin}/benchmarks#dataset` },
+        publisher: { "@id": org },
+        author: { "@type": "Person", name: "Daan van der Zwaag", url: "https://daanvanderzwaag.com" },
+      },
+    ],
   };
 }
 
@@ -68,11 +91,11 @@ const ERROR_HINTS = {
   consent_required: "consent is missing or not true. Send \"consent\": true only if you own the site or are authorized to test it, and accept the terms.",
   opted_out: "The site's robots.txt opts out of Penthera-QuickCheck, so it is not checked.",
   method_not_allowed: "Only POST is allowed.",
-  too_large: "The request body is over 4 KB.",
+  too_large: "The body is over 4 KB. The handler enforces this when it reads the body as a stream. On Vercel the platform parses the body first, so this error may not fire and a larger body is read as usual.",
   not_found: "The domain does not resolve.",
   too_many_redirects: "The site redirected more than four times.",
   tls_invalid: "The site's certificate is not valid.",
-  rate_limited: "Too many checks in a minute, from one address or of one site.",
+  rate_limited: "Too many checks from one address or of one site. Wait for the seconds in Retry-After.",
   internal: "The check failed on penthera.org's side.",
   unreachable: "penthera.org could not connect to the site.",
   timeout: "The site did not answer in time.",
@@ -118,6 +141,7 @@ export function openApi({ version, origin, root }) {
   for (const [code, status] of Object.entries(codes)) (byStatus[status] ||= []).push(code);
   const errorResponses = Object.fromEntries(Object.keys(byStatus).sort().map((s) => [s, {
     description: byStatus[s].map((c) => `\`${c}\`: ${ERROR_HINTS[c] || "See error.message and error.hint."}`).join(" "),
+    ...(s === "429" ? { headers: { "Retry-After": { description: "Sent with `rate_limited`, not with `budget`. Seconds until every full limit lets a check through.", schema: { type: "integer", minimum: 1 } } } } : {}),
     content: { "application/json": { schema: { $ref: "#/components/schemas/Error" }, example: { error: { code: byStatus[s][0], message: "…", hint: "…" } } } },
   }]));
   const str = { type: "string" };
@@ -128,10 +152,12 @@ export function openApi({ version, origin, root }) {
       version,
       summary: "Check a public website's passive security basics: HTTPS, TLS, headers, cookies, scripts, security.txt and DNS.",
       description: [
-        "One endpoint, POST /api/check, with a JSON body. It loads only what a browser would (the page, up to 14 of its scripts and stylesheets, /.well-known/security.txt) plus public DNS records, at most 20 requests, and grades what came back. No other paths, no payloads. Nothing is stored or logged. A site whose robots.txt disallows the user agent Penthera-QuickCheck is not checked.",
+        "One endpoint, POST /api/check, with a JSON body. It loads /robots.txt for the opt-out, then what a browser would (the page, up to 14 of its scripts and stylesheets, /.well-known/security.txt), plus public DNS records, at most 20 requests, and grades what came back. No other paths, no payloads. Nothing is stored or logged. A site whose robots.txt disallows the user agent Penthera-QuickCheck is not checked.",
         "Only public http(s) sites on ports 80 and 443. For localhost, internal hosts or a full scan, run `npx penthera@" + version + " <url>` on your own machine.",
         `Every request must carry "consent": true, which states that you own the site or are authorized to test it and that you accept the terms: ${origin}/terms.`,
-        "Rate limits: per client address and per target site, per minute.",
+        "Rate limits: 6 checks a minute and 40 a day per client address, and 30 an hour per target site. Each server instance counts on its own, so these numbers are approximate. To enforce them, the server keeps counts per client address and per target site in memory, for up to a day. A rate_limited 429 carries Retry-After, in seconds.",
+        "Errors share one shape. A path under /api that is not a route answers 404 with the code unknown_endpoint.",
+        `Versioning: the URL carries no version. info.version is the Penthera release this spec was built from. Breaking changes and deprecations are listed in the changelog, with no fixed notice period: ${REPO}/blob/main/CHANGELOG.md.`,
       ].join("\n\n"),
       termsOfService: `${origin}/terms`,
       license: { name: "MIT", identifier: "MIT" },
@@ -175,10 +201,10 @@ export function openApi({ version, origin, root }) {
         CheckRequest: {
           type: "object",
           required: ["url", "consent"],
-          additionalProperties: false,
+          description: "The handler reads url and consent, and ignores any other field.",
           properties: {
             url: { type: "string", minLength: 1, maxLength: 2048, description: "The site: a domain (example.com means https://example.com/) or an http(s) URL on port 80 or 443.", examples: ["example.com", "https://example.com/login"] },
-            consent: { const: true, description: `true states that you own the site or are authorized to test it, and that you accept the terms at ${origin}/terms. Ask the user before you send it.` },
+            consent: { type: "boolean", const: true, description: `true states that you own the site or are authorized to test it, and that you accept the terms at ${origin}/terms. Ask the user before you send it.` },
           },
         },
         Report: {
@@ -187,7 +213,7 @@ export function openApi({ version, origin, root }) {
           properties: {
             url: { type: "string", description: "The final URL, after redirects." },
             status: { type: "integer", description: "The HTTP status of the final response." },
-            tier: { const: "passive" },
+            tier: { type: "string", const: "passive" },
             score: { type: "integer", minimum: 0, maximum: 100, description: "The share of check weight that passed, as a percentage." },
             verdict: { type: "string", description: "The score in words, such as \"Solid basics\" (90 or more) or \"Unsafe defaults\" (under 45)." },
             redirects: { type: "array", items: str, description: "Each URL that redirected, in order." },
@@ -248,7 +274,7 @@ Reach for it when the user wants one of these, on something they own or are auth
 - Check their dependencies: what each package can do (shell, network, install scripts), typosquats, known-malicious versions. Run \`npx penthera@${version} deps\`.
 - Check AI coding tool config: MCP servers, hooks, permissions, skills and instruction files. Run \`npx penthera@${version} agents\` (add \`--home\` for the user-level config).
 - Check a running app they may test, such as a staging URL or localhost: headers, TLS, cookies, exposed files. Run \`npx penthera@${version} https://staging.example.com\`.
-- Check the basic security of a public site the user owns or may test, without installing anything: \`POST ${origin}/api/check\` with \`{"url": "example.com", "consent": true}\`. It loads only what a browser would, plus public DNS, and stores nothing. It returns a score and each check with evidence, a fix and a curl to verify it. Spec: [${origin}/openapi.json](${origin}/openapi.json).
+- Check the basic security of a public site the user owns or may test, without installing anything: \`POST ${origin}/api/check\` with \`{"url": "example.com", "consent": true}\`. It loads /robots.txt for the opt-out, then what a browser would, plus public DNS. It stores nothing about the check. It returns a score and each check with evidence, a fix and a curl to verify it. Spec: [${origin}/openapi.json](${origin}/openapi.json).
 
   \`"consent": true\` states that the user owns the site or is authorized to test it, and accepts the terms at [${origin}/terms](${origin}/terms). Ask the user before you send it; without it the API answers 400 \`consent_required\`. Sites whose robots.txt opts out of Penthera-QuickCheck are not checked.
 
@@ -256,9 +282,15 @@ Reach for it when the user wants one of these, on something they own or are auth
   curl -s ${origin}/api/check -H 'content-type: application/json' -d '{"url":"example.com","consent":true}'
   \`\`\`
 
-- Call it as tools from an agent: the MCP server, \`npx -y penthera@${version} mcp\`. Its tools are read-only and run no shell.
+- Call it as tools from an agent: the MCP server, \`npx -y penthera@${version} mcp\`. It runs on the user's machine over stdio. Manifest: [${origin}/server.json](${origin}/server.json). Its tools are read-only, read inside the project, apply no fixes and run no shell. \`scan_url\` is passive and reaches loopback or hosts the user lists with \`--allow-host\`. A redirect may also move within the target's registrable domain.
+- Teach a coding agent to run scans and explain them: the Agent Skill, \`npx skills add danoszz/penthera\`.
 
-Do not use it to find novel vulnerabilities, to test someone else's system, or in place of a human penetration test.
+What it does not do:
+
+- It finds known classes of problems. It does not find novel vulnerabilities or business-logic flaws. IDOR/BOLA results are heuristics a human must confirm. It does not replace a human penetration test.
+- It does not test someone else's system. Scan what the user owns or is authorized to test.
+- A model never decides a finding. Rules decide; opt-in AI mode lets a local model propose leads that the rules then check.
+- There is no hosted MCP endpoint. \`POST ${origin}/api/check\` is the one public HTTP API, and it is a passive check.
 `;
 }
 
@@ -336,7 +368,7 @@ Regression checks: on the project's bundled benchmark, precision ${v.BENCH_P} (9
 ## Limits
 
 - It finds known classes of problems, not novel ones. Opt-in AI mode lets a local model propose leads that the rules then check.
-- It does not find business-logic or authorization flaws yet. Authenticated preview scans are planned.
+- It does not find novel vulnerabilities or business-logic flaws. IDOR/BOLA results are heuristics a human must confirm. Authenticated preview scans are planned.
 - It will not find zero-days.
 - It does not replace a human penetration test. Use it before and between tests.
 - A public dataset is not your code. Accuracy on real projects is still being measured (experiment E1, pre-registered).
@@ -350,6 +382,8 @@ Details: ${origin}/docs/METHODOLOGY.md
 - ${origin}/benchmarks: the public benchmarks, every tool and every number
 - ${origin}/docs/index.md: the documentation index
 - ${origin}/openapi.json: the live check API
+- ${origin}/server.json: the MCP server manifest (a local stdio package)
+- ${origin}/contact: how to reach us
 - ${origin}/terms: the live check's terms
 - ${REPO}: source
 - ${NPM}: package
@@ -362,5 +396,6 @@ export function agentReadyFiles({ root, version, origin, values, pub = null }) {
   return {
     "index.md": homeMarkdown({ values, version, origin, pub }),
     "openapi.json": JSON.stringify(openApi({ version, origin, root }), null, 2) + "\n",
+    "server.json": readFileSync(join(root, "server.json"), "utf8"),
   };
 }

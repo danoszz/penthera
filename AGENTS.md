@@ -57,13 +57,13 @@ site/         penthera.org
 
 ## Using Penthera from an agent
 
-Pin the version. `latest` on npm is 2.1.1, with the MCP server, AI mode, library mode and the agent brief.
+Pin the version. `latest` on npm is 2.1.2, with the MCP server, AI mode, library mode and the agent brief.
 
 | Route | Command | Read |
 |---|---|---|
-| CLI | `npx penthera@2.1.1 --repo .` | [scan](docs/commands/scan.md) |
+| CLI | `npx penthera@2.1.2 --repo .` | [scan](docs/commands/scan.md) |
 | Agent Skill | `npx skills add danoszz/penthera` | [skill](docs/commands/skill.md) |
-| MCP server | `claude mcp add penthera -- npx -y penthera@2.1.1 mcp` | [mcp](docs/commands/mcp.md) |
+| MCP server | `claude mcp add penthera -- npx -y penthera@2.1.2 mcp` | [mcp](docs/commands/mcp.md) |
 
 The MCP tools are read-only, read only inside your project, never apply fixes
 and run no shell. `scan_url` is passive and reaches only loopback or hosts the

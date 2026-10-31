@@ -20,6 +20,17 @@
  */
 import { auditSecurityHeaders } from "../../lib/blackbox/headers.js";
 
+/** The share of weight that passed, under the caps. */
+export function scoreOf(checks) {
+  const total = checks.reduce((n, c) => n + c.weight, 0);
+  const got = checks.reduce((n, c) => n + (c.passed ? c.weight : 0), 0);
+  // A failed critical or high check caps the score, so a leaked key or a
+  // vulnerable library can never hide behind good headers.
+  const failed = checks.filter((c) => !c.passed);
+  const cap = failed.some((c) => c.severity === "critical") ? 40 : failed.some((c) => c.severity === "high") ? 69 : 100;
+  return Math.min(cap, Math.round((got / total) * 100));
+}
+
 export const CATEGORIES = {
   transport: "Connection",
   headers: "Browser protections",
@@ -180,13 +191,7 @@ export function grade(res, { now = Date.now(), extra = [], scope } = {}) {
 
   for (const c of extra) add(c);
 
-  const total = checks.reduce((n, c) => n + c.weight, 0);
-  const got = checks.reduce((n, c) => n + (c.passed ? c.weight : 0), 0);
-  // A failed critical or high check caps the score, so a leaked key or a
-  // vulnerable library can never hide behind good headers.
-  const failed = checks.filter((c) => !c.passed);
-  const cap = failed.some((c) => c.severity === "critical") ? 40 : failed.some((c) => c.severity === "high") ? 69 : 100;
-  const score = Math.min(cap, Math.round((got / total) * 100));
+  const score = scoreOf(checks);
   return {
     url,
     status: res.status,

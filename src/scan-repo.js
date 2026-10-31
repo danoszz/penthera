@@ -48,6 +48,7 @@ function findApiRoot(repoPath) {
  * @returns {object} Scan result with findings
  */
 export async function scanRepo(repoPath, opts = {}) {
+  if (!existsSync(repoPath)) throw new Error(`Path not found: ${repoPath}`);
   const progress = opts.onPhase || (() => {});
   const startTime = Date.now();
 

@@ -34,7 +34,7 @@ jobs:
         run: |
           mkdir -p reports
           set +e
-          npx --yes penthera@2.1.1 "$PENTEST_URL" \
+          npx --yes penthera@2.1.2 "$PENTEST_URL" \
             --profile standard \
             -o reports/scan.json \
             --sarif reports/scan.sarif

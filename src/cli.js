@@ -5,7 +5,7 @@
  */
 import { parseArgs } from "node:util";
 import { resolve, dirname } from "node:path";
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, existsSync, realpathSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { scanUrl } from "./scan-url.js";
 import { scanRepo } from "./scan-repo.js";
@@ -28,9 +28,10 @@ import { buildSbom } from "../lib/whitebox/sbom.js";
 import { buildCraReports, craTemplate, formatCraMarkdown, readCraInput } from "../lib/compliance/cra.js";
 import { emptyHistory, updateHistory, buildAuditLoop } from "../lib/audit-loop.js";
 import { rateSuppliers, parseSupplierList, formatSuppliersMarkdown } from "../lib/supply-chain.js";
-import { yellow } from "./cli/ansi.js";
+import { bold, dim, yellow } from "./cli/ansi.js";
 import { wantBrief, wantExitNote, briefReports } from "./cli/brief.js";
 import { buildBrief, formatBrief, NOT_PROVEN_NOTE } from "./report/brief.js";
+import { exitCodeOf } from "./report/exit.js";
 
 const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf-8"));
 
@@ -228,8 +229,6 @@ const HELP = `
     2  Scan failed (unreachable target, bad config, a tool the policy requires did not run)
 `;
 
-function bold(s) { return `\x1b[1m${s}\x1b[0m`; }
-function dim(s) { return `\x1b[2m${s}\x1b[0m`; }
 
 /** `penthera init ...`, or bare `penthera --yes` / `--dry-run`: the setup wizard. */
 function initArgs(argv) {
@@ -533,7 +532,7 @@ export async function run() {
 
   // `penthera agents [path]`: offline audit of skills, MCP servers, hooks, plugins.
   const agentsMode = positionals[0] === "agents";
-  const agentsRoot = agentsMode ? resolve(positionals[1] || ".") : null;
+  let agentsRoot = agentsMode ? resolve(positionals[1] || ".") : null;
   if (agentsMode && positionals.length > 2) {
     printError(`agents takes one path, got: ${positionals.slice(1).join(" ")}`);
     process.exit(2);
@@ -691,8 +690,17 @@ export async function run() {
         printError(`Path not found: ${agentsRoot}`);
         process.exit(2);
       }
-      const { scanAgents } = await import("../lib/agents/index.js");
-      results.push(await scanAgents(agentsRoot, { home: opts.home, pin: opts.pin, onPhase: scanOpts.onPhase }));
+      const { scanAgents, agentsTarget } = await import("../lib/agents/index.js");
+      const target = agentsTarget(agentsRoot);
+      if (!target) {
+        printError(`Not a folder or a SKILL.md file: ${agentsRoot}`);
+        process.exit(2);
+      }
+      // A folder the user named can be a skill. The working folder is a project
+      // scan, spelled `.` or not (the Action and CI pass $GITHUB_WORKSPACE).
+      const skillTarget = positionals[1] !== undefined && (target !== agentsRoot || realpathSync(target) !== realpathSync(process.cwd()));
+      agentsRoot = target;
+      results.push(await scanAgents(agentsRoot, { home: opts.home, pin: opts.pin, onPhase: scanOpts.onPhase, skillTarget }));
     }
 
     if (opts.machine) {
@@ -1000,12 +1008,8 @@ export async function run() {
 
   // Exit code: 1 if critical or high findings, other tools' included unless
   // the policy says giants.failOn: never; 2 if a tool the policy requires did not run.
-  const { giantsGate } = await import("../lib/giants/index.js");
-  const hasSevere = merged.findings.some(
-    (f) => f.severity === "critical" || f.severity === "high",
-  ) || giantsGate(merged);
   if (merged.giants?.requiredNotRun?.length) printError(`The policy file requires ${merged.giants.requiredNotRun.join(", ")}, which did not run (see Coverage by area).`);
-  const code = merged.giants?.requiredNotRun?.length ? 2 : hasSevere ? 1 : 0;
+  const code = exitCodeOf(merged);
   if (wantExitNote({ code, url, repo, opts, custom })) {
     process.stderr.write(`  No critical or high rule fired. ${NOT_PROVEN_NOTE}\n\n`);
   }

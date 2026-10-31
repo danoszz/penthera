@@ -9,9 +9,19 @@
 | Conflict of interest | The PI maintains Penthera, and the instrument is its live check. The study serves Penthera's interest in showing why such checks matter. See § 8 |
 | Data collected before registration | The E20 results of 30 Oct 2026 are known, and every prediction below was written after seeing them. The new cohorts are unseen. The new instrument is tested on loopback only |
 | Independent review | AI review of the E20 draft (figures, statistics), 30 Oct 2026. No human review |
-| Vantage point | Rented server: Hetzner Cloud, Falkenstein, `research.penthera.org`, 2.31.141.178, IPv4 only. The address is published. The maintainer's home connection is not used |
+| Vantage point | Pass 1: rented server: Hetzner Cloud, Falkenstein, `research.penthera.org`, 2.31.141.178, IPv4 only. Pass 2: the Source address row, Amendment 2. The address is published. The maintainer's home connection is not used |
 | Runs | Pass 1 no earlier than 12 hours after the updated study page is live, pass 2 seven days later |
 | Amendment | **One pass only.** Amendment 1 (30 Oct 2026, before any data) replaces every mention of pass 2 below. See the end of this file |
+| Amendment 2 | **Adopted.** 31 Oct 2026, effective through the commit that merges this row to `main`. E20-R2, a prospective corrected remeasurement after the pass 1 data was seen. See the end of this file. The runner refuses a pilot or pass 2 unless this row says Adopted |
+| Source address | `178.104.243.225` |
+| Prior opt-outs SHA-256 | `e25d88b24aa1d4122cd78e65af9c8febfd9f7309959ae1ae89446ccc90b07126` (`prior-optouts.txt`, 95 sites) |
+| Pass 1 raw SHA-256 | `ef791bee6c9598880af6da7f11db023e96e6d75b219670e45317ee9575e453dd` |
+| E20 Tranco raw SHA-256 | `09242bca6880b4a5dd9be57947806fd08105a7afa3499c0a4e21ced38dd60469` |
+| E20 YC raw SHA-256 | `b5a98cc266b232e63eee8864198dc961ffe21133fdbf43a51069acf2fcaf0391` |
+| Industry map SHA-256 | `78df4910d953379f21d935aeb3ef658d85cbef036539e1a31362c9ad7e26e075` |
+| E20 exclusion file SHA-256 | `246127f639968afc906d59f155f6a993982f3a33c0655718234955319ebe4c34` |
+| Frozen classifier SHA-256 | `7023106f7bd73c1e4122d80e9479f63a4a04091f1426327be70621951fe71d3b` (`bench/front-door/classify.mjs`) |
+| Public Suffix List SHA-256 | `d3e6243b51695327984abb3e2a5aa7077096867f75121e031e6a5a3840ca8bcd` (commit `9dfbe81931367b3f0af21035c36ae7eeb830dd88`, fetched 30 Oct 2026, private suffixes included) |
 | Registration commit | The commit that merges this file to `main` |
 | T1k list SHA-256 | `d670a3c1910fe7baa4883dcb8320b1ec99d7d29f9d22954b9288ae678540674e` (`tranco-ZJ8PG-top1000.csv`) |
 | YC-new list SHA-256 | `13df01eb681993205e89c00322db972e5137d3c4a95ec982d40a2552f415dd7f` (`yc-fall2026-summer2026-2026-10-29.csv`) |
@@ -373,3 +383,396 @@ robots.txt opt-out applied as registered, and removal stays open at any time. Th
 was decided before any E20-R data existed, and it does not change a check, a list or
 an analysis. The run stays a registered, one-pass snapshot, and this deviation is
 reported with the results.
+
+## Amendment 2: E20-R2 (adopted 31 Oct 2026, after the pass 1 data was seen)
+
+**Status: adopted.** 31 October 2026. No request had been sent under this amendment at
+adoption. It takes effect through the commit that merges this line and the Amendment 2 row
+to `main`. The runner reads both. It registers
+**E20-R2**, a second run under this file. It overrides every section above where they
+differ.
+
+Amendment 1 said a second pass could follow under its own registration. This is that
+registration. It was written with the pass 1 results in hand, and nothing in it is a
+blind prediction.
+
+**Status of each run.** Pass 1 is a pilot and instrument audit, not a confirmatory study.
+Pass 2 is a prospective corrected remeasurement of claims already seen. It
+is not a blind or independent confirmation. The study is a low-interaction active
+measurement: it sends requests to sites, so this file and the page no longer call it
+passive.
+
+### Why
+
+A line-by-line check of this protocol against the code, an outside review, a code review
+and a validity audit found faults that only a new run can fix:
+
+- 2xx bodies were not stored, so `page` and `challenge` on 2xx responses could not be
+  validated. 3,495 of 5,882 graded responses have no stored body.
+- The classifier missed Cloudflare codes representing 66.0% of enhanced-rule refusal
+  matches: 1,388 of 2,102. Code 1010 alone is 65.7%. Two signatures also fire on normal
+  pages.
+- DNS ran only after HTTP worked, so 1,149 of 7,031 listed sites have no DNS result. Of
+  those, 755 failed to connect and are eligible. Pass 2 recovers those. The other 394
+  were excluded or opted out, and stay out. DNS also read the final host, which for 379
+  of 5,882 graded responses is another organization.
+- Robots rules were read at the first origin only, and an unreadable robots.txt meant
+  "go on", which RFC 9309 does not allow.
+- A redirect could reach a host on the exclusion list. Two graded sites ended on one.
+- The deployed commit was not recorded. Request counts and bytes were not kept.
+- 8 seconds per site lost slow sites: pass 1 has 199 timeouts and 17 budget stops.
+
+### Design rule: no evasion
+
+The study measures what a declared research client receives. A refusal is a result, not
+an obstacle. So the run keeps the same honest User-Agent, and uses no browser
+impersonation, no TLS fingerprint changes, no residential or rotating addresses and no
+challenge solving, and it does not retry after a block. Any change to this rule needs a
+new registration.
+
+Pass 2 is a scheduled repeat, sent whatever a site answered in pass 1. It is not a retry
+of a block. Sites that refused in pass 1 are visited once more on that basis.
+
+### What changes in the instrument
+
+1. **Source.** One address, IPv4 only, recorded in the Source address row below, on
+   `research.penthera.org`, a rented server. The pass 1 server is deleted, so the address
+   differs. Any difference between the runs can come from the address, the date or the
+   instrument. The runner refuses unless this machine's only public IPv4 is that address.
+2. **Time.** The site budget rises from 8 to 15 seconds, shared with any `www.` attempt, and
+   the hard cap from 20 to 30 seconds. Per-request limits stay 6 seconds for the homepage and
+   4 seconds for robots.txt and security.txt. The request rate stays 4 workers with a 1-second
+   pause. Each visit runs in its own thread, which is ended at the hard cap, because a page
+   can hold a regex longer than any timer on that thread could fire.
+3. **No app page.** Pass 2 never sends the app or login page request, for any site. No claim
+   uses it. It is a change from § 4. The homepage-only list stays hashed and checked: a run
+   is refused if an entry matches no listed site.
+4. **Robots at every origin (RFC 9309).** robots.txt is read at each new origin, up to 5
+   redirects and 500 KiB, and the path plus search of each hop is checked against it,
+   with a matcher that uses no regex. A 2xx is parsed. A 4xx means no rules. A 5xx, or a 429, which the RFC counts as 4xx,
+   stops the visit as `robots_unavailable`. So do a spent budget, a 3xx with no Location,
+   a compressed file, a
+   file cut off at the cap, and a file with NUL bytes or a UTF-16 mark, because none of
+   them can be read as rules. CR, LF and CRLF all end a line, a `User-agent` name ends at a
+   slash or a space, and rule and path compare in one percent-encoded form (RFC 9309
+   § 2.2.2). A malformed escape stays literal, so a path can't dodge a rule by it, and a
+   Disallow also matches on the decoded form, so a reserved character can't either. A file that can't be reached ends the visit with the outcome the homepage would have given: `not_found`,
+   `timeout`, `unreachable`, `tls_invalid`, `tls_handshake` or `not_public`. Pass 1 went on in all these
+   cases, and 70 of its graded sites had a 5xx or no robots answer, so some sites drop out,
+   and the count is reported.
+5. **Every hop is checked.** A redirect into an excluded domain stops as `exclusion_redirect`
+   before any request reaches it, for robots.txt redirects too. A redirect to a literal IP
+   address stops, IPv4 or IPv6, so one published address accounts for every request. A hop back into
+   an origin whose robots.txt failed stops, so a failed request isn't repeated. A redirect
+   into another organization that opted out stops as `redirect_opted_out`, or as
+   `redirect_disallow_path` when its rules cover that path, and the listed site's DNS is
+   still read, and it stays eligible. Each record lists the hosts it requested.
+6. **Fallbacks.** A name that doesn't resolve gets one try at `www.`, and a host where the
+   HTTPS connection is refused or unreachable, or fails its certificate or handshake, gets
+   one try over HTTP. Unlike pass 1, these run only when nothing from the listed origin has
+   answered. A reset is not a fallback case, because it may be a refusal, and neither is a
+   timeout, as in pass 1. § 5's "no retries" meant the same request isn't repeated. Pass 1
+   also ran both fallbacks, and neither was stated before.
+7. **TLS.** `tls_invalid` stays its own outcome, reported apart from other failures, with
+   the reason code, also when plain HTTP then fails. A failed handshake is `tls_handshake`,
+   except an alert that denies access, which is a refusal and gets no fallback.
+   When HTTP answered, the record keeps why HTTPS failed. Each error keeps the system's
+   code, so a resolver failure can be told from a name that doesn't exist.
+8. **Hosts.** Each record stores listed host, final host, listed organization and final
+   organization apart, with a redirect class: none, same organization, other organization. The
+   same list decides whether two names are one site: `www.example.com` is `example.com`, and
+   `www.github.io` isn't `github.io`.
+   Organizations come from a pinned Public Suffix List, private suffixes included, vendored
+   under `bench/front-door/psl/` for the study only. It is used for organization domains,
+   DNS domain choice, clustering, deduplication and redirect classes. The grader keeps its
+   own parser, so the registered reading is unchanged. In pass 1 the list changes 19 of
+   7,031 listed hosts and 10 of 5,882 final hosts, 6 of them mail lookups. No decision
+   changes, and intervals move by at most 0.5 points.
+9. **DNS apart from HTTP.** SPF, DMARC, CAA, MX and NS are read outside the visit's thread and
+   clock, on the listed name, including for sites that time out, don't resolve, fail TLS or
+   refuse the client. When a redirect moved to another host, all five are read for the final
+   host too, and one organization asks each name once. The
+   grader's DNS checks run there too, and join the score as they did in pass 1. **DNS isn't
+   read** for a site on the exclusion list, removed, dropped as a pilot site or an earlier
+   opt-out, a `NOT_A_HOMEPAGE` host, or a site whose robots.txt opts out or disallows the
+   homepage. **It is read** when the stop was ours or someone else's: `robots_unavailable`,
+   `exclusion_redirect`, `ipv6_literal`, `ipv4_literal`, `redirect_opted_out` and `redirect_disallow_path`.
+   Each query keeps its exact
+   name, type and result, for every CAA ancestor too: an answer, NXDOMAIN, NODATA or a resolver
+   failure. A resolver failure is unknown, never a failed check.
+10. **Mail, frozen here.**
+    - *SPF record present:* exactly one `v=spf1` record on the organization domain. Includes,
+      redirects and lookup limits are not validated. The record is stored up to 2,048
+      characters.
+    - *DMARC:* a valid record is the single `v=DMARC1` record with a known `p`. We follow
+      RFC 7489: the host's record, then the organization domain's, where `sp` applies. RFC
+      9989 replaced RFC 7489 and is said to drop `pct` and use a tree walk. We did not read
+      it for this rule, and don't follow it, so that pass 2 stays comparable with pass 1.
+      Most records still carry the older tags.
+    - *Declared:* `p=quarantine` or `p=reject`. *Effective enforcement:* the applicable
+      policy is `quarantine` or `reject`, and `pct` is above 0. `pct=0` is never enforcing.
+    - `quarantine` counts as enforcement in the decision. `p=reject` alone is reported beside
+      it, because in pass 1 it flips C7 and C10.
+    - `pct` under 100 and `sp=none` are reported apart. Neither fails a domain.
+    - The registered measure, SPF with a restrictive `all` plus `p` read alone, is reported
+      beside each result.
+11. **CAA.** Read for the listed hostname and the final hostname, climbing the parent tree as
+    RFC 8659 says. The registered reading stops at the registrable domain and stays beside it.
+12. **Classifier.** Rules are in `bench/front-door/classify.mjs`, frozen by the hash below.
+    - Cloudflare `error code: 1xxx` is `block`, except 1001, 1016, 1033 and 1101, which are
+      DNS, tunnel and Worker errors.
+    - Block lines, error lines and scripts that also sit on normal pages count only on status
+      400 or above, or in a body under 8,192 characters. A long page may quote them.
+    - A block page wins over a script it carries. CloudFront's refusal lines are `block`. An
+      empty 401, 403, 406 or 429 at an edge is `block`. DDoS-Guard is a new challenge.
+    - A bare 403 is `block` under its own rule, `unrecognized-403`, so a view can drop it.
+    - The fallback classes are renamed `candidate-page` and `unrecognized-error-response`,
+      because neither is proof of what the response was.
+    - **These rules were written after reading the pass 1 labels.** Agreement with them on
+      that sample is in-sample and says little. The rules for 2xx bodies could not be tested
+      on it at all.
+    - Each record keeps the label from the original rules beside the corrected one, and every
+      signature of every rule set as a boolean, so a label can be replayed.
+13. **Evidence.** A 2xx homepage keeps its title, up to 4,096 characters of visible text,
+    the first 300 characters of `noscript`, counts of scripts, forms and links, and a meta
+    refresh flag, with no markup. This changes § 4.1, which said 2xx bodies are never stored.
+    Robots.txt and security.txt get the body hash and the non-2xx excerpt § 4.1 promised.
+    Every stored text is scrubbed of IP addresses, emails in the forms we know, form fields,
+    query strings, fragments, tokens, identifiers and long numbers, before it is cut. Cookie
+    and header names that look like tokens are dropped. SPF records keep their addresses,
+    which are mail servers named on purpose. Names and street addresses in page text are not
+    scrubbed. That is why item 16 exists. A bracketed `at` takes both neighbouring words with it, and
+    a bare `at` before something with a dot is read as an address, so some ordinary text is lost.
+    Forms the scrub can't see are listed in `bench/front-door/KNOWN-LIMITS.md`.
+14. **Header values.** For each homepage: CSP directive names, a script-control flag and an
+    open-sources flag, computed on the full header, not the grader's 160 characters. "CSP
+    controls scripts" means `script-src`, `script-src-elem` or `default-src` is present. It
+    is reported next to "CSP present", for C1, C5, C9 and C11.
+15. **Run record.** Each record counts requests and redirects. Its byte count is a lower bound: a
+    redirect's body counts as far as it arrives while the visit goes on, and a response cut off at
+    the hard cap as far as it was reported. Bytes are observed response-body bytes. They exclude
+    request bytes, headers, TLS overhead and DNS. A manifest
+    holds the commit, whether the tree is clean, the protocol,
+    amendment and study page hashes, lockfile, classifier, study code and runtime hashes,
+    Node and OS, the suffix list's version and hash, the complete configuration, list and
+    removal hashes, the seed and the times, and at the end the raw and aggregate hashes and
+    totals. The code hash covers every file the study imports, and the data files it reads.
+    All of these, lists included, are read again at the end, and the manifest names anything
+    that changed. A run with a change ends in a stop. The runner refuses a dirty tree,
+    any commit but the current tip of main on the remote, read at the start, a file git hides
+    from `status`, a placeholder in this file or the page, a page that doesn't name the
+    address, and any classifier, suffix list or prior opt-out list that doesn't match its
+    frozen hash. Pass 2 and each pilot round have one fixed folder, so a second start can't
+    revisit sites. **Limits:** a fresh clone has no such folder, so that lock is one
+    machine's, and the rule behind it is the maintainer's. The address check reads this
+    machine's interfaces. It can't see NAT or a proxy. It would need a request to an echo
+    service, which this study doesn't send. The legacy `run.mjs` refuses every run off
+    loopback.
+16. **Excerpts are deleted.** After the audit draw, `validation-sample.mjs` removes title, text and
+    `noscript` from every unsampled normal page for good. Error excerpts stay until the 12-month
+    deletion. From every pilot record, and from a pass that stopped, it removes all of these. Hashes,
+    counts and flags stay. Pruning writes a second manifest with the old and new
+    raw hashes, so the run's own manifest stays true of what was recorded.
+17. **Skips.** Sites that opted out in pass 1, removal requests and pilot sites are skipped, and
+    each is counted in its own category.
+
+### Primary endpoints and estimands
+
+These order the reporting. They add no test.
+
+- **Primary refusal endpoint.** Among graded responses in pass 2, the share with a `challenge`
+  or `block` label backed by a signature, so without `unrecognized-403`, with a cluster
+  bootstrap 95% interval. All refusals and the original rules' share stand beside it. It is a
+  rule-match rate, not a measure of how often a site refuses visitors. It describes one
+  declared client, and is descriptive.
+- **Primary HTTP endpoint.** C1, CSP present, with "CSP controls scripts" beside it.
+- **Primary DNS endpoint.** C7, on effective enforcement.
+- **HTTP estimands.** S: what the client received on every graded response, on the final host.
+  R: the same among `candidate-page` responses.
+- **DNS estimand.** The listed domain, for every eligible site whose domain exists, clustered on
+  the listed organization. The graded-only reading on the final host is reported beside it, and
+  decides nothing.
+
+### Claims and correction
+
+- **C1 to C11 are the inferential family**, with their registered directions, on pass 2.
+  Bonferroni over 11: 99.55% two-sided, 20,000 resamples, seed 2020. This replaces the 15 of § 7.
+- **C12 to C15 are descriptive reproducibility.** They get intervals and no decision. C12 and C13
+  use the original labels, and stay a difference between runs. C14 and C15 compare pass 1 and pass
+  2 on all sites graded in both, the original labels for C15, with 2,000 resamples. Their lower bound
+  is the 2.5th percentile of the percentile bootstrap, the lower limit of a two-sided 95% interval. Time, address and limits differ between the passes, so agreement says less than § 6 hoped.
+- **Margin.** The ±10 points is kept because it was registered, not because it is substantively
+  justified.
+- **Common-support floor.** A difference needs at least 20 organizations with a judged response on
+  each side, in each view it uses. Below that it is "not estimable". Standardization drops an edge
+  stratum under that floor and names it.
+- **Reading an interval.** Statistical direction and practical equivalence are reported as separate
+  outcomes for each view, next to the registered decision. Newcombe intervals and exact tests stand
+  beside the bootstrap. An organization in both groups is resampled as one, which keeps the covariance.
+- **Missingness.** Each HTTP claim reports coverage per list, and worst-case bounds that count every
+  eligible site without a judged value either way. Our own stops stay eligible; an owner's opt-out
+  and our exclusions don't. C3 and C4 are edge strata, which only a graded response shows, so their
+  bounds cover graded sites. HTTP claims make no statement about ungraded sites, and nothing here
+  can say what a browser would have seen. DNS values with a resolver failure are unknown, are left
+  out, and are counted.
+- **Registered inputs.** Pass 1's raw file, both E20 raw files, the industry map and the E20
+  exclusion file stay private and local. Their hashes are frozen above, and `analyze-r.mjs` refuses
+  any other file.
+- **Secondary analyses, narrowed.** This replaces the secondary lists of § 6 and § 7. Built: the six
+  secondary cohorts against YC-new and T1k on every check, HTTP checks on
+  graded responses, and SPF, DMARC and CAA from the DNS records of every site whose domain exists;
+  checks by site trait and by industry, on graded responses, for `https+hsts`, `csp`, `framing`,
+  `nosniff`, `referrer`, `permissions`, `spf+dmarc`, `caa` and `security-txt`; the challenge share by
+  edge, with a Wilson 95% interval; MX and NS counts in the aggregates. Their intervals are labeled
+  naive row-level, with no clustering: Newcombe for differences, Wilson for one share. They
+  corroborate nothing. Sub-measure B isn't run, because Amendment 2 has no app page.
+- **Post hoc, if reported at all, and marked so.** Providers as an explanation of the DMARC and CAA
+  gaps, the trend across YC batches, origin headers on robots.txt and security.txt responses of
+  challenged sites, and cookies on challenge pages.
+- **Intervals.** Public shares carry descriptive 95% intervals. Claims C1 to C11 are decided on
+  99.55% intervals.
+- **Analysis.** `analyze-r.mjs` holds the claims, the bounds and the standardization on both
+  views, C3 and C4 included, the secondary cohorts, and reports traits per cohort. C12 and C13 pair with their own E20 file. In it, `--pass1`
+  takes pass 2 and `--pass2` takes pass 1.
+
+### Single-human audit with model comparison
+
+One human labeler and the AI agent, as in pass 1. This is a single-human audit with model comparison,
+never independent validation. **It misses the outside reviewer's requirement of two human labelers and
+a third adjudicator.** The figures are reported as checked by one person.
+
+- **Strata**, drawn from pass 2 with seed 2021 by `validation-sample.mjs`, with no pilot sites:
+  `candidate-page` 150, `challenge` 50, signature-backed `block` 50, `unrecognized-403` 30,
+  `unrecognized-error-response` 20. All 300 rows, or every row in a smaller stratum.
+- **Blinding.** Rows are shuffled, and the sheet has no label, stratum or host field. Page text
+  can still name a site, and can't be blinded from that.
+- **`unsure`.** It stays a recorded answer and is never forced. Unsure rows are left out of kappa,
+  precision and recall, and counted. Weights are taken over the answered rows of each stratum. A
+  sensitivity keeps `unsure` as an answer no rule gives, so each one is a disagreement.
+- **Labels.** Scoring takes the human's and the agent's file, reports where they differ, and refuses
+  a missing, duplicate, unknown or invalid row.
+- **Disagreement.** The agent never settles a label. The human's label stands, and every
+  disagreement is counted.
+- **`unsure` between the human and the model.** Each one's total is reported apart. The main kappa
+  uses rows where neither is unsure, and a sensitivity counts any `unsure` as a disagreement.
+  Both state their denominators.
+- **Header checks.** This amendment removes the inherited requirement that labelers judge whether
+  the grader's outcome on three header checks matches the stored headers. Those outcomes are fixed
+  rules reading the same stored values, so a label would repeat a deterministic read and say little
+  about the study's real risk, the response class. The audit covers the class alone. The grader's
+  header outcomes rest on its tests, and no human audits them.
+- **`body-unavailable`.** A compressed answer's body isn't read. It takes this label, not
+  `candidate-page`, so it counts in S and not in R, and it isn't sampled.
+- **Weighted metrics.** Each row carries stratum size over rows drawn. Precision and recall use
+  these weights, with intervals from a stratified bootstrap, seed 2021, 20,000 resamples. Kappa
+  is reported unweighted. `validation-sample.mjs` draws the sample, writes the blind sheet and
+  scores the labels.
+- **Who sees evidence.** The maintainer, and one labeler under a written note. The note says what
+  the sheet holds, that it stays private, and that copies are deleted after labeling. An AI agent,
+  a hosted model, also reads the sampled rows, so they leave the machine for that provider, and the
+  12-month deletion can't reach what that provider keeps.
+
+### Pilot
+
+- Exactly 50 sites from the claim lists, seed 2026, at the same rate and under the same rules. Two
+  live rounds at most. Each round has a higher number than the last, and the rounds' order is the
+  order they started.
+- Pilot sites are dropped for good from pass 2 visits and analyses, and counted.
+- **Stop rules.** The run does not go on while any of these holds, and `pilot-report.mjs` prints
+  them: a privacy scrub miss, an internal error, under 90% of 2xx responses with an excerpt, an
+  eligible site without a DNS read, any site over 20 requests, any hop to a host on any of the
+  four skip lists, under half of eligible sites graded, over 20% of eligible sites with a
+  resolver failure on any exact query of the listed or final name, over 20% of SPF or DMARC reads
+  unanswered, no eligible site, or under 30 eligible sites, 25 graded sites or 10 2xx responses. The
+  report also gives coverage per claim cohort. Scrub misses, internal errors, excluded hops and
+  request-cap violations have zero tolerance.
+  Also stop on a complaint from a site owner or the provider, or if the source address isn't the
+  registered one. A stop file is checked between sites, and so is the source address, which is
+  read again at the end.
+- **Manual decision.** A person reads the report and records go or no-go before pass 2, with
+  `pilot-report.mjs --decide`, in `pilot-decision.json`: the decision, the report and seal hashes,
+  the reviewer and the time. Pass 2 needs `go` for the final round. For each claim cohort the report
+  gives selected, eligible, graded, 2xx and DNS-complete sites and each class. The automatic rule
+  rejects a cohort with no graded site or no complete DNS read, so it detects only total cohort
+  failure. The reviewer must also reject severe attrition in a cohort.
+- **Gate.** After the pilot, `pilot-report.mjs --seal` writes its result, bound to the pilot's manifest
+  and raw hash, and to the exclusion, removal, prior opt-out and earlier pilot lists that run used. Then
+  `validation-sample.mjs prune` deletes its text. A round with a finished manifest, stopped or not,
+  is sealed and then pruned. A hard kill leaves no finished manifest and is only pruned. Its sites
+  go on the dropped list either way. Pass 2 refuses unless the last round passed under the
+  code, protocol, suffix list and lists in force, every finished round has a seal that matches its own
+  hash and its stored report, every round proves its text is gone, and the rounds on disk match an
+  append-only log kept outside the results folder. After a failed round, the next needs changed code or a changed protocol, or a
+  recorded explanation. The pass 2 manifest records each round's manifest and seal hashes.
+  `npm run e20r:acceptance` injects each stop condition on loopback and shows pass 2 refused through
+  the run's own command. Labels come after pass 2, so for them it shows that scoring refuses. No pilot
+  round can start once pass 2 has. A removal list over 5% of the sites is refused.
+- **Analysis gate.** `analyze-r.mjs` and the audit draw refuse any run that didn't finish, stopped,
+  changed under itself or doesn't match its raw hash. So a stopped pass 2 can't decide a claim.
+  Analysis reads only the `raw.jsonl` the gate checked. Both also refuse without a clean privacy
+  report: `pilot-report.mjs --privacy` runs the pilot's scan over the headers, cookies, DNS, checks
+  and excerpts of the finished pass, before the draw.
+- **Immutability.** At the end the runner rehashes the code, protocol and lists, the exclusion,
+  homepage-only, removal, prior opt-out and pilot-dropped files, and reads the source address. It
+  keeps the git state from the start and the end and compares them.
+- **Deletion's limit.** Pruning covers the raw file in the run's folder. It can't reach a copy made
+  before it ran, so none is made, and deleted text can't be audited later.
+- **A failed privacy report on pass 2.** The run stops, and a person reviews the flagged fields
+  first, on the server, printing them to no shared place, so a false fire doesn't cost the run. A
+  confirmed false fire is recorded with a note and reported as a deviation. A real miss goes to
+  purge.
+- **Purge.** `validation-sample.mjs purge` deletes the whole per-site raw file, the audit sheet and
+  the key, with no field-level cleaning. It then checks they are gone, and only then writes a proof
+  with the original hash and the run's disposition, by atomic rename. It refuses without `--confirm`
+  and the first 12 characters of the raw hash. Every reader of a proof checks its kind, manifest,
+  raw hash, disposition, and that all those files are absent. A purged run decides nothing.
+- **Privacy-failed rounds.** `prune` refuses a run that stores a privacy miss, because it can't clear
+  one outside the excerpts. Pass 2 refuses a pilot round with a miss unless it has a verified purge
+  or a recorded human-reviewed false fire.
+- **Signals.** SIGINT or SIGTERM ends a run between sites, with a manifest, as a partial run. Every
+  exit other than success is followed by `validation-sample.mjs prune`, which reads the file back
+  to prove the text is gone. A kill leaves no end manifest and takes the same prune. A stop that
+  lands during the last site still makes the run partial. The final manifest is written to a temp
+  file and renamed. The semantic boundary is the last stop check, just before that rename, and
+  nothing yields between them. A signal handled by that check makes the run partial. Any later
+  signal is post-run and changes nothing.
+- **An interrupted pilot.** Its sites count as used, by the list hash its manifest recorded at the
+  start. Its text is deleted, and the next round runs on other sites.
+- **An interrupted pass 2.** It isn't resumed or restarted, because a restart would visit sites
+  twice. What ran is reported as a partial run, with its coverage, and it decides no claim. A
+  new run needs a new registration.
+- **A stop in flight.** Pass 2 watches itself: a privacy scrub miss in page or error text stops it at
+  once, and so does a share of resolver failures over 20% across its last 200 sites. It reads no SPF
+  record for this. It then counts as interrupted, and all its text is deleted.
+- **A pilot-driven rule change.** Update this amendment, re-freeze the hashes, and rerun the pilot
+  as the next round, on other sites. Those sites leave pass 2 too. `--pilot-dropped` must hold
+  exactly the sites of every finished round, checked against each manifest's hash.
+- **No rule changes after pass 2 starts.** The runner checks the frozen classifier hash at the
+  start, and the manifest records that it held at the end. A complaint during pass 2 stops the run
+  the same way, and what ran is reported.
+
+### Deviations and limits, stated plainly
+
+- **No waiting period.** The run follows as soon as this amendment and the study page are live.
+  This departs from the 12 hours of § 5, and owners get almost no notice. Notice means the public
+  study page and this amendment. No email goes to site owners.
+- **The seven-day spacing of § 5 is not kept.**
+- **Outside review.** An outside reviewer gave a technical go on 31 October 2026. That is not an
+  ethics endorsement.
+- **No independent human ethics board reviewed this study.** AI and external technical reviews have
+  occurred.
+- **Provider notice.** One advance notice was sent on 30 October 2026, naming the first server. It
+  wasn't repeated for the new address, by the maintainer's decision.
+- **Notice page, changing § 8.** § 8 promised a notice page at `research.penthera.org`. The server's
+  firewall opens port 22 only, so that page can't be served, and it was not served in pass 1. Owners
+  reach the study through the User-Agent's URL and reverse DNS.
+- **One human labeler**, as above.
+- Pass 2 sees most sites a second time, and T1k and YC-new a third.
+- The new rules were fitted on pass 1, and pass 2 is the first data they have not seen.
+- Coverage still depends on who answers this client. No part of this design can answer what a
+  browser would have received.
+- `unrecognized-403` is a label without vendor evidence.
+- A compressed page body isn't read, and takes the label `body-unavailable`: 23 responses in pass 1.
+- `platformOf` now reads Akamai's other headers as the classifier does, so a few pass 1 and pass 2
+  strata for C3 and C4 can differ for that reason.
+- SPF semantics and DMARC reporting are not validated.

@@ -10,6 +10,7 @@ import { formatAuditLoopMarkdown } from "../../lib/audit-loop.js";
 import { referencesFor, formatSourcesMarkdown } from "../../lib/references.js";
 import { formatDepsMarkdown } from "../../lib/deps/report.js";
 import { REASONS } from "../../lib/coverage.js";
+import { exitNote } from "./exit.js";
 import { mdInline } from "./md-escape.js";
 import { footerLines } from "./footer.js";
 import { giantsMarkdown, foundByText } from "./giants.js";
@@ -77,8 +78,12 @@ export function formatMarkdownReport(result, opts = {}) {
   lines.push("");
 
   const total = findings.length;
-  if (total === 0) {
-    lines.push("**No security findings detected.**");
+  const note = exitNote(result);
+  if (total === 0 && !note && result.agents && result.agents.grade == null) {
+    lines.push("**Nothing to assess: no agent config was read. This is not a clean result.**");
+    lines.push("");
+  } else if (total === 0) {
+    lines.push(note ? `**${mdInline(note)}**` : "**No security findings detected.**");
     lines.push("");
   } else {
     lines.push(
@@ -87,6 +92,7 @@ export function formatMarkdownReport(result, opts = {}) {
       `${counts.low} low · ${counts.info} info`,
     );
     lines.push("");
+    if (note) lines.push(`**${mdInline(note)}**`, "");
 
     if (counts.critical > 0 || counts.high > 0) {
       lines.push("> **Action required**, critical or high severity issues should be fixed before production deployment.");

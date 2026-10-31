@@ -13,6 +13,8 @@
     {"source": "/research/e20", "destination": "/research-e20", "permanent": true}
   ],
   "rewrites": [
+    {"source": "/api", "destination": "/api/no-route"},
+    {"source": "/api/(.*)", "destination": "/api/no-route"},
     {"source": "/(.*)", "has": [{"type": "header", "key": "accept", "value": "(.*)text/markdown(.*)"}], "destination": "/api/not-found"}
   ],
   "headers": [
@@ -36,7 +38,7 @@
       ]
     },
     {
-      "source": "/openapi\\.json",
+      "source": "/(openapi|server)\\.json",
       "headers": [{ "key": "Content-Type", "value": "application/json; charset=utf-8" }]
     },
     {

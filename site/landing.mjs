@@ -30,7 +30,8 @@ const WAITLIST_HTML = `<p class="land-cta"><a class="btn" data-variant="default"
 // `cta: contact` in the front matter: a mailto about a study (site/pages/research-e20.md).
 const CONTACT_MAIL = "daan@penthera.org";
 export const contactHref = (p) => `mailto:${CONTACT_MAIL}?subject=${encodeURIComponent(p.subject || p.h1)}`;
-const contactHtml = (p) => `<p class="land-cta"><a class="btn" data-variant="default" href="${esc(contactHref(p))}">Email the study</a><span>Opens an email to ${CONTACT_MAIL}. Nothing is stored on penthera.org.</span></p>`;
+const contactLabel = (p) => p.label || "Email the study";
+const contactHtml = (p) => `<p class="land-cta"><a class="btn" data-variant="default" href="${esc(contactHref(p))}">${esc(contactLabel(p))}</a><span>Opens an email to ${CONTACT_MAIL}. Nothing is stored on penthera.org.</span></p>`;
 const ctaHtml = (p) => (p.cta === "waitlist" ? WAITLIST_HTML : p.cta === "contact" ? contactHtml(p) : CTA_HTML);
 
 /** Parse one page: front matter, the H1 and the body. Throws on a missing field. */
@@ -60,7 +61,7 @@ export function landingPages(site) {
 /** One page as Markdown, for agents: the CTA as a link, numbers filled in. */
 export function landingMarkdown(p, { origin, values }) {
   const cta = p.cta === "waitlist" ? `[Join the waitlist](${WAITLIST_HREF})`
-    : p.cta === "contact" ? `[Email the study](${contactHref(p)})`
+    : p.cta === "contact" ? `[${contactLabel(p)}](${contactHref(p)})`
     : `[Check your site on penthera.org](${origin}/#scan)`;
   const body = p.body.replaceAll("{{CTA}}", cta)
     .replace(/\]\(\/(?!\/)/g, `](${origin}/`);
@@ -87,7 +88,7 @@ export function landingHtml(p, { origin, values, styles = "/styles.css", theme =
   <title>${esc(p.title)} · Penthera</title>
   <meta name="description" content="${esc(p.description)}">
   <meta name="color-scheme" content="dark light">
-  <link rel="canonical" href="${url}">
+${p.unlisted ? '  <meta name="robots" content="noindex, nofollow">\n' : ""}  <link rel="canonical" href="${url}">
   <link rel="alternate" type="text/markdown" href="/${p.slug}.md">
   <meta property="og:site_name" content="Penthera">
   <meta property="og:title" content="${esc(p.h1)}">

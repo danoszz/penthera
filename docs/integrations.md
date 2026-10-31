@@ -8,7 +8,7 @@ description: "Penthera runs on your machine."
 
 Penthera runs on your machine. Pick your tool below. There are three ways in:
 
-- **Your coding agent calls it** through the MCP server (`npx -y penthera@2.1.1 mcp`). This works in tools that run on your computer.
+- **Your coding agent calls it** through the MCP server (`npx -y penthera@2.1.2 mcp`). This works in tools that run on your computer.
 - **You run it** in a terminal, or in CI with the [GitHub Action](commands/action.md).
 - **You check the live app** on [penthera.org](https://penthera.org). It's passive, nothing is stored, and it only needs a URL. This is the route for browser-only app builders.
 
@@ -37,7 +37,7 @@ The commands below pin a version on purpose: an update never reaches you unless 
 ### Claude Code
 
 ```bash
-claude mcp add --scope project penthera -- npx -y penthera@2.1.1 mcp
+claude mcp add --scope project penthera -- npx -y penthera@2.1.2 mcp
 ```
 
 Or install the plugin (the skill plus the pinned server) from Claude Code's prompt: `/plugin marketplace add danoszz/penthera`, then `/plugin install penthera@penthera`.
@@ -51,7 +51,7 @@ All of these read the same shape:
   "mcpServers": {
     "penthera": {
       "command": "npx",
-      "args": ["-y", "penthera@2.1.1", "mcp"]
+      "args": ["-y", "penthera@2.1.2", "mcp"]
     }
   }
 }
@@ -67,7 +67,7 @@ One `.mcp.json` at the root of your repo serves Claude Code and VS Code together
     "penthera": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "penthera@2.1.1", "mcp"]
+      "args": ["-y", "penthera@2.1.2", "mcp"]
     }
   }
 }
@@ -76,7 +76,7 @@ One `.mcp.json` at the root of your repo serves Claude Code and VS Code together
 ### OpenAI Codex
 
 ```bash
-codex mcp add penthera -- npx -y penthera@2.1.1 mcp
+codex mcp add penthera -- npx -y penthera@2.1.2 mcp
 ```
 
 ### Gemini CLI
@@ -94,7 +94,7 @@ Gemini CLI now needs a paid API key or an Enterprise licence. Google moved free 
   "context_servers": {
     "penthera": {
       "command": "npx",
-      "args": ["-y", "penthera@2.1.1", "mcp"],
+      "args": ["-y", "penthera@2.1.2", "mcp"],
       "env": {}
     }
   }
@@ -110,7 +110,7 @@ schema: v1
 mcpServers:
   - name: penthera
     command: npx
-    args: ["-y", "penthera@2.1.1", "mcp"]
+    args: ["-y", "penthera@2.1.2", "mcp"]
 ```
 
 ## App builders (Lovable, Bolt, Base44, Replit, v0)
@@ -119,10 +119,10 @@ These run in the browser and only accept MCP servers by URL. Penthera's server r
 
 | Builder | 1. Check the live app | 2. Scan the code |
 |---|---|---|
-| **Lovable** | paste your `*.lovable.app` URL into [penthera.org](https://penthera.org) | connect GitHub (two-way sync), clone, `npx penthera@2.1.1 --repo .` |
+| **Lovable** | paste your `*.lovable.app` URL into [penthera.org](https://penthera.org) | connect GitHub (two-way sync), clone, `npx penthera@2.1.2 --repo .` |
 | **Bolt.new** | the published URL into penthera.org | GitHub sync, then the CLI or the Action |
 | **Base44** | the published URL into penthera.org | GitHub sync (Builder plan and up), clone, the CLI |
-| **Replit** | the deployed URL into penthera.org | in the Shell: `npx penthera@2.1.1 --repo .` (needs Node.js 22 or later) |
+| **Replit** | the deployed URL into penthera.org | in the Shell: `npx penthera@2.1.2 --repo .` (needs Node.js 22 or later) |
 | **v0** | the **production** URL into penthera.org (preview links can sit behind a Vercel login) | connect GitHub and add the [Action](commands/action.md) to the pull requests v0 opens |
 
 Once the code is on GitHub, the Action checks every pull request: dependencies, AI-tool config and the code. See [the Action](commands/action.md) and [a ready workflow](https://github.com/danoszz/penthera/blob/main/docs/examples/pr-dependency-review.yml).

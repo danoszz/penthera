@@ -497,7 +497,7 @@ export async function buildSite({ out = join(SITE, "dist"), engine, blogDir = jo
   if (engine) await bundle(join(SITE, "check", "engine.js"), resolve(engine), { minify: false });
 
   // Static files, as they are.
-  for (const f of ["styles.css", "theme.js", "track.js", "pro.js", "gopro.js", "research.js", "blog.js", "hub.js"]) cpSync(join(SITE, f), join(OUT, f));
+  for (const f of ["styles.css", "theme.js", "track.js", "pro.js", "research.js", "blog.js", "hub.js"]) cpSync(join(SITE, f), join(OUT, f));
   // The IndexNow key file, served at /<key>.txt (scripts/indexnow.mjs).
   for (const f of readdirSync(SITE).filter((n) => /^[0-9a-f]{32}\.txt$/.test(n))) cpSync(join(SITE, f), join(OUT, f));
   cpSync(join(SITE, "media"), join(OUT, "media"), { recursive: true });
@@ -555,7 +555,7 @@ export async function buildSite({ out = join(SITE, "dist"), engine, blogDir = jo
   // The footer of every page: a map of what this build renders, so a new
   // landing page, benchmark or approved post shows up in it by itself.
   const groups = footGroups({
-    pages: landingPages(SITE),
+    pages: landingPages(SITE).filter((p) => !p.unlisted),
     benchmarks: pub ? benchmarkViews(pub).map((v) => ({ slug: v.c.slug, label: v.c.label, nav: v.c.nav })) : [],
     posts: posts.published,
   });

@@ -4,6 +4,100 @@ All notable changes to Penthera are documented here. Versioning follows [SemVer]
 
 ## [Unreleased]
 
+## [2.1.2] - 2026-10-31
+
+### Fixed
+
+- **`penthera agents ./some-skill` scans the skill.** A folder you name with
+  `SKILL.md` at its root, in any casing, used to report `Nothing to assess` and
+  read nothing, even with a download-and-run line in it. It now gets the same
+  rules and findings as a skill under `skills/<name>/`, scripts included. A
+  direct path to a `SKILL.md` scans its folder. Any other file is an error
+  instead of an empty run. A file or folder Penthera could not read, or a file
+  over the size limit, gets a high finding, so such a skill never grades A.
+  Dependency and virtual environment folders are not read: they are listed
+  under Not read and do not lower the grade. `--pin` on a skill folder leaves its own
+  `penthera.lock` out of the hash, so the next run does not report the skill as
+  changed.
+- **Project scans do not change.** `penthera agents`, `penthera agents .` and
+  the full path of your working folder ignore a `SKILL.md` at the root, as
+  before. So do `--aibom` and the GitHub Action with its default `path`.
+- **The MCP `audit_ai_tooling` tool takes more in `path`.** Besides a project
+  folder, it now accepts a skill folder or a `SKILL.md` inside the workspace.
+  The tool's description is unchanged, so clients that pin it see no change.
+- **A run that read no agent config no longer looks clean.** The terminal
+  report said `No findings` and `Clean scan, no issues found` next to `Nothing
+  to assess`, and `--markdown` said `No security findings detected`. Both now
+  say this is not a clean result. SARIF stays free of results and carries the
+  same message as a warning notification on the run.
+- **`penthera.lock` is never read or written through a symbolic link.** A linked
+  lock is reported as a corrupt lock, at medium, and `--pin` refuses to follow it.
+- Terminal output strips control characters from finding titles and paths. A
+  linked `bin/` in a skill's virtual environment is no longer followed. Large
+  skill files are hashed in chunks. `--aibom` hashes only regular files inside
+  the repo.
+- **The `/pro` page scrolls sideways again.** Its script picked up the bottom dock instead of the page's panels, so the horizontal layout never started.
+- **Reports no longer read as clean on a run that fails.** A critical or high
+  finding in a test fixture or build output printed "Nothing to fix" and exited
+  1. Another tool's finding or a required tool that did not run printed "Clean
+  scan" in the terminal and "No security findings detected" in Markdown. The
+  exit codes stay the same, so a live-format key in a fixture still fails CI.
+  The brief says `Review`, with a line that says why the run fails, and names
+  the tool and file for another tool's finding. The terminal, Markdown and
+  audience reports give that reason when Penthera's own findings do not explain
+  the exit code, and SARIF carries a notification when a required tool did not
+  run.
+- **`--repo <missing path>` exits 2.** It used to read as clean and exit 0.
+- **`--help` no longer prints escape codes to a pipe.** The help of every command
+  honors `NO_COLOR` and uses color only on a terminal.
+- **`dist/` and `build/` in a skill you name are no longer likely noise.** They
+  are the skill's own code.
+
+### Site
+
+- The homepage title and share cards are back to the approved wording: "Penthera: your open-source cyber security agent".
+- **Unknown API paths answer in JSON.** `/api` and anything under it that is not a route return a 404 with `error.code`, `error.message` and `error.hint`, the shape `POST /api/check` uses.
+- **The live check says when to retry.** A rate-limited check now carries `Retry-After`, set to the longest wait among the limits it hit, and the OpenAPI spec states the rate limits and how versions and breaking changes work.
+- **`/server.json` is on the site.** It is the MCP Registry manifest from the repo: a local npm package over stdio, with no hosted endpoint.
+- **New `/contact` page,** with public channels: email, GitHub and private security reports.
+- **The homepage's structured data adds an Organization** with the public contact email, and no street address or phone. `llms.txt` now says what Penthera does not do, and the OpenAPI fields all declare a type.
+- **The home page types and moves more freely.** The news ticker now moves in
+  steps of about 2 px and stops while the URL field has focus or is off
+  screen. The hero's field has a layer of its own. In Safari on a 14-inch
+  MacBook Pro, with the URL field focused, GPU use fell from 25% to 11% and
+  WindowServer from 45% to 22% of a core.
+- **Every page has a bottom dock.** A steel dock fixed to the bottom of the window links Research, Benchmarks, Blog and Pro, on every screen size. It never moves, so no scroll speed can lose it. On the homepage the plate opens from its center once the hero has scrolled away, and the GitHub star and Download show inside it.
+- **The first screen is calmer.** The hero's field fills the screen, and the
+  question and an example result float above it in one glass panel. The panel is a
+  card that overlaps the grey section and runs past the bottom of the window.
+  The scan button is the one blue action, and the report after a check uses
+  the same glass.
+- **Every report ends with something to do.** Copy the fix prompt, download the
+  report as Markdown (made in your browser, nothing stored), or copy the full
+  scan command.
+- **Motion is calmer and cheaper.** Buttons press to 0.97, dialogs fade in, and the star on the
+  Go Pro plate glows with an opacity fade.
+- **The footer is easier to read.** Each group has a label of its own in blue,
+  steel or gunmetal, sub-pages are set in, and long labels are shorter. A
+  hovered link is white on blue in both themes, 9.45:1 instead of 2.1:1 in the
+  light theme.
+
+### Docs
+
+- Every command, MCP config and workflow example pins `penthera@2.1.1`, the
+  new `latest`, and the action examples pin the v2.1.1 commit. The roadmap and
+  README show 2.1.1 as the current release, and the upgrade test in the install
+  matrix starts from 2.1.1. `penthera init` still writes the v2.1.0 pin until
+  the next release.
+- Pages that said the 2.1.0 agent rules ship in the next release now say they
+  shipped. `AGENTS.md` and the integrations page name the redirect that
+  `scan_url` allows within the target's registrable domain.
+- The Agent Skill no longer tells agents to lead with a grade line that the
+  brief does not have. It now leads with the verdict line and says where the
+  A–F grade is.
+- `/trust` lists the services behind penthera.org as a list. The table showed
+  as one line of raw pipes.
+
 ## [2.1.1] - 2026-10-30
 
 ### Security

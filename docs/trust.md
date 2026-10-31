@@ -64,12 +64,10 @@ network blocked and once with it allowed, on macOS and Ubuntu
 
 ## Who runs penthera.org
 
-| Service | What for |
-|---|---|
-| Vercel | Hosting, the live check, cookieless page counts |
-| GitHub | Source code, CI, releases, security advisories |
-| npm | The package registry |
-| Google Workspace | Email for daan@penthera.org |
+- **Vercel:** hosting, the live check, cookieless page counts.
+- **GitHub:** source code, CI, releases, security advisories.
+- **npm:** the package registry.
+- **Google Workspace:** email for daan@penthera.org.
 
 ## Reporting a vulnerability
 

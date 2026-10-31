@@ -13,6 +13,7 @@ import { buildReportModel, CONFIDENCE_LABELS } from "./model.js";
 import { mdInline } from "./md-escape.js";
 import { footerLines } from "./footer.js";
 import { buildBrief, formatBrief } from "./brief.js";
+import { exitCodeOf, exitNote } from "./exit.js";
 
 export const AUDIENCES = ["developer", "owner", "auditor", "agent"];
 
@@ -89,6 +90,7 @@ export function formatDeveloperReport(m) {
   const s = m.summary;
   L.push(`${plural(s.total, "finding")}: ${s.critical} critical · ${s.high} high · ${s.medium} medium · ${s.low} low · ${s.info} info.`);
   if (s.suppressed) L.push(`${s.suppressed} suppressed (listed at the end).`);
+  if (m.exitNote) L.push("", md(m.exitNote));
   L.push("");
   if (m.findings.some((f) => f.recipe && !f.diff)) {
     L.push(`Findings with a recipe can be fixed locally: ${code("penthera fix --plan")} shows the diff, ${code("penthera fix --apply <id>")} applies it.`, "");
@@ -123,7 +125,9 @@ export function formatOwnerReport(m) {
   header(L, "Security summary", m);
   const s = m.summary;
   L.push("## In short", "");
-  if (s.total === 0) {
+  if (s.total === 0 && m.exitCode) {
+    L.push(`Penthera checked ${md(m.target)}. ${md(m.exitNote)}`);
+  } else if (s.total === 0) {
     L.push(`Penthera checked ${md(m.target)} and found no problems in the areas it tested.`);
   } else {
     const parts = [];
@@ -132,7 +136,9 @@ export function formatOwnerReport(m) {
     if (s.low) parts.push(`${s.low} minor`);
     if (s.info) parts.push(`${plural(s.info, "note")}`);
     L.push(`Penthera checked ${md(m.target)} and found ${parts.join(", ")}.`);
-    L.push(s.serious ? "Look at the serious ones first: if they are real, an attacker could use them." : "Nothing here needs an emergency response.");
+    if (s.serious) L.push("Look at the serious ones first: if they are real, an attacker could use them.");
+    else if (!m.exitCode) L.push("Nothing here needs an emergency response.");
+    if (m.exitNote) L.push(md(m.exitNote));
     if (s.seriousInTests) L.push(`${s.seriousInTests === s.serious ? (s.serious === 1 ? "It is" : "All of them are") : `${s.seriousInTests} of them ${s.seriousInTests === 1 ? "is" : "are"}`} in test or fixture files. If those values are made up, set them aside in penthera.suppress.json with a reason.`);
   }
   if (s.inconclusive) L.push(`${plural(s.inconclusive, "check")} could not finish, so those areas are untested, not clean.`);
@@ -179,6 +185,7 @@ export function formatAuditorReport(m) {
   const L = [];
   header(L, "Security evidence report", m);
   L.push("> Automated technical evidence. It is not an audit opinion, a compliance determination or a certification.", "");
+  if (m.exitNote) L.push(`**${md(m.exitNote)}**`, "");
 
   L.push("## 1. Scope and method", "");
   L.push("| | |", "|---|---|");
@@ -271,5 +278,5 @@ export function formatAudienceReport(result, audience, { version, footer = true 
   if (audience === "agent") return formatBrief(result.brief || buildBrief(result), { footer });
   const fmt = FORMATTERS[audience];
   if (!fmt) throw new Error(`Unknown --audience "${audience}". Use one of: ${AUDIENCES.join(", ")}.`);
-  return fmt({ ...buildReportModel(result, { version }), footer });
+  return fmt({ ...buildReportModel(result, { version }), footer, exitCode: exitCodeOf(result), exitNote: exitNote(result) });
 }

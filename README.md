@@ -82,7 +82,7 @@ npx skills add danoszz/penthera
 Cursor, Codex, VS Code and Windsurf. Pin the version:
 
 ```bash
-claude mcp add penthera -- npx -y penthera@2.1.1 mcp
+claude mcp add penthera -- npx -y penthera@2.1.2 mcp
 ```
 
 **In Claude Code, as a plugin.** From Claude Code's prompt:
@@ -289,7 +289,7 @@ never fails CI. Whether it finds more than the rules alone is not measured yet
 | Scans: URL, repo, dependencies, AI tooling, installs, pre-commit hook | **Stable**: in every release since 1.x, covered by the tests and the release gate |
 | Fix loop and local dashboard (`penthera ui`) | **Stable**; the dashboard was redesigned in 1.9.0 |
 | MCP server, Agent Skill, Claude Code plugin | **Stable**, since 1.9.0 |
-| Gemini CLI extension | **Stable**: it installs the newest release (2.1.1) |
+| Gemini CLI extension | **Stable**: it installs the newest release (2.1.2) |
 | Evidence bundles, NIS2 and CRA drafts | **Stable** as readiness tooling, not a certification |
 | AI mode (`--ai`) | **Experimental**: whether it finds more than the rules alone is not measured yet ([AI mode](docs/ai-mode.md)) |
 | Live check on [penthera.org](https://penthera.org) | **Beta**: passive only, [terms](docs/live-check-terms.md) |
@@ -361,8 +361,8 @@ with `npm run docs:numbers` and `npm run bench`.
 **Verify it yourself.** In an empty folder:
 
 ```bash
-npm install penthera@2.1.1 && npm audit signatures
-npx penthera@2.1.1 rules list
+npm install penthera@2.1.2 && npm audit signatures
+npx penthera@2.1.2 rules list
 ```
 
 The first checks npm's registry signature and the build provenance of the
@@ -446,7 +446,7 @@ What changed, what we are measuring, and what comes next, in one place.
 
 | | Where it stands | Read more |
 |---|---|---|
-| **Latest release** | 2.1.1 (2026-10-30) on npm `latest`: MCP `scan_url` stays in scope on every redirect, no grade without agent config, no false critical on a clean single-page app, an exit 0 that says what it means ([changes](CHANGELOG.md)) | [CHANGELOG](CHANGELOG.md), [roadmap](ROADMAP.md#now-211) |
+| **Latest release** | 2.1.2 (2026-10-31) on npm `latest`: `penthera agents ./some-skill` scans the skill, a run that fails or reads nothing no longer looks clean, `--repo <missing path>` exits 2 ([changes](CHANGELOG.md)) | [CHANGELOG](CHANGELOG.md), [roadmap](ROADMAP.md#now-212) |
 | **Research** | Public benchmarks (E11b) published: on a sealed half of four public datasets, #1 of the free tools on npm and PyPI malware, tied #1 on JS library injection bugs, #2 on leaked secrets ([summary](#public-benchmarks)). E10 pilot published: precision 0.88, recall 0.07 to 0.71 on two known-vulnerable apps after fixes (one labeller, not independent; a re-run is pending because default scans no longer send login checks). E1 on real code is pre-registered; E8 (agent guardrails) is a draft | [E11b results](bench/public/RESULTS.md), [E10 results](bench/known-vuln/RESULTS.md), [E1 pre-registration](docs/research/prereg/E1-real-world-accuracy.md), [agents safely](docs/agents-safely.md) |
 | **Next** | Real-world precision and recall with intervals (E1), published whatever the result | [Roadmap: next](ROADMAP.md#next), [research plan](docs/vision-2.0.md) |
 
@@ -486,15 +486,6 @@ Penthera is free and stays free. If it caught something before you shipped it,
 you can [sponsor its maintenance](https://github.com/sponsors/danoszz).
 Sponsorship pays for maintainer time and buys no influence over findings
 ([tiers](docs/funding/sponsor-tiers.md)).
-
-**An open question: is the free tool enough?** One person maintains Penthera
-part-time. To keep it going, and to pay independent reviewers and outside
-experts to critique its rules, I'm running a small experiment called
-[Pro](https://penthera.org/pro). It measures whether teams need anything beyond
-the free agent, such as a record kept for them and checks on a schedule. It is
-not for sale, and no check will ever move behind a paywall. If there is no
-need, the free tool is the whole product, and that's a fine answer
-([governance](GOVERNANCE.md#money)).
 
 ## License
 

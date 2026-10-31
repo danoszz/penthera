@@ -34,10 +34,11 @@ Each page is Markdown, built from the repo with every link made absolute.
 - [Research]({{ORIGIN}}/research.md): every pre-registered study with its status and result, the case studies and posts, newest first, each dated
 - [Regression benchmark](https://github.com/danoszz/penthera/blob/main/bench/RESULTS.md): precision {{BENCH_P}} (95% CI {{BENCH_P_CI}}) and recall {{BENCH_R}} (95% CI {{BENCH_R_CI}}) on {{BENCH_N}} findings in labs the project wrote. A regression check run on every release, not a measure of accuracy
 - [Security policy](https://github.com/danoszz/penthera/blob/main/SECURITY.md): report a vulnerability in Penthera itself ({{ORIGIN}}/.well-known/security.txt)
+- [Contact]({{ORIGIN}}/contact.md): email, GitHub issues and discussions, private security reports
 
 ## Machine-readable
 
-- [MCP server manifest](https://github.com/danoszz/penthera/blob/main/server.json): the MCP Registry entry, io.github.danoszz/penthera
+- [MCP server manifest]({{ORIGIN}}/server.json): the MCP Registry entry, io.github.danoszz/penthera. An npm package that runs locally over stdio; there is no hosted endpoint
 - [Agent Skill](https://github.com/danoszz/penthera/blob/main/skills/penthera/SKILL.md): the skill your agent loads
 {{AGENTS_MD_LLMS}}- [Sitemap]({{ORIGIN}}/sitemap.xml)
 

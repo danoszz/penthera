@@ -27,7 +27,8 @@ export const ldScript = (graph) => `<script type="application/ld+json">${JSON.st
 export function footGroups({ pages = [], benchmarks = [], posts = [] } = {}) {
   const page = (p) => ({ href: `/${p.slug}`, text: p.nav || p.h1 });
   const research = pages.filter((p) => p.eyebrow === "Research");
-  const product = pages.filter((p) => p.eyebrow !== "Research");
+  const contact = pages.filter((p) => p.slug === "contact");
+  const product = pages.filter((p) => p.eyebrow !== "Research" && p.slug !== "contact");
   return [
     { id: "product", label: "Product", links: [
       { href: "/#scan", text: "Live check" },
@@ -48,6 +49,7 @@ export function footGroups({ pages = [], benchmarks = [], posts = [] } = {}) {
       { href: "/trust", text: "Trust" },
       { href: "/terms", text: "Terms" },
       { href: "/type", text: "Type system" },
+      ...contact.map(page),
       { href: `${REPO}/blob/main/docs/privacy.md`, text: "Privacy and network use" },
       { href: "/.well-known/security.txt", text: "security.txt" },
       { href: "/llms.txt", text: "llms.txt" },
@@ -127,7 +129,6 @@ const RAIL = [
   { text: "Research", href: "/research", match: "research" },
   { text: "Benchmarks", href: "/benchmarks", match: "benchmarks" },
   { text: "Blog", href: "/blog", match: "blog" },
-  { text: "Pro", href: "/pro", match: "pro" },
 ];
 
 /**

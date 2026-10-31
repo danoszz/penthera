@@ -1,7 +1,7 @@
 /**
- * ANSI helpers + brand styling, respects NO_COLOR and terminal width.
+ * ANSI helpers + brand styling, respects NO_COLOR, a pipe and terminal width.
  */
-const off = !!process.env.NO_COLOR;
+const off = !!process.env.NO_COLOR || !process.stdout.isTTY;
 
 export const bold = (s) => off ? s : `\x1b[1m${s}\x1b[0m`;
 export const dim = (s) => off ? s : `\x1b[2m${s}\x1b[0m`;

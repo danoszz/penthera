@@ -379,7 +379,7 @@ export async function securityTxtCheck(pageUrl, budget, opts = {}, now = Date.no
   try {
     const timeout = Math.min(4000, budget.left() - 200);
     if (timeout < 500) throw new CheckError("budget", "", 0, "");
-    res = await fetchBody(parseTarget(url, opts), { ...opts, timeout, maxBytes: 32_768, maxRedirects: 2, accept: "text/plain", onHop: () => budget.hop() });
+    res = await fetchBody(parseTarget(url, opts), { ...opts, timeout, maxBytes: 32_768, maxRedirects: 2, accept: "text/plain", onHop: async (u) => { await opts.gate?.(u); budget.hop(); } });
   } catch {
     return [{ id: "security-txt", category: "contact", weight: 0, passed: false, severity: "info", title: "Could not read security.txt", evidence: "The request did not finish in time; this says nothing about the site.", fix: "Nothing to fix from this result.", verify }];
   }
@@ -420,7 +420,8 @@ export function optedOut(robots, tokens = [TOKEN]) {
   const names = tokens.map((t) => String(t).toLowerCase());
   let agents = [];
   let inRules = false;
-  for (const raw of String(robots).split(/\r?\n/)) {
+  // RFC 9309 ends a line with CR, LF or CRLF.
+  for (const raw of String(robots).replace(/^\uFEFF/, "").split(/\r\n|\r|\n/)) {
     const line = raw.replace(/#.*/, "").trim();
     const m = /^([a-z-]+)\s*:\s*(.*)$/i.exec(line);
     if (!m) continue;
@@ -428,7 +429,8 @@ export function optedOut(robots, tokens = [TOKEN]) {
     const value = m[2].trim();
     if (key === "user-agent") {
       if (inRules) { agents = []; inRules = false; }
-      agents.push(value.split("/")[0].trim().toLowerCase());
+      // The product token ends at a slash or a space (RFC 9309 § 2.2.1).
+      agents.push(value.split(/[/\s]/)[0].toLowerCase());
     } else if (key === "disallow" || key === "allow") {
       inRules = true;
       if (key === "disallow" && (value === "/" || value === "/*") && agents.some((a) => names.includes(a))) return true;
@@ -441,25 +443,40 @@ export function optedOut(robots, tokens = [TOKEN]) {
  * GET /robots.txt through the guard (4 s, 64 KB, in the request budget) and
  * refuse when the owner opted out. No file, or any fetch error, means go on.
  * `optOutAll` (the E20 study only) also refuses on a `*` group with Disallow: /.
+ * `onRobots` (study only) hears every outcome and may throw, so the study sets
+ * its own rules; a study run also reads any 2xx. `robotsHop` (study only) checks
+ * each hop of the file's own redirects. The live check sets neither, and keeps
+ * "go on".
  */
 export async function checkOptOut(origin, budget, opts = {}) {
+  const timeout = Math.min(4000, budget.left() - 200);
+  if (timeout < 500) { opts.onRobots?.({ origin, error: "budget" }); return; }
   let res;
+  let hops = 0;
+  const onHop = async (u) => {
+    if (hops++) opts.onAnswered?.();
+    await opts.robotsHop?.(u);
+    budget.hop();
+  };
   try {
-    const timeout = Math.min(4000, budget.left() - 200);
-    if (timeout < 500) return;
-    res = await fetchBody(parseTarget(`${origin}/robots.txt`, opts), { ...opts, timeout, maxBytes: 65_536, maxRedirects: 2, accept: "text/plain", onHop: () => budget.hop() });
-  } catch {
+    res = await fetchBody(parseTarget(`${origin}/robots.txt`, opts), { ...opts, timeout, maxBytes: opts.robotsMaxBytes ?? 65_536, maxRedirects: opts.robotsRedirects ?? 2, accept: "text/plain", onHop });
+  } catch (e) {
+    opts.onRobots?.({ origin, error: e?.code || "internal", cause: e });
     return;
   }
   opts.onResponse?.("robots", res);
-  if (res.status === 200 && optedOut(res.body, opts.optOutTokens)) {
+  opts.onRobots?.({ origin, status: res.status, body: res.body, headers: res.headers, truncated: res.truncated });
+  const readable = opts.onRobots ? res.status >= 200 && res.status < 300 : res.status === 200;
+  // The study hands in its own reading. The live check keeps the plain one.
+  const refuses = opts.optedOut ?? optedOut;
+  if (readable && refuses(res.body, opts.optOutTokens)) {
     throw new CheckError("opted_out", "This site's owner opted out of Penthera's online check.", 403, "Ask the owner, or, if it's your site, run npx penthera on your own machine.");
   }
   // The E20 study (bench/front-door) also honors `User-agent: *` with
   // `Disallow: /`, because a survey is closer to a crawler. The live check
   // never sets optOutAll, so the API never sends this. Same code, marked
   // `all`, so the study can count it apart from an opt-out naming us.
-  if (res.status === 200 && opts.optOutAll && optedOut(res.body, ["*"])) {
+  if (readable && opts.optOutAll && refuses(res.body, ["*"])) {
     throw Object.assign(new CheckError("opted_out", "This site's robots.txt disallows every user agent.", 403, ""), { all: true });
   }
 }
