@@ -116,6 +116,7 @@
         <p class="problem"><span>AI coding tools ship faster than anyone can check.</span></p>
         <ul class="pills" aria-label="Open source, MIT license, works offline"><li>Open source</li><li>MIT</li><li>Offline</li></ul>
         <p class="lede">The review you never had time for. It fixes what it can with your OK. For the rest, it tells you or your coding agent how, then checks the fix.</p>
+        <p class="start-here">Start here. Runs in your app's folder, and needs Node.js 22 or later.</p>
         <div class="hero-actions">
           <button class="cmd" type="button" data-copy="npx penthera" data-track="install-hero">
             <span class="cmd-prompt" aria-hidden="true">$</span>
@@ -268,7 +269,7 @@
           <p class="step-n"><span>1</span> Start a check</p>
           <figure class="shot">
             <img src="/media/tour/tour-1-scan.jpg" width="1200" height="750" loading="lazy" alt="The Check my app window in the dashboard, light theme: what do you want to do, with Check my app chosen over Fix problems for me, the app's folder code/acme-shop, and where the app runs, http://localhost:3000">
-            <figcaption>Run <code>npx penthera ui</code>, pick your app's folder and check it. Local only.</figcaption>
+            <figcaption>Run <code>npx penthera ui --open</code> in your app's folder and check it. Local only.</figcaption>
           </figure>
         </li>
         <li>
@@ -454,7 +455,7 @@
         <details>
           <summary>What will it change on my machine?</summary>
           <div class="faq-a">
-            <p>Nothing without asking. The guided start detects your setup read-only, asks what to check, and offers the hook, the CI workflow and the rest one yes or no at a time. <code>npx penthera init --dry-run</code> shows what it would do and changes nothing. A fix is a diff you approve, and Penthera never commits or pushes. <a href="https://github.com/danoszz/penthera/blob/main/docs/commands/init.md">What the guided start does</a></p>
+            <p>Nothing without asking. The guided start detects your setup read-only, asks what to check, and offers the hook, the CI workflow and the rest one yes or no at a time. <code>npx penthera init --dry-run</code> shows what it would do and changes nothing. A fix is a diff you approve. The dashboard commits it to a separate local branch for you to merge. Nothing is pushed. <a href="https://github.com/danoszz/penthera/blob/main/docs/commands/init.md">What the guided start does</a></p>
           </div>
         </details>
         <details>

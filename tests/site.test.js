@@ -107,6 +107,13 @@ describe("site build", () => {
     expect(html).toMatch(/src="\/check\.js\?v=[0-9a-f]{10}"/);
   });
 
+  it("keeps the check's tracking function reachable, and says no before asking consent for an address it can't check", () => {
+    const ui = readFileSync(join(ROOT, "site", "check", "ui.js"), "utf8");
+    // A local named count hid this function once, so a working copy read "Copy failed".
+    expect(ui.match(/\b(?:const|let|var) count\b/g)).toBeNull();
+    expect(ui.indexOf("notCheckable(url)")).toBeLessThan(ui.indexOf("await askConsent(host)"));
+  });
+
   it("gives every page a share image that exists, and an icon for the iPhone", () => {
     for (const f of ["news.html", "blog.html", "research.html", "blog/sealed-half-benchmark.html", "trust.html", "terms.html", "type.html"]) {
       const html = readFileSync(join(out, f), "utf8");

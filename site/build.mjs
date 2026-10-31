@@ -446,7 +446,7 @@ export function readNews(file = join(SITE, "news.json")) {
 function tickerHtml(items) {
   const fmt = (d) => new Date(`${d}T00:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
   const list = (hidden) => `<ul class="ticker-list"${hidden ? ' aria-hidden="true"' : ""}>${items.map((n) =>
-    `<li><svg class="lock" viewBox="0 0 12 14" aria-hidden="true"><use href="#i-lock"/></svg><time datetime="${n.date}">${fmt(n.date)}</time> <a href="${esc(n.source)}"${hidden ? ' tabindex="-1"' : ""}>${esc(n.text)}</a></li>`).join("")}</ul>`;
+    `<li><svg class="lock" viewBox="0 0 12 14" aria-hidden="true"><use href="#i-lock"/></svg><time datetime="${n.date}">${fmt(n.date)}</time> <a href="${esc(n.source)}" tabindex="-1">${esc(n.text)}</a></li>`).join("")}</ul>`;
   return `<div class="ticker" role="region" aria-label="Security news"><div class="ticker-track">${list(false)}${list(true)}</div></div>`;
 }
 

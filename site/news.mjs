@@ -78,7 +78,7 @@ ${key === "research" ? `    <p class="hub-purpose">${smart(esc(PURPOSE))}</p>
     <div class="rs">${feature}</div>\n` : ""}    <ul class="hub-list">
 ${rows.map((e, i) => row(e, i, posts)).join("\n")}
     </ul>
-    <p class="hub-none" hidden>Nothing here yet.</p>
+    <p class="hub-none" role="status" hidden>Nothing matches this.</p>
     <nav class="ttx-keys" aria-label="More pages"><a href="/benchmarks">Benchmarks</a><a href="/news/feed.xml">Atom feed</a><a href="${v.href}.md">Markdown copy</a></nav>`;
   const ld = key === "research" ? researchLd(rows, { url: `${origin}/research`, origin, description: v.description }) : key === "articles" ? blogLd(posts, origin) : "";
   return paperPage({ title: v.title, description: v.description, url: `${origin}${v.href}`, path: v.href, h1: v.h1, ld, body, styles, theme: "/theme.js", foot, type: "website", mast: true,
