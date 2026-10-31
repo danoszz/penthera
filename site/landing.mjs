@@ -86,7 +86,7 @@ export function landingHtml(p, { origin, values, styles = "/styles.css", theme =
   <title>${esc(p.title)} · Penthera</title>
   <meta name="description" content="${esc(p.description)}">
   <meta name="color-scheme" content="dark light">
-  <link rel="canonical" href="${url}">
+${p.unlisted ? '  <meta name="robots" content="noindex, nofollow">\n' : ""}  <link rel="canonical" href="${url}">
   <link rel="alternate" type="text/markdown" href="/${p.slug}.md">
   <meta property="og:site_name" content="Penthera">
   <meta property="og:title" content="${esc(p.h1)}">
