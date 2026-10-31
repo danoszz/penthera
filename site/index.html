@@ -127,7 +127,7 @@
 
     <!-- 01 · Get started: the CLI, the skill and the MCP server, then the rest
          folded: prompts, configs, builders and the files for agents. -->
-    <section class="get" id="get" aria-labelledby="get-title">
+    <section class="get band band-blue" id="get" aria-labelledby="get-title">
       <p class="eyebrow">01 · Get started</p>
       <h2 id="get-title">Three ways to run Penthera.</h2>
       <p class="start-here">Runs in your app's folder, and needs Node.js 22 or later.</p>
@@ -170,6 +170,8 @@
         <button class="btn btn-prompt" type="button" data-js data-track="agent-prompt" data-copy="Set up Penthera in this repo. Run `npx penthera init --dry-run` and show me what it would do. Then run `npx penthera --repo .`, `npx penthera agents` and `npx penthera deps`, and list the findings by severity, with the file for each. Do not change, commit or push anything without asking me."><svg class="tool-icon" viewBox="0 0 9 9" aria-hidden="true"><path d="M0 0h1v1h-1zM4 0h1v1h-1zM8 0h1v1h-1zM1 1h1v1h-1zM4 1h1v1h-1zM7 1h1v1h-1zM2 2h1v1h-1zM4 2h1v1h-1zM6 2h1v1h-1zM3 3h3v1h-3zM0 4h9v1h-9zM3 5h3v1h-3zM2 6h1v1h-1zM4 6h1v1h-1zM6 6h1v1h-1zM1 7h1v1h-1zM4 7h1v1h-1zM7 7h1v1h-1zM0 8h1v1h-1zM4 8h1v1h-1zM8 8h1v1h-1z"/></svg><span data-copy-label>Copy prompt for your coding agent</span></button>
       </div>
 
+      <details class="agent more-ways">
+        <summary class="prompts-title">Prompts, MCP configs, app builders and files for agents</summary>
       <details class="agent" id="prompts">
         <summary class="prompts-title">Prompts for Claude Code, Cursor and Codex</summary>
       <div class="prompts">
@@ -286,6 +288,7 @@
       </button>
       </div>
       </details>
+      </details>
 
       <p class="links">
         <a href="https://github.com/danoszz/penthera" data-track="github-source">Source on GitHub</a>
@@ -293,12 +296,25 @@
       </p>
     </section>
 
-    <!-- 02 · What it finds: the four places it looks. The poster shows a real result. -->
+    <!-- 02 · What it finds: the film's bubbles, live. They arrive on scroll, and
+         the four areas are questions you can ask. Without JavaScript they stand
+         as a grid. -->
     <section class="ba" id="answer" aria-labelledby="ba-title">
       <p class="eyebrow">02 · What it finds</p>
       <h2 id="ba-title">Ask once. Get findings you can check.</h2>
+      <div class="chat" data-chat>
+        <div class="chat-stage">
+          <p class="chat-q" data-chat-q>yo is my app secure?</p>
+          <p class="chat-a" data-chat-a>check it before they wreck it</p>
+        </div>
+        <div class="chips" data-js role="group" aria-label="Ask about one area">
+          <button class="chip" type="button" data-ask="0">my code</button>
+          <button class="chip" type="button" data-ask="1">my packages</button>
+          <button class="chip" type="button" data-ask="2">my AI setup</button>
+          <button class="chip" type="button" data-ask="3">my live site</button>
+        </div>
+      </div>
       <figure class="map" id="checks" aria-labelledby="map-cap">
-        <div class="map-bar"><span class="title">npx penthera</span><span class="status"><svg class="lock" viewBox="0 0 12 14" aria-hidden="true"><use href="#i-lock"/></svg>Offline</span></div>
         <ul class="map-grid">
           <li class="map-cell map-app">
             <p class="map-k"><span class="swatch swatch-solid" aria-hidden="true"></span>Your code</p>
@@ -329,39 +345,9 @@
       </figure>
     </section>
 
-    <!-- 03 · See it work: the dashboard in three steps, light theme, demo
-         data. The shots come from site/tools/tour-shots.mjs. -->
-    <section class="tour" id="tour" aria-labelledby="tour-title">
-      <p class="eyebrow">03 · See it work</p>
-      <h2 id="tour-title">Three steps, start to fix.</h2>
-      <ol class="tour-steps">
-        <li>
-          <p class="step-n"><span>1</span> Start a check</p>
-          <figure class="shot">
-            <img src="/media/tour/tour-1-scan.jpg" width="1200" height="750" loading="lazy" alt="The Check my app window in the dashboard, light theme: what do you want to do, with Check my app chosen over Fix problems for me, the app's folder code/acme-shop, and where the app runs, http://localhost:3000">
-            <figcaption>Run <code>npx penthera ui --open</code> in your app's folder and check it. Local only.</figcaption>
-          </figure>
-        </li>
-        <li>
-          <p class="step-n"><span>2</span> See what to fix first</p>
-          <figure class="shot">
-            <img src="/media/tour/tour-2-verdict.jpg" width="1200" height="750" loading="lazy" alt="The dashboard's verdict in Simple mode, light theme: 'Not ready to ship: 1 critical problem to fix first', 11 to fix and 17 fixed, a score of 55 out of 100, the buttons Fix problems for me and Show me the first one, and first in the list to fix a critical hardcoded Stripe live secret key in code/acme-shop">
-            <figcaption>A verdict, then the problems in the order to fix them. Open one to read it in plain words.</figcaption>
-          </figure>
-        </li>
-        <li>
-          <p class="step-n"><span>3</span> Approve a fix</p>
-          <figure class="shot">
-            <img src="/media/tour/tour-3-fix.jpg" width="1200" height="750" loading="lazy" alt="Fix 1 of 3 waiting for approval, light theme: 'Penthera wants to change 1 file to fix this: Missing Content-Security-Policy header', a note that it changes next.config.js on a separate branch and undoes the change if the problem stays, and the diff that adds a headers function to next.config.js">
-            <figcaption>Each fix is a diff you approve. A re-scan checks it. Fixes stay on your machine, and nothing is pushed.</figcaption>
-          </figure>
-        </li>
-      </ol>
-    </section>
-
-    <!-- 04 · Can I trust it: principles, the rank per benchmark, and what it does not do. -->
+    <!-- 03 · Can I trust it: principles, the rank per benchmark, and what it does not do. -->
     <section class="trust band band-invert" id="trust" aria-labelledby="trust-title">
-      <p class="eyebrow">04 · Can I trust it</p>
+      <p class="eyebrow">03 · Can I trust it</p>
       <h2 id="trust-title">Don't take our word for it.</h2>
       <ul class="pillars">
         <li><h3>Rules decide.</h3><p>Every finding comes from a readable rule and shows its evidence. A model may propose a fix or a lead; a rule, a re-scan and your tests decide. <a href="https://github.com/danoszz/penthera/blob/main/docs/METHODOLOGY.md">Methodology</a></p></li>
@@ -429,26 +415,9 @@
       </div>
     </section>
 
-    <!-- 05 · How it compares: the table is built from site/compare.json. -->
-    <section class="compare" id="compare" aria-labelledby="compare-title">
-      <p class="eyebrow">05 · How it compares</p>
-      <h2 id="compare-title">Use it with the tools you have.</h2>
-      <p class="compare-lede">Most teams use Penthera with at least one of these. Here is where each goes further.</p>
-      <details class="cmp-more">
-        <summary>Where each tool goes further, with sources</summary>
-{{COMPARE_SUMMARY}}
-        <p class="cmp-hint">Scroll the table sideways to see all seven tools.</p>
-        <div class="cmp-scroll" role="region" aria-labelledby="compare-title" tabindex="0">
-{{COMPARE}}
-        </div>
-        <p class="compare-note">Every cell links its source: the vendor's docs or one of our compare pages, each with the date we last checked it. Prices and plans change, so check the vendor's page before you rely on one. A dash means our page does not cover it.</p>
-      </details>
-      <p class="compare-note">No row says which tool finds more; that has not been measured. <a href="https://github.com/danoszz/penthera/blob/main/docs/compare/README.md">All comparisons, and how to run each tool with Penthera</a></p>
-    </section>
-
-    <!-- 06 · Before you install -->
+    <!-- 04 · Before you install -->
     <section class="faq" id="faq" aria-labelledby="faq-title">
-      <p class="eyebrow">06 · Questions</p>
+      <p class="eyebrow">04 · Questions</p>
       <h2 id="faq-title">Before you install.</h2>
       <div class="faq-list">
         <details>
@@ -518,11 +487,22 @@
           </div>
         </details>
       </div>
+      <details class="agent compare" id="compare">
+        <summary class="prompts-title" id="compare-title">Use it with the tools you have</summary>
+        <p class="compare-lede">Most teams use Penthera with at least one of these. Here is where each goes further.</p>
+{{COMPARE_SUMMARY}}
+        <p class="cmp-hint">Scroll the table sideways to see all seven tools.</p>
+        <div class="cmp-scroll" role="region" aria-labelledby="compare-title" tabindex="0">
+{{COMPARE}}
+        </div>
+        <p class="compare-note">Every cell links its source: the vendor's docs or one of our compare pages, each with the date we last checked it. Prices and plans change, so check the vendor's page before you rely on one. A dash means our page does not cover it.</p>
+        <p class="compare-note">No row says which tool finds more; that has not been measured. <a href="https://github.com/danoszz/penthera/blob/main/docs/compare/README.md">All comparisons, and how to run each tool with Penthera</a></p>
+      </details>
     </section>
 
-    <!-- 07 · About: who builds it, and why. -->
-    <section class="about" id="about" aria-labelledby="about-title">
-      <p class="eyebrow">07 · About</p>
+    <!-- 05 · About: who builds it, and why. -->
+    <section class="about band band-grey" id="about" aria-labelledby="about-title">
+      <p class="eyebrow">05 · About</p>
       <h2 id="about-title">Why Penthera exists.</h2>
       <p class="about-text">I build Penthera in the open, at night, alongside my PhD in AI and architecture. In 15 years I designed and built more than 100 apps for startups and governments, some used by millions of people. Security was always expected of me, so I collected the tricks and scripts I run before anything ships. Penthera is that sanity check, for everyone.</p>
       <p class="about-text">AI coding tools let far more people build. The security basics have to keep up, or apps leak data and run up credit-card bills. I believe technology does more good than harm when it is designed for people. Penthera uses research-backed methods and what I learned building agents: readable rules, free and MIT-licensed, to help people check what they ship.</p>

@@ -50,11 +50,6 @@ export function publicBenchHtml(pub) {
         <ul class="pb-cards" aria-labelledby="pb-title">
         ${cards}
         </ul>
-        <p class="links">
-          <a href="/benchmarks">All four benchmarks</a>
-          <a href="https://github.com/danoszz/penthera/blob/main/docs/research/prereg/E11b-improvement-study.md">Protocol</a>
-          <a href="https://github.com/danoszz/penthera/blob/main/bench/public/PUBLISHED.md">All numbers</a>
-          <a href="https://github.com/danoszz/penthera/tree/main/bench/public">Reproduce it</a>
-        </p>
+        <p class="links"><a href="/benchmarks">All four benchmarks</a></p>
       </div>`;
 }

@@ -270,7 +270,7 @@ describe("site comparison table", () => {
 
   it("renders every cell with its source, inside its own scroll box", () => {
     const html = readFileSync(join(out, "index.html"), "utf8");
-    const sec = html.slice(html.indexOf('id="compare"'), html.indexOf("<!-- 7 · EU rules -->"));
+    const sec = html.slice(html.indexOf('id="compare"'), html.indexOf('id="about"'));
     expect(sec).not.toMatch(/\{\{\w+\}\}/);
     expect(sec).toMatch(/<div class="cmp-scroll" role="region" aria-labelledby="compare-title" tabindex="0">\s*<table class="cmp">/);
     expect(sec.match(/<tr><th scope="row">/g)).toHaveLength(cmp.rows.length);
@@ -294,7 +294,7 @@ describe("site before and after", () => {
 
   it("fills in the scan and counts every rule from the repo, without the fix recipes", () => {
     const html = readFileSync(join(out, "index.html"), "utf8");
-    const sec = html.slice(html.indexOf('class="ba"'), html.indexOf('id="tour"'));
+    const sec = html.slice(html.indexOf('class="ba"'), html.indexOf('id="trust"'));
     expect(sec).not.toMatch(/\{\{\w+\}\}/);
     const packRules = activePacks().reduce((n, p) => n + p.count, 0);
     const rules = COUNTS.urlTemplates + COUNTS.secretPatterns + COUNTS.capabilities + COUNTS.agentRules + packRules;
@@ -343,7 +343,6 @@ describe("site benchmark (E10 pilot)", () => {
     const sec = html.slice(html.indexOf('id="benchmark"'), html.indexOf('id="limits"'));
     expect(html.indexOf('id="trust"')).toBeLessThan(html.indexOf('id="benchmark"'));
     expect(html.indexOf('id="benchmark"')).toBeLessThan(html.indexOf('id="limits"'));
-    expect(html.indexOf('id="tour"')).toBeLessThan(html.indexOf('id="trust"'));
     expect(sec).not.toMatch(/\{\{\w+\}\}/);
     for (const a of [...e.apps, e.pooled]) {
       expect(sec).toContain(`<p class="stat-num">${a.after.k}/${a.after.n}</p><p class="stat-was">was ${a.before.k}/${a.before.n}</p>`);
@@ -455,9 +454,9 @@ describe("site news ticker", () => {
 describe("site story", () => {
   const html = () => readFileSync(join(out, "index.html"), "utf8");
 
-  it("tells it in order: the live check, the problem, get started and the files for agents, what it finds, see it work, trust and limits, compare, questions, about", () => {
+  it("tells it in order: the live check, the film, get started and the files for agents, the chat, trust and limits, questions and the comparison, about", () => {
     const h = html();
-    const order = ['id="scan"', 'class="problem"', 'id="get"', 'id="for-agents"', 'id="answer"', 'id="checks"', 'id="tour"', 'id="trust"', 'id="limits"', 'id="compare"', 'id="faq"', 'id="about"'];
+    const order = ['id="scan"', 'class="problem"', 'id="get"', 'id="for-agents"', 'id="answer"', 'data-chat', 'id="checks"', 'id="trust"', 'id="limits"', 'id="faq"', 'id="compare"', 'id="about"'];
     const at = order.map((m) => h.indexOf(m));
     for (const [i, m] of order.entries()) expect(at[i], m).toBeGreaterThan(0);
     expect([...at].sort((a, b) => a - b)).toEqual(at);
@@ -559,23 +558,19 @@ describe("site story", () => {
     expect(terms).toContain("counts that a check ran");
   });
 
-  it("shows the four areas with counts from the rules, and the tour as three dashboard steps", () => {
+  it("shows the four areas with counts from the rules, and the chat that asks about them", () => {
     const h = html();
-    const map = h.slice(h.indexOf('id="checks"'), h.indexOf('id="tour"'));
+    const map = h.slice(h.indexOf('id="checks"'), h.indexOf('id="trust"'));
     for (const [n, what] of [[COUNTS.secretPatterns, "secret and AI-key patterns"], [COUNTS.agentRules, "AI setup rules"], [COUNTS.urlTemplates, "URL scan templates"], [(COUNTS.popularNpm + COUNTS.popularPypi).toLocaleString("en-US"), "package names"]]) {
       expect(map).toContain(`<p class="map-n">${n}<span> ${what}</span></p>`);
     }
     expect(map.match(/<li class="map-cell /g)).toHaveLength(4);
     expect(map.match(/<p class="map-one"><strong>[^<]+\.<\/strong>/g)).toHaveLength(4);
-    const tour = h.slice(h.indexOf('id="tour"'), h.indexOf('id="trust"'));
-    // No video: three numbered stills of the light dashboard, each with alt text.
-    expect(tour).not.toContain("<video");
-    expect(tour.match(/<p class="step-n"><span>[123]<\/span> /g)).toHaveLength(3);
-    expect(tour.match(/<figure class="shot">/g)).toHaveLength(3);
-    for (const f of ["media/tour/tour-1-scan.jpg", "media/tour/tour-2-verdict.jpg", "media/tour/tour-3-fix.jpg"]) {
-      expect(existsSync(join(out, f)), f).toBe(true);
-      expect(tour).toMatch(new RegExp(`<img src="/${f}" width="1200" height="750" loading="lazy" alt="[^"]{40,}">`));
-    }
+    // The chat stands in for the grid with JavaScript; each chip asks about one area, in the grid's order.
+    const chips = [...h.matchAll(/<button class="chip" type="button" data-ask="(\d)">my [^<]+<\/button>/g)].map((m) => +m[1]);
+    expect(chips).toEqual([0, 1, 2, 3]);
+    expect(h).toContain('<p class="chat-q" data-chat-q>yo is my app secure?</p>');
+    expect(h).toContain('<p class="chat-a" data-chat-a>check it before they wreck it</p>');
   });
 
   it("gets you started three ways, each with a copy button", () => {
