@@ -70,7 +70,6 @@ const RAIL = [
   { text: "Research", href: "/research", match: "research" },
   { text: "Benchmarks", href: "/benchmarks", match: "benchmarks" },
   { text: "Blog", href: "/blog", match: "blog" },
-  { text: "Pro", href: "/pro", match: "pro" },
 ];
 
 /**

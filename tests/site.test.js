@@ -620,17 +620,14 @@ describe("site story", () => {
     expect(existsSync(join(out, "upkeep.html"))).toBe(false);
   });
 
-  it("the landing page's Go Pro plate links to /pro, with its motion in /gopro.js", () => {
-    const page = readFileSync(join(out, "index.html"), "utf8");
-    const plate = page.slice(page.indexOf('id="go-pro"'), page.indexOf("</section>", page.indexOf('id="go-pro"')));
-    expect(plate).toContain('<h2 id="gopro-title">Go Pro</h2>');
-    expect(plate).toContain("What you shipped, checked again every day.");
-    expect(plate).toMatch(/<a class="gopro-btn" href="\/pro" data-track="gopro-waitlist">Join the experiment/);
-    expect(plate).toContain("An experiment, not a sale");
-    expect(plate).not.toMatch(/\$\d/); // no price on the plate
-    expect(page).toContain('<script defer src="/gopro.js"></script>');
-    expect(existsSync(join(out, "gopro.js"))).toBe(true);
-    expect(readFileSync(join(out, "gopro.js"), "utf8")).toContain("prefers-reduced-motion");
+  it("keeps Pro on ice: /pro still works, unlisted and noindex, and nothing links it", () => {
+    const pro = readFileSync(join(out, "pro.html"), "utf8");
+    expect(pro).toContain('<meta name="robots" content="noindex, nofollow">');
+    expect(readFileSync(join(out, "pro.md"), "utf8")).toContain("Penthera Pro");
+    const pages = readdirSync(out, { recursive: true }).map(String).filter((f) => /\.(html|txt|xml)$/.test(f) && f !== "pro.html");
+    for (const f of pages) expect(readFileSync(join(out, f), "utf8"), f).not.toMatch(/href="\/pro"|penthera\.org\/pro(\.md)?\b/);
+    expect(readFileSync(join(out, "index.html"), "utf8")).not.toMatch(/go-pro|gopro/);
+    expect(existsSync(join(ROOT, "site", "gopro.js"))).toBe(true); // the code stays for later
   });
 
   it("counts checks and installs without the URL, host or score", () => {
@@ -722,7 +719,7 @@ describe("site landing pages", () => {
 
   it("lists each page in the sitemap and llms.txt, serves its Markdown, and links it from the homepage", () => {
     const locs = [...read("sitemap.xml").matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]);
-    for (const p of pages) {
+    for (const p of pages.filter((x) => !x.unlisted)) {
       expect(locs, p.slug).toContain(`${ORIGIN}/${p.slug}`);
       expect(read("llms.txt"), p.slug).toContain(`(${ORIGIN}/${p.slug}.md)`);
       expect(read(`${p.slug}.md`), p.slug).not.toMatch(/\]\(\/(?!\/)/);
