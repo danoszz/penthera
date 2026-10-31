@@ -24,7 +24,7 @@ For the most common findings you don't need an agent at all. `penthera fix` plan
 
 ```bash
 penthera fix --plan --repo .                  # fresh repo scan, one diff per fix
-penthera fix --plan --repo . -o report.json   # or use the findings from an earlier scan
+penthera fix --plan --repo . -o report.json   # or use the findings from an earlier scan (-o, --input)
 penthera fix --apply <id> --repo .            # apply one diff after you approve it
 ```
 

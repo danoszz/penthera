@@ -40,7 +40,12 @@ Override or extend profile defaults:
 | `--timeout <ms>` | Request timeout (default: 10000) |
 | `--concurrency <n>` | Concurrent requests (default: 15) |
 | `-v, --verbose` | Detailed output |
-| `-q, --quiet` | Findings only |
+| `-q, --quiet` | Findings only. In a pipe outside CI the brief prints instead; add `PENTHERA_BRIEF=0` |
+| `--brief` | The short agent brief, the default with no terminal outside CI |
+| `--offline` | No third-party requests and no DNS lookups for email checks |
+| `--giants` | Also run the free scanners installed here and merge their findings |
+| `--templates <dir>` | Load extra YAML templates |
+| `--rules <dir>` | Add a signed rule pack (repeatable) |
 
 ## Auth environment variables
 
@@ -51,11 +56,11 @@ Override or extend profile defaults:
 
 ## URL scan coverage (black-box)
 
-TLS, fingerprinting, endpoint discovery, built-in templates, CORS, cookies, Retire.js (JS CVEs), param discovery, OpenAPI/FastAPI probes, security headers, auth hardening, JWT probes.
+TLS, fingerprinting, endpoint discovery, built-in templates, CORS, cookies, Retire.js (JS CVEs), param discovery, OpenAPI/FastAPI probes, security headers, auth hardening, JWT probes, provider keys in same-site scripts.
 
 ## Repo scan coverage (white-box)
 
-Next.js API route discovery, trust-boundary mapping, risky code patterns, hardcoded secrets (keys, tokens, private keys). Expanded route discovery in `routes/`, `api/`, `server/routes/`.
+API route discovery (Next.js, Express, Hono, Fastify), trust-boundary mapping, code-execution sinks, hardcoded secrets (keys, tokens, private keys), runtime version pins, library mode for packages. Expanded route discovery in `routes/`, `api/`, `server/routes/`.
 
 ## Examples
 

@@ -301,7 +301,7 @@ Each feature goes through the same path: **method → evidence → tool.**
 - **Method.** The [methodology](docs/METHODOLOGY.md) states the threat model,
   what black-box (HTTP) and white-box (source) analysis can and cannot see, the
   confidence model, and the false-positive controls on each probe. Each design
-  choice cites the research or standard it rests on: 95 verified references, in
+  choice cites the research or standard it rests on: 158 verified references, in
   APA style, in [docs/references.md](docs/references.md).
 - **Evidence.** A benchmark runs on every release, and the release gate fails
   if precision or recall drops by more than 0.02. Experiments that decide what
@@ -317,7 +317,7 @@ Each feature goes through the same path: **method → evidence → tool.**
 | Requests past loopback during the benchmark | 0 | Enforced by a network guard |
 | Public benchmarks (E11b), sealed test half | 1st on npm and PyPI malware (tied 1st to 3rd), 1st on JS library injection bugs (tied 1st to 4th), 2nd on leaked secrets | 4 public datasets, up to 10 free tools each ([results](bench/public/RESULTS.md#e11b-final-the-sealed-test-half-scored-once-2026-10-25), [summary](#public-benchmarks)) |
 | E10 pilot, known-vulnerable apps | Precision 0.88, 95% CI 0.78 to 0.93. Recall 0.07 before fixes, 0.71 (CI 0.45 to 0.88) after | 14 root causes in Juice Shop and DVNA ([results](bench/known-vuln/RESULTS-after-fixes.md)) |
-| Detection rules, all readable | 132 in this release: 16 URL scan templates, 21 secret and AI-key patterns, 15 dependency capabilities, 39 AI-tooling rules, 5 fix recipes, and the signed rule packs | [Rule packs](docs/rule-packs.md) |
+| Detection rules, all readable | 132 in this release: 16 URL scan templates, 24 secret and AI-key patterns, 15 dependency capabilities, 47 AI-tooling rules, 5 fix recipes, and 25 rules in the signed rule packs | [Rule packs](docs/rule-packs.md) |
 
 The bundled benchmark is 24 findings in small labs we wrote ourselves. It
 catches regressions; it does not measure real-world accuracy. The E10 pilot
@@ -345,7 +345,7 @@ with `npm run docs:numbers` and `npm run bench`.
 - **Deterministic.** Rules you can read, with `file:line` evidence. A model may
   propose a fix or a lead; a deterministic re-scan and your tests decide.
 - **Non-destructive by default.** Default scans send no attack payloads.
-  Payload testing (`--deep`, `--fuzz`, `--all`) is opt-in, asks for a
+  Payload testing (`--deep`, `--fuzz`, `--adaptive`, `--all`) is opt-in, asks for a
   confirmation bound to the target, and is rate-limited.
 - **Asks before it changes anything.** The fix loop works on a local branch,
   asks before every change by default, and never pushes or opens pull requests.
@@ -393,7 +393,7 @@ All comparisons, including Cloudflare's security-audit skill: [docs/compare/](do
 
 ### Run the free tools you already have: `--giants`
 
-`--giants` (2.1 release candidate) runs the free scanners installed on your
+`--giants` runs the free scanners installed on your
 machine after Penthera's own scan: gitleaks, TruffleHog, Semgrep with your
 local rules, osv-scanner, Trivy and Checkov for a repository, nuclei and the
 ZAP baseline for a URL. Their findings go into the same report and SARIF, each
@@ -406,9 +406,9 @@ penthera giants              # which tools you have
 penthera --repo . --giants   # Penthera, then each installed tool
 ```
 
-This runs the tools you have and merges their findings. Whether the
-combination finds more is measured by experiment E14 and is not claimed until
-it is published. Details, safety rules and the policy key:
+This runs the tools you have and merges their findings. It is not a claim that
+the combination finds more: experiment E14 measured that
+([results](bench/public/RESULTS.md)). Details, safety rules and the policy key:
 [docs/commands/giants.md](docs/commands/giants.md).
 
 ## Start here
@@ -428,7 +428,8 @@ The full map, by situation and from first scan to research, is in
 ## Ethics and authorization
 
 Penthera sends HTTP requests to the targets you give it, and some modes
-(`--deep`, `--fuzz`, `--all`) send attack payloads, after a confirmation.
+(`--deep`, `--fuzz`, `--adaptive`, `--all`) send attack payloads, after a
+confirmation.
 Scan only what you own, what you have written authorization to test, or local
 environments you control. Do not use it to probe third-party systems,
 exfiltrate data, disrupt services, or harm anyone. Unauthorized testing may
@@ -447,7 +448,7 @@ What changed, what we are measuring, and what comes next, in one place.
 | | Where it stands | Read more |
 |---|---|---|
 | **Latest release** | 2.1.2 (2026-10-31) on npm `latest`: `penthera agents ./some-skill` scans the skill, a run that fails or reads nothing no longer looks clean, `--repo <missing path>` exits 2 ([changes](CHANGELOG.md)) | [CHANGELOG](CHANGELOG.md), [roadmap](ROADMAP.md#now-212) |
-| **Research** | Public benchmarks (E11b) published: on a sealed half of four public datasets, #1 of the free tools on npm and PyPI malware, tied #1 on JS library injection bugs, #2 on leaked secrets ([summary](#public-benchmarks)). E10 pilot published: precision 0.88, recall 0.07 to 0.71 on two known-vulnerable apps after fixes (one labeller, not independent; a re-run is pending because default scans no longer send login checks). E1 on real code is pre-registered; E8 (agent guardrails) is a draft | [E11b results](bench/public/RESULTS.md), [E10 results](bench/known-vuln/RESULTS.md), [E1 pre-registration](docs/research/prereg/E1-real-world-accuracy.md), [agents safely](docs/agents-safely.md) |
+| **Research** | Public benchmarks (E11b) published: on a sealed half of four public datasets, 1st of the free tools on npm and PyPI malware (tied 1st to 3rd), 1st on JS library injection bugs (tied 1st to 4th), 2nd on leaked secrets ([summary](#public-benchmarks)). E10 pilot published: precision 0.88, recall 0.07 to 0.71 on two known-vulnerable apps after fixes (one labeller, not independent; a re-run is pending because default scans no longer send login checks). E1 on real code is pre-registered; E8 (agent guardrails) is a draft | [E11b results](bench/public/RESULTS.md), [E10 results](bench/known-vuln/RESULTS.md), [E1 pre-registration](docs/research/prereg/E1-real-world-accuracy.md), [agents safely](docs/agents-safely.md) |
 | **Next** | Real-world precision and recall with intervals (E1), published whatever the result | [Roadmap: next](ROADMAP.md#next), [research plan](docs/vision-2.0.md) |
 
 [![Star history](https://api.star-history.com/svg?repos=danoszz/penthera&type=Date)](https://star-history.com/#danoszz/penthera&Date)

@@ -146,8 +146,8 @@ penthera init --yes --dry-run
   [roadmap](https://github.com/danoszz/penthera/blob/main/ROADMAP.md).
 - A clean scan is not proof of safety. Every finding has a confidence label, and
   probes that could not run are listed as inconclusive rather than passed.
-- Its accuracy is measured only on labs we wrote ourselves: precision 0.88
-  (95% CI 0.69 to 0.96) and recall 0.91 (95% CI 0.73 to 0.98) on 24 findings
+- Its accuracy is measured only on labs we wrote ourselves: precision 0.92
+  (95% CI 0.74 to 0.98) and recall 0.96 (95% CI 0.79 to 0.99) on 24 findings
   ([results](https://github.com/danoszz/penthera/blob/main/bench/RESULTS.md)). Accuracy on real apps is not measured
   yet. That is [experiment E1](https://github.com/danoszz/penthera/blob/main/docs/research/prereg/E1-real-world-accuracy.md).
 
@@ -165,11 +165,15 @@ Exit code: 0 when the wizard finishes (whatever the grades), 2 for a bad flag.
 For a gate in CI, use the commands themselves (`penthera --repo .`, `penthera deps`):
 they exit 1 on high or critical findings.
 
+`PENTHERA_NO_ONBOARDING=1` stops a bare `penthera` from opening the wizard, and
+`PENTHERA_INIT_PORTS` replaces the dev ports it probes (a comma list, or empty
+for none).
+
 The pinned SHA is the last release tagged before this version
 (`ACTION_PIN` in `src/cli/onboarding.js`); Dependabot's `github-actions`
 updates keep it current in your repo.
 
 Known issue: in every release from 1.5.0 to 2.0.0, the action's `mode: deps`
 exits before it scans, and the job still reports success, with no comment and
-no SARIF. 2.1.0-rc.1 has the fix, and `init` now writes a v2.1.0 pin. A workflow
+no SARIF. 2.1.0-rc.1 has the fix, and `init` writes a pin to a release that has it. A workflow
 written by an older `init` needs its pin moved to 2.1.0-rc.1 or later.

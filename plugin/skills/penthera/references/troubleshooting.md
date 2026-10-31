@@ -9,7 +9,8 @@
 | Error | Cause | Solution |
 |-------|-------|----------|
 | Target unreachable | Server down, wrong URL, firewall | Verify URL in browser; check server is running |
-| No target specified | Missing URL and `--repo` | Provide URL, `--repo <path>`, or `--machine` |
+| `No target` | Missing URL and `--repo` | Provide a URL, `--repo <path>` or a command |
+| `--repo` path not found | The path does not exist | Check the path |
 | Unknown profile | Invalid `--profile` value | Use `quick`, `standard`, or `deep` |
 | Scan failed (exception) | Network timeout, parse error | Retry with `--verbose`; increase `--timeout` |
 
@@ -24,7 +25,7 @@ penthera https://myapp.com --verbose --timeout 30000
 **Solution:** Install Node.js 22+ from [nodejs.org](https://nodejs.org/). Verify:
 
 ```bash
-node -v   # should be v18.x or higher
+node -v   # should be v22.x or higher
 ```
 
 ## Penthera CLI not found
@@ -62,11 +63,11 @@ penthera https://myapp.com -o reports/scan.json
 penthera https://myapp.com --auth-cookie "session=abc123; path=/"
 ```
 
-## Deep/fuzz warnings
+## Active scan refused
 
-**Symptoms:** Yellow WARN about attack payloads
+**Symptoms:** Exit 2 with `Active modes (...)` or a hostname mismatch
 
-**Expected:** `--deep` always prints a warning. Confirm user authorization before proceeding.
+**Expected:** Active modes ask first. In a script or agent, pass `--confirm-target <host>` after the user confirms that exact host.
 
 ## Baseline file not found
 
@@ -86,7 +87,7 @@ penthera https://myapp.com -o reports/previous.json
 
 **Checks:**
 - `reports/scan.sarif` was generated (`--sarif` flag used)
-- `github/codeql-action/upload-sarif@v3` step has `if: always()`
+- the `github/codeql-action/upload-sarif` step has `if: always()`
 - Repository has code scanning enabled
 
 ## Preflight script failures

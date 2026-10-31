@@ -20,8 +20,8 @@ that follow from fail-safe design. Detection rules are distributed only in
 reviewed, versioned releases, never through a live feed, which removes an
 update channel from the attack surface. Each design choice is tied to prior
 research or a published standard. On a bundled benchmark of labeled local
-targets, Penthera reaches a precision of 0.88 (95% CI 0.69 to 0.96) and a recall
-of 0.91 (95% CI 0.73 to 0.98) on 24 scored findings. Because the same authors
+targets, Penthera reaches a precision of 0.92 (95% CI 0.74 to 0.98) and a recall
+of 0.96 (95% CI 0.79 to 0.99) on 24 scored findings. Because the same authors
 wrote the scanner and the targets, these figures measure
 regressions, not accuracy on arbitrary applications.
 
@@ -393,10 +393,10 @@ into SARIF, so the label survives into GitHub code scanning.
 
 The benchmark reports precision per confidence label, which tests whether the
 labels mean what they say. On the current run, all `likely` and
-`needs-human-review` findings were true positives and the one `potential`
-finding was a false positive. The two `confirmed` false positives are cases
-where the evidence is real but the judgment is wrong: a health endpoint that
-is public by design, and AWS's published example key. See
+`needs-human-review` findings were true positives. `confirmed` had 12 true and
+1 false positive, and `potential` 2 true and 1 false positive. The `confirmed`
+false positive is a case where the evidence is real but the judgment is wrong:
+a health endpoint that is public by design. See
 [bench/RESULTS.md](https://github.com/danoszz/penthera/blob/main/bench/RESULTS.md).
 
 ### Findings proposed by a model
@@ -626,8 +626,9 @@ are welcome (see [MANIFESTO.md](MANIFESTO.md)).
     al., 2013; Stock et al., 2014).
 - **Logic and authorization.** No business logic testing. IDOR/BOLA findings are
   heuristics that need a human to confirm them.
-- **Secrets.** Detection is pattern-based and skips Markdown and other
-  documentation files, so unprefixed secrets and secrets in notes are missed.
+- **Secrets.** Detection is pattern-based. In Markdown and other documentation
+  files, and in translation files, only the fixed-shape rules run, so unprefixed
+  secrets and secrets in notes are missed.
 - **Dependencies (`deps`, `install`).**
   - Analysis is static. Behavior that is only decided at run time (code
     fetched or decrypted on execution, heavily obfuscated or minified bundles,
@@ -657,8 +658,8 @@ are welcome (see [MANIFESTO.md](MANIFESTO.md)).
 
 ### How far the evidence reaches
 
-- **Small sample.** The bundled benchmark scores 24 findings. Precision 0.88 and
-  recall 0.91 come with wide 95% Wilson intervals (0.69 to 0.96 and 0.73 to 0.98), so
+- **Small sample.** The bundled benchmark scores 24 findings. Precision 0.92 and
+  recall 0.96 come with wide 95% Wilson intervals (0.74 to 0.98 and 0.79 to 0.99), so
   small changes in either are not meaningful.
 - **Built by the same team.** The benchmark targets, their labels, and the
   scanner were written by the same people, so the numbers measure regressions
@@ -672,8 +673,9 @@ are welcome (see [MANIFESTO.md](MANIFESTO.md)).
   labeler, so label errors are not measured.
 - **Recall is only partly known.** Recall counts misses of issues we planted. On
   real code, the full set of issues is unknown.
-- **No head-to-head comparison** with other tools under the same conditions has
-  been run.
+- **No head-to-head comparison on this bundled benchmark.** The
+  [public benchmarks](https://github.com/danoszz/penthera/blob/main/bench/public/RESULTS.md)
+  compare Penthera with free tools on datasets other people built.
 - **Confidence labels are not calibrated.** The labels (confirmed, likely,
   potential, needs human review) are expert judgment about each probe's
   method, not measured probabilities. Severity mappings are judgment too.

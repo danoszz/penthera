@@ -59,7 +59,7 @@ With `--offline`, the HTTP client refuses every host except the scan target. A r
 - **The Retire.js database comes from the snapshot vendored in the package** (`lib/data/retire-jsrepository.json.gz`), refreshed at each release by `scripts/refresh-retire-db.mjs`. The source URL, fetch date and SHA-256 sit next to it in `retire-jsrepository.meta.json`, so you can check it against upstream. Online scans fall back to the snapshot too when the live download fails.
 - **Third-party scripts are not fetched.** A refused request is listed in the report as an inconclusive probe, not passed over silently.
 - **`--suppliers` is refused**, because it rates third-party domains.
-- **DNS:** reaching a remote target needs DNS. For non-local targets, the email-authentication check also looks up the target domain's SPF/DMARC/MX records through your system resolver. A `localhost` or IP target needs no DNS at all.
+- **DNS:** reaching a remote target needs DNS. The SPF, DMARC and MX lookups of the email check are skipped with `--offline`. A `localhost` or IP target needs no DNS at all.
 
 Penthera never fetches rules or code at runtime. Templates, wordlists and the vulnerability database ship in the package.
 

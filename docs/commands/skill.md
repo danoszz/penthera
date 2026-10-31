@@ -54,8 +54,9 @@ read-only tools instead, add the MCP server: see [mcp.md](mcp.md).
 
 The skill adds an authorization gate: it instructs the agent to refuse targets you
 do not own or are not authorized to test, and the wizard asks you to confirm before
-scanning a remote host. It is an agent-level and interactive safeguard, not something
-the raw CLI enforces. You are responsible for every target you pass it. Run preflight
+scanning a remote host. The raw CLI does not check who owns a target. It asks for
+confirmation only before active modes (`--deep`, `--fuzz`, `--adaptive`, `--all`,
+`--profile deep`). You are responsible for every target you pass it. Run preflight
 from your project folder before the first scan. The script is in the skill's own folder:
 `~/.claude/skills/penthera` after `npx skills add -g`, or `skills/penthera` in a checkout.
 

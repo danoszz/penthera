@@ -22,14 +22,13 @@ penthera giants                            # which tools you have, their version
 penthera --repo . --giants                 # Penthera, then every installed offline tool
 penthera --repo . --with gitleaks,trivy    # only these tools
 penthera --repo . --giants --without trufflehog
-penthera --repo . --giants --giants-online # also pip-audit and TruffleHog key verification
+penthera --repo . --giants --giants-online # also pip-audit, TruffleHog key verification and osv-scanner's API
 penthera https://staging.example.com --giants --nuclei ./my-templates
 ```
 
 This is a feature description, not a claim that the combination finds more.
-Whether it does is measured by experiment E14
-([pre-registration](https://github.com/danoszz/penthera/blob/main/docs/research/prereg/E14-giants-combination.md)); until E14
-is published, Penthera makes no accuracy claim for `--giants`.
+Experiment E14 measured that
+([results](https://github.com/danoszz/penthera/blob/main/bench/public/RESULTS.md)).
 
 ## What runs
 
@@ -37,7 +36,7 @@ is published, Penthera makes no accuracy claim for `--giants`.
 |---|---|---|---|
 | Secrets | Secret rules | gitleaks, TruffleHog | None. TruffleHog verifies keys only with `--giants-online` |
 | Code | Code patterns, library mode | Semgrep (your local rules only); CodeQL only with `--with codeql` | None |
-| Dependencies | `penthera deps` | osv-scanner (your local database), pip-audit | osv-scanner: none with a local database. pip-audit: always online, so only with `--giants-online` |
+| Dependencies | `penthera deps` | osv-scanner (your local database), pip-audit | osv-scanner: none with a local database, its API with `--giants-online`. pip-audit: always online, so only with `--giants-online` |
 | Infrastructure | Runtime versions in Dockerfiles and version files | Trivy (`trivy fs`, vulnerabilities and IaC), Checkov | None, with Trivy's database already in its cache |
 | Live app (URL scans) | Passive checks, templates, `--deep` probes | nuclei (your templates), the ZAP baseline scan | The target only |
 
@@ -114,7 +113,7 @@ Two findings are the same when their keys match:
 | Infrastructure | File, resource, and a shared check id |
 | Web | URL, parameter, and a shared CWE |
 
-The default is **Penthera-first**, until E14 decides otherwise. A tool finding
+The default is **Penthera-first**, as E14's rule kept it. A tool finding
 that matches one of Penthera's is folded into it, and the report says
 "found by Penthera, gitleaks". Penthera's confidence and remediation lead.
 Everything else is merged among the tools (highest severity wins, every source

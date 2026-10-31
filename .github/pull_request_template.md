@@ -20,7 +20,7 @@ Closes #<!-- issue number, if any -->
 - [ ] `npm test` passes locally
 - [ ] Added or updated tests for the change (a new probe should have at least a mock-server test)
 - [ ] For a new check: it confirms a real hit (documented how false positives are avoided)
-- [ ] Updated docs / README / CHANGELOG if behavior or flags changed
+- [ ] Added a changelog fragment, and updated the docs if flags, MCP tools, rules or behavior changed (or wrote `docs: none, <reason>` in the fragment)
 - [ ] No secrets, real hostnames, or scan output committed
 - [ ] Change respects the authorization posture (no probe scans a target the user hasn't authorized)
 

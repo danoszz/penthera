@@ -53,8 +53,14 @@ penthera install --yes                # CI: install only if nothing breaches the
 (`install-scripts`, `shell`, `network`, `env-bulk`, `obfuscated`, ...) plus
 `typosquat` and `unscanned`. The `requireApproval` list shown is the default.
 `allow` takes names or globs, optionally pinned to a version, and overrides
-both. The one network use is npm talking to your configured registry, and
+both, except two floors: `script-mismatch` is always denied, and `unscanned`
+always needs approval. The one network use is npm talking to your configured registry, and
 Penthera prints which one; Penthera itself sends nothing. Workspaces and
 `file:` dependencies are not supported yet.
+
+Other flags: `--dir <path>`, `--policy <file>`, `-D, --save-dev`,
+`-E, --save-exact`, `--offline` (npm cache only), `-v, --verbose`, `--json`, and
+`--allow-non-registry` to accept git and tarball-URL packages, which are refused
+by default.
 
 [Back to the README](https://github.com/danoszz/penthera/blob/main/README.md) · [All commands](https://github.com/danoszz/penthera/blob/main/docs/commands/README.md)

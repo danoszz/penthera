@@ -27,7 +27,7 @@ agent config.
 | | Penthera | Semgrep |
 |---|---|---|
 | Your code | Route discovery, trust-boundary mapping and secrets for Next.js, Express, Hono, Fastify | Pattern-based analysis in many languages; CE works within a single file, the platform adds cross-file taint analysis ([CE vs platform](https://docs.semgrep.dev/semgrep-pro-vs-oss)) |
-| Rules | Built in and readable; no rule language for users | A rule language plus 2,000+ community rules in the Registry ([repo](https://github.com/semgrep/semgrep)) |
+| Rules | Built in and readable; add patterns and IOCs with signed rule packs or Nuclei templates; no rule language for code | A rule language plus 2,000+ community rules in the Registry ([repo](https://github.com/semgrep/semgrep)) |
 | Dependencies | Capabilities, upgrade diff, typosquats, licenses (npm and Python) | Semgrep Supply Chain with reachability, on the platform |
 | Running app | URL scan | No |
 | AI tooling | `penthera agents` | No dedicated check |

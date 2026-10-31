@@ -125,7 +125,7 @@ These run in the browser and only accept MCP servers by URL. Penthera's server r
 | **Replit** | the deployed URL into penthera.org | in the Shell: `npx penthera@2.1.2 --repo .` (needs Node.js 22 or later) |
 | **v0** | the **production** URL into penthera.org (preview links can sit behind a Vercel login) | connect GitHub and add the [Action](commands/action.md) to the pull requests v0 opens |
 
-Once the code is on GitHub, the Action checks every pull request: dependencies, AI-tool config and the code. See [the Action](commands/action.md) and [a ready workflow](https://github.com/danoszz/penthera/blob/main/docs/examples/pr-dependency-review.yml).
+Once the code is on GitHub, the Action checks every pull request: dependencies with `mode: deps`, AI-tool config with `mode: agents`. To scan the code, add a `npx penthera@2.1.2 --repo .` step. See [the Action](commands/action.md) and [a ready workflow](https://github.com/danoszz/penthera/blob/main/docs/examples/pr-dependency-review.yml).
 
 After the GitHub sync, one file checks the agent config (skills, MCP servers, hooks) on every pull request and reports to Code scanning: copy [`github-actions-agents.yml`](https://github.com/danoszz/penthera/blob/main/docs/examples/github-actions-agents.yml) into `.github/workflows/`, or let `penthera init` write it.
 
@@ -136,5 +136,5 @@ Mobile builders (Rork and similar) usually have no web URL. Sync to GitHub and s
 ## Limits
 
 - **Browser-only builders:** they can't run Penthera's MCP server, because it needs a local process.
-- **Live check:** penthera.org checks one public page and up to 8 of its scripts. It's passive and doesn't log in.
+- **Live check:** penthera.org checks one public page and up to 14 of the scripts and stylesheets it references. It's passive and doesn't log in.
 - **Configs in these tools change often.** Each link above goes to the tool's own docs. If a path moved, the tool's docs win.

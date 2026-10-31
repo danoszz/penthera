@@ -15,7 +15,7 @@ description: >
   of their own app, staging URL, localhost, repo, dependencies, or agent setup. Do
   NOT use for targets without explicit authorization.
 license: MIT
-compatibility: Node.js 22+, network access to target, Penthera CLI (npm link or node bin/penthera.js from repo). macOS only for --machine.
+compatibility: Node.js 22+, the Penthera CLI (npx -y penthera@2.1.2, npm install -g, or node bin/penthera.js from a checkout), network access to the target for URL scans. macOS only for --machine.
 allowed-tools: "Bash(penthera:*) Bash(npx -y penthera@2.1.2:*) Bash(npx --no-install penthera:*) Read"
 metadata:
   author: danoszz
@@ -73,7 +73,7 @@ To try a release candidate in someone's project, run it with `npx penthera@next 
 | Scan a live URL | `penthera <url> --profile standard -o reports/scan.json` |
 | Scan repo only (secrets, routes) | `penthera --repo . -o reports/repo-scan.json` |
 | Is this dependency safe? / what changed in my deps? | `penthera deps` or `penthera deps --base origin/main` (see **Dependency risk scan**) |
-| Am I affected by a PHP / nginx / Apache / Node.js / Python / OpenSSL advisory? | `penthera <url>` and `penthera --repo .`; for an advisory newer than the release, add `--rules <signed-pack>` (see docs/runtime-advisories.md). Report "check on server" findings as unknown, never as safe |
+| Am I affected by a PHP / nginx / Apache / Node.js / Python / OpenSSL / MongoDB advisory? | `penthera <url>` and `penthera --repo .`; for an advisory newer than the release, add `--rules <signed-pack>` (see docs/runtime-advisories.md). Report "check on server" findings as unknown, never as safe |
 | Install X safely / is it safe to add this package? | `penthera install <pkg> --dry-run`, then `penthera install <pkg>` (see **Install firewall**) |
 | Are our dependency licenses OK? / any AGPL? | `penthera deps --license-policy permissive` (see **License policy**) |
 | Add a pre-commit hook / stop me committing secrets | `penthera hook install` (see **Pre-commit hook**) |
@@ -94,7 +94,7 @@ To try a release candidate in someone's project, run it with `npx penthera@next 
 
 ## Reply with the brief
 
-A scan run from an agent prints the brief to stdout: a verdict, then Act on, Check first, Likely noise, Not checked and Next. Rules fill it. For a repo, deps and agent-config scan together, merge them into one brief:
+A scan run from an agent prints the brief to stdout, unless it runs in CI or with `--verbose`: a verdict, then Act on, Check first, Likely noise, Not checked and Next. Rules fill it. For a repo, deps and agent-config scan together, merge them into one brief:
 
 ```bash
 penthera --repo . -o reports/repo.json
@@ -116,8 +116,11 @@ These flags send **attack payloads**. Require explicit user confirmation before 
 
 - `--deep`, SQLi, SSTI, SSRF, XSS, CMDi probes
 - `--fuzz`, property-based API fuzzing
+- `--adaptive`, probes that may send unexpected methods, including `DELETE`
 - `--all`, enables recon + deep + fuzz
 - `--profile deep`, maximum coverage
+
+An agent has no terminal, so the CLI refuses these flags with exit 2 unless you pass `--confirm-target <host>`. Pass it only after the user confirms that exact host.
 
 If user asks for "full pentest" or "deep scan", confirm they own the target and accept payload-based testing.
 
@@ -134,9 +137,9 @@ mkdir -p reports
 penthera https://staging.example.com --profile standard -o reports/scan.json
 ```
 
-4. Read `reports/scan.md`, summarize critical/high/medium findings.
+4. Reply with the agent brief it printed (see **Reply with the brief**).
 5. Recommend concrete fixes per finding.
-6. Note exit code: `0` = no critical/high; `1` = critical/high found; `2` = scan failed.
+6. Note exit code: `0` = no critical/high; `1` = critical/high found, other tools' too with `--giants`; `2` = scan failed.
 
 ## Workflow 2: Repo + live combined
 
@@ -169,7 +172,7 @@ penthera https://staging.example.com --profile standard \
 ```
 
 3. Report: new findings count, resolved count, unchanged count (printed to stderr during scan).
-4. Focus summary on **new** findings only.
+4. Rerun with `-q` to list new findings only; without it the report holds all of them.
 
 ## Workflow 4: Scan and fix
 
@@ -244,7 +247,7 @@ Env vars: `PENTHERA_BEARER`, `PENTHERA_COOKIE`.
 
 **Triggers:** "audit my MCP servers", "audit my skills / agent config", "is this skill safe to install?", "check my Claude Code hooks and permissions", "did any of my MCP servers change?"
 
-Offline and read-only: it reads config files, sends nothing anywhere and modifies nothing, so no target authorization is needed. Use `--home` only when the user asks about their machine-wide setup (it reads `~/.claude`, `~/.cursor`, `~/.claude.json`, and the Claude Desktop config).
+Offline and read-only: it reads config files, sends nothing anywhere and modifies nothing, so no target authorization is needed. Use `--home` only when the user asks about their machine-wide setup (it reads `~/.claude`, `~/.cursor`, `~/.claude.json`, the Claude Desktop config, and Cline's and Roo Code's MCP settings).
 
 ```bash
 penthera agents .                               # repo: .mcp.json, .claude/, .cursor/, AGENTS.md, skills/
@@ -270,7 +273,7 @@ mkdir -p reports
 penthera <url> --repo . --framework nis2 --audience auditor --markdown reports/auditor.md
 ```
    Add `--memory` so the owner report can show the trend across scans.
-3. Evidence an auditor can check (all reports plus a hashed, optionally signed manifest). The directory must be new:
+3. Evidence an auditor can check (all reports plus a hashed, optionally signed manifest). The directory must be new or empty:
 ```bash
 penthera <url> --repo . --framework nis2 --evidence reports/evidence-$(date +%F) --sign-key ~/.ssh/id_ed25519
 penthera evidence verify reports/evidence-$(date +%F)
@@ -314,7 +317,7 @@ penthera deps --venv path/to/venv          # Python: a virtualenv that is not .v
 
 **Triggers:** "install X safely", "is it safe to add this package?", "add X but check it first", "will this upgrade run anything on install?"
 
-`penthera install` resolves with scripts off in a temp copy, diffs capabilities against the current lockfile, and applies `penthera.policy.json` before the real `npm install`. npm contacts the configured registry (the only egress); say so.
+`penthera install` resolves with scripts off in a temp copy, diffs capabilities against the current lockfile, and applies `penthera.policy.json` before `npm ci` installs the reviewed lockfile. npm contacts the configured registry (the only egress); say so.
 
 ```bash
 penthera install <pkg> --dry-run --json   # always start here: report only, nothing changes
@@ -346,7 +349,7 @@ penthera init --yes             # code, deps and AI tooling checks offline; hook
 penthera init                   # the interactive wizard, in the user's terminal
 ```
 
-1. Run `--dry-run --yes` first and show the user the plan. `--yes` never scans a URL, never runs the fix loop and never opens the dashboard; it writes the pre-commit hook, `.github/workflows/penthera.yml` and a `reports/` line in `.gitignore`. Ask before running it if the user only asked a question.
+1. Run `--dry-run --yes` first and show the user the plan. `--yes` never scans a URL, never runs the fix loop and never opens the dashboard; it installs the pre-commit hook, writes `.github/workflows/penthera.yml` when the repo has a `package-lock.json`, `.github/workflows/penthera-agents.yml` when it has agent config, and adds `reports/` to `.gitignore`. Steps already done, or not applicable, are skipped. Ask before running it if the user only asked a question.
 2. Reports land in `reports/penthera-<date>/`; read `summary.md` and walk the user through the "Fix first" items.
 3. Never commit or push the workflow file it writes; tell the user to review and commit it. To scan the running app, use `penthera <url>` after the authorization gate above, not `init --yes`.
 
@@ -389,7 +392,7 @@ Actions:
 1. Confirm localhost, authorization satisfied.
 2. `bash <this skill's folder>/scripts/preflight.sh http://localhost:3000`
 3. `penthera http://localhost:3000 --profile quick -o reports/scan.json`
-4. Summarize `reports/scan.md`.
+4. Reply with the brief.
 
 **Example 2: Staging before deploy**
 

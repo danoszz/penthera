@@ -200,9 +200,6 @@ Keep the approved one-liner. Add one idea, stated soberly:
 - Say what Penthera is not: it does not secure frontier-lab training clusters.
   It helps a developer or small team with *their* agents, *their* dependencies
   and *their* secrets.
-- Grant angle (NLnet): action A, action C and E7 form a coherent work package,
-  "trustworthy verification of AI-assisted development". It is open,
-  measurable and local first.
 
 ## Caveats
 

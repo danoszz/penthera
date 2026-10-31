@@ -1,6 +1,6 @@
 # Authorization and ethical use
 
-Penthera sends HTTP requests to targets you specify. Some modes (`--deep`, `--fuzz`, `--all`) send **attack payloads** designed to find vulnerabilities. This is powerful tooling, treat it like a loaded instrument, not a toy.
+Penthera sends HTTP requests to targets you specify. Some modes (`--deep`, `--fuzz`, `--adaptive`, `--all`) send **attack payloads** designed to find vulnerabilities. This is powerful tooling, treat it like a loaded instrument, not a toy.
 
 ## You may use Penthera when
 

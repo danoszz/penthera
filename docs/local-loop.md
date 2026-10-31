@@ -166,7 +166,7 @@ The same object, without `testOutput` and with finding ids in place of finding
 objects, is appended to memory as a `loop_run` event.
 
 Exit codes: `0` nothing fixable left, `1` fixable findings remain (declined,
-failed, or out of iterations), `2` the loop could not start (dirty tree,
+failed, or out of iterations) or the loop stopped on an error, `2` the loop could not start (dirty tree,
 detached HEAD, bad options), `130` interrupted.
 
 ## The learning store
