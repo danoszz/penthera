@@ -9,11 +9,11 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { scrub, scrubMisses } from "./classify.mjs";
 import { pageTextMissed, safeRecord, selfHashed, withheldCounts, withholdText } from "./record-checks.mjs";
-import { assemble, joined, nestedProblems, NOT_PRINTED, NOT_THE_RESULT, NOT_VALIDATED, PART_TWO, PRINTED_KEYS, main as report, UNDER_20 } from "./report-tables.mjs";
+import { assemble, joined, NESTED_FIELDS, nestedProblems, NOT_PRINTED, NOT_THE_RESULT, NOT_VALIDATED, PART_TWO, PRINTED_KEYS, main as report, UNDER_20 } from "./report-tables.mjs";
 import { codeFiles, studyState } from "./replicate.mjs";
 import { sha256, wilson } from "./run.mjs";
 import { auditFrame, main as validation, scoreLabels, stateOf, SUPPRESSED, NO_ANSWERS } from "./validation-sample.mjs";
-import { challengeByEdge, main as analyze, industryTable, refusalShares, traitTable } from "./analyze-r.mjs";
+import { challengeByEdge, main as analyze, industryTable, refusalShares, standardizedDiff, traitTable } from "./analyze-r.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const quiet = () => undefined;
@@ -64,17 +64,21 @@ export function scoredRun(dir, { resamples = 200, change } = {}) {
   return shown;
 }
 
-const VIEW = { diff: 0.1, ci: [0.05, 0.15], orgsA: 30, orgsB: 30, direction: "as predicted" };
+const VIEW = { diff: 0.1, ci: [0.05, 0.15], nA: 40, nB: 41, judgedA: 38, judgedB: 39, orgsA: 30, orgsB: 30, skipped: 2, newcombe: { diff: 0.11, ci95: [0.02, 0.2] }, exactP: 0.04, direction: "above zero", equivalence: "not shown", decision: "supported" };
+const STANDARD = { diff: 0.1, ci: [0, 0.2], supported: ["cloudflare"], dropped: [] };
 
 /** An analysis of this run, in the shape analyze-r.mjs writes, with one view of each kind. */
 export function fixtureAnalysis(dir) {
   const manifest = json(join(dir, "manifest.json"));
   const rows = readFileSync(join(dir, "raw.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
   const claim = (id) => ({ id, label: "x minus y", check: "csp", predicted: "-", S: VIEW, R: VIEW, decision: "supported" });
+  const dnsClaim = (id) => ({ id, label: "DNS", check: "spf+dmarc", predicted: "-", S: VIEW, decision: "supported" });
   return selfHashed({
-    experiment: "E20-R", level: 0.9954, primaryRefusal: { n: rows.length, share: 0.1, ci: [0.05, 0.15] }, refusals: { all: 0.2, allCi95: [0.15, 0.25], registered: 0.15, registeredCi95: [0.1, 0.2], interval: "naive row-level" },
+    experiment: "E20-R", level: 0.9954, primaryRefusal: { n: rows.length, share: 0.1, ci: [0.05, 0.15] }, refusals: { n: rows.length, all: 0.2, allCi95: [0.15, 0.25], signatureBacked: 0.1, registered: 0.15, registeredCi95: [0.1, 0.2], interval: "naive row-level" },
     claims: [claim("C1"), claim("C2"), { id: "C6", label: "DNS", check: "spf+dmarc", predicted: "-", S: VIEW, decision: "not estimable" }, { id: "C12", label: "share", n: 9, diff: 0.1, ci: [0.05, 0.15] }],
-    cspControlsScripts: [claim("C1")], standardized: { C1: { diff: 0.1, ci: [0, 0.2] } }, standardizedR: { C1: { diff: 0.1, ci: [0, 0.2] } }, replicationAsE20: [claim("C1")],
+    cspControlsScripts: [claim("C1")], replicationAsE20: [claim("C1")],
+    standardized: { C1: STANDARD, C3: { ...STANDARD, dropped: ["vercel", "akamai"] } }, standardizedR: { C1: STANDARD, C3: { ...STANDARD, dropped: ["vercel"] } },
+    dnsBeside: { registered: [dnsClaim("C2")], declared: [dnsClaim("C6")], rejectOnly: [dnsClaim("C7")] }, dnsGradedOnlyReading: [dnsClaim("C10"), { ...claim("C8"), S: { ...VIEW, exactP: 1e-9 } }],
     bounds: { C1: { low: 0, high: 0.2, coverageA: 0.9, coverageB: 0.9 } }, skipsByCohort: { T1k: { exclusion_list: 1 } }, dnsCoverage: { T1k: { read: 9, exists: 9, nxdomain: 0, unknown: 0 } },
     textWithheld: withheldCounts(rows), auditFrame: auditFrame(rows),
     provenance: { manifestSha256: sha256(readFileSync(join(dir, "manifest.json"))), rawSha256: sha256(readFileSync(join(dir, "raw.jsonl"))), state: stateOf(manifest) },
@@ -107,7 +111,8 @@ export function auditRows(root, add, truth, { inputs, preregText }) {
   scoredRun(flips);
   const a = reportOf(stands), b = reportOf(flips);
   add("R1: exactly 2.0% stands, end to end", "allowed", truth(a.code === 0 && a.text.includes("**Headline audit: stands, on its frame.**") && count(a.text, NOT_VALIDATED) === 0 && !a.text.includes("not the audit's result") && !a.text.includes("Headline audit: not estimable") && a.text.includes("Audit figures, on the frame") && a.text.includes("| C6 | DNS "), "1 of 51 is under, the warning count is 0"));
-  const realViews = 2 + 1 + 1 + 1;
+  // Claims, CSP and the E20 reading, standardized, graded-only DNS, then the row-level tables of each.
+  const realViews = 2 + 1 + 1 + 2 + 1 + 2 + 1 + 1 + 1;
   add("R2: one more withheld flips every row", "allowed", truth(b.code === 0 && count(b.text, NOT_VALIDATED) === realViews && b.text.includes("**Headline audit: not estimable.** Over 2.0% withheld: challenge 2 of 50. It changes no claim's decision.") && b.text.includes("Frame figures, not the audit's result") && b.text.includes(NOT_THE_RESULT) && b.text.includes("Frame only, not the audit's result: kappa"), `${count(b.text, NOT_VALIDATED)} warnings on ${realViews} real-page views`));
   add("R3: the headline stands above the first claim row, after provenance and scope", "allowed", truth(b.text.indexOf("Headline audit") < b.text.indexOf("| C1 |") && b.text.indexOf("## Provenance") < b.text.indexOf("Headline audit") && b.text.indexOf("Headline audit") < b.text.indexOf("Audit figures describe non-withheld records, not the run as a whole."), "order"));
   add("R4: a DNS claim with no real-page view gets no warning", "allowed", truth(b.text.split("\n").filter((l) => l.startsWith("| C6 |")).every((l) => !l.includes(NOT_VALIDATED)), "C6"));
@@ -204,6 +209,49 @@ export function auditRows(root, add, truth, { inputs, preregText }) {
     "a refusal label removed": (x) => { delete x.refusals.interval; },
   };
   for (const [name, change] of Object.entries(nestedEdits)) { const x = JSON.parse(JSON.stringify(chainAnalysis)); change(x); add(`G6: the nested guard sees ${name}`, "allowed", truth(nestedProblems(x).length > 0, nestedProblems(x)[0] ?? "nothing seen")); }
+  const fieldEdits = {
+    "a new field in a claim view": (x) => { x.claims[0].S.note = 1; },
+    "a new field in a real-page view": (x) => { x.claims[0].R.note = 1; },
+    "a view with no equivalence": (x) => { delete x.claims[0].S.equivalence; },
+    "a view with no exact p": (x) => { delete x.cspControlsScripts[0].S.exactP; },
+    "a new field in Newcombe": (x) => { x.claims[0].S.newcombe.note = 1; },
+    "a new field in a standardized row": (x) => { x.standardized.C1.note = 1; },
+    "a real-page standardized row with no dropped": (x) => { delete x.standardizedR.C1.dropped; },
+    "a new field in a bound": (x) => { x.bounds.C1.note = 1; },
+    "C3 with no scope": (x) => { delete x.bounds.C3.scope; },
+  };
+  for (const [name, change] of Object.entries(fieldEdits)) { const x = JSON.parse(JSON.stringify(chainAnalysis)); change(x); add(`G14: the nested guard sees ${name}`, "allowed", truth(nestedProblems(x).length > 0, nestedProblems(x)[0] ?? "nothing seen")); }
+  for (const [name, change] of Object.entries({
+    "a new field in a DNS view": (x) => { x.dnsBeside.declared[0].S.note = 1; },
+    "a graded-only view with no Newcombe": (x) => { delete x.dnsGradedOnlyReading[0].S.newcombe; },
+  })) { const x = JSON.parse(JSON.stringify(fixtureAnalysis(stands))); change(x); add(`G14: the nested guard sees ${name}`, "allowed", truth(!nestedProblems(fixtureAnalysis(stands)).length && nestedProblems(x).length > 0, nestedProblems(x)[0] ?? "nothing seen")); }
+  add("G14: every field of a view, standardized row and bound is printed or listed once", "allowed", truth(Object.values(NESTED_FIELDS).every(({ printed, notPrinted }) => !printed.some((f) => f in notPrinted) && Object.values(notPrinted).every((why) => why.length > 20)), "two lists, with reasons"));
+  const rowCells = (id, side, v) => [id, side, v.nA, v.nB, v.judgedA, v.judgedB, v.newcombe.diff === null ? "n/a" : (v.newcombe.diff * 100).toFixed(1), v.newcombe.ci95[0] === null ? "n/a" : `${(v.newcombe.ci95[0] * 100).toFixed(1)} to ${(v.newcombe.ci95[1] * 100).toFixed(1)}`, v.exactP === null ? "n/a" : v.exactP < 0.001 ? "under 0.001" : v.exactP.toFixed(3), v.skipped];
+  for (const [name, list] of [["claims", chainAnalysis.claims.filter((c) => c.S)], ["CSP controls scripts", chainAnalysis.cspControlsScripts], ["the E20 reading", chainAnalysis.replicationAsE20]]) {
+    const rows = list.flatMap((c) => [["S", c.S], ["R", c.R]].filter(([, v]) => v).map(([side, v]) => finalText.includes(`| ${rowCells(c.id, side, v).join(" | ")} |`)));
+    add(`V1: a real run prints every row-level view of ${name}`, "allowed", truth(rows.length > 0 && rows.every(Boolean), `${rows.length} views`));
+    add(`V1: and each view's equivalence, in ${name}`, "allowed", truth(list.every((c) => finalText.includes(`${c.S.direction}; equivalence ${c.S.equivalence}`)), "after direction"));
+  }
+  const section = (text, from, to) => text.slice(text.indexOf(from), to ? text.indexOf(to, text.indexOf(from) + from.length) : undefined);
+  const rowLine = "| 40 | 41 | 38 | 39 | 11.0 | 2.0 to 20.0 | 0.040 | 2";
+  const fiveLists = [["claims", "## Claims C1", "## CSP controls scripts", 3 * 2 - 1], ["CSP controls scripts", "## CSP controls scripts", "## Standardized figures", 2], ["the E20 reading", "## The E20-matched reading", "## C12 to C15", 2], ["DNS beside the decision", "## DNS beside the decision", "## Graded-only DNS reading", 3], ["graded-only DNS", "## Graded-only DNS reading", null, 3]];
+  for (const [label, text] of [["stands", a.text], ["not estimable", b.text]]) for (const [name, from, to, views] of fiveLists) {
+    const part5 = section(text, from, to);
+    const lines = part5.split("\n").filter((l) => /^\| C\d+ \| [SR] \|/.test(l));
+    add(`V2: ${name}, ${label}: equivalence and every row-level figure print, per view`, "allowed", truth(lines.length === views && part5.includes("above zero; equivalence not shown") && part5.includes("Newcombe difference, naive row-level") && lines.filter((l) => l.includes(rowLine)).length >= views - (name === "graded-only DNS" ? 1 : 0), `${lines.length} views`));
+    const realRows = lines.filter((l) => l.includes("| R |"));
+    add(`V3: ${name}, ${label}: every real-page row of the table is warned exactly when not estimable`, "allowed", truth(realRows.every((l) => l.includes(NOT_VALIDATED) === (label === "not estimable")) && lines.filter((l) => l.includes("| S |")).every((l) => !l.includes(NOT_VALIDATED)), `${realRows.length} real-page rows`));
+  }
+  add("V2: a tiny exact p prints as under 0.001, never 0.000", "allowed", truth(a.text.includes("| under 0.001 |") && !a.text.includes("| 0.000 | 2"), "the fixture's 1e-9"));
+  const orgRows = (edge, n, passes) => Array.from({ length: n }, (_, i) => ({ host: `${edge}${passes ? "p" : "f"}${i}.org`, status: "ok", platform: { edge }, checks: [{ id: "csp", weight: 14, passed: passes }], evidence: { class: { label: "candidate-page" } } }));
+  const under = standardizedDiff([...orgRows("cloudflare", 25, true), ...orgRows("vercel", 3, true)], [...orgRows("cloudflare", 25, false), ...orgRows("vercel", 3, false)], "csp", { resamples: 20 });
+  add("V4: a stratum under the floor is dropped", "allowed", truth(under.dropped.join() === "vercel" && under.supported.join() === "cloudflare", `${under.dropped}`));
+  const stratumRow = a.text.split("\n").find((l) => l.startsWith("| C3 | 10.0 (0.0 to 20.0) |"));
+  add("V4: dropped strata are named on the served and real-page views", "allowed", truth(stratumRow === "| C3 | 10.0 (0.0 to 20.0) | vercel, akamai | 10.0 (0.0 to 20.0) | vercel |", stratumRow ?? "no row"));
+  add("V4: none dropped prints none, on both", "allowed", truth(a.text.includes("| C1 | 10.0 (0.0 to 20.0) | none | 10.0 (0.0 to 20.0) | none |"), "C1"));
+  add("V4: a real run prints dropped too", "allowed", truth(section(finalText, "## Standardized figures", "## The E20-matched reading").includes("Strata dropped, real page"), "both columns"));
+  const boundsPart = section(finalText, "## Worst-case bounds of the claims", "## Sites skipped");
+  add("V5: the bounds name their scope", "allowed", truth(boundsPart.split("\n").filter((l) => /^\| C[34] \|/.test(l)).every((l) => l.endsWith("| graded |")) && boundsPart.split("\n").filter((l) => /^\| C[34] \|/.test(l)).length === 2 && boundsPart.split("\n").filter((l) => /^\| C(1|5|8|9|11) \|/.test(l)).length === 5 && boundsPart.split("\n").filter((l) => /^\| C(1|5|8|9|11) \|/.test(l)).every((l) => l.endsWith("| eligible |")), "graded for C3 and C4, eligible otherwise"));
   const printedRow = (cells) => part.includes(`| ${cells.join(" | ")} |`);
   const hidden = Array(5).fill(UNDER_20);
   const shareCells = (s) => (s.suppressed ? hidden : [s.passed, s.judged, (s.share * 100).toFixed(1), `${(s.ci95[0] * 100).toFixed(1)} to ${(s.ci95[1] * 100).toFixed(1)}`, "naive row-level"]);
@@ -276,6 +324,12 @@ export function auditRows(root, add, truth, { inputs, preregText }) {
     "a passed count": (x) => { x.industries.fixture.shares.csp.passed += 1; },
     "a refusal interval": (x) => { x.refusals.allCi95[0] += 0.01; },
     "an original-rules interval": (x) => { x.refusals.registeredCi95[1] -= 0.01; },
+    "a Newcombe difference": (x) => { x.claims[0].S.newcombe.diff = 0.42; },
+    "a Newcombe interval": (x) => { x.claims[0].S.newcombe.ci95 = [0.1, 0.2]; },
+    "an equivalence outcome": (x) => { x.claims[0].S.equivalence = "within the margin"; },
+    "an exact p": (x) => { x.claims[0].S.exactP = 0.5; },
+    "a dropped stratum": (x) => { x.standardized.C1.dropped = ["vercel"]; },
+    "a bound's scope": (x) => { x.bounds.C1.scope = "graded"; },
     "a suppressed cell lifted": (x) => { x.traits.login.shares.caa = { passed: 19, judged: 19, share: 1, ci95: [0.8, 1], interval: "naive row-level" }; },
     "a suppressed group lifted": (x) => { x.traits.payments = { sites: 19, shares: { csp: { passed: 9, judged: 19, share: 9 / 19, ci95: [0.3, 0.7], interval: "naive row-level" } } }; },
   })) refused(`A1: ${name} edited, with a fresh self-hash`, untouched(chain, (d) => freshAnalysis(d, change)), /analysis doesn't follow from its inputs/);

@@ -41,10 +41,17 @@ export const SHARE_FIELDS = Object.freeze(["passed", "judged", "share", "ci95", 
 export const GROUP_FIELDS = Object.freeze({ trait: ["sites", "shares"], industry: ["sites", "median", "shares"], suppressed: ["sites", "suppressed"], edge: ["n", "share", "ci95", "interval"], refusals: ["n", "all", "allCi95", "signatureBacked", "registered", "registeredCi95", "interval"] });
 export const PART_TWO = "Secondary figures. Their intervals are naive row-level, with no clustering, and they corroborate nothing. The two DNS tables keep the claims' cluster bootstrap and level.";
 export const UNDER_20 = "under 20";
+// Every field of a claim view, a standardized row and a bound is printed or listed here with a reason. A new field needs one or the other.
+export const NESTED_FIELDS = Object.freeze({
+  view: { printed: ["diff", "ci", "orgsA", "orgsB", "direction", "equivalence", "nA", "nB", "judgedA", "judgedB", "newcombe", "exactP", "skipped"], notPrinted: { decision: "each view's decision goes into the claim's decision, which the tables print" } },
+  newcombe: { printed: ["diff", "ci95"], notPrinted: {} },
+  standardized: { printed: ["diff", "ci", "dropped"], notPrinted: { supported: "the edge strata less the dropped ones, which the table names" } },
+  bound: { printed: ["low", "high", "coverageA", "coverageB", "scope"], notPrinted: {} },
+});
 
 const refuse = (why) => { throw new Error(`Refused: ${why}.`); };
 
-/** What is wrong with the nested rows of an analysis: a field missing, an unlisted field, a figure under the floor, or an interval that doesn't fit its counts. */
+/** What is wrong with the nested rows of an analysis: a field missing, an unlisted field, a figure under the floor, or an interval that doesn't fit its counts. Reads claim views, standardized rows and bounds too. */
 export function nestedProblems(a) {
   const out = [];
   const exact = (at, row, fields) => {
@@ -68,6 +75,16 @@ export function nestedProblems(a) {
   for (const [name, g] of Object.entries(industries)) group(`industries.${name}`, g, GROUP_FIELDS.industry);
   for (const [edge, g] of Object.entries(a.challengeByEdge ?? {})) exact(`challengeByEdge.${edge}`, g, GROUP_FIELDS.edge);
   exact("refusals", a.refusals, GROUP_FIELDS.refusals);
+  const listed = ({ printed, notPrinted }) => [...printed, ...Object.keys(notPrinted)];
+  const views = { claims: a.claims, cspControlsScripts: a.cspControlsScripts, replicationAsE20: a.replicationAsE20, dnsGradedOnlyReading: a.dnsGradedOnlyReading, ...Object.fromEntries(Object.entries(a.dnsBeside ?? {}).map(([name, list]) => [`dnsBeside.${name}`, list])) };
+  for (const [name, list] of Object.entries(views)) for (const c of list ?? []) for (const side of ["S", "R"]) {
+    if (!c[side]) continue;
+    exact(`${name}.${c.id}.${side}`, c[side], listed(NESTED_FIELDS.view));
+    exact(`${name}.${c.id}.${side}.newcombe`, c[side].newcombe, listed(NESTED_FIELDS.newcombe));
+  }
+  for (const name of ["standardized", "standardizedR"]) for (const [id, d] of Object.entries(a[name] ?? {})) exact(`${name}.${id}`, d, listed(NESTED_FIELDS.standardized));
+  const unscoped = NESTED_FIELDS.bound.printed.filter((f) => f !== "scope");
+  for (const [id, b] of Object.entries(a.bounds ?? {})) exact(`bounds.${id}`, b, ["C3", "C4"].includes(id) ? listed(NESTED_FIELDS.bound) : unscoped);
   if (a.refusals?.interval !== "naive row-level") out.push("refusals doesn't say its interval is naive row-level");
   return out;
 }
@@ -142,6 +159,7 @@ export function checkAgainstRun(dir, analysis, score, inputs, { state = studySta
 const pct = (v) => (typeof v === "number" ? (v * 100).toFixed(1) : "n/a");
 const ci = (c) => (Array.isArray(c) && typeof c[0] === "number" ? `${pct(c[0])} to ${pct(c[1])}` : "n/a");
 const num = (v) => (typeof v === "number" ? v.toFixed(3) : "n/a");
+const pValue = (v) => (typeof v === "number" && v < 0.001 ? "under 0.001" : num(v));
 
 /** The report's text, in the registered order. It checks nothing and writes nothing: only `main` writes, after every check. */
 export function assemble(a, s, { runtimeNow = null } = {}) {
@@ -149,9 +167,14 @@ export function assemble(a, s, { runtimeNow = null } = {}) {
   const table = (head, rows) => out.push(`| ${head.join(" | ")} |`, `|${head.map(() => "---").join("|")}|`, ...rows.map((r) => `| ${r.join(" | ")} |`), "");
   const title = (t) => out.push(`## ${t}`, "");
   const notEstimable = s.frame.notEstimable;
-  const view = (v) => (v ? `${pct(v.diff)} (${ci(v.ci)}), orgs ${v.orgsA}/${v.orgsB}, ${v.direction}` : "");
+  const view = (v) => (v ? `${pct(v.diff)} (${ci(v.ci)}), orgs ${v.orgsA}/${v.orgsB}, ${v.direction}; equivalence ${v.equivalence}` : "");
   const real = (cell) => (notEstimable ? `${cell}${NOT_VALIDATED}` : cell);
   const realView = (v) => (v ? real(view(v)) : "");
+  // After each claim-shaped table: what stands beside the bootstrap, one row per view.
+  const rowFigures = (list) => table(["Claim", "View", "Sites A", "Sites B", "Judged A", "Judged B", "Newcombe difference, naive row-level", "95% interval, naive row-level", "Exact p, naive row-level", "Skipped draws"], list.flatMap((c) => [["S", c.S], ["R", c.R]].filter(([, v]) => v).map(([side, v]) => {
+    const skipped = `${v.skipped ?? "n/a"}`;
+    return [c.id, side, v.nA, v.nB, v.judgedA, v.judgedB, pct(v.newcombe?.diff), ci(v.newcombe?.ci95), pValue(v.exactP), side === "R" ? real(skipped) : skipped];
+  })));
   const p = s.provenance;
 
   out.push("# E20-R2 results", "");
@@ -167,22 +190,26 @@ export function assemble(a, s, { runtimeNow = null } = {}) {
 
   title(`Claims C1 to C11, on ${(a.level * 100).toFixed(2)}% intervals`);
   table(["Claim", "Comparison", "Check", "Predicted", "Served", "Real page", "Decision"], a.claims.filter((c) => c.S).map((c) => [c.id, c.label, `\`${c.check}\``, c.predicted, view(c.S), realView(c.R), c.decision]));
+  rowFigures(a.claims.filter((c) => c.S));
 
   title("CSP controls scripts");
   table(["Claim", "Comparison", "Served", "Real page", "Decision"], (a.cspControlsScripts ?? []).map((c) => [c.id, c.label, view(c.S), realView(c.R), c.decision]));
+  rowFigures(a.cspControlsScripts ?? []);
 
   title("Standardized figures");
   const standard = (d) => (d ? `${pct(d.diff)} (${ci(d.ci)})` : "");
-  table(["Claim", "Served", "Real page"], Object.keys(a.standardized ?? {}).map((id) => [id, standard(a.standardized[id]), a.standardizedR?.[id] ? real(standard(a.standardizedR[id])) : ""]));
+  const droppedOf = (d) => (d ? d.dropped?.join(", ") || "none" : "");
+  table(["Claim", "Served", "Strata dropped, served", "Real page", "Strata dropped, real page"], Object.keys(a.standardized ?? {}).map((id) => [id, standard(a.standardized[id]), droppedOf(a.standardized[id]), a.standardizedR?.[id] ? real(standard(a.standardizedR[id])) : "", droppedOf(a.standardizedR?.[id])]));
 
   title("The E20-matched reading");
   table(["Claim", "Comparison", "Served", "Real page", "Decision"], (a.replicationAsE20 ?? []).map((c) => [c.id, c.label, view(c.S), realView(c.R), c.decision]));
+  rowFigures(a.replicationAsE20 ?? []);
 
   title("C12 to C15, descriptive");
   table(["Claim", "What", "n", "Value", "Interval or lower bound"], a.claims.filter((c) => !c.S).map((c) => [c.id, c.label, c.n ?? "n/a", typeof c.diff === "number" ? pct(c.diff) : num(c.kappa), c.ci ? ci(c.ci) : `${num(c.lower)} (threshold ${c.threshold})`]));
 
   title("Worst-case bounds of the claims");
-  table(["Claim", "Low", "High", "Coverage A", "Coverage B"], Object.entries(a.bounds ?? {}).map(([id, b]) => [id, pct(b.low), pct(b.high), pct(b.coverageA), pct(b.coverageB)]));
+  table(["Claim", "Low", "High", "Coverage A", "Coverage B", "Scope"], Object.entries(a.bounds ?? {}).map(([id, b]) => [id, pct(b.low), pct(b.high), pct(b.coverageA), pct(b.coverageB), b.scope ?? "eligible"]));
   title("Sites skipped, per list and reason");
   const reasons = [...new Set(Object.values(a.skipsByCohort ?? {}).flatMap((c) => Object.keys(c)))].sort();
   table(["List", ...reasons], Object.entries(a.skipsByCohort ?? {}).map(([c, r]) => [c, ...reasons.map((k) => r[k] ?? 0)]));
@@ -241,10 +268,12 @@ export function assemble(a, s, { runtimeNow = null } = {}) {
   for (const [name, list] of Object.entries(a.dnsBeside ?? {})) {
     out.push(`Measure: ${name === "rejectOnly" ? "p=reject" : name}`, "");
     table(["Claim", "Comparison", "Check", "Served", "Decision"], list.map((c) => [c.id, c.label, `\`${c.check}\``, view(c.S), c.decision]));
+    rowFigures(list);
   }
   title("Graded-only DNS reading");
   out.push("Decides nothing.", "");
   table(["Claim", "Comparison", "Check", "Served", "Real page", "Decision"], (a.dnsGradedOnlyReading ?? []).map((c) => [c.id, c.label, `\`${c.check}\``, view(c.S), realView(c.R), c.decision]));
+  rowFigures(a.dnsGradedOnlyReading ?? []);
   return out.join("\n");
 }
 
