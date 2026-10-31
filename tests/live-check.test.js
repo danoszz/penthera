@@ -8,7 +8,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { createServer } from "node:http";
 import { parseTarget, isPublicIp, resolvePublic, fetchHeaders, CheckError } from "../api/_lib/guard.mjs";
 import { grade } from "../api/_lib/grade.mjs";
-import { createHandler } from "../api/check.mjs";
+import { createHandler, RATE_LIMIT_POLICY } from "../api/check.mjs";
 
 const codeOf = (fn) => { try { fn(); } catch (e) { return e.code; } return null; };
 const codeOfAsync = async (p) => { try { await p; } catch (e) { return e.code; } return null; };
@@ -152,6 +152,8 @@ describe("live check endpoint", () => {
       expect(res.status, code).toBe(status);
       expect(res.headers.get("content-type")).toMatch(/^application\/json/);
       expect(res.headers.get("cache-control")).toBe("no-store");
+      expect(res.headers.get("ratelimit-policy")).toBe(RATE_LIMIT_POLICY);
+      expect(res.headers.get("ratelimit-remaining")).toBeNull();
       const { error } = await res.json();
       expect(error.code).toBe(code);
       expect(error.message.length).toBeGreaterThan(5);
@@ -170,6 +172,7 @@ describe("live check endpoint", () => {
     // www. is stripped: the bare name shares the same limit.
     const res = await post({ url: "limited.example.org", consent: true }, "203.0.113.200");
     expect(res.status).toBe(429);
+    expect(res.headers.get("ratelimit-policy")).toBe(RATE_LIMIT_POLICY);
     const wait = Number(res.headers.get("retry-after"));
     expect(Number.isInteger(wait)).toBe(true);
     expect(wait).toBeGreaterThan(0);

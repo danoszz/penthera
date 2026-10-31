@@ -258,6 +258,15 @@ describe("OpenAPI for the live check", () => {
     expect(res429.description).toContain("`budget`");
   });
 
+  it("documents RateLimit-Policy with the numbers api/check.mjs enforces, and no remaining count", async () => {
+    const { RATE_LIMIT_POLICY } = await import("../api/check.mjs");
+    expect(RATE_LIMIT_POLICY).toBe('"ip-60s";q=6;w=60, "ip-86400s";q=40;w=86400, "host-3600s";q=30;w=3600');
+    const { responses } = spec.paths["/api/check"].post;
+    for (const r of Object.values(responses)) expect(r.headers["RateLimit-Policy"].description).toContain("No remaining count");
+    expect(spec.info.description).toContain("carries RateLimit-Policy with these limits, and no remaining count");
+    expect(JSON.stringify(spec)).not.toMatch(/RateLimit-Remaining/);
+  });
+
   it("says what the handler does with a large body and with extra fields", () => {
     const req = spec.components.schemas.CheckRequest;
     expect(req.additionalProperties).toBeUndefined();
