@@ -4,15 +4,20 @@
  * named, so the output can be read and pasted anywhere.
  *
  *   node bench/front-door/pilot-report.mjs <raw.jsonl> --exclude <exclusion list> --skip <host list>... [--seal]
- *   node bench/front-door/pilot-report.mjs --privacy <run folder> [--false-fire <note file>]
+ *   node bench/front-door/pilot-report.mjs --privacy <run folder> [--false-fire <note file> --reviewer <who>]
+ *   node bench/front-door/pilot-report.mjs --replay <raw.jsonl>
+ *   node bench/front-door/pilot-report.mjs --legacy-findings <run folder>
  *   node bench/front-door/pilot-report.mjs --decide <run folder> --decision go|no-go --reviewer <who>
  *
  * --decide records the person's decision on a sealed round, bound to its report and seal.
  * --privacy runs the pilot's scan over every stored field of a finished pass and writes
  * privacy-report.json, which analysis and the audit draw require. Run it before the draw.
  * It prints counts and the code `purge` asks for. Which fields were flagged goes only to
- * that private file. --false-fire records a person's review that every miss was false,
- * as a note whose hash the analysis reports as a deviation.
+ * that private file. --false-fire records a named person's review that every miss was
+ * false, as a note whose hash the analysis reports as a deviation. A clean scan has nothing
+ * to review, unless a legacy finding report for this run says the frozen detector fired.
+ * --replay runs the scan over a raw file, writes nothing and prints counts only.
+ * --legacy-findings runs the frozen detector (legacy-findings.mjs) and prints counts only.
  * Pass the removal, prior opt-out and earlier pilot lists as --skip, so every hop meets all
  * four. Sealing checks each against the run's manifest. This round's own list is not one.
  * --seal writes pilot-result.json next to the raw file, which pass 2 requires. Seal
@@ -24,7 +29,8 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { isEligible, missedFields, recordMisses, resolverFailed, sealHash, stopRules, MAX_RESOLVER_FAILURES, MIN_ELIGIBLE, MIN_GRADED, MIN_GRADED_SHARE, MIN_TWOXX } from "./record-checks.mjs";
+import { isEligible, legacyProblem, missedFields, recordMisses, resolverFailed, sealHash, withheldCounts, stopRules, MAX_RESOLVER_FAILURES, MIN_ELIGIBLE, MIN_GRADED, MIN_GRADED_SHARE, MIN_TWOXX } from "./record-checks.mjs";
+import { legacyFindings, scanLegacy } from "./legacy-findings.mjs";
 import { CLAIM_COHORTS, readRemovals } from "./replicate.mjs";
 import { exclusionFor, readExclusions } from "./run.mjs";
 
@@ -47,7 +53,7 @@ export function pilotReport(records, { exclude = new Map(), pruned = false } = {
   const sum = (k) => records.reduce((n, r) => n + (r.counters?.[k] ?? 0), 0);
   const twoxx = ok.filter((r) => r.httpStatus >= 200 && r.httpStatus < 300);
   return {
-    sites: records.length, pruned,
+    sites: records.length, pruned, textWithheld: withheldCounts(records),
     coverage: Object.fromEntries(CLAIM_COHORTS.map((c) => {
       const rows = records.filter((r) => r.cohorts?.[c]);
       const graded = rows.filter((r) => r.status === "ok");
@@ -67,6 +73,7 @@ export function pilotReport(records, { exclude = new Map(), pruned = false } = {
       withEvidence: ok.filter((r) => r.evidence).length,
       twoxx: twoxx.length,
       twoxxWithExcerpt: twoxx.filter((r) => r.evidence?.pageExcerpt?.text || r.evidence?.pageExcerpt?.title).length,
+      twoxxWithheld: twoxx.filter((r) => r.evidence?.textWithheld).length,
       outside2xxWithExcerpt: ok.filter((r) => r.evidence?.excerpt).length,
       withBodyHashes: ok.filter((r) => r.evidence?.bodySha256 && (r.evidence?.others ?? []).every((o) => o.bodySha256)).length,
     },
@@ -129,7 +136,7 @@ export function sealPilot(dir, { exclude = new Map(), exclusionBytes, skipBytes 
 }
 
 /** The pilot's scan over a finished pass, bound to its manifest and raw file. */
-export function privacyReport(dir, { falseFire } = {}) {
+export function privacyReport(dir, { falseFire, reviewer } = {}) {
   const manifestBytes = readFileSync(join(dir, "manifest.json"));
   const manifest = JSON.parse(manifestBytes);
   const rawBytes = readFileSync(join(dir, "raw.jsonl"));
@@ -139,12 +146,28 @@ export function privacyReport(dir, { falseFire } = {}) {
   const { sites: records, scrubMisses } = pilotReport(rows);
   const clean = !Object.values(scrubMisses).some(Boolean);
   if (falseFire?.length === 0) throw new Error("Refused: the false-fire note is empty.");
+  if (falseFire && !String(reviewer ?? "").trim()) throw new Error("Refused: a false-fire review needs --reviewer.");
+  const legacyFile = join(dir, "legacy-findings.json");
+  const legacyBytes = falseFire && existsSync(legacyFile) ? readFileSync(legacyFile) : null;
+  const legacy = legacyBytes && JSON.parse(legacyBytes);
+  // Before a prune the raw file is here, so the report is checked against a fresh scan too.
+  const fresh = legacy && hash(rawBytes) === manifest.rawSha256 ? scanLegacy(dir) : null;
+  const legacyHolds = Boolean(legacy) && legacy.manifestSha256 === hash(manifestBytes) && legacy.rawSha256 === rawSha256
+    && !legacyProblem(legacy, new Set(rows.map((r) => r.order))) && JSON.stringify(fresh?.findings) === JSON.stringify(legacy.findings);
+  if (falseFire && clean && !legacyHolds) throw new Error("Refused: this scan is clean, so there is nothing to call a false fire. It needs a legacy finding report for this run.");
   const report = {
     manifestSha256: hash(manifestBytes), rawSha256, purgeConfirm: rawSha256.slice(0, 12), records, scrubMisses, clean, flaggedFields: missedFields(rows),
-    ...(falseFire && !clean ? { reviewed: { noteSha256: hash(falseFire) } } : {}), writtenAt: new Date().toISOString(),
+    ...(falseFire ? { reviewed: { noteSha256: hash(falseFire), reviewer, reviewedAt: new Date().toISOString(), ...(legacyHolds ? { legacyFindingsSha256: hash(legacyBytes) } : {}) } } : {}), writtenAt: new Date().toISOString(),
   };
   writeFileSync(join(dir, "privacy-report.json"), `${JSON.stringify(report, null, 2)}\n`, { mode: 0o600 });
   return report;
+}
+
+/** The scan over one raw file, as counts alone: no site, no field and no text. */
+export function replayRaw(file) {
+  const rows = readFileSync(file, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
+  const flagged = rows.filter((r) => Object.values(recordMisses(r)).some(Boolean)).length;
+  return { records: rows.length, flagged, scrubMisses: pilotReport(rows).scrubMisses };
 }
 
 /** The person's go or no-go on a sealed round. A failed round can't be a go. */
@@ -169,10 +192,28 @@ export function main(args, { log = console.log, fail = console.error } = {}) {
       return 3;
     }
   }
-  if (args[0] === "--privacy") {
-    if (!args[1]) { fail("Usage: pilot-report.mjs --privacy <run folder> [--false-fire <note file>]"); return 2; }
+  if (args[0] === "--legacy-findings") {
+    if (!args[1]) { fail("Usage: pilot-report.mjs --legacy-findings <run folder>"); return 2; }
     try {
-      const { flaggedFields: _private, ...report } = privacyReport(args[1], args[2] === "--false-fire" ? { falseFire: readFileSync(args[3]) } : {});
+      const { findings, reproducesStop, records, purgeConfirm } = legacyFindings(args[1]);
+      log(JSON.stringify({ records, findings: findings.length, reproducesStop, purgeConfirm }, null, 2));
+      return reproducesStop ? 0 : 1;
+    } catch (e) {
+      fail(e.message);
+      return 3;
+    }
+  }
+  if (args[0] === "--replay") {
+    if (!args[1]) { fail("Usage: pilot-report.mjs --replay <raw.jsonl>"); return 2; }
+    const report = replayRaw(args[1]);
+    log(JSON.stringify(report, null, 2));
+    return report.flagged ? 1 : 0;
+  }
+  if (args[0] === "--privacy") {
+    if (!args[1]) { fail("Usage: pilot-report.mjs --privacy <run folder> [--false-fire <note file> --reviewer <who>]"); return 2; }
+    try {
+      const value = (name) => (args.includes(name) ? args[args.indexOf(name) + 1] : undefined);
+      const { flaggedFields: _private, ...report } = privacyReport(args[1], args.includes("--false-fire") ? { falseFire: readFileSync(value("--false-fire")), reviewer: value("--reviewer") } : {});
       log(JSON.stringify(report, null, 2));
       return report.clean || report.reviewed ? 0 : 1;
     } catch (e) {

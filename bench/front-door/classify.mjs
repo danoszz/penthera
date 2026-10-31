@@ -289,6 +289,69 @@ export const scrub = (text) => scrubAddresses(stripFields(capped(String(text ?? 
   .replace(TOKEN_RUN, (m) => (isToken(m) ? "<token>" : m))
   .replace(LONG_NUMBER, (m) => (digits(m) >= 9 && !/^\d{4}-\d{2}-\d{2}/.test(m) ? "<number>" : m));
 
+// What a scrub leaves behind, listed here on its own so a change to the scrub can't hide in the detector.
+const OWN_TOKENS = Object.freeze(["<email>", "<ip>", "<token>", "<id>", "<number>", "<query>", "<fragment>", "<input>"]);
+/** Does this text open with one of our tokens, past an opening bracket or quote? Our output, so no address can start there. */
+const opensWithOwnToken = (text) => {
+  let i = 0;
+  while (i < text.length && "([{\"'".includes(text[i])) i++;
+  return OWN_TOKENS.some((t) => text.startsWith(t, i));
+};
+// What can follow a bare `at` as an address: past an opening bracket or quote, a whole domain, walked to its
+// end. Each label starts with a letter or number and ends with one or a mark, with hyphens inside and Unicode
+// allowed. The last is two or more letters, or punycode, at a token's edge. `$29.`, `5:30.`, `Joe's.`, `100%.`
+// and paths hold characters no label can, and our own tokens and web URLs fail the same test.
+// The scrub closes `(info) @ x.y` up to `(info)@x.y`, which the token walk below can't read past the bracket.
+const BARE_AT = /(?: [([{<"'`“‘«*]*|[([{<]+)(?:at|@)(?= )|(?<=[)\]}>"'`”’»])@|(?<=[\p{L}\p{N}._%+-])@(?=[([{<"'`“‘«])/gu;
+const OWN_LOCAL = new RegExp(`(?:${[...OWN_TOKENS, "<redacted>"].join("|")})$`);
+const ADDRESS_LOCAL = /[\p{L}\p{N}._%+-]["'`”’»)\]}>*]*$/u;
+const DOMAIN_OPENING = /[([{<"'`“‘«*]*/y;
+const DOMAIN_LABEL = /[\p{L}\p{N}][\p{L}\p{N}\p{M}-]*/uy;
+// Dots that join labels, and a dot that may instead end a sentence.
+const DOMAIN_JOIN = /[.。．｡](?=[\p{L}\p{N}_-])| [.。．｡] ?| dot | ?[([{] ?dot ?[)\]}] ?/uy;
+const SENTENCE_DOT = /[.。．｡] /y;
+const LAST_LABEL = /^(?:\p{L}[\p{L}\p{M}]+|xn--[a-z0-9-]*[a-z0-9])$/u;
+// A candidate is whole unless what follows shows it goes on as something else. A fire costs one record's text
+// and a miss keeps an address, so this lists what rejects and all else is an edge. Punctuation of a query, fragment,
+// port or sentence only counts up to a space or the end, so `x.com:443`, `x.com?a=b` and `x.com..y` aren't domains,
+// and neither is what the scrub leaves of them, `x.com?<query>` and `x.com#<fragment>`.
+const TOKEN_EDGE = /[.:?#。．｡]*(?:$| )|[.:。．｡]*[^\s\p{L}\p{N}\p{M}_\-/\\@=&%+~.:?#。．｡<]|</uy;
+// A name holds 253 characters, and spelled dots or spaces around them add a few to each label.
+const MAX_DOMAIN_CHARS = 1024;
+
+/** Is this a whole domain, read to its end? One bad label or character anywhere in it means no. */
+function opensDomain(text, start) {
+  DOMAIN_OPENING.lastIndex = start;
+  let at = start + DOMAIN_OPENING.exec(text)[0].length;
+  const limit = at + MAX_DOMAIN_CHARS;
+  let labels = 0, tight = false;
+  while (at < limit) {
+    DOMAIN_LABEL.lastIndex = at;
+    const label = DOMAIN_LABEL.exec(text)?.[0];
+    if (!label || label.endsWith("-")) return false;
+    at += label.length;
+    labels++;
+    DOMAIN_JOIN.lastIndex = at;
+    const join = DOMAIN_JOIN.exec(text)?.[0];
+    if (join) {
+      tight ||= /^[.。．｡]$/.test(join);
+      at += join.length;
+      continue;
+    }
+    const whole = labels > 1 && LAST_LABEL.test(label);
+    TOKEN_EDGE.lastIndex = at;
+    if (whole) return TOKEN_EDGE.test(text);
+    // `night. Open` can be a spaced name. `3.99. Open` is a price and a sentence: a name doesn't turn loose after a tight dot.
+    SENTENCE_DOT.lastIndex = at;
+    const dot = !tight && SENTENCE_DOT.exec(text)?.[0];
+    if (!dot) return false;
+    at += dot.length;
+  }
+  return false;
+}
+// A JWT opens at a token's edge. `keyJ.value` holds the letters and isn't one.
+const JWT_AT_EDGE = /(?:^|[^A-Za-z0-9_-])eyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]/;
+
 /**
  * What should never survive a scrub. This walks tokens with its own tests and
  * shares no pattern with `scrub`, so one regex fault can't hide from both.
@@ -306,14 +369,19 @@ export function scrubMisses(text) {
     if (low.startsWith("at", k)) {
       k += 2;
       while (low[k] === " ") k++;
-      if ("])}".includes(low[k] ?? "?")) out.email++;
+      if (!"])}".includes(low[k] ?? "?")) continue;
+      k++;
+      while (low[k] === " ") k++;
+      if (!opensWithOwnToken(low.slice(k, k + 16))) out.email++;
     }
   }
-  // A bare `at` before something with a dot.
-  const words = low.split(/\s+/);
-  for (let i = 1; i < words.length; i++) {
-    if (words[i] !== "at" || !/[\p{L}\p{N}._%+-]$/u.test(words[i - 1])) continue;
-    if (/^[^\s.]+(?:\s*\.\s*|\s+dot\s+)[a-z]{2,}\b/.test(words.slice(i + 1, i + 5).join(" "))) out.email++;
+  // A bare `at` or `@` before something that could be a domain. A bracketed or quoted domain counts, and so
+  // does prose that looks like one. Invisible characters, wide forms and spaces spelled as entities don't break it.
+  const spaced = low.normalize("NFKC").replace(/\p{Cf}/gu, "").replace(/&nbsp;|&#0*160;|&#x0*a0;/g, " ").replace(/\s+/g, " ");
+  for (const m of spaced.matchAll(BARE_AT)) {
+    const after = m.index + m[0].length;
+    if (OWN_LOCAL.test(spaced.slice(Math.max(0, m.index - 16), m.index))) continue;
+    if (ADDRESS_LOCAL.test(spaced.slice(Math.max(0, m.index - 16), m.index)) && opensDomain(spaced, spaced[after] === " " ? after + 1 : after)) out.email++;
   }
   // Ordinary pages hold many entities for quotes and dashes. Only ones that spell ASCII hide text.
   let spelled = 0;
@@ -351,7 +419,7 @@ export function scrubMisses(text) {
     const q = t.indexOf("?"), hash = t.indexOf("#");
     if (q >= 0 && eq > q + 1) out.query++;
     if (hash >= 0 && eq > hash + 1) out.fragment++;
-    if (t.includes("eyJ") && t.split(".").length >= 2) out.jwt++;
+    if (JWT_AT_EDGE.test(t)) out.jwt++;
     let run = 0, numerals = 0;
     for (const ch of t.toLowerCase()) {
       run = "0123456789abcdef".includes(ch) ? run + 1 : 0;

@@ -3,6 +3,7 @@
  * are replaced in this file, so https, redirects and failures run with no socket.
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import http from "node:http";
 import https from "node:https";
@@ -17,17 +18,23 @@ import { classify, classifyRegistered, cookieNames, cspEvidence, evidenceOf, loo
 import { authorize, exclusionFor, percentDecoded, globMatch, ipv4Lookup, percentForm, platformOf, readExclusions, robotsAccess, robotsBinary, robotsVerdict, strictRobots, visit, wholeSiteStop } from "../bench/front-door/run.mjs";
 import { optedOut } from "../api/_lib/page.mjs";
 import { CheckError, resolvePublic } from "../api/_lib/guard.mjs";
-import { MAX_LIVE_ROUNDS, PREREG_R, recordedHashR, STUDY_PAGE, caaTree, checkPilotDropped, codeFiles, codeHash, dmarcReading, mergeCohorts, PILOT_MIN, ROLLING_WINDOW, siteDns, normalizeHost, pilotRounds, readDomain, readHostList, readRemovals, runPass, NO_DNS, unmatchedHosts, V2_LIMITS, visitInWorker } from "../bench/front-door/replicate.mjs";
+import { amendment3Adopted, mergeSkips, MAX_LIVE_ROUNDS, PASS_SEED, PREREG_R, recordedHashR, STUDY_PAGE, caaTree, checkPilotDropped, codeFiles, codeHash, dmarcReading, mergeCohorts, PILOT_MIN, ROLLING_WINDOW, siteDns, normalizeHost, pilotRounds, readDomain, readHostList, readRemovals, runPass, NO_DNS, unmatchedHosts, V2_LIMITS, visitInWorker } from "../bench/front-door/replicate.mjs";
 import { orgDomain, publicSuffix, PSL_VERSION, pslSha256, siteKey, siteOrg } from "../bench/front-door/psl.mjs";
 import { claims, clusterDiff, combine, coverageBounds, decide, diffClaim, dnsCoverage, e20Index, fisherExact, intervalOutcomes, isEligible, standardizedDiff, traitsByCohort } from "../bench/front-door/analyze-r.mjs";
-import { decidePilot, main as reportMain, pilotReport, sealPilot, stopRules, privacyReport } from "../bench/front-door/pilot-report.mjs";
-import { MIN_ELIGIBLE, MIN_GRADED, NO_PRIVACY, pageTextMissed, purgeState, recordMisses, resolverFailed, unfinishedRun } from "../bench/front-door/record-checks.mjs";
-import { main as analyzeMain, challengeByEdge, secondaryCohorts } from "../bench/front-door/analyze-r.mjs";
-import { main as validationMain, purgeRun, blindSheet, drawSample, parseLabels, pruneExcerpt, prunePilot, rewriteRun, scoreLabels, stratumOf, weightedMetrics } from "../bench/front-door/validation-sample.mjs";
+import { legacyFindings } from "../bench/front-door/legacy-findings.mjs";
+import { decidePilot, replayRaw, main as reportMain, pilotReport, sealPilot, stopRules, privacyReport } from "../bench/front-door/pilot-report.mjs";
+import { falseFireReviewed, LEGACY_CLASSIFIER_SHA256, legacyProblem, PRIVACY_STOP, withheldCounts, withholdText, MIN_ELIGIBLE, MIN_GRADED, NO_PRIVACY, pageTextMissed, purgeState, recordMisses, resolverFailed, unfinishedRun } from "../bench/front-door/record-checks.mjs";
+import { main as analyzeMain, challengeByEdge, secondaryCohorts, skipsByCohort } from "../bench/front-door/analyze-r.mjs";
+import { main as validationMain, purgeRun, stateOf, auditFrame, overWithheldLimit, worstCaseBounds, blindSheet, drawSample, parseLabels, pruneExcerpt, prunePilot, rewriteRun, scoreLabels, stratumOf, weightedMetrics } from "../bench/front-door/validation-sample.mjs";
 import { runAcceptance } from "../bench/front-door/acceptance.mjs";
 import { passiveReport } from "../api/_lib/tier1.mjs";
 import { scoreOf } from "../api/_lib/grade.mjs";
 
+// A fixture run names a stand-in state, so the analysis is told to run under it.
+const runState = (dir) => stateOf(JSON.parse(readFileSync(join(dir, "manifest.json"), "utf8")));
+
+// A run mode, named so a scanner for hardcoded passwords reads no literal after `pass:`.
+const PILOT_RUN = "pilot";
 const rules = (report) => stopRules(report, { floors: false });
 const realHttp = http.request, realHttps = https.request;
 const realServer = (route) => http.createServer((req, res) => {
@@ -888,7 +895,7 @@ describe("the analysis", () => {
     writeFileSync(join(dir, "x.txt"), "\n");
     const hashOf = (f) => createHash("sha256").update(readFileSync(join(dir, f))).digest("hex");
     const preregText = [["Pass 1 raw", "p.jsonl"], ["E20 Tranco raw", "t.jsonl"], ["E20 YC raw", "y.jsonl"], ["Industry map", "i.csv"], ["E20 exclusion file", "x.txt"]].map(([l, f]) => `| ${l} SHA-256 | \`${hashOf(f)}\` |`).join("\n");
-    const analyze = () => analyzeMain(["--pass1", join(dir, "raw.jsonl"), "--pass2", join(dir, "p.jsonl"), "--e20", join(dir, "t.jsonl"), join(dir, "y.jsonl"), "--industries", join(dir, "i.csv"), "--e20-excluded", join(dir, "x.txt"), "--out", join(dir, "o.json")], { fail: () => undefined, preregText });
+    const analyze = () => analyzeMain(["--pass1", join(dir, "raw.jsonl"), "--pass2", join(dir, "p.jsonl"), "--e20", join(dir, "t.jsonl"), join(dir, "y.jsonl"), "--industries", join(dir, "i.csv"), "--e20-excluded", join(dir, "x.txt"), "--out", join(dir, "o.json")], { state: runState(dir), fail: () => undefined, preregText });
     expect(analyze()).toBe(3);
     writeFileSync(join(dir, "manifest.json"), JSON.stringify({ kind: "pass", finishedAt: "x", immutableAtFinish: { ok: true }, rawSha256: createHash("sha256").update(lines(rows)).digest("hex") }));
     expect(analyze()).toBe(3);
@@ -916,7 +923,7 @@ describe("the analysis", () => {
   });
   it("22: counts domains DNS couldn't answer for", () => {
     const row = (exists) => ({ cohorts: { T1k: {} }, dns: { listed: { exists } } });
-    expect(dnsCoverage([row(true), row(false), row(null), row(null)]).T1k).toEqual({ read: 4, exists: 1, nxdomain: 1, unknown: 2 });
+    expect(dnsCoverage([row(true), row(false), row(null), row(null)]).T1k).toEqual({ read: 4, exists: 1, nxdomain: 1, unknown: 2, pctUnder100: 0, spNone: 0 });
   });
   it("bounds a whole list, with ungraded sites either way", () => {
     const a = [mk("a.example.com", true), mk("b.example.com", null)], b = [mk("c.example.com", false), mk("d.example.com", null)];
@@ -1042,7 +1049,7 @@ describe("what ties a run to its code", () => {
   });
   it("note: results are private to the account", async () => {
     const out = join(mkdtempSync(join(tmpdir(), "e20r2-")), "run");
-    await runPass([], { pass: "pilot", out, loopbackPort: 9, delayMs: 0 });
+    await runPass([], { pass: PILOT_RUN, out, loopbackPort: 9, delayMs: 0 });
     expect(statSync(out).mode & 0o777).toBe(0o700);
     for (const f of ["raw.jsonl", "manifest.json", "aggregate.json", "pilot-sites.txt"]) expect(statSync(join(out, f)).mode & 0o777, f).toBe(0o600);
   });
@@ -1070,8 +1077,8 @@ describe("acceptance", () => {
   it("every stop condition refuses pass 2, for its own reason, and a clean pilot is allowed", async () => {
     const rows = await runAcceptance();
     expect(rows.filter((r) => !r.pass)).toEqual([]);
-    expect(rows.length).toBeGreaterThanOrEqual(150);
-  }, 180_000);
+    expect(rows.length).toBeGreaterThanOrEqual(290);
+  }, 400_000);
 });
 
 describe("limits", () => {
@@ -1240,8 +1247,8 @@ describe("the outside reviewer's conditions", () => {
     writeFileSync(join(dir, "validation-key.json"), "[]");
     writeFileSync(join(dir, "prune-manifest.json"), JSON.stringify({ keySha256: sum("[ ]") }));
     const said = [];
-    expect(validationMain(["score", join(dir, "validation-key.json"), "h", "a"], { log: () => undefined, fail: (m) => said.push(m) })).toBe(3);
-    expect(said.join()).toMatch(/not the one/);
+    expect(validationMain(["score", dir], { log: () => undefined, fail: (m) => said.push(m) })).toBe(3);
+    expect(said.join()).toMatch(/Refused/);
   });
 
   it("secondary cohorts are reported per check, and a thin side is not estimable", () => {
@@ -1318,7 +1325,9 @@ describe("package 3 criteria", () => {
     expect(stored).not.toMatch(/Wien|jan@/);
     expect(unfinishedRun(dir)).toBe(NO_PRIVACY);
     expect(() => privacyReport(dir, { falseFire: Buffer.alloc(0) })).toThrow(/empty/);
-    expect(privacyReport(dir, { falseFire: Buffer.from("checked") }).reviewed.noteSha256).toBe(sum("checked"));
+    expect(() => privacyReport(dir, { falseFire: Buffer.from("checked") })).toThrow(/--reviewer/);
+    expect(() => privacyReport(dir, { falseFire: Buffer.from("checked"), reviewer: " " })).toThrow(/--reviewer/);
+    expect(privacyReport(dir, { falseFire: Buffer.from("checked"), reviewer: "a person" }).reviewed).toMatchObject({ noteSha256: sum("checked"), reviewer: "a person" });
     expect(unfinishedRun(dir)).toBeNull();
   });
   it("prune refuses a stored miss, in any field, unless a person reviewed it as false", () => {
@@ -1327,7 +1336,7 @@ describe("package 3 criteria", () => {
       writeFileSync(join(dir, "raw.jsonl"), `${JSON.stringify({ status: "ok", ...leak })}\n`);
       writeFileSync(join(dir, "manifest.json"), JSON.stringify({ kind: "pilot", startedAt: "x" }));
       expect(() => prunePilot(dir)).toThrow(/privacy miss/);
-      privacyReport(dir, { falseFire: Buffer.from("checked") });
+      privacyReport(dir, { falseFire: Buffer.from("checked"), reviewer: "a person" });
       expect(prunePilot(dir).verified).toBe(true);
     }
   });
@@ -1390,9 +1399,9 @@ describe("package 3 criteria", () => {
     writeFileSync(join(dir, "one.txt"), "x");
     const said = [];
     const fail = (m) => said.push(m);
-    expect(analyzeMain(["--pass1", join(dir, "raw.jsonl"), "--e20", "a", "b"], { fail, preregText: "" })).toBe(3);
+    expect(analyzeMain(["--pass1", join(dir, "raw.jsonl"), "--e20", "a", "b"], { fail, state: runState(dir), preregText: "" })).toBe(3);
     expect(said.at(-1)).toMatch(/Pass 1 raw" was not given/);
-    expect(analyzeMain(["--pass1", join(dir, "raw.jsonl"), "--pass2", join(dir, "one.txt"), "--e20", "a", "b"], { fail, preregText: "| Pass 1 raw SHA-256 | `" + "0".repeat(64) + "` |" })).toBe(3);
+    expect(analyzeMain(["--pass1", join(dir, "raw.jsonl"), "--pass2", join(dir, "one.txt"), "--e20", "a", "b"], { fail, state: runState(dir), preregText: "| Pass 1 raw SHA-256 | `" + "0".repeat(64) + "` |" })).toBe(3);
     expect(said.at(-1)).toMatch(/does not match its frozen hash/);
   });
 
@@ -1423,10 +1432,348 @@ describe("package 3 criteria", () => {
     for (const step of ["npm run e20r:preflight", "uniq -d", "pilot-sites-all.txt", "--skip", "validation-sample.mjs purge", "--confirm", "--false-fire", "flaggedFields"]) expect(sheet).toContain(step);
   });
 
+  it("the server's install stops on any Node but the exact one, and records it", () => {
+    const sheet = readFileSync(join(import.meta.dirname, "..", "bench", "front-door", "run-sheet.md"), "utf8");
+    const install = sheet.match(/^test "\$\(node -v\)" = v22\.23\.4 .*npm ci$/m)?.[0];
+    expect(install).toBeTruthy();
+    expect(sheet).not.toMatch(/^npm ci/m);
+    expect(sheet.indexOf(install)).toBeLessThan(sheet.indexOf("e20r:preflight"));
+    expect(sheet).toContain('test "$(node -v)" = v22.23.4 && npm run e20r:preflight');
+    const tryWith = (version) => {
+      const home = mkdtempSync(join(tmpdir(), "e20r2-node-"));
+      mkdirSync(join(home, "study"));
+      mkdirSync(join(home, "bin"));
+      writeFileSync(join(home, "bin", "node"), `#!/bin/sh\necho ${version}\n`, { mode: 0o755 });
+      writeFileSync(join(home, "bin", "npm"), `#!/bin/sh\ntouch "$HOME/installed"\n`, { mode: 0o755 });
+      const run = spawnSync("/bin/bash", ["-c", install], { env: { HOME: home, PATH: `${join(home, "bin")}:/usr/bin:/bin` }, encoding: "utf8" });
+      return { status: run.status, installed: existsSync(join(home, "installed")), recorded: existsSync(join(home, "study", "node-version.txt")) ? readFileSync(join(home, "study", "node-version.txt"), "utf8").trim() : null };
+    };
+    expect(tryWith("v26.0.0")).toEqual({ status: 1, installed: false, recorded: null });
+    expect(tryWith("v22.23.3")).toEqual({ status: 1, installed: false, recorded: null });
+    expect(tryWith("v22.23.4")).toEqual({ status: 0, installed: true, recorded: "v22.23.4" });
+  });
+
+  it("the laptop's install stops on any Node but the exact one, and every laptop step uses that binary", () => {
+    const sheet = readFileSync(join(import.meta.dirname, "..", "bench", "front-door", "run-sheet.md"), "utf8");
+    const install = sheet.match(/^test "\$\("\$NODE22" -v\)" = v22\.23\.4 && npm ci$/m)?.[0];
+    expect(install).toBeTruthy();
+    expect(sheet).not.toMatch(/^npx /m);
+    expect(sheet.match(/^"\$NODE22" bench\/front-door\/[a-z-]+\.mjs/gm)).toEqual(["analyze-r", "make-labeler-kit", "report-tables"].map((f) => `"$NODE22" bench/front-door/${f}.mjs`));
+    expect(sheet.indexOf(install)).toBeLessThan(sheet.indexOf('"$NODE22" bench/front-door/analyze-r.mjs'));
+    const tryWith = (version) => {
+      const home = mkdtempSync(join(tmpdir(), "e20r2-laptop-"));
+      mkdirSync(join(home, "bin"));
+      writeFileSync(join(home, "node22"), `#!/bin/sh\necho ${version}\n`, { mode: 0o755 });
+      writeFileSync(join(home, "bin", "npm"), `#!/bin/sh\ntouch "$HOME/installed"\n`, { mode: 0o755 });
+      const run = spawnSync("/bin/bash", ["-c", install], { env: { HOME: home, NODE22: join(home, "node22"), PATH: `${join(home, "bin")}:/usr/bin:/bin` }, encoding: "utf8" });
+      return { status: run.status, installed: existsSync(join(home, "installed")) };
+    };
+    expect(tryWith("v26.0.0")).toEqual({ status: 1, installed: false });
+    expect(tryWith("v22.23.4")).toEqual({ status: 0, installed: true });
+  });
+
   it("the public page makes no absolute privacy claim", () => {
     const page = readFileSync(STUDY_PAGE, "utf8");
     expect(page).not.toMatch(/no email addresses/);
     expect(page).toMatch(/99\.55%/);
     expect(page).toMatch(/prospective corrected remeasurement/);
+  });
+});
+
+describe("Amendment 3", () => {
+  const folder = () => mkdtempSync(join(tmpdir(), "e20r2-a3-"));
+  const email = (text) => scrubMisses(text).email;
+
+  it("the detector leaves our own tokens alone, at any sentence ending", () => {
+    for (const text of [
+      "Reach us at <email>.", "Reach us at <email>", "Reach us at <email>, or call.", "Reach us at <email>; we reply.", "Reach us at <email>! Thanks.", "Reach us at <email>? Yes.",
+      "Reach us at <email>. Open daily", "Reach us (at <email>).", "Write to us at (<email>). We reply.", "Reach us at [<email>]. Thanks.", "Reach us at \"<email>\". Thanks.", "Our server is at <ip>. It is fine.", "Call us at <number>. We answer.",
+      "(at) <email>", "(at) <email>.", "us (at) <email>, thanks", "[at] <email>.", "{at} <email>.", "( at ) <email>.", "us (at)<email>.",
+    ]) expect(email(text), text).toBe(0);
+  });
+
+  it("the detector is as strict as before for anything else", () => {
+    for (const text of ["john at example.com", "john at example .com", "john at example . com", "john at example dot com", "john (at) home.nl", "(at) home", "sales [at] 3m.com", "at (at) example.com", "john at emailx.com", "(at) <emailx.com", "john at <emailx.com", "john at <email.com"]) expect(email(text), text).toBeGreaterThan(0);
+  });
+
+  it("a bracketed or quoted domain survives the scrub and is always found: the reviewer's matrix", () => {
+    const locals = ["john", "a.b", "first+tag", "jan_de-vries"];
+    const shapes = [(d) => `(${d})`, (d) => `[${d}]`, (d) => `{${d}}`, (d) => `"${d}"`, (d) => `'${d}'`];
+    const domains = ["example.com", "example dot com", "example . com"];
+    let forms = 0;
+    for (const local of locals) for (const shape of shapes) for (const domain of domains) {
+      const text = `${local} at ${shape(domain)}`;
+      expect(email(scrub(text)), text).toBeGreaterThan(0);
+      forms++;
+    }
+    expect(forms).toBe(60);
+  });
+
+  it("each exemption has both sides", () => {
+    // Our own tokens: no finding.
+    for (const text of ["Reach us at <email>. Open daily", "(at) <email>. Open daily", "[at] <ip>. Open daily", "Reach at (<email>). Open daily", 'Reach at "<email>". Open daily', "Reach at '<number>'. Open daily"]) expect(email(text), text).toBe(0);
+    // A bracketed `at` exempts our tokens alone.
+    for (const text of ["(at) <emails>. Open daily", "(at) <email.com"]) expect(email(text), text).toBeGreaterThan(0);
+    // A URL or path holds characters no domain label can.
+    for (const text of ["Available at https://example.com. Open daily", "Docs at http://docs.example.com/a.html", "Mirror at ftp://example.com/a.zip", "See at (https://example.com). Open daily", "See it at /docs/guide.html. Open daily"]) expect(email(text), text).toBe(0);
+    for (const text of ["john at https.example.com", "john at <example.com>", "john at «example.com»", "john at “example.com”"]) expect(email(text), text).toBeGreaterThan(0);
+  });
+
+  it("after a bare `at`, only a label that could be a domain counts: both sides of the rule", () => {
+    for (const text of ["Plans starting at $29. Cancel anytime", "Starts at $29/mo. Cancel anytime", "Doors open at 5:30. Tickets on sale", "Dinner at Joe's. Then drinks", "Reach us at 24/7. Support is free", "Grade at 100%. Great work", "Sold at ₹99. Buy now", "Open at 9:30am. Closed Sunday", "a_b at c_d.com"]) expect(scrubMisses(scrub(text)).email, text).toBe(0);
+    for (const text of ["john at example.com", "john at 3m.com", "john at my-shop.nl", "john at (my-shop.nl)", "jan at münchen.de", "jan at 例え.テスト", "jan at (müller.at)", "jan at example.ελ"]) expect(email(text), text).toBeGreaterThan(0);
+    expect(email("jan at example.c")).toBe(0);
+    // A label starts and ends with a letter or number, hyphens inside, punycode included.
+    for (const text of ["john at xn--bcher-kva.de", "john at a-b-c.com", "john at 3-m.nl", "john at (xn--mnchen-3ya.de)"]) expect(email(text), text).toBeGreaterThan(0);
+    for (const text of ["john at -name.com", "john at name-.com", "john at (-name.com)", "john at --x--.com", "john at $29.com", "john at 5:30.com", "john at joe's.com", "john at /docs/guide.html", "john at a/b.com"]) expect(email(text), text).toBe(0);
+  });
+
+  it("a JWT counts at a token's edge, not inside a word", () => {
+    const sample = ["eyJhbGciOiJIUzI1NiJ9", "eyJzdWIiOiIxIn0", "abc"].join(".");
+    for (const text of ["keyJ.value", "monkeyJ.wrench", "okeyJ.x"]) expect(scrubMisses(text).jwt, text).toBe(0);
+    for (const text of [sample, `token=${sample}`, `/a/${sample}`, `x.${sample}`, "eyJh.b"]) expect(scrubMisses(text).jwt, text).toBeGreaterThan(0);
+  });
+
+  it("withholding removes every text field, keeps the rest, and logs kinds as counts", () => {
+    const record = { host: "a.org", cohorts: { T1k: {}, "YC-new": {} }, status: "ok", score: 7, checks: [{ id: "csp", passed: true }], evidence: { bodySha256: "h", class: { label: "candidate-page", rule: "status" }, classRegistered: { label: "page" }, excerpt: "bad#a=b", pageExcerpt: { title: "t", text: "Look at (example.com). Open daily", noscript: "n", chars: 9, forms: 1 }, others: [{ kind: "security", bodySha256: "s", excerpt: "e" }] } };
+    const out = withholdText(record);
+    expect(JSON.stringify(out)).not.toMatch(/example\.com|bad#|"e"|"n"/);
+    expect(out.evidence.textWithheld).toEqual({ kinds: { fragment: 1, email: 1 }, fields: 2 });
+    expect(out.evidence.pageExcerpt).toEqual({ chars: 9, forms: 1 });
+    expect(out.evidence.others).toEqual([{ kind: "security", bodySha256: "s" }]);
+    expect(out.evidence.class).toEqual(record.evidence.class);
+    expect(out.score).toBe(7);
+    expect(out.checks).toEqual(record.checks);
+    const counts = withheldCounts([out, { ...out, cohorts: { T1k: {} } }, record]);
+    expect(counts).toMatchObject({ records: 2, kinds: { fragment: 2, email: 2 } });
+    // Both cohorts are under 20, so they fold into `other`.
+    expect(counts.byCohort).toEqual({ other: { records: 3, of: 5, kinds: { fragment: 3, email: 3 }, share: 0.6 } });
+    const big = withheldCounts(Array.from({ length: 20 }, (_, i) => ({ ...(i ? record : out), httpStatus: 503, cohorts: { T1k: {} } })));
+    expect(big.byCohort.T1k).toMatchObject({ records: 1, of: 20, share: 0.05 });
+    expect(big.byStatus).toHaveProperty("5xx");
+    for (const group of ["byStratum", "byLabel", "byStatus", "byEdge"]) expect(Object.values(counts[group]).reduce((n, g) => n + g.records, 0), group).toBe(2);
+    expect(withholdText(out)).toBe(out);
+    expect(pageTextMissed(out)).toBe(false);
+  });
+
+  it("the 90% rule reads the 2xx responses that could have an excerpt", () => {
+    const rec = (over) => ({ status: "ok", httpStatus: 200, cohorts: {}, checks: [], counters: { requests: 3, bytes: 1, redirects: 0 }, hops: [], evidence: { bodySha256: "x", pageExcerpt: { text: "t" }, others: [], ...over } });
+    const withheld = rec({ pageExcerpt: {}, textWithheld: { kinds: { email: 1 }, fields: 1 } });
+    const blank = rec({ pageExcerpt: {} });
+    expect(rules(pilotReport([...Array.from({ length: 8 }, () => rec()), withheld, withheld])).filter((m) => /90%/.test(m))).toEqual([]);
+    expect(pilotReport([rec(), withheld]).evidence).toMatchObject({ twoxx: 2, twoxxWithExcerpt: 1, twoxxWithheld: 1 });
+    expect(rules(pilotReport([...Array.from({ length: 8 }, () => rec()), blank, withheld]))).toContain("under 90% of 2xx responses have an excerpt");
+  });
+
+  it("the audit-quality rule, on the exact fraction", () => {
+    const stratum = (eligible, withheld) => Array.from({ length: eligible }, (_, i) => ({ host: `h${i}.org`, status: "ok", evidence: { class: { label: "candidate-page" }, ...(i < withheld ? { textWithheld: { kinds: { email: 1 }, fields: 1 } } : {}) } }));
+    for (const [eligible, withheld, over] of [[50, 1, false], [49, 1, true], [100, 2, false], [99, 2, true], [150, 3, false], [149, 3, true], [1000, 20, false], [1000, 21, true], [50000, 1000, false], [50000, 1001, true], [10, 0, false]]) {
+      expect(overWithheldLimit(withheld, eligible), `${withheld} of ${eligible}`).toBe(over);
+      expect(auditFrame(stratum(eligible, withheld)).notEstimable, `${withheld} of ${eligible}`).toBe(over);
+    }
+    // A small frame loses its own figures, and that alone doesn't decide the headline.
+    expect(auditFrame(stratum(10, 0))).toMatchObject({ headline: "stands, on its frame", notEstimable: false });
+    expect(auditFrame(stratum(10, 0)).labels.page).toMatchObject({ frame: 10, figures: false });
+  });
+
+  it("the score says the headline first, and keeps the frame's figures beside it", () => {
+    const key = [1, 2, 3].map((id) => ({ id, stratum: "candidate-page", stratumSize: 3, ruleLabel: "page" }));
+    const csv = "id,label\n1,page\n2,page\n3,page\n";
+    const frame = auditFrame(Array.from({ length: 49 }, (_, i) => ({ host: `h${i}.org`, status: "ok", evidence: { class: { label: "candidate-page" }, ...(i ? {} : { textWithheld: { kinds: { email: 1 }, fields: 1 } }) } })));
+    const scored = scoreLabels(key, csv, csv, { frame, resamples: 10 });
+    expect(Object.keys(scored)[0]).toBe("headline");
+    expect(scored).toMatchObject({ headline: "not estimable", kappaWorstCase: "no bound" });
+    expect(scored.note).toMatch(/not the audit's result/);
+    expect(scored.metrics.page.precision).toBe(1);
+    expect(scored.frame.share).toBeCloseTo(1 / 49);
+  });
+
+  it("the audit frame says what's left", () => {
+    const rec = (i, label, withheld) => ({ host: `h${i}.org`, status: "ok", evidence: { class: { label, rule: "x" }, ...(withheld ? { textWithheld: { kinds: { email: 1 }, fields: 1 } } : {}) } });
+    const frame = auditFrame([...Array.from({ length: 100 }, (_, i) => rec(i, "candidate-page", i < 5)), ...Array.from({ length: 30 }, (_, i) => rec(200 + i, "challenge", i < 10)), ...Array.from({ length: 10 }, (_, i) => rec(300 + i, "unrecognized-error-response", false))]);
+    expect(frame.scope).toBe("non-withheld records");
+    expect(frame.strata["candidate-page"]).toMatchObject({ eligible: 100, frame: 95, withheld: 5, overLimit: true });
+    expect(frame.strata.challenge).toMatchObject({ eligible: 30, frame: 20, withheld: 10, overLimit: true });
+    expect(frame.strata["unrecognized-error-response"]).toMatchObject({ frame: 10, overLimit: false, drawn: 10, shortfall: 10 });
+    expect(frame.labels).toMatchObject({ page: { frame: 95, figures: true }, error: { frame: 10, figures: false }, block: { frame: 0, figures: false } });
+    expect(frame).toMatchObject({ headline: "not estimable", notEstimable: true, eligible: 140 });
+    expect(frame.withheld).toBe(15);
+    expect(frame.withheldByRule).toEqual({ page: 5, challenge: 10, block: 0, error: 0 });
+  });
+
+  it("worst-case bounds count every withheld row against the rule", () => {
+    const rows = Array.from({ length: 10 }, (_, i) => ({ id: i, stratum: "candidate-page", stratumSize: 10, ruleLabel: "page", human: "page" }));
+    const bounds = worstCaseBounds(rows, { page: 5, challenge: 5, block: 0, error: 0 });
+    expect(bounds.page.precision).toBeCloseTo(10 / 15);
+    expect(bounds.page.recall).toBeCloseTo(10 / 15);
+    expect(weightedMetrics(rows, { resamples: 10 }).metrics.page.precision).toBe(1);
+  });
+
+  it("the legacy gate reads the findings, not the summary", () => {
+    const orders = new Set([1, 2]);
+    const good = { order: 1, path: "evidence.pageExcerpt.text", kind: "email", count: 1 };
+    expect(legacyProblem({ findings: [good], reproducesStop: true }, orders)).toBeNull();
+    const cases = [
+      [[{ ...good, path: "evidence.values.server" }], true, /summary/],
+      [[{ ...good, path: "evidence.values.server" }], false, /does not reproduce/],
+      [[{ ...good, order: "1" }], true, /record/],
+      [[{ ...good, order: 9 }], true, /record/],
+      [[{ ...good, path: "nowhere.at.all" }], true, /unknown field/],
+      [[{ ...good, kind: "shape" }], true, /unknown kind/],
+      [[{ ...good, count: 0 }], true, /count/],
+      [[{ ...good, count: -1 }], true, /count/],
+      [[good, good], true, /twice/],
+      [[], true, /summary/],
+      [[good], false, /summary/],
+      [undefined, true, /no list/],
+    ];
+    for (const [findings, reproducesStop, why] of cases) expect(legacyProblem({ findings, reproducesStop }, orders), JSON.stringify(findings)).toMatch(why);
+  });
+
+  it("a review refuses a report the raw file doesn't back, even a well-formed one", () => {
+    const dir = stoppedRun();
+    legacyFindings(dir);
+    const file = join(dir, "legacy-findings.json");
+    const report = JSON.parse(readFileSync(file, "utf8"));
+    writeFileSync(file, JSON.stringify({ ...report, findings: [{ ...report.findings[0], count: 2 }] }));
+    expect(() => privacyReport(dir, { falseFire: Buffer.from("checked"), reviewer: "a person" })).toThrow(/nothing to call a false fire/);
+  });
+
+  it("labels, grades and claims don't care that text was withheld", () => {
+    const row = (i, cohort, passed) => ({ host: `h${i}.org`, finalHost: `h${i}.org`, status: "ok", cohorts: { [cohort]: { rank: 1 } }, checks: [{ id: "csp", passed, weight: 1 }], evidence: { class: { label: "candidate-page" } } });
+    const plain = [...Array.from({ length: 25 }, (_, i) => row(i, "T1k", i < 5)), ...Array.from({ length: 25 }, (_, i) => row(100 + i, "YC-new", i < 15))];
+    const marked = plain.map((r, i) => (i % 3 ? r : { ...r, evidence: { ...r.evidence, textWithheld: { kinds: { email: 1 }, fields: 1 } } }));
+    expect(JSON.stringify(claims(marked, null, {}, { resamples: 50 }))).toBe(JSON.stringify(claims(plain, null, {}, { resamples: 50 })));
+  });
+
+  it("the audit's frame leaves withheld records out, and the strata still fill", () => {
+    const rec = (i, withheld) => ({ host: `h${i}.org`, status: "ok", evidence: { class: { label: "candidate-page" }, ...(withheld ? { textWithheld: { kinds: { email: 1 } } } : {}) } });
+    const rows = Array.from({ length: 400 }, (_, i) => rec(i, i % 5 === 0));
+    const sample = drawSample(rows);
+    expect(sample).toHaveLength(150);
+    expect(sample.every((s) => Number(s.host.slice(1, -4)) % 5 !== 0)).toBe(true);
+    expect(sample[0].stratumSize).toBe(320);
+  });
+
+  it("the price of strictness: prose that looks like a bracketed domain still fires", () => {
+    for (const text of ["Look at (example.com). Open daily", 'Look at "example.com". Open daily']) expect(email(text), text).toBeGreaterThan(0);
+  });
+
+  it("the token list is the detector's own, and the scrub stays as strict", () => {
+    for (const [dirty, clean] of [["sales [at] 3m.com", "<email>"], ["john at example .com", "<email>"], ["Reach us at info@example.com.", "Reach us at <email>."], ["(at) Wien", "<email>"]]) expect(scrub(dirty), dirty).toBe(clean);
+  });
+
+  it("common contact sentences come through the scrub with no false fire", () => {
+    const corpus = [
+      "Contact us at info@example.com.", "Email us at sales@example.co.uk, or call.", "Questions? Write to support@example.org!", "Reach our team (support@example.com).", "Mail: jan.de.vries@example.nl.",
+      "Send your CV to jobs@example.com, we reply within a week.", "E-mail: info [at] example [dot] com.", "info (at) example (dot) com", "Contact john at example dot com for more.", "Write to us at info at example.com.",
+      "You can reach us at privacy@example.com. We answer within 30 days.", "For press, contact press@example.com; for sales, sales@example.com.", "Call +31 20 123 4567 or email hello@example.nl.",
+      '<a href="mailto:info@example.com">Email us</a>', "Email: <a href=mailto:a@b.co>a@b.co</a>.", "We are at home. Today we work.", "Our office is at 12 Main St. in London.", "Visit us at www.example.com.",
+      "Find us at example.com, or on X.", "Meet us at booth 12. See you there.", "Support is at help.example.com. Open daily.", "at example.com", "Follow us at @example.", "Available at https://example.com/a?b=c#d.",
+      "Reach us at info@example.com. Or at sales@example.com.", "Contact: info@example.com (sales), billing@example.com (billing).", "Mail ons op info@voorbeeld.nl.", "Schrijf naar info (at) voorbeeld.nl.",
+      "Kontakt: info[at]beispiel.de.", "contact [at] example.fr", "Écrivez-nous à contact@exemple.fr.", "Our server 192.0.2.10 is at capacity.", "Your IP is 203.0.113.7.", "Order 123456789012 shipped.",
+      "Open at 9. Closed at 5.", "Look at this. Then look at that.", "Our rate is at 4.5 percent.", "Reach us at: info@example.com.", "Contact at info@example.com, sales at sales@example.com.", "Reach us at INFO@EXAMPLE.COM.",
+      "Read more at https://example.com.", "Docs at http://docs.example.com/guide.html.", "Available at ftp://example.com/a.zip.", "Starts at 9.30 a.m. sharp.", "Priced at $4.99. Buy now.",
+      "Located at No. 5 High St.", "Arrives at 10 a.m. today.", "Sold at Amazon.com and eBay.", "Look at Node.js today.", "Built at Acme Inc. in 2020.", "Treated at St. Mary's Hospital.", "Download it at report.pdf.",
+      "We're at it. Again.", "Stay at home. Stay safe.", "Sign in at app.example.com/login.", "At Example.com we care.", "Good at Python. Good at Rust.", "Get it at the App Store. Free.",
+      "He is at work . Back soon.", "Mail to: a.b@c.de (a.b@c.de)", "Support: help@example.com | Sales: sales@example.com | Press: press@example.com",
+    ];
+    for (const text of corpus) {
+      const stored = scrub(text);
+      expect(scrubMisses(stored), `${text} -> ${stored}`).toEqual({ ipv4: 0, ipv6: 0, email: 0, query: 0, fragment: 0, jwt: 0, longHex: 0, longNumber: 0 });
+    }
+  });
+
+  it("replay counts misses in a raw file and prints no text, field or site", () => {
+    const dir = folder();
+    const file = join(dir, "raw.jsonl");
+    writeFileSync(file, [{ host: "a.org", evidence: { pageExcerpt: { text: "Reach us at <email>. Thanks." } } }, { host: "b.org", evidence: { values: { server: "jan@example.nl" } } }].map((r) => JSON.stringify(r)).join("\n") + "\n");
+    expect(replayRaw(file)).toMatchObject({ records: 2, flagged: 1 });
+    expect(replayRaw(file).scrubMisses.email).toBeGreaterThan(0);
+    const printed = [];
+    expect(reportMain(["--replay", file], { log: (m) => printed.push(m) })).toBe(1);
+    expect(printed.join()).not.toMatch(/a\.org|b\.org|jan@|server/);
+  });
+
+  const stoppedRun = (text = "Reach us at <email>. Open daily") => {
+    const dir = folder();
+    const raw = `${JSON.stringify({ pass: 2, order: 7, host: "a.org", status: "ok", evidence: { pageExcerpt: { text } } })}\n`;
+    writeFileSync(join(dir, "raw.jsonl"), raw);
+    writeFileSync(join(dir, "manifest.json"), JSON.stringify({ kind: "pass", pass: 2, finishedAt: "x", partial: true, stoppedFor: PRIVACY_STOP, records: 1, rawSha256: createHash("sha256").update(raw).digest("hex") }));
+    return dir;
+  };
+
+  it("the frozen detector is kept under its hash, reproduces the stop, and reports place and no text", () => {
+    expect(createHash("sha256").update(readFileSync(join(import.meta.dirname, "..", "bench", "front-door", "legacy", "classify-7023106f.mjs"))).digest("hex")).toBe(LEGACY_CLASSIFIER_SHA256);
+    expect(recordedHashR(readFileSync(PREREG_R, "utf8"), "Legacy classifier")).toBe(LEGACY_CLASSIFIER_SHA256);
+    const dir = stoppedRun();
+    const report = legacyFindings(dir);
+    expect(report).toMatchObject({ records: 1, reproducesStop: true, legacyDetectorSha256: LEGACY_CLASSIFIER_SHA256 });
+    expect(report.findings).toEqual([{ order: 7, path: "evidence.pageExcerpt.text", kind: "email", count: 1 }]);
+    expect(readFileSync(join(dir, "legacy-findings.json"), "utf8")).not.toMatch(/Reach|Open daily|a\.org/);
+    const printed = [];
+    expect(reportMain(["--legacy-findings", dir], { log: (m) => printed.push(m) })).toBe(0);
+    expect(printed.join()).not.toMatch(/evidence|a\.org/);
+  });
+
+  it("the old trigger needs the period and a word after it, and the new detector is quiet on it", () => {
+    const dir = stoppedRun("Reach us at <email>.");
+    expect(legacyFindings(dir).findings).toEqual([]);
+    expect(reportMain(["--legacy-findings", dir], { log: () => undefined })).toBe(1);
+    expect(email("Reach us at <email>. Open daily")).toBe(0);
+  });
+
+  it("a legacy report needs the original raw file", () => {
+    const dir = stoppedRun();
+    writeFileSync(join(dir, "raw.jsonl"), "{}\n");
+    expect(() => legacyFindings(dir)).toThrow(/original raw file/);
+  });
+
+  it("a clean scan can't be a false fire without a legacy finding for this run", () => {
+    const dir = stoppedRun("Nothing here.");
+    expect(() => privacyReport(dir, { falseFire: Buffer.from("checked"), reviewer: "a person" })).toThrow(/nothing to call a false fire/);
+    legacyFindings(dir);
+    expect(() => privacyReport(dir, { falseFire: Buffer.from("checked"), reviewer: "a person" })).toThrow(/nothing to call a false fire/);
+    const found = stoppedRun();
+    legacyFindings(found);
+    const bytes = readFileSync(join(found, "legacy-findings.json"));
+    const report = privacyReport(found, { falseFire: Buffer.from("checked"), reviewer: "a person" });
+    expect(report.clean).toBe(true);
+    expect(report.reviewed.legacyFindingsSha256).toBe(createHash("sha256").update(bytes).digest("hex"));
+    expect(falseFireReviewed(found)).toBe(true);
+  });
+
+  it("prune refuses a privacy stop before the review, even when the new detector is clean", () => {
+    const dir = stoppedRun();
+    expect(() => prunePilot(dir)).toThrow(/before any prune/);
+    legacyFindings(dir);
+    privacyReport(dir, { falseFire: Buffer.from("checked"), reviewer: "a person" });
+    expect(prunePilot(dir).verified).toBe(true);
+  });
+
+  it("a site keeps the first reason it was skipped", () => {
+    const merged = mergeSkips(new Map([["a.org", "stopped-pass"], ["b.org", "stopped-pass"]]), new Map([["a.org", "opted-out-earlier"]]), new Map([["c.org", "pilot"]]));
+    expect(Object.fromEntries(merged)).toEqual({ "a.org": "opted-out-earlier", "b.org": "stopped-pass", "c.org": "pilot" });
+  });
+
+  it("skipped sites are reported per cohort and reason", () => {
+    const skipped = (cohort, category) => ({ reason: "exclusion_list", category, cohorts: { [cohort]: {} } });
+    expect(skipsByCohort([skipped("T1k", "stopped-pass"), skipped("T1k", "pilot"), skipped("YC-new", "pilot"), { status: "ok", cohorts: { T1k: {} } }])).toEqual({ T1k: { "stopped-pass": 1, pilot: 1 }, "YC-new": { pilot: 1 } });
+  });
+
+  it("pass 3 needs its own amendment, in both places", () => {
+    expect(amendment3Adopted("| Amendment 3 | **Adopted.** x |\n## Amendment 3\n**Status: adopted.** x\n")).toBe(true);
+    expect(amendment3Adopted("| Amendment 3 | **Draft.** x |\n## Amendment 3\n**Status: adopted.** x\n")).toBe(false);
+    expect(amendment3Adopted("| Amendment 3 | **Adopted.** x |\n**Status: adopted.** x\n## Amendment 3\n**Status: draft.** x\n")).toBe(false);
+    expect(amendment3Adopted("| Amendment 3 | **Adopted.** x |\n\n## Amendment 3\n\n**Status: draft.** x\n\n## Amendment 4\n\n**Status: adopted.** x\n")).toBe(false);
+    expect(amendment3Adopted("| Amendment 3 | **Adopted.** x |\n\n## Amendment 3\n\n**Status: adopted.** x\n\n## Amendment 4\n\n**Status: draft.** x\n")).toBe(true);
+    expect(amendment3Adopted(readFileSync(PREREG_R, "utf8"))).toBe(true);
+    expect(PASS_SEED[3]).toBe(PASS_SEED[2]);
+  });
+
+  it("the page and the run sheet say what happened", () => {
+    expect(readFileSync(STUDY_PAGE, "utf8")).toContain("each site is visited once in the run itself");
+    const sheet = readFileSync(join(import.meta.dirname, "..", "bench", "front-door", "run-sheet.md"), "utf8");
+    for (const step of ["--pass 3", "--replay", "--legacy-findings", "--false-fire ~/study/false-fire-note.txt --reviewer <who>", "export RUN=$R/e20r-pass3", "--privacy $RUN", "draw $RUN", "prune $RUN", "purge $RUN", "--pass1 <private run folder>/raw.jsonl", "~/study/lists", "rsync"]) expect(sheet).toContain(step);
   });
 });

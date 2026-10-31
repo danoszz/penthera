@@ -17,10 +17,11 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { siteKey, siteOrg } from "./psl.mjs";
-import { isEligible, unfinishedRun } from "./record-checks.mjs";
-import { PREREG_R, recordedHashR } from "./replicate.mjs";
+import { isEligible, selfHashed, unfinishedRun, withheldCounts } from "./record-checks.mjs";
+import { PREREG_R, recordedHashR, studyState } from "./replicate.mjs";
+import { auditFrame, stateOf, stateProblem } from "./validation-sample.mjs";
 import { seeded } from "./replicate.mjs";
-import { newcombe } from "./run.mjs";
+import { newcombe, statusCounts, wilson } from "./run.mjs";
 
 // Amendment 2: C1 to C11 are the family. The ±10 margin stays because it was registered, not because it is justified.
 export const CLAIMS_R = 11;
@@ -268,7 +269,8 @@ export function dnsCoverage(records) {
   const out = {};
   for (const cohort of ["T1k", "YC-new", "YC-25", "YC-old", "T100k"]) {
     const rows = inCohort(records, cohort).filter((r) => r.dns?.listed);
-    out[cohort] = { read: rows.length, exists: rows.filter((r) => r.dns.listed.exists === true).length, nxdomain: rows.filter((r) => r.dns.listed.exists === false).length, unknown: rows.filter((r) => r.dns.listed.exists === null).length };
+    const readings = rows.filter((r) => r.dns.listed.exists === true).map((r) => r.dns.listed.dmarcReading).filter(Boolean);
+    out[cohort] = { read: rows.length, exists: rows.filter((r) => r.dns.listed.exists === true).length, nxdomain: rows.filter((r) => r.dns.listed.exists === false).length, unknown: rows.filter((r) => r.dns.listed.exists === null).length, pctUnder100: readings.filter((d) => d.partial).length, spNone: readings.filter((d) => d.spNone).length };
   }
   return out;
 }
@@ -342,10 +344,28 @@ export function secondaryCohorts(graded, all = graded) {
   })));
 }
 
+/** What happened to every record, with the aggregate's keys, and TLS failures apart. Either failure counts when plain HTTP was then tried. */
+export function outcomesOf(all) {
+  const failed = (name) => all.filter((r) => r.error === name || r.httpsFailed?.error === name).length;
+  const reasons = {};
+  for (const reason of all.map((r) => r.tlsReason ?? r.httpsFailed?.tlsReason).filter(Boolean)) reasons[reason] = (reasons[reason] ?? 0) + 1;
+  return { status: statusCounts(all), tls: { invalid: failed("tls_invalid"), handshake: failed("tls_handshake"), reasons, fellBackToHttp: all.filter((r) => r.httpsFailed).length } };
+}
+
+/** Sites this run skipped, per cohort and reason: pilot, stopped pass and the rest. Skipped sites aren't missing at random, so each list shows its own. */
+export function skipsByCohort(all) {
+  const out = {};
+  for (const r of all.filter((x) => x.reason === "exclusion_list")) for (const c of Object.keys(r.cohorts ?? {})) ((out[c] ||= {})[r.category] = (out[c][r.category] ?? 0) + 1);
+  return out;
+}
+
 /** A Wilson 95% interval, row-level like the table it sits in. */
-function wilson(k, n, z = 1.96) {
-  const p = k / n, d = 1 + z * z / n, mid = (p + z * z / (2 * n)) / d, half = z * Math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / d;
-  return [Math.max(0, mid - half), Math.min(1, mid + half)];
+const interval = (k, n) => { const { lo, hi } = wilson(k, n); return n ? [lo, hi] : null; };
+
+/** One check in one group: its counts, its share and its interval. Under the floor of judged sites, including none, it holds no number. */
+function checkShare(rows, id, min) {
+  const n = judged(rows, id), k = rows.filter((r) => pass(r, id)).length;
+  return n < min ? { suppressed: true } : { passed: k, judged: n, share: k / n, ci95: interval(k, n), interval: "naive row-level" };
 }
 
 /** The challenge share by edge, among graded responses, for edges with at least 20 sites, with a naive row-level 95% interval. */
@@ -354,7 +374,7 @@ export function challengeByEdge(rows) {
   for (const stratum of new Set(rows.map(edgeStratum))) {
     const here = rows.filter((r) => edgeStratum(r) === stratum);
     const k = here.filter((r) => r.evidence?.class?.label === "challenge").length;
-    if (here.length >= MIN_SUPPORT) out[stratum] = { n: here.length, share: k / here.length, ci95: wilson(k, here.length), interval: "naive row-level" };
+    if (here.length >= MIN_SUPPORT) out[stratum] = { n: here.length, share: k / here.length, ci95: interval(k, here.length), interval: "naive row-level" };
   }
   return out;
 }
@@ -363,7 +383,8 @@ export function challengeByEdge(rows) {
 export function refusalShares(rows) {
   const n = rows.length;
   const refused = rows.filter(isRefused);
-  return { n, all: n ? refused.length / n : NaN, signatureBacked: n ? refused.filter((r) => r.evidence.class.rule !== "unrecognized-403").length / n : NaN, registered: n ? rows.filter((r) => ["challenge", "block"].includes(r.evidence?.classRegistered?.label)).length / n : NaN };
+  const registered = rows.filter((r) => ["challenge", "block"].includes(r.evidence?.classRegistered?.label));
+  return { n, all: n ? refused.length / n : NaN, allCi95: interval(refused.length, n), signatureBacked: n ? refused.filter((r) => r.evidence.class.rule !== "unrecognized-403").length / n : NaN, registered: n ? registered.length / n : NaN, registeredCi95: interval(registered.length, n), interval: "naive row-level" };
 }
 
 /** The primary refusal endpoint with a cluster-bootstrap 95% interval. */
@@ -392,7 +413,7 @@ export function industryTable(rows, industries, checks = KAPPA_CHECKS, min = 20)
   const out = { suppressedGroups: 0 };
   for (const [i, g] of Object.entries(by)) {
     if (g.length < min) { out.suppressedGroups++; continue; }
-    out[i] = { sites: g.length, median: median(g.map((r) => r.score)), shares: Object.fromEntries(checks.map((c) => [c, share(g, c)])) };
+    out[i] = { sites: g.length, median: median(g.map((r) => r.score)), shares: Object.fromEntries(checks.map((c) => [c, checkShare(g, c, min)])) };
   }
   return out;
 }
@@ -403,7 +424,7 @@ export function traitTable(rows, checks = KAPPA_CHECKS, min = 20) {
   for (const trait of ["login", "payments", "shop", "securityPage"]) {
     const g = rows.filter((r) => r.evidence?.traits?.[trait] === true);
     if (g.length < min) { out[trait] = { sites: g.length, suppressed: true }; continue; }
-    out[trait] = { sites: g.length, shares: Object.fromEntries(checks.map((c) => [c, share(g, c)])) };
+    out[trait] = { sites: g.length, shares: Object.fromEntries(checks.map((c) => [c, checkShare(g, c, min)])) };
   }
   return out;
 }
@@ -414,19 +435,27 @@ export function traitsByCohort(rows, checks = KAPPA_CHECKS, min = 20) {
   return Object.fromEntries(cohorts.map((c) => [c, traitTable(inCohort(rows, c), checks, min)]));
 }
 
-export function main(args, { fail = console.error, preregText } = {}) {
+/**
+ * The analysis of one run from its registered inputs, as plain JSON, or null after a refusal.
+ * It reads no clock and no path into its output, so the same inputs give the same bytes, and
+ * the report runs it again to prove a saved analysis.
+ */
+export function analysisOf(args, { fail = console.error, preregText, state = studyState() } = {}) {
   const at = (n) => args[args.indexOf(n) + 1];
-  if (!args.includes("--pass1")) { fail("Usage: analyze-r.mjs --pass1 <raw> [--pass2 <raw>] --e20 <tranco raw> <yc raw> [--out file]"); return 2; }
   const problem = unfinishedRun(dirname(at("--pass1")));
-  if (problem) { fail(`Refused: this run can't decide claims: ${problem}.`); return 3; }
+  if (problem) { fail(`Refused: this run can't decide claims: ${problem}.`); return null; }
   // The gate read raw.jsonl, so nothing else in the folder may stand in for it.
-  if (basename(at("--pass1")) !== "raw.jsonl") { fail("Refused: --pass1 takes the run's raw.jsonl, the file the gate checked."); return 3; }
+  if (basename(at("--pass1")) !== "raw.jsonl") { fail("Refused: --pass1 takes the run's raw.jsonl, the file the gate checked."); return null; }
+  const departs = stateProblem(JSON.parse(readFileSync(join(dirname(at("--pass1")), "manifest.json"), "utf8")), state);
+  if (departs) { fail(`Refused: ${departs}.`); return null; }
   // The other inputs stay private, so their frozen hashes are what ties a result to them.
   const prereg = preregText ?? readFileSync(PREREG_R, "utf8");
   const given = (flag, offset = 1) => (args.includes(flag) ? args[args.indexOf(flag) + offset] : undefined);
+  const inputs = {};
   for (const [label, file] of [["Pass 1 raw", given("--pass2")], ["E20 Tranco raw", given("--e20")], ["E20 YC raw", given("--e20", 2)], ["Industry map", given("--industries")], ["E20 exclusion file", given("--e20-excluded")]]) {
-    if (!file || !existsSync(file)) { fail(`Refused: the registered input "${label}" was not given.`); return 3; }
-    if (recordedHashR(prereg, label) !== createHash("sha256").update(readFileSync(file)).digest("hex")) { fail(`Refused: ${label} does not match its frozen hash.`); return 3; }
+    if (!file || !existsSync(file)) { fail(`Refused: the registered input "${label}" was not given.`); return null; }
+    inputs[label] = createHash("sha256").update(readFileSync(file)).digest("hex");
+    if (recordedHashR(prereg, label) !== inputs[label]) { fail(`Refused: ${label} does not match its frozen hash.`); return null; }
   }
   const i = args.indexOf("--e20");
   const e20 = { T1k: e20Index(load(args[i + 1])), "YC-new": e20Index(load(args[i + 2])) };
@@ -452,6 +481,10 @@ export function main(args, { fail = console.error, preregText } = {}) {
   out.standardizedR.C4 = standardizedDiff(edge(inCohort(p1, "T1k"), false).filter(isPage), edge(inCohort(p1, "YC-new"), false).filter(isPage), "https+hsts");
   out.secondaryCohorts = secondaryCohorts(p1, all);
   out.challengeByEdge = challengeByEdge(p1);
+  out.skipsByCohort = skipsByCohort(all);
+  out.outcomes = outcomesOf(all);
+  out.textWithheld = withheldCounts(all);
+  out.auditFrame = auditFrame(all);
   out.cspControlsScripts = cspValueClaims(p1);
   if (all.some((r) => r.dns?.listed)) {
     const decided = dnsClaims(all);
@@ -463,7 +496,19 @@ export function main(args, { fail = console.error, preregText } = {}) {
   }
   if (args.includes("--industries")) out.industries = industryTable(p1, new Map(readFileSync(at("--industries"), "utf8").split(/\r?\n/).slice(1).filter(Boolean).map((l) => l.split(",")).map(([h, i]) => [h, i])));
   if (args.includes("--e20-excluded")) out.replicationAsE20 = replicationAsE20(p1, new Set(readFileSync(at("--e20-excluded"), "utf8").split(/\r?\n/).map((l) => l.trim().toLowerCase()).filter(Boolean)));
-  const text = JSON.stringify(out, null, 2) + "\n";
+  // The run this came from and the state it ran under, for the report to check.
+  const sha = (f) => createHash("sha256").update(readFileSync(f)).digest("hex");
+  out.provenance = { manifestSha256: sha(join(dirname(at("--pass1")), "manifest.json")), rawSha256: sha(at("--pass1")), inputs, options: { level: LEVEL, resamples: RESAMPLES, kappaResamples: KAPPA_RESAMPLES, seed: SEED }, state: stateOf(state) };
+  return JSON.parse(JSON.stringify(out));
+}
+
+export function main(args, opts = {}) {
+  const at = (n) => args[args.indexOf(n) + 1];
+  const { fail = console.error } = opts;
+  if (!args.includes("--pass1")) { fail("Usage: analyze-r.mjs --pass1 <raw> [--pass2 <raw>] --e20 <tranco raw> <yc raw> [--out file]"); return 2; }
+  const out = analysisOf(args, opts);
+  if (!out) return 3;
+  const text = JSON.stringify(selfHashed(out), null, 2) + "\n";
   if (args.includes("--out")) writeFileSync(at("--out"), text); else process.stdout.write(text);
   return 0;
 }
