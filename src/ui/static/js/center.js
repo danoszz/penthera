@@ -101,7 +101,7 @@ function projectView(col, ctx) {
       h("p", { class: "counts" }, h("b", {}, String(open)), easy ? " to fix · " : " open · ", h("b", {}, String(fixed)), " fixed"),
       v.top ? h("div", { class: "actions start" },
         fix ? h("button", { type: "button", class: "btn primary", onclick: () => ctx.newScan("loop", all ? null : key) }, "Fix problems for me…") : null,
-        h("button", { type: "button", class: ["btn", fix ? "ink" : "primary", "first"], onclick: () => ctx.openFinding(v.top) }, easy ? "Show me the first one ▸" : `Open: ${v.top.title}`)) : null),
+        h("button", { type: "button", class: ["btn", fix ? "ink" : "primary", "first"], onclick: () => { state.focusPanel = true; ctx.openFinding(v.top); } }, easy ? "Show me the first one ▸" : `Open: ${v.top.title}`)) : null),
     h("div", { class: "report-score" },
       score == null ? null : h("div", { class: "score" }, meter(score),
         h("p", { class: "score-n" }, String(score), h("span", {}, all && scores.length > 1 ? `/100, lowest of ${scores.length}` : "/100"))),
@@ -399,7 +399,7 @@ function runView(col, ctx) {
         else if (d.status === "stopped") said.textContent = "Stopped. Everything applied so far was checked; nothing was published.";
         else if (sum?.totals) {
           const t = sum.totals;
-          said.textContent = `Done. ${plural(t.verified, "fix", "fixes")} applied and checked${t.failed ? `, ${t.failed} undone` : ""}${t.declined ? `, ${t.declined} skipped` : ""}.`;
+          said.textContent = t.verified || t.failed || t.declined ? `Done. ${plural(t.verified, "fix", "fixes")} applied and checked${t.failed ? `, ${t.failed} undone` : ""}${t.declined ? `, ${t.declined} skipped` : ""}.` : "Nothing here can be fixed automatically.";
         } else if (sum?.counts) {
           // A check: say what it found, not "up to date".
           const serious = (sum.counts.critical || 0) + (sum.counts.high || 0);
@@ -407,7 +407,10 @@ function runView(col, ctx) {
             ? `Done. ${plural(sum.total, "problem")} found${serious ? `, ${serious} serious` : ""}.`
             : "Done. Penthera found no problems.";
         } else said.textContent = "Done.";
-        saidSub.textContent = run.kind === "loop" && d.status !== "error" ? "The changes are on a separate branch on this computer. Nothing was published." : "";
+        saidSub.textContent = run.kind === "loop" && d.status !== "error"
+          ? (sum?.totals?.verified ? `The fix is on a separate branch on this computer${sum.branch ? `, ${sum.branch}, and your project is on it now` : ""}. Merge it when you are happy with it. Nothing was published. Problems with no automatic fix stay on your list.`
+            : "Open a problem on your list and copy its prompt for your coding agent.") : "";
+        if (easy) col.querySelector(".run-head h1").textContent = "Finished";
         if (sum?.totals) {
           const t = sum.totals;
           typer.push(`done: ${sum.stopReason} after ${plural(t.iterations, "round")} (${duration(sum.durationMs)})`, "ok");
@@ -499,13 +502,14 @@ function openApproval(run, d, ty) {
     h("h3", { id: "ap-h" }, easy ? `Penthera wants to change ${plural(files, "file")} to fix this:` : p.title),
     h("ul", { class: "mini" }, p.findings.map((f) => h("li", {}, easy ? h("span", { class: `sev sev-${f.severity}` }, SEV_WORD[f.severity]) : sevBadge(f.severity), h("span", { class: "grow t1" }, f.title)))),
     h("p", { id: "ap-d", class: easy ? "prose" : "muted" }, easy
-      ? `${p.title}. It changes ${p.files.join(", ")} on a separate branch, checks the problem is gone, and undoes the change if it is not. Nothing is published.`
+      ? `${p.title}. It changes ${p.files.join(", ")} on a separate branch, scans for the problem again, and undoes the change if it is still there. Nothing is published. Try your app afterwards.`
       : `${p.recipe}${p.framework ? ` (${p.framework})` : ""} · ${p.files.join(", ")} · ${d.memory ? `memory: ${d.memory.verified} verified, ${d.memory.failed} failed` : "no history for this recipe yet"}`),
     easy && !p.truncated ? h("details", { class: "more" }, h("summary", {}, "Show the exact change"), diff) : diff,
     p.truncated ? h("p", { class: "bad", role: "note" }, easy
       ? "[!] This change is too long to show in full here. Ask a developer to look at the rest in the project before you apply it."
       : `[!] Diff cut: showing the first ${shownDiff.length.toLocaleString()} of ${Number(p.fullLength).toLocaleString()} characters. Review the rest in the repo before applying.`) : null,
     p.truncated ? h("label", { class: "check", for: "ap-ack" }, ack, h("span", { class: "prose" }, " I have not seen the whole change and want to apply it anyway")) : null,
+    p.ownerActions?.length ? h("div", { class: "prose" }, h("b", {}, "After this, check:"), h("ul", { class: "mini" }, p.ownerActions.map((a) => h("li", {}, a)))) : null,
     p.redacted ? h("p", { class: "muted" }, "Secret values are masked here; the real patch uses them.") : null,
   );
   const apply = h("button", { type: "button", class: "btn primary", disabled: Boolean(ack && !ack.checked), onclick: () => decide("approve") }, easy ? "Apply this fix" : "Apply", h("kbd", {}, "y"));
