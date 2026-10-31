@@ -46,7 +46,7 @@ import {
 } from "./run.mjs";
 import { EXCERPT_BYTES, INPUT_CAP_CHARS, PAGE_TEXT_CHARS, scrub, SOFT_MAX_CHARS } from "./classify.mjs";
 import { pslSha256, PSL_VERSION, siteKey, siteOrg } from "./psl.mjs";
-import { falseFireReviewed, LEGACY_CLASSIFIER_SHA256, MAX_RESOLVER_FAILURES, pageTextMissed, PRIVACY_STOP, purgeState, resolverFailed, sealHash, stopRules } from "./record-checks.mjs";
+import { falseFireReviewed, LEGACY_CLASSIFIER_SHA256, legacyProblem, MAX_RESOLVER_FAILURES, pageTextMissed, PRIVACY_STOP, purgeState, resolverFailed, safeRecord, sealHash, stopRules, withheldCounts } from "./record-checks.mjs";
 import { scoreOf } from "../../api/_lib/grade.mjs";
 import { dnsChecks } from "../../api/_lib/dns.mjs";
 import { isPublicIp } from "../../api/_lib/guard.mjs";
@@ -593,7 +593,9 @@ export function stoppedPass(results = RESULTS, { allowFixture = false } = {}) {
   const legacy = legacyBytes && JSON.parse(legacyBytes);
   if (!legacy) return no("pass 2 has no legacy finding report");
   if (legacy.legacyDetectorSha256 !== LEGACY_CLASSIFIER_SHA256 || legacy.manifestSha256 !== sha256(bytes) || legacy.rawSha256 !== m.rawSha256 || legacy.records !== m.records) return no("its legacy finding report is for another run");
-  if (!legacy.findings?.length || !legacy.reproducesStop) return no("its legacy finding report does not reproduce the stop");
+  const orders = new Set(readFileSync(join(dir, "raw.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l).order));
+  const legacyWrong = legacyProblem(legacy, orders);
+  if (legacyWrong) return no(`its legacy finding report is not valid: ${legacyWrong}`);
   const reviewed = JSON.parse(json("privacy-report.json") ?? "null");
   if (!falseFireReviewed(dir) || reviewed.rawSha256 !== m.rawSha256) return no("pass 2 has no recorded false-fire review");
   if (reviewed.reviewed.legacyFindingsSha256 !== sha256(legacyBytes)) return no("its review is not bound to this legacy finding report");
@@ -720,12 +722,12 @@ export function aggregateR(records, meta = {}) {
  * minutes, and no timer on that thread would fire, so the cap is enforced here.
  * The record then keeps the last progress the thread sent.
  */
-export function visitInWorker(row, { loopbackPort, exclude = new Map(), budgetMs = V2_LIMITS.siteBudgetMs, hardCapMs = V2_LIMITS.siteHardCapMs, workerFile = VISIT_WORKER } = {}) {
+export function visitInWorker(row, { loopbackPort, exclude = new Map(), budgetMs = V2_LIMITS.siteBudgetMs, hardCapMs = V2_LIMITS.siteHardCapMs, workerFile = VISIT_WORKER, withhold = false } = {}) {
   return new Promise((done) => {
     const at = new Date().toISOString();
     let last = { requests: 0, bytes: 0, redirects: 0, hosts: [] };
     let finished = false;
-    const worker = new Worker(workerFile, { workerData: { row, loopbackPort, exclude: [...exclude], budgetMs, hardCapMs } });
+    const worker = new Worker(workerFile, { workerData: { row, loopbackPort, exclude: [...exclude], budgetMs, hardCapMs, withhold } });
     const finish = (record) => {
       if (finished) return;
       finished = true;
@@ -745,7 +747,7 @@ export function visitInWorker(row, { loopbackPort, exclude = new Map(), budgetMs
 const letSignalsIn = async () => { for (let i = 0; i < 2; i++) await new Promise((r) => { setImmediate(r); }); };
 
 /** One pass. `rows` come from mergeCohorts. Appends each record to raw.jsonl. */
-export async function runPass(rows, { pass, out, loopbackPort, exclude = new Map(), delayMs = LIMITS.delayMs, concurrency = LIMITS.concurrency, dns = {}, meta = {}, manifest = {}, onRecord, onStart, workerFile, recheck = () => ({}), stopCheck = () => null, gitNow = () => gitState(ROOT, execFileSync, { remote: !loopbackPort }), rollingWindow = ROLLING_WINDOW } = {}) {
+export async function runPass(rows, { pass, out, loopbackPort, exclude = new Map(), delayMs = LIMITS.delayMs, concurrency = LIMITS.concurrency, dns = {}, meta = {}, manifest = {}, onRecord, onStart, workerFile, recheck = () => ({}), visitLimits = {}, stopCheck = () => null, gitNow = () => gitState(ROOT, execFileSync, { remote: !loopbackPort }), rollingWindow = ROLLING_WINDOW } = {}) {
   if (!loopbackPort) { concurrency = LIMITS.concurrency; delayMs = LIMITS.delayMs; }
   const order = shuffled(rows, PASS_SEED[pass]);
   mkdirSync(out, { recursive: true, mode: 0o700 });
@@ -769,7 +771,7 @@ export async function runPass(rows, { pass, out, loopbackPort, exclude = new Map
   let stoppedFor = null;
   const watch = (record) => {
     if (pass === "pilot") return;
-    if (pageTextMissed(record)) stoppedFor = PRIVACY_STOP;
+    if (pass === 2 && pageTextMissed(record)) stoppedFor = PRIVACY_STOP;
     recent.push(resolverFailed(record));
     if (recent.length > rollingWindow) recent.shift();
     if (recent.length === rollingWindow && recent.filter(Boolean).length / rollingWindow > MAX_RESOLVER_FAILURES) stoppedFor ??= "over 20% of recent sites hit a resolver failure";
@@ -785,7 +787,10 @@ export async function runPass(rows, { pass, out, loopbackPort, exclude = new Map
       if (category) record = { ...row, at: new Date().toISOString(), status: "excluded", reason: "exclusion_list", category };
       else {
         // Amendment 2: no app page, for any site. `appPage` is not passed, and `strict` refuses it anyway.
-        record = { ...row, ...(await visitInWorker(row, { loopbackPort, exclude, workerFile })) };
+        // Pass 2 keeps the path it ran on. Everywhere else a fire means the text never reaches a disk:
+        // the worker withholds it, and this side checks again, before anything here can see it.
+        const visited = await visitInWorker(row, { loopbackPort, exclude, workerFile, withhold: pass !== 2, ...visitLimits });
+        record = { ...row, ...(pass === 2 ? visited : safeRecord(visited)) };
         record.listedHost = row.host;
         record.listedOrg = siteOrg(row.host);
         if (record.finalHost) {
@@ -823,11 +828,12 @@ export async function runPass(rows, { pass, out, loopbackPort, exclude = new Map
   const changed = [...Object.keys(end).filter((k) => JSON.stringify(end[k]) !== JSON.stringify(started[k])), ...(gitChanged ? ["git"] : [])];
   let agg;
   const writeFinal = () => {
-    agg = aggregateR(done, { pass, partial: Boolean(stoppedFor), ...meta, concurrency, delayMs, appPage: false, userAgent: USER_AGENT, order: "seeded shuffle", seed: PASS_SEED[pass] });
+    agg = aggregateR(done, { pass, partial: Boolean(stoppedFor), textWithheld: withheldCounts(done), ...meta, concurrency, delayMs, appPage: false, userAgent: USER_AGENT, order: "seeded shuffle", seed: PASS_SEED[pass] });
     writeFileSync(join(out, "aggregate.json.tmp"), JSON.stringify(agg, null, 2) + "\n", SECRET);
     writeFileSync(join(out, "manifest.json.tmp"), JSON.stringify({
       ...begun, gitAtStart, gitAtFinish, finishedAt: new Date().toISOString(), records: done.length,
       ...(stoppedFor ? { partial: true, stoppedFor } : {}),
+      textWithheld: withheldCounts(done),
       totals: { requests: sum("requests"), bytes: sum("bytes"), redirects: sum("redirects") },
       immutableAtFinish: { ok: changed.length === 0, changed },
       rawSha256: fileHash(raw), aggregateSha256: fileHash(join(out, "aggregate.json.tmp")),

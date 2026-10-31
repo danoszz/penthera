@@ -6,9 +6,10 @@
  */
 import { parentPort, workerData } from "node:worker_threads";
 import { evidenceOf } from "./classify.mjs";
+import { safeRecord } from "./record-checks.mjs";
 import { ipv4Lookup, visit } from "./run.mjs";
 
-const { row, loopbackPort, exclude, budgetMs, hardCapMs } = workerData;
+const { row, loopbackPort, exclude, budgetMs, hardCapMs, withhold } = workerData;
 const meter = { requests: 0, bytes: 0, redirects: 0, hosts: [] };
 const send = () => parentPort.postMessage({ progress: { requests: meter.requests, bytes: meter.bytes, redirects: meter.redirects, hosts: [...meter.hosts] } });
 let sent = 0;
@@ -23,4 +24,5 @@ const record = await visit(row, {
   loopbackPort, exclude: new Map(exclude), evidence: evidenceOf, strict: true, budgetMs, hardCapMs, meter,
   lookup: loopbackPort ? undefined : ipv4Lookup,
 });
-parentPort.postMessage({ record });
+// Text a detector doesn't trust stops here, before the record leaves this thread.
+parentPort.postMessage({ record: withhold ? safeRecord(record) : record });

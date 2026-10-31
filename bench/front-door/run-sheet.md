@@ -2,10 +2,10 @@
 
 The order of work on the study server, from the tip of `main`. The protocol is `docs/research/prereg/E20r-front-door-replication.md`, Amendment 2. The maintainer starts every step that reaches another host.
 
-Set these first. `/srv/e20` is an example: use the server's real paths. `LISTS` holds the cohort lists, and the other files are the frozen lists:
+On the server, the code is in `~/penthera` and the lists and notes are in `~/study`. Work from `~/penthera`, in `tmux`, so a dropped connection isn't a hangup. Set these first:
 
 ```bash
-export LISTS=/srv/e20/lists EXCLUDE=/srv/e20/exclusions.txt HOMEPAGE=/srv/e20/homepage-only.txt REMOVALS=/srv/e20/removals.txt PRIOR=/srv/e20/prior-optouts.txt
+export LISTS=~/study/lists EXCLUDE=~/study/lists/exclusions-e20r.txt HOMEPAGE=~/study/lists/health-homepage-only.txt REMOVALS=~/study/removals.txt PRIOR=~/study/prior-optouts.txt
 ```
 
 ```bash
@@ -59,7 +59,7 @@ node bench/front-door/pilot-report.mjs --decide $R/e20r-pilot-1 --decision go --
 ### One round: it was a go
 
 ```bash
-cp $R/e20r-pilot-1/pilot-sites.txt /srv/e20/pilot-sites-all.txt
+cp $R/e20r-pilot-1/pilot-sites.txt ~/study/pilot-sites-all.txt
 ```
 
 Then go to pass 2.
@@ -75,15 +75,15 @@ echo "<what went wrong and why it can't repeat>" > $R/e20r-pilot-1/pilot-explana
 Its sites go on the dropped list whatever happened to it:
 
 ```bash
-sort -u $R/e20r-pilot-1/pilot-sites.txt > /srv/e20/pilot-sites-round1.txt
+sort -u $R/e20r-pilot-1/pilot-sites.txt > ~/study/pilot-sites-round1.txt
 ```
 
 ```bash
-node bench/front-door/replicate.mjs --pilot 50 --pilot-round 2 --pilot-dropped /srv/e20/pilot-sites-round1.txt $COMMON
+node bench/front-door/replicate.mjs --pilot 50 --pilot-round 2 --pilot-dropped ~/study/pilot-sites-round1.txt $COMMON
 ```
 
 ```bash
-node bench/front-door/pilot-report.mjs $R/e20r-pilot-2/raw.jsonl --exclude $EXCLUDE --skip $REMOVALS --skip $PRIOR --skip /srv/e20/pilot-sites-round1.txt --seal
+node bench/front-door/pilot-report.mjs $R/e20r-pilot-2/raw.jsonl --exclude $EXCLUDE --skip $REMOVALS --skip $PRIOR --skip ~/study/pilot-sites-round1.txt --seal
 ```
 
 ```bash
@@ -97,7 +97,7 @@ node bench/front-door/pilot-report.mjs --decide $R/e20r-pilot-2 --decision go --
 Build the dropped list from both rounds. Then check that no site ran twice, which must print 0:
 
 ```bash
-cat $R/e20r-pilot-1/pilot-sites.txt $R/e20r-pilot-2/pilot-sites.txt | sort -u > /srv/e20/pilot-sites-all.txt
+cat $R/e20r-pilot-1/pilot-sites.txt $R/e20r-pilot-2/pilot-sites.txt | sort -u > ~/study/pilot-sites-all.txt
 ```
 
 ```bash
@@ -137,7 +137,7 @@ A real address: purge as above. Amendment 3 doesn't apply.
 **4.** A false fire: write what was checked in a private note, with no flagged text. Record the review. It binds to the legacy report:
 
 ```bash
-node bench/front-door/pilot-report.mjs --privacy $R/e20r-pass2 --false-fire /srv/e20/false-fire-note.txt --reviewer <who>
+node bench/front-door/pilot-report.mjs --privacy $R/e20r-pass2 --false-fire ~/study/false-fire-note.txt --reviewer <who>
 ```
 
 **5.** Prune the stopped pass, and check it prints `"verified":true`:
@@ -151,7 +151,7 @@ node bench/front-door/validation-sample.mjs prune $R/e20r-pass2
 **7.** Pass 3. It takes the dropped list of both rounds, and skips the 188 sites itself. It runs once:
 
 ```bash
-node bench/front-door/replicate.mjs --pass 3 --pilot-dropped /srv/e20/pilot-sites-all.txt $COMMON
+node bench/front-door/replicate.mjs --pass 3 --pilot-dropped ~/study/pilot-sites-all.txt $COMMON
 ```
 
 **8.** Set the run folder for every command in sections 4 and Failure recovery:
@@ -163,7 +163,7 @@ export RUN=$R/e20r-pass3
 ## 3. Pass 2
 
 ```bash
-node bench/front-door/replicate.mjs --pass 2 --pilot-dropped /srv/e20/pilot-sites-all.txt $COMMON
+node bench/front-door/replicate.mjs --pass 2 --pilot-dropped ~/study/pilot-sites-all.txt $COMMON
 ```
 
 To stop it between sites, for a complaint or anything else that can't wait:
@@ -186,13 +186,43 @@ node bench/front-door/pilot-report.mjs --privacy $RUN
 node bench/front-door/validation-sample.mjs draw $RUN
 ```
 
-The analysis takes pass 2 as `--pass1`, under Amendment 2. Its other inputs are private files whose hashes are frozen in the protocol:
+`draw` prints `sampled` and `withheldFromDraw`, and writes `audit-frame.json`. Withheld records keep their label and grade, and stay out of the audit's frame. A stratum marked `estimable: false` is reported as not estimable. There is no further pass.
+
+## 5. Bring the data to the laptop
+
+The analysis needs pass 1 and E20 raw files. They stay on the laptop, so the server can't run it. Pull the run folder without the key, so no laptop session can read the key before both label files exist. Check that `raw.jsonl` hashes to `rawSha256After` in `prune-manifest.json`. It still holds the sample's text, so it never goes into a chat.
 
 ```bash
-node bench/front-door/analyze-r.mjs --pass1 $RUN/raw.jsonl --pass2 /srv/e20/pass1/raw.jsonl --e20 /srv/e20/e20/tranco/raw.jsonl /srv/e20/e20/yc/raw.jsonl --industries /srv/e20/industries.csv --e20-excluded /srv/e20/e20-health-excluded.txt --out analysis.json
+rsync -a --exclude validation-key.json <server>:penthera/$RUN/ <private run folder>/
 ```
 
+## 6. The analysis, on the laptop
+
+Use a clean, detached checkout of the commit pass 3 ran, because the analysis reads the protocol's hashes there. `--pass1` takes the deciding run, as the file's header says. The other inputs are private, and match their frozen hashes:
+
+```bash
+node bench/front-door/analyze-r.mjs --pass1 <private run folder>/raw.jsonl --pass2 <pass 1 raw.jsonl> --e20 <E20 tranco raw.jsonl> <E20 yc raw.jsonl> --industries <industries.csv> --e20-excluded <e20-health-excluded.txt> --out <private run folder>/analysis.json
+```
+
+Read coverage, skips, `textWithheld` and bounds first, then the primary endpoints, then C1 to C11 in order. Nothing is re-cut after looking.
+
+## 7. Labels and the score
+
+The human and the model each label `validation-sheet.json`, and neither sees the other's labels. The model labels first, and its file's hash is noted. No other copy of the sheet is made, and every copy's path is written down so it can be deleted. The key stays on the server until both files exist. Then copy `human.csv` and `agent.csv` to `~/study` and score there. The result's metrics cover non-withheld records, with `worstCase` bounds beside them:
+
+```bash
+node bench/front-door/validation-sample.mjs score $RUN/validation-key.json ~/study/human.csv ~/study/agent.csv > ~/study/score.json
+```
+
+## 8. Deletions and the server's end
+
+- The labeler deletes every copy of the sheet and says so. The date is recorded.
+- The private evidence goes 12 months after publication, from every copy.
+- The server goes after the pull is checked and the score is done, on the maintainer's go.
+
 ## Failure recovery
+
+`textWithheld` isn't a failure. A record whose page or error text fired the detector is written without any of that text, and the run goes on. Pass 3 never stops for this. A pilot round fails its seal past 2 of 50.
 
 Every failed run ends in a prune or a purge. A prune reads the file back and prints `"verified":true`. If it doesn't, the run isn't closed.
 
@@ -201,7 +231,7 @@ Every failed run ends in a prune or a purge. A prune reads the file back and pri
 | Usage error | 2 | Fix the command. Nothing ran. |
 | Refused by the gate | 3 | Read the reason. Nothing ran. |
 | Something changed during the run | 4 | Do what the runner printed. Pilot: seal, then prune. Pass 2: prune. The run decides nothing. |
-| Stopped: scrub miss, resolver failures, stop file, source address, signal | 5 | Do what the runner printed. Pilot: seal, then prune. Pass 2: prune, and report what ran as partial. |
+| Stopped: resolver failures, stop file, source address, signal | 5 | Do what the runner printed. Pilot: seal, then prune. Pass 2: prune, and report what ran as partial. |
 | Hard kill, crash or full disk | none | Prune only. The run counts as interrupted. |
 | Prune refuses, or the privacy report isn't clean | 3 or 1 | Stop. A person reviews the flagged fields first (below). |
 
@@ -222,7 +252,7 @@ node bench/front-door/pilot-report.mjs --privacy $RUN
 3. A confirmed false fire: write what was checked in a private note, with no flagged text in it, then record it. The analysis reports it as a deviation.
 
 ```bash
-node bench/front-door/pilot-report.mjs --privacy $RUN --false-fire /srv/e20/false-fire-note.txt --reviewer <who>
+node bench/front-door/pilot-report.mjs --privacy $RUN --false-fire ~/study/false-fire-note.txt --reviewer <who>
 ```
 
 4. A real miss: purge, with the `purgeConfirm` code the report printed. Report a pass 2 as partial. A pilot round needs a seal first if it has a finished manifest, and pass 2 refuses it without a verified purge or a recorded false fire.

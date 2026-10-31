@@ -297,8 +297,11 @@ const opensWithOwnToken = (text) => {
   while (i < text.length && "([{\"'".includes(text[i])) i++;
   return OWN_TOKENS.some((t) => text.startsWith(t, i));
 };
-// A web URL after `at` is common page text, and a scheme can't open an address. Named on its own, so it stays narrow.
-const opensWithUrl = (text) => /^[([{"']*(?:https?|ftp):\/\//.test(text);
+// What can follow a bare `at` as an address: a label of letters, digits and hyphens, past an opening
+// bracket or quote, then a dot and a word. `$29.`, `5:30.`, `Joe's.` and `100%.` hold characters no domain can.
+const DOMAIN_AFTER_AT = /^[([{<"'`“‘«]*[\p{L}\p{N}-]+(?:\s*\.\s*|\s+dot\s+)\p{L}{2,}(?![\p{L}\p{N}])/u;
+// A JWT opens at a token's edge. `keyJ.value` holds the letters and isn't one.
+const JWT_AT_EDGE = /(?:^|[^A-Za-z0-9_-])eyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]/;
 
 /**
  * What should never survive a scrub. This walks tokens with its own tests and
@@ -323,12 +326,12 @@ export function scrubMisses(text) {
       if (!opensWithOwnToken(low.slice(k, k + 16))) out.email++;
     }
   }
-  // A bare `at` before something with a dot. Only our own tokens and a web URL are left out, so
-  // a bracketed or quoted domain counts, and so does prose that looks like one.
+  // A bare `at` before something that could be a domain. A bracketed or quoted domain counts, and so
+  // does prose that looks like one.
   const words = low.split(/\s+/);
   for (let i = 1; i < words.length; i++) {
-    if (words[i] !== "at" || !/[\p{L}\p{N}._%+-]$/u.test(words[i - 1]) || opensWithOwnToken(words[i + 1] ?? "") || opensWithUrl(words[i + 1] ?? "")) continue;
-    if (/^[^\s.]+(?:\s*\.\s*|\s+dot\s+)[a-z]{2,}\b/.test(words.slice(i + 1, i + 5).join(" "))) out.email++;
+    if (words[i] !== "at" || !/[\p{L}\p{N}._%+-]$/u.test(words[i - 1])) continue;
+    if (DOMAIN_AFTER_AT.test(words.slice(i + 1, i + 5).join(" "))) out.email++;
   }
   // Ordinary pages hold many entities for quotes and dashes. Only ones that spell ASCII hide text.
   let spelled = 0;
@@ -366,7 +369,7 @@ export function scrubMisses(text) {
     const q = t.indexOf("?"), hash = t.indexOf("#");
     if (q >= 0 && eq > q + 1) out.query++;
     if (hash >= 0 && eq > hash + 1) out.fragment++;
-    if (t.includes("eyJ") && t.split(".").length >= 2) out.jwt++;
+    if (JWT_AT_EDGE.test(t)) out.jwt++;
     let run = 0, numerals = 0;
     for (const ch of t.toLowerCase()) {
       run = "0123456789abcdef".includes(ch) ? run + 1 : 0;

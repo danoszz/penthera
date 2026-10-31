@@ -14,7 +14,8 @@ import { eachMiss, LEGACY_CLASSIFIER_SHA256, PAGE_PATHS } from "./record-checks.
 const FROZEN_FILE = new URL("./legacy/classify-7023106f.mjs", import.meta.url);
 const hash = (b) => createHash("sha256").update(b).digest("hex");
 
-export function legacyFindings(dir) {
+/** What the frozen detector finds in this run's original raw file. Writes nothing. */
+export function scanLegacy(dir) {
   if (hash(readFileSync(FROZEN_FILE)) !== LEGACY_CLASSIFIER_SHA256) throw new Error("Refused: the frozen detector does not match its hash.");
   const manifestBytes = readFileSync(join(dir, "manifest.json"));
   const manifest = JSON.parse(manifestBytes);
@@ -23,10 +24,14 @@ export function legacyFindings(dir) {
   const rows = rawBytes.toString("utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
   const findings = [];
   for (const r of rows) eachMiss(r, (path, isKey, kind, count) => findings.push({ order: r.order, path: isKey ? `${path || "record"} (a key)` : path, kind, count }), frozenDetector);
-  const report = {
+  return {
     legacyDetectorSha256: LEGACY_CLASSIFIER_SHA256, manifestSha256: hash(manifestBytes), rawSha256: manifest.rawSha256, records: rows.length, findings,
-    reproducesStop: findings.some((f) => PAGE_PATHS.includes(f.path)), purgeConfirm: manifest.rawSha256.slice(0, 12), writtenAt: new Date().toISOString(),
+    reproducesStop: findings.some((f) => PAGE_PATHS.includes(f.path)), purgeConfirm: manifest.rawSha256.slice(0, 12),
   };
+}
+
+export function legacyFindings(dir) {
+  const report = { ...scanLegacy(dir), writtenAt: new Date().toISOString() };
   writeFileSync(join(dir, "legacy-findings.json"), `${JSON.stringify(report, null, 2)}\n`, { mode: 0o600 });
   return report;
 }

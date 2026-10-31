@@ -24,28 +24,56 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { dispositionOf, falseFireReviewed, NO_PRIVACY, PRIVACY_STOP, PURGED_FILES, recordMisses, unfinishedRun } from "./record-checks.mjs";
+import { dispositionOf, falseFireReviewed, NO_PRIVACY, PRIVACY_STOP, PURGED_FILES, recordMisses, STRATA, stratumOf, unfinishedRun } from "./record-checks.mjs";
 import { holdsText, PASS_SEED, seeded, shuffled } from "./replicate.mjs";
 
-// Rows per stratum, frozen in the amendment.
-export const STRATA = Object.freeze({
-  "candidate-page": 150, challenge: 50, "block-signature": 50, "block-unrecognized-403": 30, "unrecognized-error-response": 20,
-});
+// A stratum this small, or with this much withheld, can't speak for its label.
+export const MIN_AUDIT_FRAME = 20;
+export const MAX_WITHHELD_SHARE = 0.1;
 export const LABELS = Object.freeze(["page", "challenge", "block", "error"]);
 export const ANSWERS = Object.freeze([...LABELS, "unsure"]);
 const RULE_LABEL = Object.freeze({ "candidate-page": "page", challenge: "challenge", block: "block", "unrecognized-error-response": "error" });
 export const BOOTSTRAP = Object.freeze({ resamples: 20_000, seed: PASS_SEED[2] });
 
-export function stratumOf(r) {
-  const c = r.evidence?.class;
-  if (!c) return null;
-  if (c.label === "block") return c.rule === "unrecognized-403" ? "block-unrecognized-403" : "block-signature";
-  return c.label in STRATA ? c.label : null;
+export { STRATA, stratumOf };
+
+/**
+ * The audit's frame: graded records that kept their text, per stratum, beside what was
+ * withheld. Withheld rows aren't missing at random, so a stratum says "not estimable" when
+ * it's too small or too much of it is gone, and the withheld count feeds the worst-case bounds.
+ */
+export function auditFrame(records) {
+  const graded = records.filter((r) => r.status === "ok");
+  const strata = {}, withheldByRule = Object.fromEntries(LABELS.map((l) => [l, 0]));
+  for (const stratum of Object.keys(STRATA)) {
+    const all = graded.filter((r) => stratumOf(r) === stratum);
+    const withheld = all.filter((r) => r.evidence?.textWithheld).length;
+    const frame = all.length - withheld;
+    strata[stratum] = { frame, withheld, drawn: Math.min(frame, STRATA[stratum]), target: STRATA[stratum], estimable: frame >= MIN_AUDIT_FRAME && withheld / all.length <= MAX_WITHHELD_SHARE };
+  }
+  for (const r of graded) if (r.evidence?.textWithheld && stratumOf(r)) withheldByRule[RULE_LABEL[r.evidence.class.label]]++;
+  return { scope: "non-withheld records", strata, withheld: Object.values(withheldByRule).reduce((a, b) => a + b, 0), withheldByRule };
+}
+
+/** Precision and recall if the rule label were wrong on every withheld row. */
+export function worstCaseBounds(rows, withheldByRule) {
+  const answered = reweighted(rows.filter((r) => r.human !== "unsure"));
+  const total = Object.values(withheldByRule).reduce((a, b) => a + b, 0);
+  return Object.fromEntries(LABELS.map((label) => {
+    let tp = 0, called = withheldByRule[label] ?? 0, actual = total - (withheldByRule[label] ?? 0);
+    for (const r of answered) {
+      if (r.ruleLabel === label) called += r.weight;
+      if (r.human === label) actual += r.weight;
+      if (r.ruleLabel === label && r.human === label) tp += r.weight;
+    }
+    return [label, { precision: called ? tp / called : NaN, recall: actual ? tp / actual : NaN }];
+  }));
 }
 
 /** Fixed sample per stratum, with the stratum's size for the weights. */
 export function drawSample(records, { seed = PASS_SEED[2] } = {}) {
-  const graded = records.filter((r) => r.status === "ok");
+  // Nobody could label a withheld record, so the audit's frame leaves it out, and the number is reported.
+  const graded = records.filter((r) => r.status === "ok" && !r.evidence?.textWithheld);
   return Object.entries(STRATA).flatMap(([stratum, size]) => {
     const all = graded.filter((r) => stratumOf(r) === stratum);
     return shuffled(all, seed).slice(0, size).map((r) => ({ host: r.host, stratum, stratumSize: all.length, ruleLabel: RULE_LABEL[r.evidence.class.label] }));
@@ -163,7 +191,7 @@ export function weightedMetrics(rows, { resamples = BOOTSTRAP.resamples, seed = 
 }
 
 /** Both labelers against the rules and each other. The model is a comparison, never a judge. */
-export function scoreLabels(key, humanText, agentText, opts) {
+export function scoreLabels(key, humanText, agentText, { frame, ...opts } = {}) {
   if (!key.length) throw new Error("the key is empty");
   const ids = key.map((k) => k.id);
   const human = parseLabels(humanText, ids, "human labels");
@@ -174,6 +202,7 @@ export function scoreLabels(key, humanText, agentText, opts) {
   for (const r of rows) if (r.human !== r.agent) pairs[`human ${r.human}, agent ${r.agent}`] = (pairs[`human ${r.human}, agent ${r.agent}`] ?? 0) + 1;
   return {
     ...weightedMetrics(rows, opts),
+    ...(frame ? { auditScope: frame.scope, frame, worstCase: worstCaseBounds(rows, frame.withheldByRule) } : {}),
     humanVsAgent: {
       rows: rows.length, humanUnsure: rows.filter((r) => r.human === "unsure").length, agentUnsure: rows.filter((r) => r.agent === "unsure").length,
       bothAnswered: both.length,
@@ -249,11 +278,13 @@ export function main([mode, target, a, b], { log = console.log, fail = console.e
     const records = readRaw(join(target, "raw.jsonl"));
     const sample = drawSample(records);
     const { sheet, key } = blindSheet(sample, records);
+    const frameText = JSON.stringify(auditFrame(records), null, 2) + "\n";
+    writeFileSync(join(target, "audit-frame.json"), frameText, PRIVATE);
     writeFileSync(join(target, "validation-sheet.json"), JSON.stringify(sheet, null, 2) + "\n", PRIVATE);
     const keyText = JSON.stringify(key, null, 2) + "\n";
     writeFileSync(join(target, "validation-key.json"), keyText, PRIVATE);
     const sampled = new Set(sample.map((s) => s.host));
-    log(JSON.stringify({ sampled: sample.length, ...rewriteRun(target, records.map((r) => pruneExcerpt(r, sampled)), "validation-draw", { keySha256: hash(keyText) }) }));
+    log(JSON.stringify({ sampled: sample.length, withheldFromDraw: records.filter((r) => r.evidence?.textWithheld).length, ...rewriteRun(target, records.map((r) => pruneExcerpt(r, sampled)), "validation-draw", { keySha256: hash(keyText), frameSha256: hash(frameText) }) }));
     return 0;
   }
   if (mode === "prune" && target) {
@@ -281,7 +312,9 @@ export function main([mode, target, a, b], { log = console.log, fail = console.e
     const proofFile = join(dirname(target), "prune-manifest.json");
     const proof = existsSync(proofFile) ? JSON.parse(readFileSync(proofFile, "utf8")) : null;
     if (proof?.keySha256 !== hash(readFileSync(target))) { fail("Refused: this key is not the one this run's draw wrote."); return 3; }
-    console.log(JSON.stringify(scoreLabels(JSON.parse(readFileSync(target, "utf8")), readFileSync(a, "utf8"), readFileSync(b, "utf8")), null, 2));
+    const frameFile = join(dirname(target), "audit-frame.json");
+    if (!existsSync(frameFile) || proof.frameSha256 !== hash(readFileSync(frameFile))) { fail("Refused: this audit frame is not the one this run's draw wrote."); return 3; }
+    console.log(JSON.stringify(scoreLabels(JSON.parse(readFileSync(target, "utf8")), readFileSync(a, "utf8"), readFileSync(b, "utf8"), { frame: JSON.parse(readFileSync(frameFile, "utf8")) }), null, 2));
     return 0;
   }
   console.error("Usage: validation-sample.mjs draw <run folder> | prune <run folder> | purge <run folder> --confirm <code> | score <validation-key.json> <human.csv> <agent.csv>");

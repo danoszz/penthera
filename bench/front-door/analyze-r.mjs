@@ -17,7 +17,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { siteKey, siteOrg } from "./psl.mjs";
-import { isEligible, unfinishedRun } from "./record-checks.mjs";
+import { isEligible, unfinishedRun, withheldCounts } from "./record-checks.mjs";
 import { PREREG_R, recordedHashR } from "./replicate.mjs";
 import { seeded } from "./replicate.mjs";
 import { newcombe } from "./run.mjs";
@@ -460,6 +460,7 @@ export function main(args, { fail = console.error, preregText } = {}) {
   out.secondaryCohorts = secondaryCohorts(p1, all);
   out.challengeByEdge = challengeByEdge(p1);
   out.skipsByCohort = skipsByCohort(all);
+  out.textWithheld = withheldCounts(all);
   out.cspControlsScripts = cspValueClaims(p1);
   if (all.some((r) => r.dns?.listed)) {
     const decided = dnsClaims(all);

@@ -22,9 +22,9 @@ import { orgDomain, publicSuffix, PSL_VERSION, pslSha256, siteKey, siteOrg } fro
 import { claims, clusterDiff, combine, coverageBounds, decide, diffClaim, dnsCoverage, e20Index, fisherExact, intervalOutcomes, isEligible, standardizedDiff, traitsByCohort } from "../bench/front-door/analyze-r.mjs";
 import { legacyFindings } from "../bench/front-door/legacy-findings.mjs";
 import { decidePilot, replayRaw, main as reportMain, pilotReport, sealPilot, stopRules, privacyReport } from "../bench/front-door/pilot-report.mjs";
-import { falseFireReviewed, LEGACY_CLASSIFIER_SHA256, PRIVACY_STOP, MIN_ELIGIBLE, MIN_GRADED, NO_PRIVACY, pageTextMissed, purgeState, recordMisses, resolverFailed, unfinishedRun } from "../bench/front-door/record-checks.mjs";
+import { falseFireReviewed, LEGACY_CLASSIFIER_SHA256, legacyProblem, PRIVACY_STOP, withheldCounts, withholdText, MIN_ELIGIBLE, MIN_GRADED, NO_PRIVACY, pageTextMissed, purgeState, recordMisses, resolverFailed, unfinishedRun } from "../bench/front-door/record-checks.mjs";
 import { main as analyzeMain, challengeByEdge, secondaryCohorts, skipsByCohort } from "../bench/front-door/analyze-r.mjs";
-import { main as validationMain, purgeRun, blindSheet, drawSample, parseLabels, pruneExcerpt, prunePilot, rewriteRun, scoreLabels, stratumOf, weightedMetrics } from "../bench/front-door/validation-sample.mjs";
+import { main as validationMain, purgeRun, auditFrame, worstCaseBounds, blindSheet, drawSample, parseLabels, pruneExcerpt, prunePilot, rewriteRun, scoreLabels, stratumOf, weightedMetrics } from "../bench/front-door/validation-sample.mjs";
 import { runAcceptance } from "../bench/front-door/acceptance.mjs";
 import { passiveReport } from "../api/_lib/tier1.mjs";
 import { scoreOf } from "../api/_lib/grade.mjs";
@@ -1073,8 +1073,8 @@ describe("acceptance", () => {
   it("every stop condition refuses pass 2, for its own reason, and a clean pilot is allowed", async () => {
     const rows = await runAcceptance();
     expect(rows.filter((r) => !r.pass)).toEqual([]);
-    expect(rows.length).toBeGreaterThanOrEqual(220);
-  }, 300_000);
+    expect(rows.length).toBeGreaterThanOrEqual(290);
+  }, 400_000);
 });
 
 describe("limits", () => {
@@ -1468,16 +1468,120 @@ describe("Amendment 3", () => {
   it("each exemption has both sides", () => {
     // Our own tokens: no finding.
     for (const text of ["Reach us at <email>. Open daily", "(at) <email>. Open daily", "[at] <ip>. Open daily", "Reach at (<email>). Open daily", 'Reach at "<email>". Open daily', "Reach at '<number>'. Open daily"]) expect(email(text), text).toBe(0);
-    // One character off a token: a finding.
-    for (const text of ["Reach us at <emails>. Open daily", "Reach us at <mail>. Open daily", "(at) <emails>. Open daily", "Reach at (<emails>). Open daily"]) expect(email(text), text).toBeGreaterThan(0);
-    // Web URLs, on their own rule: no finding.
-    for (const text of ["Available at https://example.com. Open daily", "Docs at http://docs.example.com/a.html", "Mirror at ftp://example.com/a.zip", "See at (https://example.com). Open daily"]) expect(email(text), text).toBe(0);
-    // Anything short of a web URL: a finding.
-    for (const text of ["john at https.example.com", "john at mailto://example.com", "john at //example.com"]) expect(email(text), text).toBeGreaterThan(0);
+    // A bracketed `at` exempts our tokens alone.
+    for (const text of ["(at) <emails>. Open daily", "(at) <email.com"]) expect(email(text), text).toBeGreaterThan(0);
+    // A URL or path holds characters no domain label can.
+    for (const text of ["Available at https://example.com. Open daily", "Docs at http://docs.example.com/a.html", "Mirror at ftp://example.com/a.zip", "See at (https://example.com). Open daily", "See it at /docs/guide.html. Open daily"]) expect(email(text), text).toBe(0);
+    for (const text of ["john at https.example.com", "john at <example.com>", "john at «example.com»", "john at “example.com”"]) expect(email(text), text).toBeGreaterThan(0);
   });
 
-  it("the price of strictness: paths and prose that look like a bracketed domain can stop a run", () => {
-    for (const text of ["See it at /docs/guide.html. Open daily", "Look at (example.com). Open daily", 'Look at "example.com". Open daily']) expect(email(text), text).toBeGreaterThan(0);
+  it("after a bare `at`, only a label that could be a domain counts: both sides of the rule", () => {
+    for (const text of ["Plans starting at $29. Cancel anytime", "Starts at $29/mo. Cancel anytime", "Doors open at 5:30. Tickets on sale", "Dinner at Joe's. Then drinks", "Reach us at 24/7. Support is free", "Grade at 100%. Great work", "Sold at ₹99. Buy now", "Open at 9:30am. Closed Sunday", "a_b at c_d.com"]) expect(scrubMisses(scrub(text)).email, text).toBe(0);
+    for (const text of ["john at example.com", "john at 3m.com", "john at my-shop.nl", "john at (my-shop.nl)", "jan at münchen.de", "jan at 例え.テスト", "jan at (müller.at)", "jan at example.ελ"]) expect(email(text), text).toBeGreaterThan(0);
+    expect(email("jan at example.c")).toBe(0);
+  });
+
+  it("a JWT counts at a token's edge, not inside a word", () => {
+    const token = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.abc";
+    for (const text of ["keyJ.value", "monkeyJ.wrench", "okeyJ.x"]) expect(scrubMisses(text).jwt, text).toBe(0);
+    for (const text of [token, `token=${token}`, `/a/${token}`, `x.${token}`, "eyJh.b"]) expect(scrubMisses(text).jwt, text).toBeGreaterThan(0);
+  });
+
+  it("withholding removes every text field, keeps the rest, and logs kinds as counts", () => {
+    const record = { host: "a.org", cohorts: { T1k: {}, "YC-new": {} }, status: "ok", score: 7, checks: [{ id: "csp", passed: true }], evidence: { bodySha256: "h", class: { label: "candidate-page", rule: "status" }, classRegistered: { label: "page" }, excerpt: "bad#a=b", pageExcerpt: { title: "t", text: "Look at (example.com). Open daily", noscript: "n", chars: 9, forms: 1 }, others: [{ kind: "security", bodySha256: "s", excerpt: "e" }] } };
+    const out = withholdText(record);
+    expect(JSON.stringify(out)).not.toMatch(/example\.com|bad#|"e"|"n"/);
+    expect(out.evidence.textWithheld).toEqual({ kinds: { fragment: 1, email: 1 }, fields: 2 });
+    expect(out.evidence.pageExcerpt).toEqual({ chars: 9, forms: 1 });
+    expect(out.evidence.others).toEqual([{ kind: "security", bodySha256: "s" }]);
+    expect(out.evidence.class).toEqual(record.evidence.class);
+    expect(out.score).toBe(7);
+    expect(out.checks).toEqual(record.checks);
+    const counts = withheldCounts([out, { ...out, cohorts: { T1k: {} } }, record]);
+    expect(counts).toMatchObject({ records: 2, kinds: { fragment: 2, email: 2 } });
+    expect(counts.byCohort.T1k).toEqual({ records: 2, of: 3, kinds: { fragment: 2, email: 2 } });
+    expect(counts.byCohort["YC-new"]).toEqual({ records: 1, of: 2, kinds: { fragment: 1, email: 1 } });
+    for (const group of ["byStratum", "byLabel", "byStatus", "byEdge"]) expect(Object.values(counts[group]).reduce((n, g) => n + g.records, 0), group).toBe(2);
+    expect(withholdText(out)).toBe(out);
+    expect(pageTextMissed(out)).toBe(false);
+  });
+
+  it("the 90% rule reads the 2xx responses that could have an excerpt", () => {
+    const rec = (over) => ({ status: "ok", httpStatus: 200, cohorts: {}, checks: [], counters: { requests: 3, bytes: 1, redirects: 0 }, hops: [], evidence: { bodySha256: "x", pageExcerpt: { text: "t" }, others: [], ...over } });
+    const withheld = rec({ pageExcerpt: {}, textWithheld: { kinds: { email: 1 }, fields: 1 } });
+    const blank = rec({ pageExcerpt: {} });
+    expect(rules(pilotReport([...Array.from({ length: 8 }, () => rec()), withheld, withheld])).filter((m) => /90%/.test(m))).toEqual([]);
+    expect(pilotReport([rec(), withheld]).evidence).toMatchObject({ twoxx: 2, twoxxWithExcerpt: 1, twoxxWithheld: 1 });
+    expect(rules(pilotReport([...Array.from({ length: 8 }, () => rec()), blank, withheld]))).toContain("under 90% of 2xx responses have an excerpt");
+  });
+
+  it("the audit frame says what's left, and a depleted stratum is not estimable", () => {
+    const rec = (i, label, withheld) => ({ host: `h${i}.org`, status: "ok", evidence: { class: { label, rule: "x" }, ...(withheld ? { textWithheld: { kinds: { email: 1 }, fields: 1 } } : {}) } });
+    const frame = auditFrame([...Array.from({ length: 100 }, (_, i) => rec(i, "candidate-page", i < 5)), ...Array.from({ length: 30 }, (_, i) => rec(200 + i, "challenge", i < 10)), ...Array.from({ length: 10 }, (_, i) => rec(300 + i, "unrecognized-error-response", false))]);
+    expect(frame.scope).toBe("non-withheld records");
+    expect(frame.strata["candidate-page"]).toMatchObject({ frame: 95, withheld: 5, estimable: true });
+    expect(frame.strata.challenge).toMatchObject({ frame: 20, withheld: 10, estimable: false });
+    expect(frame.strata["unrecognized-error-response"]).toMatchObject({ frame: 10, estimable: false });
+    expect(frame.withheld).toBe(15);
+    expect(frame.withheldByRule).toEqual({ page: 5, challenge: 10, block: 0, error: 0 });
+  });
+
+  it("worst-case bounds count every withheld row against the rule", () => {
+    const rows = Array.from({ length: 10 }, (_, i) => ({ id: i, stratum: "candidate-page", stratumSize: 10, ruleLabel: "page", human: "page" }));
+    const bounds = worstCaseBounds(rows, { page: 5, challenge: 5, block: 0, error: 0 });
+    expect(bounds.page.precision).toBeCloseTo(10 / 15);
+    expect(bounds.page.recall).toBeCloseTo(10 / 15);
+    expect(weightedMetrics(rows, { resamples: 10 }).metrics.page.precision).toBe(1);
+  });
+
+  it("the legacy gate reads the findings, not the summary", () => {
+    const orders = new Set([1, 2]);
+    const good = { order: 1, path: "evidence.pageExcerpt.text", kind: "email", count: 1 };
+    expect(legacyProblem({ findings: [good], reproducesStop: true }, orders)).toBeNull();
+    const cases = [
+      [[{ ...good, path: "evidence.values.server" }], true, /summary/],
+      [[{ ...good, path: "evidence.values.server" }], false, /does not reproduce/],
+      [[{ ...good, order: "1" }], true, /record/],
+      [[{ ...good, order: 9 }], true, /record/],
+      [[{ ...good, path: "nowhere.at.all" }], true, /unknown field/],
+      [[{ ...good, kind: "shape" }], true, /unknown kind/],
+      [[{ ...good, count: 0 }], true, /count/],
+      [[{ ...good, count: -1 }], true, /count/],
+      [[good, good], true, /twice/],
+      [[], true, /summary/],
+      [[good], false, /summary/],
+      [undefined, true, /no list/],
+    ];
+    for (const [findings, reproducesStop, why] of cases) expect(legacyProblem({ findings, reproducesStop }, orders), JSON.stringify(findings)).toMatch(why);
+  });
+
+  it("a review refuses a report the raw file doesn't back, even a well-formed one", () => {
+    const dir = stoppedRun();
+    legacyFindings(dir);
+    const file = join(dir, "legacy-findings.json");
+    const report = JSON.parse(readFileSync(file, "utf8"));
+    writeFileSync(file, JSON.stringify({ ...report, findings: [{ ...report.findings[0], count: 2 }] }));
+    expect(() => privacyReport(dir, { falseFire: Buffer.from("checked"), reviewer: "a person" })).toThrow(/nothing to call a false fire/);
+  });
+
+  it("labels, grades and claims don't care that text was withheld", () => {
+    const row = (i, cohort, passed) => ({ host: `h${i}.org`, finalHost: `h${i}.org`, status: "ok", cohorts: { [cohort]: { rank: 1 } }, checks: [{ id: "csp", passed, weight: 1 }], evidence: { class: { label: "candidate-page" } } });
+    const plain = [...Array.from({ length: 25 }, (_, i) => row(i, "T1k", i < 5)), ...Array.from({ length: 25 }, (_, i) => row(100 + i, "YC-new", i < 15))];
+    const marked = plain.map((r, i) => (i % 3 ? r : { ...r, evidence: { ...r.evidence, textWithheld: { kinds: { email: 1 }, fields: 1 } } }));
+    expect(JSON.stringify(claims(marked, null, {}, { resamples: 50 }))).toBe(JSON.stringify(claims(plain, null, {}, { resamples: 50 })));
+  });
+
+  it("the audit's frame leaves withheld records out, and the strata still fill", () => {
+    const rec = (i, withheld) => ({ host: `h${i}.org`, status: "ok", evidence: { class: { label: "candidate-page" }, ...(withheld ? { textWithheld: { kinds: { email: 1 } } } : {}) } });
+    const rows = Array.from({ length: 400 }, (_, i) => rec(i, i % 5 === 0));
+    const sample = drawSample(rows);
+    expect(sample).toHaveLength(150);
+    expect(sample.every((s) => Number(s.host.slice(1, -4)) % 5 !== 0)).toBe(true);
+    expect(sample[0].stratumSize).toBe(320);
+  });
+
+  it("the price of strictness: prose that looks like a bracketed domain still fires", () => {
+    for (const text of ["Look at (example.com). Open daily", 'Look at "example.com". Open daily']) expect(email(text), text).toBeGreaterThan(0);
   });
 
   it("the token list is the detector's own, and the scrub stays as strict", () => {
@@ -1595,6 +1699,6 @@ describe("Amendment 3", () => {
   it("the page and the run sheet say what happened", () => {
     expect(readFileSync(STUDY_PAGE, "utf8")).toContain("each site is visited once in the run itself");
     const sheet = readFileSync(join(import.meta.dirname, "..", "bench", "front-door", "run-sheet.md"), "utf8");
-    for (const step of ["--pass 3", "--replay", "--legacy-findings", "--false-fire /srv/e20/false-fire-note.txt --reviewer <who>", "export RUN=$R/e20r-pass3", "--privacy $RUN", "draw $RUN", "prune $RUN", "purge $RUN", "--pass1 $RUN/raw.jsonl"]) expect(sheet).toContain(step);
+    for (const step of ["--pass 3", "--replay", "--legacy-findings", "--false-fire ~/study/false-fire-note.txt --reviewer <who>", "export RUN=$R/e20r-pass3", "--privacy $RUN", "draw $RUN", "prune $RUN", "purge $RUN", "--pass1 <private run folder>/raw.jsonl", "~/study/lists", "rsync"]) expect(sheet).toContain(step);
   });
 });

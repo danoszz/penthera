@@ -22,7 +22,7 @@
 | Industry map SHA-256 | `78df4910d953379f21d935aeb3ef658d85cbef036539e1a31362c9ad7e26e075` |
 | E20 exclusion file SHA-256 | `246127f639968afc906d59f155f6a993982f3a33c0655718234955319ebe4c34` |
 | Legacy classifier SHA-256 | `7023106f7bd73c1e4122d80e9479f63a4a04091f1426327be70621951fe71d3b` (`bench/front-door/legacy/classify-7023106f.mjs`, the detector that stopped pass 2) |
-| Frozen classifier SHA-256 | `280c4633f3d003371203957774b867889e596db9bd8b716f2e0e9c1fb49efbac` (`bench/front-door/classify.mjs`) |
+| Frozen classifier SHA-256 | `72f67dcb46157d9ad1af123216f8c29ce94898a5ade326ba496db6805a3d4f4f` (`bench/front-door/classify.mjs`) |
 | Public Suffix List SHA-256 | `d3e6243b51695327984abb3e2a5aa7077096867f75121e031e6a5a3840ca8bcd` (commit `9dfbe81931367b3f0af21035c36ae7eeb830dd88`, fetched 30 Oct 2026, private suffixes included) |
 | Registration commit | The commit that merges this file to `main` |
 | T1k list SHA-256 | `d670a3c1910fe7baa4883dcb8320b1ec99d7d29f9d22954b9288ae678540674e` (`tranco-ZJ8PG-top1000.csv`) |

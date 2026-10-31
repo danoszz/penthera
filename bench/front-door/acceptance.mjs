@@ -14,18 +14,18 @@
  */
 import { spawn } from "node:child_process";
 import { createServer } from "node:http";
-import { appendFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, writeSync } from "node:fs";
+import { appendFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync, writeSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { classify, scrub } from "./classify.mjs";
 import { siteOrg } from "./psl.mjs";
 import { robotsVerdict, sha256, strictRobots, wholeSiteStop } from "./run.mjs";
-import { main as analyze, secondaryCohorts } from "./analyze-r.mjs";
+import { claims, main as analyze, secondaryCohorts } from "./analyze-r.mjs";
 import { main as reportMain } from "./pilot-report.mjs";
-import { pageTextMissed, PRIVACY_STOP, recordMisses, resolverFailed, sealHash } from "./record-checks.mjs";
-import { CLAIM_COHORTS, main as replicate, PREREG_R, R_COHORTS } from "./replicate.mjs";
-import { main as validation, scoreLabels } from "./validation-sample.mjs";
+import { pageTextMissed, PRIVACY_STOP, recordMisses, resolverFailed, safeRecord, sealHash, stopRules, withholdText } from "./record-checks.mjs";
+import { CLAIM_COHORTS, main as replicate, mergeCohorts, PREREG_R, R_COHORTS, runPass, visitInWorker } from "./replicate.mjs";
+import { auditFrame, drawSample, main as validation, scoreLabels, worstCaseBounds } from "./validation-sample.mjs";
 
 const IP = "178.104.243.225";
 const COMMIT = "c".repeat(40);
@@ -168,11 +168,15 @@ function renumbered(v, later) {
   return v;
 }
 
-async function syntheticSite() {
+/** `plant` puts text on the next `pages` homepages, or the next `errors` error pages, so a row can count what it planted. */
+async function syntheticSite(plant = {}) {
   const server = createServer((req, res) => {
     if (req.url === "/robots.txt") { res.writeHead(200, { "content-type": "text/plain" }); res.end("User-agent: *\nAllow: /\n"); return; }
-    res.writeHead(req.url === "/" ? 200 : 404, { "content-type": "text/html" });
-    res.end("<html><title>A page</title><p>Hello from a synthetic site.</p></html>");
+    const home = req.url === "/";
+    const planted = home ? plant.pages > 0 : plant.errors > 0;
+    if (planted) plant[home ? "pages" : "errors"]--;
+    res.writeHead(home ? 200 : 404, { "content-type": "text/html" });
+    res.end(`<html><title>A page</title><p>Hello from a synthetic site.${planted ? ` ${plant.text}` : ""}</p></html>`);
   });
   await new Promise((r) => server.listen(0, "127.0.0.1", r));
   return server;
@@ -207,10 +211,94 @@ function followed(message) {
   return [...message.matchAll(/^node bench\/front-door\/(pilot-report|validation-sample)\.mjs (.+)$/gm)].map(([, tool, args]) => (tool === "pilot-report" ? reportMain : validation)(args.split(" "), { log: quiet, fail: quiet }));
 }
 
+// One canary per place page text can sit. Each fires the detector, and each marks its own field.
+const fires = (word) => `Look at (${word}.org). Open daily`;
+const CANARY_PAGES = {
+  "a-title": { body: `<title>${fires("canary-title")}</title><p>Quiet canary-beside words.</p>` },
+  "a-text": { body: `<title>Fine</title><p>${fires("canary-text")}</p>` },
+  "a-noscript": { body: `<title>Fine</title><p>Hello.</p><noscript>${fires("canary-noscript")}</noscript>` },
+  "a-error": { status: 503, body: `<p>${fires("canary-error")}</p>` },
+  "a-others": { body: "<title>Fine</title><p>Hello.</p>", other: `<p>${fires("canary-others")}</p>` },
+  "a-multi": { body: `<title>${fires("canary-multi-a")}</title><p>${fires("canary-multi-b")} Reach canary-multi-c#a=b now.</p><noscript>${fires("canary-multi-d")}</noscript>` },
+  "a-real": { body: "<title>Fine</title><p>Write to john at (canary-real.org). Open daily</p>" },
+  "a-normal": { body: "<title>Fine</title><p>Write to canary-normal@example.com today.</p>" },
+  "a-plain": { body: "<title>Fine</title><p>Hello from a plain page.</p>" },
+};
+const CANARY_LIST = () => mergeCohorts({ T1k: Object.keys(CANARY_PAGES).map((name, i) => ({ host: `${name}.selftest.example.com`, rank: i + 1, group: "x" })) });
+
+async function canarySite() {
+  const server = createServer((req, res) => {
+    if (req.url === "/robots.txt") { res.writeHead(200, { "content-type": "text/plain" }); res.end("User-agent: *\nAllow: /\n"); return; }
+    const page = CANARY_PAGES[String(req.headers.host).split(".")[0]] ?? CANARY_PAGES["a-plain"];
+    const home = req.url === "/";
+    res.writeHead(home ? page.status ?? 200 : 404, { "content-type": "text/html" });
+    res.end(home ? `<html>${page.body}</html>` : page.other ?? "<p>Nothing here.</p>");
+  });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  return server;
+}
+
+const noDns = () => Promise.reject(Object.assign(new Error("x"), { code: "ENODATA" }));
+const NO_DNS_AT_ALL = { mx: noDns, ns: noDns, resolveTxt: noDns, resolveCaa: noDns };
+
+/** A run in its own process, so stdout, stderr, temp files and real signals are all in view. */
+async function canaryChild(dir, mode, stubs) {
+  const server = await canarySite();
+  const stopFile = join(dir, "stop");
+  let signal = null;
+  process.once("SIGTERM", (name) => { signal = name; });
+  let seen = 0;
+  const atFinal = () => { writeSync(1, "finalizing\n"); Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 500); return {}; };
+  await runPass(mode === "hardcap" ? CANARY_LIST().slice(0, 3) : CANARY_LIST(), {
+    pass: mode === "control" ? 2 : 3, out: join(dir, "run"), loopbackPort: server.address().port, delayMs: 0, concurrency: 4, dns: NO_DNS_AT_ALL,
+    ...(mode === "worker" ? { workerFile: join(stubs, "throws.mjs") } : {}), ...(mode === "hardcap" ? { workerFile: join(stubs, "hangs.mjs"), visitLimits: { budgetMs: 50, hardCapMs: 100 } } : {}),
+    ...(mode === "final" ? { recheck: atFinal } : {}),
+    stopCheck: () => (signal ? `interrupted by ${signal}` : existsSync(stopFile) ? "the stop file exists" : null),
+    onRecord: () => { if (++seen === 1) writeSync(1, "visited\n"); if (seen === 3 && mode === "stopfile") writeFileSync(stopFile, ""); },
+  });
+  if (mode === "whole") {
+    reportMain(["--privacy", join(dir, "run")]);
+    validation(["draw", join(dir, "run")]);
+  }
+  server.closeAllConnections();
+  server.close();
+  return 0;
+}
+
+/** Runs one mode, sends a real signal where asked, and scans everything it left and said. */
+function canaryRun(root, mode, signalOn) {
+  return new Promise((done) => {
+    const dir = mkdtempSync(join(root, `canary-${mode}-`));
+    mkdirSync(join(dir, "tmp"));
+    const child = spawn(process.execPath, [fileURLToPath(import.meta.url), "--canary-child", dir, mode, join(root, "stubs")], { stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, TMPDIR: join(dir, "tmp") } });
+    let said = "";
+    child.stdout.on("data", (d) => { said += d; if (signalOn && String(d).includes(signalOn)) child.kill("SIGTERM"); });
+    child.stderr.on("data", (d) => { said += d; });
+    child.on("close", () => {
+      const manifest = JSON.parse(readFileSync(join(dir, "run", "manifest.json"), "utf8"));
+      done({ dir, said, manifest, leaked: onDisk(dir, "canary-") || said.includes("canary-") });
+    });
+  });
+}
+
+/** Paths at which two values differ. */
+function diffPaths(a, b, path = "") {
+  if (JSON.stringify(a) === JSON.stringify(b)) return [];
+  if (!a || !b || typeof a !== "object" || typeof b !== "object") return [path];
+  return [...new Set([...Object.keys(a), ...Object.keys(b)])].flatMap((k) => diffPaths(a[k], b[k], path ? `${path}.${Array.isArray(a) ? "[]" : k}` : k));
+}
+
+/** Is this string in any file under this folder? Reads bytes, so no format can hide it. */
+function onDisk(dir, needle) {
+  const want = Buffer.from(needle);
+  return readdirSync(dir, { withFileTypes: true }).some((e) => (e.isDirectory() ? onDisk(join(dir, e.name), needle) : readFileSync(join(dir, e.name)).includes(want)));
+}
+
 /** Every row: its condition, what it must do, and what it did. */
 export async function runAcceptance() {
   const root = mkdtempSync(join(tmpdir(), "e20r2-acceptance-"));
-  const server = await syntheticSite();
+  const plant = { text: "", pages: 0, errors: 0 };
+  const server = await syntheticSite(plant);
   const rows = [];
   const add = (condition, expect, got, because = /./) => {
     const allowed = got.code === 0;
@@ -684,9 +772,37 @@ export async function runAcceptance() {
     add("pass 3 with no pilot round after the stop", "refused", await run(falseFired, pass3(falseFired), { preregText: adopted }), /pilot round after the stopped pass/);
     secondRound(falseFired);
     add("pass 3 with the amendment unadopted", "refused", await run(falseFired, pass3(falseFired), { stopBeforeRun: true }), /Amendment 3 adopted/);
-    add("pass 3 under Amendment 3", "allowed", await run(falseFired, pass3(falseFired), { preregText: adopted }));
+    const PRICE_FORM = "Look at (example.com). Cancel anytime";
+    const REAL_FORM = "john at (mailbox-acme.com). Write anytime";
+    plant.text = `${PRICE_FORM} ${REAL_FORM}`;
+    plant.pages = 2;
+    const thirdRun = await run(falseFired, pass3(falseFired), { preregText: adopted });
+    add("pass 3 under Amendment 3", "allowed", thirdRun);
+    add("W1: a fired page doesn't stop pass 3", "allowed", truth(plant.pages === 0 && !/STOP/.test(thirdRun.said), thirdRun.said.slice(0, 60)));
+    const thirdManifest = JSON.parse(readFileSync(join(falseFired.results, "e20r-pass3", "manifest.json"), "utf8"));
+    add("W1: the run logs it, per kind and cohort", "allowed", truth(thirdManifest.textWithheld.records === 2 && thirdManifest.textWithheld.kinds.email > 0 && Object.keys(thirdManifest.textWithheld.byCohort).length > 0 && !thirdManifest.partial, JSON.stringify(thirdManifest.textWithheld).slice(0, 70)));
+    add("W1: the planted text is on no disk", "allowed", truth(!onDisk(root, PRICE_FORM) && !thirdRun.said.includes(PRICE_FORM), "every file under the run's root"));
+    add("W3: a real address only the detector sees, on no disk", "allowed", truth(!onDisk(root, "mailbox-acme") && !thirdRun.said.includes("mailbox-acme"), "every file under the run's root"));
     const stoppedHosts = new Set(readFileSync(join(firedRun, "raw.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l).host));
     const thirdRaw = readFileSync(join(falseFired.results, "e20r-pass3", "raw.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
+    const withheldRows = thirdRaw.filter((r) => r.evidence?.textWithheld);
+    const plainRows = thirdRaw.filter((r) => r.status === "ok" && !r.evidence?.textWithheld);
+    add("W6: withheld records keep label and grade", "allowed", truth(withheldRows.length === 2 && plainRows.length > 0 && withheldRows.every((r) => JSON.stringify([r.evidence.class, r.evidence.classRegistered, r.score, r.checks.map((c) => [c.id, c.passed])]) === JSON.stringify([plainRows[0].evidence.class, plainRows[0].evidence.classRegistered, plainRows[0].score, plainRows[0].checks.map((c) => [c.id, c.passed])])), "same label, grade and checks"));
+    const thirdDir = join(falseFired.results, "e20r-pass3");
+    add("W8: a clean privacy report after withholding", "allowed", privacy(thirdDir));
+    const analyzed = analysis(thirdDir);
+    const analyzedOut = JSON.parse(readFileSync(join(thirdDir, "analysis.json"), "utf8"));
+    add("W: analysis reports withheld overall and per cohort", "allowed", { code: analyzed.code || (analyzedOut.textWithheld?.records === 2 && Object.keys(analyzedOut.textWithheld.byCohort).length ? 0 : 3), said: analyzed.said });
+    const drawSaid = [];
+    add("E27: the draw reports what it left out", "allowed", { code: validation(["draw", thirdDir], { log: (m) => drawSaid.push(m), fail: (m) => drawSaid.push(m) }), said: drawSaid.join(" ") }, /"withheldFromDraw":2/);
+    const headerMiss = join(falseFired.results, "header-miss");
+    cpSync(thirdDir, headerMiss, { recursive: true });
+    rmSync(join(headerMiss, "prune-manifest.json"));
+    const missRaw = `${readFileSync(join(headerMiss, "raw.jsonl"), "utf8")}${JSON.stringify({ status: "ok", evidence: { values: { server: "jan@example.nl" } } })}\n`;
+    writeFileSync(join(headerMiss, "raw.jsonl"), missRaw);
+    writeFileSync(join(headerMiss, "manifest.json"), JSON.stringify({ ...JSON.parse(readFileSync(join(headerMiss, "manifest.json"), "utf8")), rawSha256: hashOf(missRaw) }));
+    add("W8: a header miss on a finished pass fails the report", "refused", privacy(headerMiss));
+    add("W8: and analysis then waits for a person", "refused", analysis(headerMiss), /privacy report/);
     add("nobody gets a second visit in pass 3", "allowed", truth(stoppedHosts.size > 0 && thirdRaw.filter((r) => stoppedHosts.has(r.host)).length === stoppedHosts.size && thirdRaw.filter((r) => stoppedHosts.has(r.host)).every((r) => r.status === "excluded" && !r.counters), "pass 3 records"));
     add("pass 3's manifest names the stopped pass", "allowed", truth(JSON.parse(readFileSync(join(falseFired.results, "e20r-pass3", "manifest.json"), "utf8")).stoppedPass?.sites === stoppedHosts.size, "manifest"));
     add("a second start of pass 3", "refused", await catching(() => run(falseFired, pass3(falseFired), { preregText: adopted })), /already holds a run/);
@@ -702,6 +818,147 @@ export async function runAcceptance() {
     rmSync(fx.stopFile);
     purge(join(purgedStop.results, "e20r-pass2"));
     add("pass 3 after a purged pass 2", "refused", await run(purgedStop, pass3(purgedStop), { preregText: adopted }), /purged/);
+    // Package 8, A to F. Every text field, every exit, both sides of the worker boundary.
+    mkdirSync(join(root, "stubs"));
+    writeFileSync(join(root, "stubs", "throws.mjs"), `throw new Error(${JSON.stringify(fires("canary-thrown"))});`);
+    writeFileSync(join(root, "stubs", "hangs.mjs"), 'import { parentPort } from "node:worker_threads"; parentPort.postMessage({ progress: { requests: 1, bytes: 1, redirects: 0, hosts: [] } }); for (;;);');
+    const canaries = await canarySite();
+    const canaryPort = canaries.address().port;
+    const rowFor = (name) => CANARY_LIST().find((r) => r.host.startsWith(`${name}.`));
+    const raw = (dir) => readFileSync(join(dir, "raw.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
+
+    const whole2 = await canaryRun(root, "whole");
+    const wholeRows = raw(join(whole2.dir, "run"));
+    const byName = (name) => wholeRows.find((r) => r.host.startsWith(`${name}.`));
+    for (const name of ["a-title", "a-text", "a-noscript", "a-error", "a-others", "a-real"]) add(`A1,4: a finding in ${name} withholds the record`, "allowed", truth(Boolean(byName(name)?.evidence?.textWithheld), JSON.stringify(byName(name)?.evidence?.textWithheld ?? null)));
+    add("A2,12: several findings are one record, with counts per kind", "allowed", truth(byName("a-multi").evidence.textWithheld.fields === 3 && byName("a-multi").evidence.textWithheld.kinds.email === 3 && whole2.manifest.textWithheld.records === 7, JSON.stringify(byName("a-multi").evidence.textWithheld)));
+    add("A5: a normal address becomes <email>, and isn't withheld", "allowed", truth(!byName("a-normal").evidence.textWithheld && byName("a-normal").evidence.pageExcerpt.text.includes("<email>"), "kept, scrubbed"));
+    add("A6: no canary in any file, temp folder, stdout or stderr", "allowed", truth(!whole2.leaked && existsSync(join(whole2.dir, "run", "validation-sheet.json")) && existsSync(join(whole2.dir, "run", "privacy-report.json")), `${whole2.said.length} bytes of output scanned`));
+    const signaledCanary = await canaryRun(root, "signal", "visited");
+    add("A7: a signal leaves no canary", "allowed", truth(!signaledCanary.leaked && signaledCanary.manifest.partial === true, String(signaledCanary.manifest.stoppedFor)));
+    const stoppedCanary = await canaryRun(root, "stopfile");
+    add("A7: the stop file leaves no canary", "allowed", truth(!stoppedCanary.leaked && stoppedCanary.manifest.partial === true, String(stoppedCanary.manifest.stoppedFor)));
+    const thrownCanary = await canaryRun(root, "worker");
+    add("A7: a worker error leaves no canary, even in its message", "allowed", truth(!thrownCanary.leaked && raw(join(thrownCanary.dir, "run")).every((r) => r.status === "error"), "every visit failed"));
+    const hungCanary = await canaryRun(root, "hardcap");
+    add("A7: a hard-cap timeout leaves no canary", "allowed", truth(!hungCanary.leaked && raw(join(hungCanary.dir, "run")).every((r) => r.reason === "hard_cap"), "every visit capped"));
+    const racedCanary = await canaryRun(root, "final", "finalizing");
+    add("A7: a signal in finalization leaves no canary", "allowed", truth(!racedCanary.leaked && racedCanary.manifest.partial === true, String(racedCanary.manifest.stoppedFor)));
+    const controlCanary = await canaryRun(root, "control");
+    add("A control: pass 2's path does store it, so the scan can fail", "allowed", truth(controlCanary.leaked && controlCanary.manifest.stoppedFor === PRIVACY_STOP, String(controlCanary.manifest.stoppedFor)));
+    add("B14: pass 2 keeps its write and stop", "allowed", truth(raw(join(controlCanary.dir, "run")).some((r) => /canary-/.test(JSON.stringify(r.evidence ?? {}))), "text stored, then the stop"));
+
+    const unflagged = await visitInWorker(rowFor("a-text"), { loopbackPort: canaryPort, withhold: false });
+    const flagged = await visitInWorker(rowFor("a-text"), { loopbackPort: canaryPort, withhold: true });
+    add("A9: the worker alone withholds", "allowed", truth(JSON.stringify(unflagged).includes("canary-text") && !JSON.stringify(flagged).includes("canary-text"), "with and without the worker's check"));
+    const onlyText = new Set(["evidence.pageExcerpt.title", "evidence.pageExcerpt.text", "evidence.pageExcerpt.noscript", "evidence.excerpt", "evidence.others.[].excerpt", "evidence.textWithheld"]);
+    const changedPaths = diffPaths({ ...unflagged, at: "" }, { ...flagged, at: "" });
+    add("B10: nothing but the five text paths and the marker changed", "allowed", truth(changedPaths.length > 0 && changedPaths.every((p) => onlyText.has(p)), changedPaths.join(" ")));
+    const allFive = { evidence: { excerpt: fires("x"), pageExcerpt: { title: "t", text: "t", noscript: "t", chars: 1 }, others: [{ kind: "s", excerpt: "t", bodySha256: "h" }, { kind: "r", bodySha256: "h" }] } };
+    add("A: any finding removes all five paths", "allowed", truth(diffPaths(allFive, withholdText(allFive)).every((p) => onlyText.has(p)) && !/"t"/.test(JSON.stringify(withholdText(allFive))), "main excerpt fired, four others went too"));
+    add("B11: the marker passes the scan", "allowed", truth(Object.values(recordMisses(flagged)).every((n) => n === 0), "recordMisses"));
+    add("B13: withholding twice is withholding once", "allowed", truth(JSON.stringify(withholdText(withholdText(allFive))) === JSON.stringify(withholdText(allFive)) && safeRecord(flagged) === flagged, "idempotent"));
+
+    const SAMPLES = { ipv4: "203.0.113.7", ipv6: "2001:db8::1:2", email: "a@example.org", query: "page?a=b", fragment: "page#a=b", jwt: "eyJhbGci.eyJzdWI.sig", longHex: "0123456789abcdef0123456789abcdef", longNumber: "123456789012" };
+    const stubFile = join(root, "stubs", "raw-text.mjs");
+    writeFileSync(stubFile, `import { parentPort, workerData } from "node:worker_threads"; const texts = ${JSON.stringify(SAMPLES)}; const { row } = workerData; const kind = row.host.split(".")[0]; parentPort.postMessage({ record: { ...row, status: "ok", httpStatus: 200, checks: [], evidence: { bodySha256: "h", pageExcerpt: { text: texts[kind] ?? "A page." }, others: [] }, finalHost: row.host, score: 1, counters: {}, hops: [], robots: [] } });`);
+    const kindList = mergeCohorts({ T1k: Object.keys(SAMPLES).map((k, i) => ({ host: `${k}.selftest.example.com`, rank: i + 1, group: "x" })) });
+    const seenByCallback = [];
+    const kindRun = await runPass(kindList, { pass: 3, out: join(root, "kinds"), loopbackPort: 9, delayMs: 0, dns: NO_DNS_AT_ALL, workerFile: stubFile, onRecord: (r) => seenByCallback.push(JSON.stringify(r)) });
+    const kindManifest = JSON.parse(readFileSync(join(root, "kinds", "manifest.json"), "utf8"));
+    add("A3: every detector kind withholds", "allowed", truth(Object.keys(SAMPLES).every((k) => kindManifest.textWithheld.kinds[k] > 0) && kindManifest.textWithheld.records === 8, Object.keys(kindManifest.textWithheld.kinds).join(" ")));
+    add("A8,9: with a worker that doesn't withhold, the parent does", "allowed", truth(kindRun.records.every((r) => r.evidence.textWithheld) && !Object.values(SAMPLES).some((t) => onDisk(join(root, "kinds"), t)), "parent check alone"));
+    add("A8: callbacks and aggregation never see the text", "allowed", truth(seenByCallback.length === 8 && !seenByCallback.some((r) => Object.values(SAMPLES).some((t) => r.includes(t))) && !Object.values(SAMPLES).some((t) => JSON.stringify(kindRun.aggregate).includes(t)), "onRecord and the aggregate"));
+
+    const pilotAt = (name) => ({ ...fx, results: join(root, name), roundsLog: join(root, `${name}.log`) });
+    const sealOf = (at) => join(at.results, "e20r-pilot-1");
+    for (const n of [0, 1, 2]) {
+      Object.assign(plant, { text: fires(`pilot-form-${n}`), pages: n, errors: 0 });
+      const at = pilotAt(`pilot-${n}`);
+      await run(at, pilotArgs(50, 1));
+      const sealed = close(fx, sealOf(at));
+      add(`C15: ${n} withheld seals, takes a go, and clears the pilot gate`, "allowed", await (async () => { const got = await gate(at); return { code: sealed || got.code, said: got.said }; })(), /authorized/);
+      add(`C18: ${n} withheld is no scrub miss in the report`, "allowed", truth(Object.values(JSON.parse(readFileSync(join(sealOf(at), "pilot-report.json"), "utf8")).scrubMisses).every((v) => v === 0) && !onDisk(root, "pilot-form"), "report clean, text on no disk"));
+    }
+    Object.assign(plant, { text: fires("three-form"), pages: 3, errors: 0 });
+    const threePilot = pilotAt("pilot-three");
+    await run(threePilot, pilotArgs(50, 1));
+    const threeCode = close(fx, sealOf(threePilot), { prune: false });
+    add("C16: 3 of 50 withheld fails the seal", "refused", { code: threeCode, said: JSON.parse(readFileSync(join(sealOf(threePilot), "pilot-result.json"), "utf8")).stop.join("; ") }, /over 2 records had their text withheld/);
+    const notGo = [];
+    add("C16: and the round can't be a go", "refused", { code: reportMain(["--decide", sealOf(threePilot), "--decision", "go", "--reviewer", "x"], { log: quiet, fail: (m) => notGo.push(m) }), said: notGo.join(" ") }, /can't be a go/);
+    const excerptReport = (twoxxWithExcerpt, twoxxWithheld) => ({ scrubMisses: {}, outcomes: {}, sites: 50, evidence: { graded: 50, twoxx: 30, twoxxWithExcerpt, twoxxWithheld }, dns: { read: 50, answered: { spf: 50, dmarc: 50 } }, resolverFailures: 0, counters: { maxRequestsPerSite: 3 }, excludedHops: 0 });
+    add("C17: the 90% rule reads readable 2xx", "allowed", truth(stopRules(excerptReport(27, 0), { floors: false }).length === 0 && stopRules(excerptReport(26, 2), { floors: false }).length === 0 && stopRules(excerptReport(25, 2), { floors: false }).length === 1, "27 of 30 and 26 of 28 pass; 25 of 28 fails"));
+    for (const [field, leak] of Object.entries({ header: { evidence: { values: { server: "jan@example.nl" } } }, dns: { dns: { listed: { dmarcRecord: "rua=jan@example.nl" } } } })) {
+      const noted = join(root, `non-text-${field}`);
+      cpSync(join(falseFired.results, "e20r-pass3"), noted, { recursive: true });
+      rmSync(join(noted, "prune-manifest.json"));
+      const text = `${readFileSync(join(noted, "raw.jsonl"), "utf8")}${JSON.stringify({ status: "ok", ...leak })}\n`;
+      writeFileSync(join(noted, "raw.jsonl"), text);
+      writeFileSync(join(noted, "manifest.json"), JSON.stringify({ ...JSON.parse(readFileSync(join(noted, "manifest.json"), "utf8")), rawSha256: hashOf(text) }));
+      add(`C19: a ${field} finding still goes to the privacy report`, "refused", privacy(noted));
+    }
+
+    const stubAll = join(root, "stubs", "all-fire.mjs");
+    writeFileSync(stubAll, `import { parentPort, workerData } from "node:worker_threads"; const { row } = workerData; parentPort.postMessage({ record: { ...row, status: "ok", httpStatus: 200, checks: [], evidence: { bodySha256: "h", pageExcerpt: { text: ${JSON.stringify(fires("every-page"))} } }, finalHost: row.host, score: 1, counters: {}, hops: [], robots: [] } });`);
+    const manyList = mergeCohorts({ T1k: Array.from({ length: 300 }, (_, i) => ({ host: `m${i}.selftest.example.com`, rank: i + 1, group: "x" })) });
+    const many = await runPass(manyList, { pass: 3, out: join(root, "many"), loopbackPort: 9, delayMs: 0, concurrency: 8, workerFile: stubAll, dns: NO_DNS_AT_ALL });
+    add("D20: every record withheld doesn't stop pass 3, and all are reported", "allowed", truth(!many.stoppedFor && many.records.length === 300 && JSON.parse(readFileSync(join(root, "many", "manifest.json"), "utf8")).textWithheld.records === 300 && !onDisk(join(root, "many"), "every-page"), "300 of 300"));
+
+    const auditRows = [...Array.from({ length: 400 }, (_, i) => ({ host: `d${i}.org`, status: "ok", httpStatus: 200, cohorts: { T1k: {} }, platform: { edge: "other" }, evidence: { class: { label: "candidate-page" }, ...(i % 4 === 0 ? { textWithheld: { kinds: { email: 1 }, fields: 1 } } : {}) } })), ...Array.from({ length: 25 }, (_, i) => ({ host: `c${i}.org`, status: "ok", httpStatus: 403, cohorts: { "YC-new": {} }, platform: { edge: "cloudflare" }, evidence: { class: { label: "challenge" }, ...(i < 10 ? { textWithheld: { kinds: { fragment: 1 }, fields: 1 } } : {}) } }))];
+    const drawn = drawSample(auditRows);
+    add("E27: the draw never picks a withheld record", "allowed", truth(drawn.every((d) => !auditRows.find((r) => r.host === d.host).evidence.textWithheld), `${drawn.length} rows`));
+    add("E28: stratum sizes and weights use the non-withheld frame", "allowed", truth(drawn.filter((d) => d.stratum === "candidate-page").length === 150 && drawn.find((d) => d.stratum === "candidate-page").stratumSize === 300, "300 of 400 in the frame"));
+    const counted = (await import("./record-checks.mjs")).withheldCounts(auditRows);
+    add("E29: counts reconcile overall and by every group", "allowed", truth(counted.records === 110 && ["byCohort", "byStratum", "byLabel", "byStatus", "byEdge"].every((g) => Object.values(counted[g]).reduce((n, v) => n + v.records, 0) === 110) && counted.kinds.email === 100 && counted.kinds.fragment === 10, "110 in every group"));
+    const frame = auditFrame(auditRows);
+    add("E30: a depleted stratum is not estimable", "allowed", truth(frame.strata.challenge.estimable === false && frame.strata["candidate-page"].estimable === false && frame.strata.challenge.frame === 15, "15 left of 25, and 25% withheld"));
+    const scoredRows = drawn.map((d, i) => ({ ...d, id: i + 1, human: d.ruleLabel }));
+    const bounds = worstCaseBounds(scoredRows, frame.withheldByRule);
+    add("E31: worst-case bounds count all withheld rows", "allowed", truth(bounds.page.precision < 0.76 && bounds.page.precision > 0.74 && frame.withheld === 110, `page precision ${bounds.page.precision.toFixed(3)}`));
+    const claimRows = [...Array.from({ length: 25 }, (_, i) => ({ host: `t${i}.org`, finalHost: `t${i}.org`, status: "ok", cohorts: { T1k: { rank: 1 } }, checks: [{ id: "csp", passed: i < 5, weight: 1 }], evidence: { class: { label: "candidate-page" } } })), ...Array.from({ length: 25 }, (_, i) => ({ host: `y${i}.org`, finalHost: `y${i}.org`, status: "ok", cohorts: { "YC-new": { rank: 1 } }, checks: [{ id: "csp", passed: i < 15, weight: 1 }], evidence: { class: { label: "candidate-page" } } }))];
+    const claimMarked = claimRows.map((r, i) => (i % 3 ? r : { ...r, evidence: { ...r.evidence, textWithheld: { kinds: { email: 1 }, fields: 1 } } }));
+    add("E32: main claims keep withheld records", "allowed", truth(JSON.stringify(claims(claimRows, null, {}, { resamples: 20 })) === JSON.stringify(claims(claimMarked, null, {}, { resamples: 20 })), "claims identical"));
+
+    const forgedRun = clean();
+    await run(forgedRun, pass2(forgedRun), stopSoon);
+    rmSync(fx.stopFile);
+    const forgedDir = passDir(forgedRun);
+    stoppedFor(forgedDir, PRIVACY_STOP);
+    const forgedRaw = raw(forgedDir);
+    forgedRaw[0].evidence = { values: { server: "Reach us at <email>. Open daily" } };
+    const forgedText = `${forgedRaw.map((r) => JSON.stringify(r)).join("\n")}\n`;
+    writeFileSync(join(forgedDir, "raw.jsonl"), forgedText);
+    writeFileSync(join(forgedDir, "manifest.json"), JSON.stringify({ ...JSON.parse(readFileSync(join(forgedDir, "manifest.json"), "utf8")), rawSha256: hashOf(forgedText) }));
+    reportMain(["--legacy-findings", forgedDir], { log: quiet, fail: quiet });
+    const forgedFile = join(forgedDir, "legacy-findings.json");
+    const genuine = JSON.parse(readFileSync(forgedFile, "utf8"));
+    add("F35: the named review stays bound after withholding", "allowed", truth(JSON.parse(readFileSync(join(firedRun, "privacy-report.json"), "utf8")).reviewed.legacyFindingsSha256 === sha256(readFileSync(join(firedRun, "legacy-findings.json"))), "legacyFindingsSha256"));
+    add("F33: the report itself says the stop isn't reproduced", "allowed", truth(genuine.reproducesStop === false && genuine.findings[0].path === "evidence.values.server", genuine.findings[0].path));
+    writeFileSync(forgedFile, JSON.stringify({ ...genuine, reproducesStop: true }));
+    const forgedSaid = [];
+    add("F33: a forged summary can't get a review", "refused", { code: reportMain(["--privacy", forgedDir, "--false-fire", reviewNote, "--reviewer", "x"], { log: quiet, fail: (m) => forgedSaid.push(m) }), said: forgedSaid.join(" ") }, /nothing to call a false fire/);
+    reportMain(["--privacy", forgedDir], { log: quiet, fail: quiet });
+    const bindReview = (report) => {
+      const bytes = JSON.stringify(report);
+      writeFileSync(forgedFile, bytes);
+      const file = join(forgedDir, "privacy-report.json");
+      writeFileSync(file, JSON.stringify({ ...JSON.parse(readFileSync(file, "utf8")), reviewed: { noteSha256: "a".repeat(64), reviewer: "x", legacyFindingsSha256: hashOf(bytes) } }));
+    };
+    bindReview({ ...genuine, reproducesStop: true });
+    validation(["prune", forgedDir], { log: quiet, fail: quiet });
+    await refusedBoth("F33: a forged summary with a hand-bound review", forgedRun, /not valid: its summary doesn't match/);
+    const good = genuine.findings[0];
+    const pagePath = { ...good, path: "evidence.pageExcerpt.text" };
+    for (const [name, findings, why] of [["a text order", [{ ...pagePath, order: "0" }], /record the raw file/], ["an order not in the raw file", [{ ...pagePath, order: 99999 }], /record the raw file/], ["an unknown path", [{ ...pagePath, path: "nowhere.x" }, pagePath], /unknown field/], ["an unknown kind", [{ ...pagePath, kind: "shape" }], /unknown kind/], ["a zero count", [{ ...pagePath, count: 0 }], /valid count/], ["a negative count", [{ ...pagePath, count: -2 }], /valid count/], ["a duplicate finding", [pagePath, pagePath], /appears twice/]]) {
+      bindReview({ ...genuine, findings, reproducesStop: true });
+      add(`F34: ${name}`, "refused", await run(forgedRun, pass3(forgedRun), { preregText: adopted }), why);
+    }
+    bindReview({ ...genuine, findings: [pagePath], reproducesStop: false });
+    add("F34: a summary that disagrees with its findings", "refused", await run(forgedRun, pass3(forgedRun), { preregText: adopted }), /summary doesn't match/);
+    canaries.closeAllConnections();
+    await new Promise((r) => canaries.close(r));
+
     add("the scrub's own output doesn't stop a run", "allowed", truth(!pageTextMissed({ evidence: { pageExcerpt: { text: scrub("Reach us at info@example.com. We reply.") } } }), "pageTextMissed"));
 
     const wrongInput = fx.prereg.replace(/(Pass 1 raw SHA-256 \| `)[0-9a-f]{64}/, `$1${"0".repeat(64)}`);
@@ -756,5 +1013,6 @@ async function main() {
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  (process.argv[2] === "--finalizing-child" ? finalizingChild(process.argv[3]) : main()).then((code) => { process.exitCode = code; });
+  const child = { "--finalizing-child": () => finalizingChild(process.argv[3]), "--canary-child": () => canaryChild(process.argv[3], process.argv[4], process.argv[5]) }[process.argv[2]];
+  (child ?? main)().then((code) => { process.exitCode = code; });
 }

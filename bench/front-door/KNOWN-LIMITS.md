@@ -53,11 +53,20 @@ The audit sheet goes to one labeler and to a hosted model. The 12-month deletion
 ## After the stopped pass 2
 
 - The detector now skips a bracketed `at` whose next word is one of our own tokens. Stored text is scrubbed, so that neighbour is ours unless a page itself prints such a token.
-- The detector skips our own tokens after a bare or bracketed `at`, and a web URL after a bare `at`. It still finds `john at (example.com)`, which the scrub leaves in place, and it can't tell that form from prose. So `Look at (example.com). Open daily` can stop a run again.
+- After a bare `at`, the detector counts only what could be a domain: a label of letters, digits and hyphens, past an opening bracket or quote, then a dot and a word. It still finds `john at (example.com)`, which the scrub leaves in place, and it can't tell that form from prose such as `Look at (example.com). Open daily`.
+- Withholding protects the study's write paths. It doesn't protect process memory, swap, a core dump or a compromised host.
+- From pilot round 2, a fire doesn't stop a run. The record's title, text, `noscript` and error excerpts are withheld before anything is written. So a real address that fires is never studied, and nobody can say afterwards whether a fire was true. Fires are a count, per kind, never a verdict.
+- `fragment` and `longHex` fires can't be tightened by what a character may be, so they are left to withholding.
+- Withheld records leave the audit's frame, and they aren't missing at random. Audit metrics describe non-withheld records, with worst-case bounds beside them. A stratum under 20 rows or with over 10% withheld says "not estimable". Those two numbers are judgment calls.
+- Withholding covers page and error text. A miss in a header, cookie, DNS field or check still goes to the final privacy report and a person.
 - The frozen detector in `legacy/` runs only for the legacy finding report. That report names record order and field path, so it stays on the server.
 - Pass 3 learns which sites to skip from the stopped pass's pruned raw file. A purge deletes that file, so a purged pass 2 can't be followed by pass 3.
 - A false-fire review rests on one named person's note. Only its hash is kept with the run, bound to the legacy finding report.
 - The realistic corpus in the tests is hand-written. It finds common sentence forms, and it says nothing about forms nobody wrote down.
+
+## Stated deviations
+
+- **Pilot label sheets.** Amendment 2 says no text copy is made before a prune. Pilot round 1's label sheets were copied before its prune. All copies were deleted on 31 Oct 2026, and their hashes are kept privately. The raw prune proof doesn't cover such copies.
 
 ## Stops
 

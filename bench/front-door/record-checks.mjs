@@ -63,6 +63,12 @@ export const MAX_RESOLVER_FAILURES = 0.2;
 export const PRIVACY_STOP = "a privacy scrub missed something";
 // The detector that stopped pass 2. Its file stays in legacy/, and only the finding report reads it.
 export const LEGACY_CLASSIFIER_SHA256 = "7023106f7bd73c1e4122d80e9479f63a4a04091f1426327be70621951fe71d3b";
+// A pilot round fails past this many withheld records. A pass never stops for them.
+export const MAX_PILOT_WITHHELD = 2;
+// Rows per audit stratum, frozen in the amendment.
+export const STRATA = Object.freeze({
+  "candidate-page": 150, challenge: 50, "block-signature": 50, "block-unrecognized-403": 30, "unrecognized-error-response": 20,
+});
 // Where the in-flight stop looks, so a legacy finding can be shown to be that stop.
 export const PAGE_PATHS = Object.freeze(["evidence.excerpt", "evidence.pageExcerpt.title", "evidence.pageExcerpt.text", "evidence.pageExcerpt.noscript", "evidence.others.excerpt"]);
 
@@ -80,6 +86,66 @@ export const pageText = (r) => [
 ].filter(Boolean);
 export const pageTextMissed = (r) => pageText(r).some((t) => Object.values(scrubMisses(t)).some(Boolean));
 
+/** The audit stratum of one record, or null. */
+export function stratumOf(r) {
+  const c = r.evidence?.class;
+  if (!c) return null;
+  if (c.label === "block") return c.rule === "unrecognized-403" ? "block-unrecognized-403" : "block-signature";
+  return c.label in STRATA ? c.label : null;
+}
+
+/**
+ * The record with all its page and error text gone, on a finding in any of it. Only those
+ * five paths and the marker change, and the marker holds counts alone. Doing it twice is
+ * doing it once.
+ */
+export function withholdText(r) {
+  if (r.evidence?.textWithheld) return r;
+  const kinds = {};
+  let fields = 0;
+  for (const text of pageText(r)) {
+    const found = Object.entries(scrubMisses(text)).filter(([, n]) => n);
+    if (found.length) fields++;
+    for (const [kind, n] of found) kinds[kind] = (kinds[kind] ?? 0) + n;
+  }
+  const { excerpt: _excerpt, ...evidence } = r.evidence;
+  if (evidence.pageExcerpt) {
+    const { title: _title, text: _text, noscript: _noscript, ...shape } = evidence.pageExcerpt;
+    evidence.pageExcerpt = shape;
+  }
+  if (evidence.others) evidence.others = evidence.others.map(({ excerpt: _other, ...o }) => o);
+  return { ...r, evidence: { ...evidence, textWithheld: { kinds, fields } } };
+}
+
+/** A record that may leave for a disk: both sides of the worker boundary run this. */
+export const safeRecord = (r) => (pageTextMissed(r) ? withholdText(r) : r);
+
+/** Withheld records, overall and by group, with each group's own total. Counts only. */
+export function withheldCounts(records) {
+  const out = { records: 0, kinds: {}, byCohort: {}, byStratum: {}, byLabel: {}, byStatus: {}, byEdge: {} };
+  const bump = (into, key, kinds) => {
+    const g = (into[key] ??= { records: 0, of: 0, kinds: {} });
+    g.of++;
+    if (!kinds) return;
+    g.records++;
+    for (const [kind, n] of Object.entries(kinds)) g.kinds[kind] = (g.kinds[kind] ?? 0) + n;
+  };
+  for (const r of records) {
+    if (!r.evidence) continue;
+    const kinds = r.evidence.textWithheld?.kinds;
+    if (kinds) {
+      out.records++;
+      for (const [kind, n] of Object.entries(kinds)) out.kinds[kind] = (out.kinds[kind] ?? 0) + n;
+    }
+    for (const c of Object.keys(r.cohorts ?? {})) bump(out.byCohort, c, kinds);
+    bump(out.byStratum, stratumOf(r) ?? "none", kinds);
+    bump(out.byLabel, r.evidence.class?.label ?? "none", kinds);
+    bump(out.byStatus, String(r.httpStatus ?? "none"), kinds);
+    bump(out.byEdge, r.platform?.edge ?? "unknown", kinds);
+  }
+  return out;
+}
+
 // A visit's own budget allows 20 requests; more means the limit failed.
 const MAX_REQUESTS_PER_SITE = 20;
 // A run that barely reached anything tells nothing about its instrument. Pass 1 graded 84% of what it could.
@@ -94,7 +160,9 @@ export function stopRules(report, { floors = true } = {}) {
   const stop = [];
   if (Object.values(report.scrubMisses).some(Boolean)) stop.push("a privacy scrub missed something");
   if ((report.outcomes["error:internal"] ?? 0) > 0) stop.push("an internal error");
-  if (!report.pruned && report.evidence.twoxx && report.evidence.twoxxWithExcerpt < report.evidence.twoxx * 0.9) stop.push("under 90% of 2xx responses have an excerpt");
+  // Withheld pages lose their text on purpose, so the rule reads the 2xx responses that could have one.
+  const readable = report.evidence.twoxx - (report.evidence.twoxxWithheld ?? 0);
+  if (!report.pruned && readable && report.evidence.twoxxWithExcerpt < readable * 0.9) stop.push("under 90% of 2xx responses have an excerpt");
   const eligible = report.sites - Object.entries(report.outcomes).filter(([k]) => /^(opted_out|excluded:(robots_disallow_all|robots_disallow_path|not_a_homepage|exclusion_list))$/.test(k)).reduce((n, [, v]) => n + v, 0);
   if (report.dns.read < eligible) stop.push("a site with no DNS read");
   if (report.counters.maxRequestsPerSite > MAX_REQUESTS_PER_SITE) stop.push(`a site took more than ${MAX_REQUESTS_PER_SITE} requests`);
@@ -105,6 +173,7 @@ export function stopRules(report, { floors = true } = {}) {
   else if (floors && eligible && report.evidence.twoxx < MIN_TWOXX) stop.push(`under ${MIN_TWOXX} 2xx responses`);
   if (report.dns.read && report.dns.answered.spf / report.dns.read < 1 - MAX_RESOLVER_FAILURES) stop.push("over 20% of SPF reads got no answer");
   if (report.dns.read && report.dns.answered.dmarc / report.dns.read < 1 - MAX_RESOLVER_FAILURES) stop.push("over 20% of DMARC reads got no answer");
+  if ((report.textWithheld?.records ?? 0) > MAX_PILOT_WITHHELD) stop.push(`over ${MAX_PILOT_WITHHELD} records had their text withheld`);
   if (floors && eligible === 0) stop.push("no eligible site");
   else if (floors && eligible < MIN_ELIGIBLE) stop.push(`under ${MIN_ELIGIBLE} eligible sites`);
   if (floors && eligible && report.evidence.graded < MIN_GRADED) stop.push(`under ${MIN_GRADED} graded sites`);
@@ -115,6 +184,32 @@ export function stopRules(report, { floors = true } = {}) {
 const hash = (b) => createHash("sha256").update(b).digest("hex");
 
 export const NO_PRIVACY = "no clean privacy report";
+
+const DETECTOR_KINDS = new Set(["ipv4", "ipv6", "email", "query", "fragment", "jwt", "longHex", "longNumber"]);
+const RECORD_FIELDS = new Set(["record", "evidence", "dns", "checks", "app", "hops", "finalHost", "finalOrg", "listedHost", "listedOrg", "host", "cohorts", "robots", "platform", "dnsProviders", "error", "reason", "category", "group"]);
+const knownPath = (path) => typeof path === "string" && /^[^\s]+(?: \(a key\))?$/.test(path) && RECORD_FIELDS.has(path.replace(/ \(a key\)$/, "").split(".")[0]);
+
+/**
+ * What's wrong with a legacy finding report, or null. Nothing in it is taken on trust:
+ * each finding is checked against the raw file's orders, and `reproducesStop` must be
+ * what the findings themselves say.
+ */
+export function legacyProblem(report, orders) {
+  if (!Array.isArray(report?.findings)) return "it has no list of findings";
+  const seen = new Set();
+  for (const f of report.findings) {
+    if (!Number.isInteger(f?.order) || !orders.has(f.order)) return "a finding names a record the raw file doesn't hold";
+    if (!knownPath(f.path)) return "a finding names an unknown field";
+    if (!DETECTOR_KINDS.has(f.kind)) return "a finding names an unknown kind";
+    if (!Number.isInteger(f.count) || f.count < 1) return "a finding has no valid count";
+    const key = `${f.order} ${f.path} ${f.kind}`;
+    if (seen.has(key)) return "a finding appears twice";
+    seen.add(key);
+  }
+  const reproduces = report.findings.some((f) => PAGE_PATHS.includes(f.path));
+  if (report.reproducesStop !== reproduces) return "its summary doesn't match its findings";
+  return reproduces ? null : "it does not reproduce the stop";
+}
 
 /** The hash a seal carries over its own fields, `passed` among them. */
 export const sealHash = ({ sealSha256: _own, ...fields }) => hash(JSON.stringify(fields));

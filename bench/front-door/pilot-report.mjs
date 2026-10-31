@@ -29,8 +29,8 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { isEligible, missedFields, recordMisses, resolverFailed, sealHash, stopRules, MAX_RESOLVER_FAILURES, MIN_ELIGIBLE, MIN_GRADED, MIN_GRADED_SHARE, MIN_TWOXX } from "./record-checks.mjs";
-import { legacyFindings } from "./legacy-findings.mjs";
+import { isEligible, legacyProblem, missedFields, recordMisses, resolverFailed, sealHash, withheldCounts, stopRules, MAX_RESOLVER_FAILURES, MIN_ELIGIBLE, MIN_GRADED, MIN_GRADED_SHARE, MIN_TWOXX } from "./record-checks.mjs";
+import { legacyFindings, scanLegacy } from "./legacy-findings.mjs";
 import { CLAIM_COHORTS, readRemovals } from "./replicate.mjs";
 import { exclusionFor, readExclusions } from "./run.mjs";
 
@@ -53,7 +53,7 @@ export function pilotReport(records, { exclude = new Map(), pruned = false } = {
   const sum = (k) => records.reduce((n, r) => n + (r.counters?.[k] ?? 0), 0);
   const twoxx = ok.filter((r) => r.httpStatus >= 200 && r.httpStatus < 300);
   return {
-    sites: records.length, pruned,
+    sites: records.length, pruned, textWithheld: withheldCounts(records),
     coverage: Object.fromEntries(CLAIM_COHORTS.map((c) => {
       const rows = records.filter((r) => r.cohorts?.[c]);
       const graded = rows.filter((r) => r.status === "ok");
@@ -73,6 +73,7 @@ export function pilotReport(records, { exclude = new Map(), pruned = false } = {
       withEvidence: ok.filter((r) => r.evidence).length,
       twoxx: twoxx.length,
       twoxxWithExcerpt: twoxx.filter((r) => r.evidence?.pageExcerpt?.text || r.evidence?.pageExcerpt?.title).length,
+      twoxxWithheld: twoxx.filter((r) => r.evidence?.textWithheld).length,
       outside2xxWithExcerpt: ok.filter((r) => r.evidence?.excerpt).length,
       withBodyHashes: ok.filter((r) => r.evidence?.bodySha256 && (r.evidence?.others ?? []).every((o) => o.bodySha256)).length,
     },
@@ -149,7 +150,10 @@ export function privacyReport(dir, { falseFire, reviewer } = {}) {
   const legacyFile = join(dir, "legacy-findings.json");
   const legacyBytes = falseFire && existsSync(legacyFile) ? readFileSync(legacyFile) : null;
   const legacy = legacyBytes && JSON.parse(legacyBytes);
-  const legacyHolds = legacy?.findings?.length > 0 && legacy.manifestSha256 === hash(manifestBytes) && legacy.rawSha256 === rawSha256;
+  // Before a prune the raw file is here, so the report is checked against a fresh scan too.
+  const fresh = legacy && hash(rawBytes) === manifest.rawSha256 ? scanLegacy(dir) : null;
+  const legacyHolds = Boolean(legacy) && legacy.manifestSha256 === hash(manifestBytes) && legacy.rawSha256 === rawSha256
+    && !legacyProblem(legacy, new Set(rows.map((r) => r.order))) && JSON.stringify(fresh?.findings) === JSON.stringify(legacy.findings);
   if (falseFire && clean && !legacyHolds) throw new Error("Refused: this scan is clean, so there is nothing to call a false fire. It needs a legacy finding report for this run.");
   const report = {
     manifestSha256: hash(manifestBytes), rawSha256, purgeConfirm: rawSha256.slice(0, 12), records, scrubMisses, clean, flaggedFields: missedFields(rows),
