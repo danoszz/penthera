@@ -1243,8 +1243,8 @@ describe("the outside reviewer's conditions", () => {
     writeFileSync(join(dir, "validation-key.json"), "[]");
     writeFileSync(join(dir, "prune-manifest.json"), JSON.stringify({ keySha256: sum("[ ]") }));
     const said = [];
-    expect(validationMain(["score", join(dir, "validation-key.json"), "h", "a"], { log: () => undefined, fail: (m) => said.push(m) })).toBe(3);
-    expect(said.join()).toMatch(/not the one/);
+    expect(validationMain(["score", dir], { log: () => undefined, fail: (m) => said.push(m) })).toBe(3);
+    expect(said.join()).toMatch(/Refused/);
   });
 
   it("secondary cohorts are reported per check, and a thin side is not estimable", () => {
@@ -1529,7 +1529,7 @@ describe("Amendment 3", () => {
     }
     // A small frame loses its own figures, and that alone doesn't decide the headline.
     expect(auditFrame(stratum(10, 0))).toMatchObject({ headline: "stands, on its frame", notEstimable: false });
-    expect(auditFrame(stratum(10, 0)).strata["candidate-page"].ownFigures).toBe(false);
+    expect(auditFrame(stratum(10, 0)).labels.page).toMatchObject({ frame: 10, figures: false });
   });
 
   it("the score says the headline first, and keeps the frame's figures beside it", () => {
@@ -1548,9 +1548,10 @@ describe("Amendment 3", () => {
     const rec = (i, label, withheld) => ({ host: `h${i}.org`, status: "ok", evidence: { class: { label, rule: "x" }, ...(withheld ? { textWithheld: { kinds: { email: 1 }, fields: 1 } } : {}) } });
     const frame = auditFrame([...Array.from({ length: 100 }, (_, i) => rec(i, "candidate-page", i < 5)), ...Array.from({ length: 30 }, (_, i) => rec(200 + i, "challenge", i < 10)), ...Array.from({ length: 10 }, (_, i) => rec(300 + i, "unrecognized-error-response", false))]);
     expect(frame.scope).toBe("non-withheld records");
-    expect(frame.strata["candidate-page"]).toMatchObject({ eligible: 100, frame: 95, withheld: 5, overLimit: true, ownFigures: true });
-    expect(frame.strata.challenge).toMatchObject({ eligible: 30, frame: 20, withheld: 10, overLimit: true, ownFigures: true });
-    expect(frame.strata["unrecognized-error-response"]).toMatchObject({ frame: 10, overLimit: false, ownFigures: false, drawn: 10, shortfall: 10 });
+    expect(frame.strata["candidate-page"]).toMatchObject({ eligible: 100, frame: 95, withheld: 5, overLimit: true });
+    expect(frame.strata.challenge).toMatchObject({ eligible: 30, frame: 20, withheld: 10, overLimit: true });
+    expect(frame.strata["unrecognized-error-response"]).toMatchObject({ frame: 10, overLimit: false, drawn: 10, shortfall: 10 });
+    expect(frame.labels).toMatchObject({ page: { frame: 95, figures: true }, error: { frame: 10, figures: false }, block: { frame: 0, figures: false } });
     expect(frame).toMatchObject({ headline: "not estimable", notEstimable: true, eligible: 140 });
     expect(frame.withheld).toBe(15);
     expect(frame.withheldByRule).toEqual({ page: 5, challenge: 10, block: 0, error: 0 });

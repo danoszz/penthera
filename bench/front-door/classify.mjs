@@ -297,16 +297,46 @@ const opensWithOwnToken = (text) => {
   while (i < text.length && "([{\"'".includes(text[i])) i++;
   return OWN_TOKENS.some((t) => text.startsWith(t, i));
 };
-// What can follow a bare `at` as an address: past an opening bracket or quote, a whole domain, read to
-// its end. Each label starts and ends with a letter or number, with hyphens inside and Unicode allowed. The
-// last is two or more letters, or punycode. `$29.`, `5:30.`, `Joe's.`, `100%.` and paths hold characters no
-// label can, and our own tokens and web URLs fail the same test. Bounded, as a name holds so many labels.
-const LABEL = String.raw`[\p{L}\p{N}](?:[\p{L}\p{N}\p{M}-]*[\p{L}\p{N}\p{M}])?`;
-const TERMINAL = String.raw`(?:xn--[\p{L}\p{N}](?:[\p{L}\p{N}-]*[\p{L}\p{N}])?|\p{L}[\p{L}\p{M}]+)`;
-const DOT = String.raw`(?:\s*[.。．｡]\s*|\s+dot\s+)`;
-const AFTER = String.raw`(?![\p{L}\p{N}\p{M}_-]|[.。．｡][\p{L}\p{N}_-])`;
-const DOMAIN_AFTER_AT = new RegExp(String.raw`^[([{<"'\`“‘«]*(?:${LABEL}${DOT}){1,11}${TERMINAL}${AFTER}`, "u");
-const WORDS_IN_A_DOMAIN = 24;
+// What can follow a bare `at` as an address: past an opening bracket or quote, a whole domain, walked to its
+// end. Each label starts with a letter or number and ends with one or a mark, with hyphens inside and Unicode
+// allowed. The last is two or more letters, or punycode, at a token's edge. `$29.`, `5:30.`, `Joe's.`, `100%.`
+// and paths hold characters no label can, and our own tokens and web URLs fail the same test.
+// The scrub closes `(info) @ x.y` up to `(info)@x.y`, which the token walk below can't read past the bracket.
+const BARE_AT = /(?: [([{<"'`“‘«*]*|[([{<]+)(?:at|@)(?= )|(?<=[)\]}>"'`”’»])@|(?<=[\p{L}\p{N}._%+-])@(?=[([{<"'`“‘«])/gu;
+const ADDRESS_LOCAL = /[\p{L}\p{N}._%+-]["'`”’»)\]}>*]*$/u;
+const DOMAIN_OPENING = /[([{<"'`“‘«*]*/y;
+const DOMAIN_LABEL = /[\p{L}\p{N}][\p{L}\p{N}\p{M}-]*/uy;
+const DOMAIN_DOT = / ?[.。．｡] ?| dot | ?[([{] ?dot ?[)\]}] ?/y;
+const LAST_LABEL = /^(?:\p{L}[\p{L}\p{M}]+|xn--[a-z0-9-]*[a-z0-9])$/u;
+const LABEL_GOES_ON = /^[\p{L}\p{N}\p{M}_-]/u;
+const LABEL_FOLLOWS_DOT = /^[.。．｡][\p{L}\p{N}_-]/u;
+// A name holds 253 characters, and spelled dots or spaces around them add a few to each label.
+const MAX_DOMAIN_CHARS = 1024;
+
+/** Does a whole domain open at `start`? Stops at the first character that can't belong to one. */
+function opensDomain(text, start) {
+  DOMAIN_OPENING.lastIndex = start;
+  let at = start + DOMAIN_OPENING.exec(text)[0].length;
+  const limit = at + MAX_DOMAIN_CHARS;
+  let labels = 0, tight = false;
+  while (at < limit) {
+    DOMAIN_LABEL.lastIndex = at;
+    const label = DOMAIN_LABEL.exec(text)?.[0];
+    if (!label || label.endsWith("-")) return false;
+    at += label.length;
+    labels++;
+    const next = text.slice(at, at + 4);
+    if (labels > 1 && LAST_LABEL.test(label) && !LABEL_GOES_ON.test(next) && !LABEL_FOLLOWS_DOT.test(next)) return true;
+    DOMAIN_DOT.lastIndex = at;
+    const dot = DOMAIN_DOT.exec(text);
+    if (!dot) return false;
+    // `3.99. Open` is a price and a sentence: a name doesn't turn loose after a tight dot.
+    if (tight && /^ ?[.。．｡] /.test(dot[0])) return false;
+    tight ||= /^[.。．｡]$/.test(dot[0]);
+    at += dot[0].length;
+  }
+  return false;
+}
 // A JWT opens at a token's edge. `keyJ.value` holds the letters and isn't one.
 const JWT_AT_EDGE = /(?:^|[^A-Za-z0-9_-])eyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]/;
 
@@ -333,12 +363,12 @@ export function scrubMisses(text) {
       if (!opensWithOwnToken(low.slice(k, k + 16))) out.email++;
     }
   }
-  // A bare `at` before something that could be a domain. A bracketed or quoted domain counts, and so
-  // does prose that looks like one.
-  const words = low.split(/\s+/);
-  for (let i = 1; i < words.length; i++) {
-    if (words[i] !== "at" || !/[\p{L}\p{N}._%+-]$/u.test(words[i - 1])) continue;
-    if (DOMAIN_AFTER_AT.test(words.slice(i + 1, i + 1 + WORDS_IN_A_DOMAIN).join(" "))) out.email++;
+  // A bare `at` or `@` before something that could be a domain. A bracketed or quoted domain counts, and so
+  // does prose that looks like one. Invisible characters, wide forms and spaces spelled as entities don't break it.
+  const spaced = low.normalize("NFKC").replace(/\p{Cf}/gu, "").replace(/&nbsp;|&#0*160;|&#x0*a0;/g, " ").replace(/\s+/g, " ");
+  for (const m of spaced.matchAll(BARE_AT)) {
+    const after = m.index + m[0].length;
+    if (ADDRESS_LOCAL.test(spaced.slice(Math.max(0, m.index - 16), m.index)) && opensDomain(spaced, spaced[after] === " " ? after + 1 : after)) out.email++;
   }
   // Ordinary pages hold many entities for quotes and dashes. Only ones that spell ASCII hide text.
   let spelled = 0;

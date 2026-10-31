@@ -816,24 +816,25 @@ original raw hash to the pruned file, SHA-256 starting `3e2cd5393328`, which is 
 
 **The partial run.** It is reported as a partial run with its coverage, and it decides no claim. Its
 records aren't pooled with any other run. Nobody reads its results before pass 3 ends.
+The steps ran in this order: the legacy finding, a replay, the person's review, the prune. Page text in
+the stopped pass no longer exists, so it can't be replayed at the final classifier hash.
 
 ### The detector
 
 `classify.mjs` holds both the labels and the detector, `scrubMisses`, so the fix changes its frozen
 hash. It can't sit elsewhere, because the detector is what the stop reads.
 
-- **What changed.** Inside `scrubMisses`, and nowhere else in the file. After a bare `at`, what follows
-  counts only if a whole domain opens there: past an opening bracket or quote, two or more valid labels
-  joined by a dot, or the word `dot`, read to the end of the name. A valid label starts and ends with a
-  letter or number, may hold hyphens inside, and takes Unicode letters, numbers and marks and punycode.
-  The last label is two or more letters, or punycode. `$29.`, `5:30.`, `Joe's.`, `100%.` and paths hold
-  characters no label can, and our own scrub tokens and web URLs fail the same test. A JWT now has to
-  open at a token's edge, so `keyJ.value` isn't one.
+- **What changed.** Inside `scrubMisses`, and nowhere else in the file. After a bare `at`, what follows counts only if it could be a domain: past an opening bracket or quote,
+  one or more labels joined by dots, or the word `dot`, ending in a label of at least two letters at a
+  token boundary. A valid label starts and ends with a letter or number, may hold hyphens inside, and
+  takes Unicode letters and numbers and punycode. `$29.`, `5:30.`, `Joe's.`, `100%.` and paths hold
+  characters no label can, and our own scrub tokens and web URLs fail the same test. A JWT
+  now has to open at a token's edge, so `keyJ.value` isn't one.
 - **What still counts.** Bracketed and quoted domains, such as `john at (example.com)`, on purpose. So
   `Look at (example.com). Open daily` still fires. This detector is the backstop for retained addresses,
   so it stays strict there, and a fire no longer costs a run. See "Withheld text".
 - **Old hash.** `7023106f7bd73c1e4122d80e9479f63a4a04091f1426327be70621951fe71d3b`.
-- **New hash.** `fbbca91fcca98049bd15bd5c37f39ac3662d1670840f4d852799849c84ae3df1`.
+- **New hash.** `6f5143c95894d3dd25115fc56d7f8b66e8c981e757678b07561e0481fd44b8be`.
 - **No graded result changes.** `classify`, `classifyRegistered`, `scrub`, `evidenceOf` and every other
   export keep their source, byte for byte, so a label, a stored excerpt or a grade can't differ. The
   detector fires less, apart from one narrow case: it now accepts any letters after the dot, where the
@@ -853,9 +854,6 @@ BrowseSafe, a public corpus of synthetic web pages, as counts only. It holds no 
 
 <GAP-DETECTOR-RECOUNT>
 
-The stopped pass's page text is pruned, so this detector can't be replayed on it. Nothing here counts
-as a replay of those records' text at this hash.
-
 The last row was written after reading the shapes behind the second, on the same corpus, so it is
 in-sample, and the real rate may be higher. Pass 3 should see about 3,350 2xx pages. At 0.04% that is
 about 1.4 fires, and about a 1 in 4 chance of none. So a tighter detector doesn't remove the problem. A
@@ -872,8 +870,9 @@ The stop on resolver failures stays.
   checks are done. On any fire it removes `evidence.pageExcerpt.title`, `.text` and `.noscript`,
   `evidence.excerpt` and every `evidence.others[].excerpt`, and marks the record `textWithheld`, with
   counts per detector kind and of fields, and nothing else. Only then does the record leave the thread.
-  The runner repeats the check before anything is written, aggregated, logged or passed on. The run
-  goes on.
+  The runner repeats the check on the content before anything is written, aggregated, logged or passed
+  on, whatever marker the record carries, and removes the same text if anything still fires. No record
+  leaves that step with text the detector flags. The run goes on.
 - **What stays.** Labels, signatures, checks and score, CSP and traits, status, header names, kept
   header values, cookie names, body hashes, counters, robots outcomes, DNS, cohorts and order. They were
   computed on the response in memory, as for every other record.
@@ -921,15 +920,17 @@ withheld share is `w = W / N`. The draw takes its rows and weights from `F`.
 - **The rule.** The headline audit is **not estimable** if `w` exceeds 2.0% in any audited stratum. The
   test is on the exact fraction, with no rounding. Otherwise the headline audit stands, on its frame.
 - **Always reported, whichever way it goes.** The withheld share overall and per stratum, and the
-  worst-case bounds below. When the audit is not estimable, the figures for its frame stay in a table,
-  marked as not the audit's result.
+  worst-case bounds below for every label with figures. When the audit is not estimable, the figures
+  for its frame stay in a table, marked as not the audit's result.
 - **Sample sizes don't change.** Each stratum draws its registered rows, or every row of its frame if
   that is fewer, and the shortfall is reported.
-- **Figures by label.** The five strata report through four labels: `candidate-page` is page,
-  `challenge` is challenge, `unrecognized-error-response` is error, and both block strata pool into
-  block. A label whose pooled `F` is under 20 gives no precision, recall, interval or worst-case figure,
-  because this study quotes no group under 20. Its row says "under 20 in frame" in their place. That
-  alone doesn't make the headline not estimable.
+- **Figures under 20.** Figures are per label, and a label's frame is the sum of its strata's frames:
+  `page` from `candidate-page`, `challenge` from its own, `error` from `unrecognized-error-response`,
+  and `block` from `block-signature` and `block-unrecognized-403` together. A label with a frame under 20
+  gets no precision, recall, interval or worst-case figure, and says so, because this study quotes no
+  group under 20. Kappa covers the whole audit, under the same floor. This doesn't decide the headline,
+  and it doesn't lift when the headline is not estimable. The 2.0% rule stays per stratum, so each block
+  stratum meets it alone. A silent label's rows still count in other labels' recall, at their weights.
 - **One small stratum can decide it.** In a stratum under 50 records, one withheld record is over 2.0%.
   That is the rule working as written, and it won't be relaxed afterwards.
 
@@ -942,20 +943,18 @@ records whose rule label is that label, and `W_other` the other withheld records
 
 Kappa has no bound, and says so.
 
-**Provenance.** The draw proof holds the hashes of the audit frame, the sheet and the key. Each label
-file has a manifest binding the labeler, the sheet's hash and the file's hash. Scoring refuses unless all
-of these chain to the run's manifest and its raw file after the draw, and it writes `score.json` with
-the hash of every input and the study's code and protocol hashes. `final-report.mjs` is the one step
-that joins the claims and the audit. It refuses any analysis, score, frame, key or proof that doesn't
-chain, or a checkout that isn't the run's. These hashes aren't keyed, so they catch mix-ups and edits to
-one file, and not an operator who rewrites all of them.
-
 **"Audit not estimable" is an outcome.** It is reported in the summary, beside the claims. It changes no
 claim's decision and no main analysis, which rest on the registered rules. The real-page view of each
 HTTP claim then carries a line saying its `candidate-page` label wasn't validated on this run.
 
 **What it never triggers.** No pass 4, no second draw, no substitute rows, no new labeling to recover a
 stratum, and no change to this rule.
+
+**One report.** `bench/front-door/report-tables.mjs` is the only step that joins the claims and the
+audit. It is part of the study's frozen code, and it refuses inputs that don't belong together. The
+headline stands above the claims, and when the audit is not estimable, every real-page view it prints
+says so. The chain from the run to that report is bound by hashes: the manifest and post-draw raw file,
+the audit frame, sheet and key, each labeler's labels, the score and the analysis.
 
 ### Text copies
 
@@ -1037,7 +1036,7 @@ sites per cohort and reason, and a site keeps the first reason it was skipped.
 ### Review
 
 The outside reviewer's technical go of 31 October in Amendment 2 was given on Amendment 2. It doesn't
-cover this amendment. That reviewer gave a technical no-go on packages 6 and 7.
+cover this amendment. That reviewer gave a technical no-go on packages 6, 7 and 8.
 <GAP-REVIEW-STATUS> This is not an ethics endorsement, and no independent human ethics board reviewed
 this study.
 

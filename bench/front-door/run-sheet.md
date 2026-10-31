@@ -186,7 +186,7 @@ node bench/front-door/pilot-report.mjs --privacy $RUN
 node bench/front-door/validation-sample.mjs draw $RUN
 ```
 
-`draw` prints `sampled` and `withheldFromDraw`, and writes `audit-frame.json`. Withheld records keep their label and grade, and stay out of the audit's frame. The headline audit is not estimable if any stratum is over 2.0% withheld: `headline` says so, and `score` prints it first. Nothing follows from that but the report: no further pass, draw or labels.
+`draw` prints `sampled` and `withheldFromDraw`, and writes `audit-frame.json`. Withheld records keep their label and grade, and stay out of the audit's frame. The headline audit is not estimable if any stratum is over 2.0% withheld: `headline` says so, and the report prints it above the claims. Nothing follows from that but the report: no further pass, draw or labels.
 
 ## 5. Bring the data to the laptop
 
@@ -208,26 +208,32 @@ Read coverage, skips, `textWithheld` and bounds first, then the primary endpoint
 
 ## 7. Labels and the score
 
-The human and the model each label from `validation-sheet.json`, and neither sees the other's labels. The model labels first, and its file's hash is noted. No other copy of the sheet is made, and every copy's path is written down so it can be deleted. The key stays on the server until both files exist. Then copy `human.csv` and `agent.csv` to `~/study`, and bind each to this draw's sheet:
+The human and the model each label from `validation-sheet.json`, and neither sees the other's labels. The model labels first, and its file's hash is noted. Build what they get with the kit, which shows the sheet's hash, and each labeler sends that hash back with their labels:
 
 ```bash
-node bench/front-door/validation-sample.mjs label-manifest $RUN ~/study/human.csv human <who>
+node bench/front-door/make-labeler-kit.mjs $RUN/validation-sheet.json ~/study/kit --expect 300
+```
+
+No other copy of the sheet is made, and every copy's path is written down so it can be deleted. The key stays on the server until both files exist. Then put the files in the run folder as `$RUN/labels-human.csv` and `$RUN/labels-model.csv`, each `id,label`, and bind each to this draw's sheet with the hash its labeler sent back. A manifest is written once, with no name in it:
+
+```bash
+node bench/front-door/validation-sample.mjs bind $RUN human <sheet hash>
 ```
 
 ```bash
-node bench/front-door/validation-sample.mjs label-manifest $RUN ~/study/agent.csv agent <model and session>
+node bench/front-door/validation-sample.mjs bind $RUN model <sheet hash>
 ```
 
-Score there. It refuses anything that doesn't chain to this run's manifest, raw file, frame, sheet and key, and it writes `$RUN/score.json`. The metrics cover non-withheld records, with `worstCase` bounds beside them. A label with a pooled frame under 20 says `under 20 in frame` in place of its figures:
+Score there. It refuses anything that doesn't chain to this run's manifest, raw file, frame, sheet and key, and it writes `$RUN/score.json` once. The metrics cover non-withheld records, with `worstCase` bounds beside them. A label with a frame under 20 holds nulls and says `under 20 in frame`:
 
 ```bash
-node bench/front-door/validation-sample.mjs score $RUN/validation-key.json ~/study/human.csv ~/study/agent.csv
+node bench/front-door/validation-sample.mjs score $RUN
 ```
 
-Pull `score.json` and the key to the laptop's run folder. Then, in the same checkout as the analysis, assemble the one report that joins the claims and the audit. It refuses anything that doesn't chain, and writes `final-report.md`:
+Pull `score.json`, both label files, their manifests and the key to the laptop's run folder. Then, in the same checkout as the analysis, assemble the one report that joins the claims and the audit. It refuses anything that doesn't chain, and writes nothing then. `--run` proves the chain again from the raw file and scores the labels again:
 
 ```bash
-node bench/front-door/final-report.mjs <private run folder>
+node bench/front-door/report-tables.mjs --analysis <private run folder>/analysis.json --score <private run folder>/score.json --out <private run folder>/final-report.md --run <private run folder>
 ```
 
 ## 8. Deletions and the server's end

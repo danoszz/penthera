@@ -25,7 +25,9 @@ import { claims, main as analyze, secondaryCohorts } from "./analyze-r.mjs";
 import { main as reportMain } from "./pilot-report.mjs";
 import { pageTextMissed, PRIVACY_STOP, recordMisses, resolverFailed, safeRecord, sealHash, stopRules, withholdText } from "./record-checks.mjs";
 import { CLAIM_COHORTS, main as replicate, mergeCohorts, PREREG_R, R_COHORTS, runPass, visitInWorker } from "./replicate.mjs";
-import { auditFrame, drawSample, main as validation, scoreLabels, worstCaseBounds } from "./validation-sample.mjs";
+import { auditFrame, drawSample, main as validation, scoreLabels, stateOf, worstCaseBounds } from "./validation-sample.mjs";
+import { auditRows as auditChainRows } from "./audit-acceptance.mjs";
+import { main as tables, NOT_VALIDATED } from "./report-tables.mjs";
 
 const IP = "178.104.243.225";
 const COMMIT = "c".repeat(40);
@@ -251,7 +253,7 @@ async function canaryChild(dir, mode, stubs) {
   const atFinal = () => { writeSync(1, "finalizing\n"); Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 500); return {}; };
   await runPass(mode === "hardcap" ? CANARY_LIST().slice(0, 3) : CANARY_LIST(), {
     pass: mode === "control" ? 2 : 3, out: join(dir, "run"), loopbackPort: server.address().port, delayMs: 0, concurrency: 4, dns: NO_DNS_AT_ALL,
-    ...(mode === "worker" ? { workerFile: join(stubs, "throws.mjs") } : {}), ...(mode === "hardcap" ? { workerFile: join(stubs, "hangs.mjs"), visitLimits: { budgetMs: 50, hardCapMs: 100 } } : {}),
+    ...(mode === "worker" ? { workerFile: join(stubs, "throws.mjs") } : {}), ...(mode === "marker" ? { workerFile: join(stubs, "marker.mjs") } : {}), ...(mode === "hardcap" ? { workerFile: join(stubs, "hangs.mjs"), visitLimits: { budgetMs: 50, hardCapMs: 100 } } : {}),
     ...(mode === "final" ? { recheck: atFinal } : {}),
     stopCheck: () => (signal ? `interrupted by ${signal}` : existsSync(stopFile) ? "the stop file exists" : null),
     onRecord: () => { if (++seen === 1) writeSync(1, "visited\n"); if (seen === 3 && mode === "stopfile") writeFileSync(stopFile, ""); },
@@ -442,10 +444,10 @@ export async function runAcceptance() {
     const failingDns = { ...DNS, ns: () => Promise.reject(Object.assign(new Error("x"), { code: "ESERVFAIL" })) };
     add("in flight: resolver failures stop pass 2", "refused", await run(stopped, pass2(stopped), { dns: failingDns, rollingWindow: 8 }), /STOP: over 20%.*partial/);
     const stoppedRun = join(stopped.results, "e20r-pass2");
-    const analysis = (dir, preregText = fx.prereg) => {
+    const analysis = (dir, preregText = fx.prereg, more = {}) => {
       const said = [];
       const i = fx.inputs;
-      const code = analyze(["--pass1", join(dir, "raw.jsonl"), "--pass2", i["Pass 1 raw"], "--e20", i["E20 Tranco raw"], i["E20 YC raw"], "--industries", i["Industry map"], "--e20-excluded", i["E20 exclusion file"], "--out", join(dir, "analysis.json")], { fail: (m) => said.push(m), preregText });
+      const code = analyze(["--pass1", join(dir, "raw.jsonl"), "--pass2", i["Pass 1 raw"], "--e20", i["E20 Tranco raw"], i["E20 YC raw"], "--industries", i["Industry map"], "--e20-excluded", i["E20 exclusion file"], "--out", join(dir, "analysis.json")], { fail: (m) => said.push(m), preregText, ...more });
       return { code, said: said.join(" ") || "analyzed" };
     };
     const onLast = (act) => { let n = 0; return (_k, total) => { if (++n === total) act(); }; };
@@ -643,7 +645,7 @@ export async function runAcceptance() {
     const keyFile = join(wholeRun, "validation-key.json");
     writeFileSync(keyFile, `${readFileSync(keyFile, "utf8")} `);
     const keySaid = [];
-    add("validation key not this run's", "refused", { code: validation(["score", keyFile, "h.csv", "a.csv"], { fail: (m) => keySaid.push(m) }), said: keySaid.join(" ") }, /not the one/);
+    add("validation key not this run's", "refused", { code: validation(["score", wholeRun], { fail: (m) => keySaid.push(m) }), said: keySaid.join(" ") }, /not the one/);
 
     const wrongKind = clean();
     const pilotProof = join(wrongKind.runDir, "prune-manifest.json");
@@ -795,6 +797,24 @@ export async function runAcceptance() {
     add("W: analysis reports withheld overall and per cohort", "allowed", { code: analyzed.code || (analyzedOut.textWithheld?.records === 2 && Object.keys(analyzedOut.textWithheld.byCohort).length ? 0 : 3), said: analyzed.said });
     const drawSaid = [];
     add("E27: the draw reports what it left out", "allowed", { code: validation(["draw", thirdDir], { log: (m) => drawSaid.push(m), fail: (m) => drawSaid.push(m) }), said: drawSaid.join(" ") }, /"withheldFromDraw":2/);
+    // The real commands in a row, on a real pass with withheld records and a real analysis.
+    const realKey = JSON.parse(readFileSync(join(thirdDir, "validation-key.json"), "utf8"));
+    const realLabels = `id,label\n${realKey.map((k) => `${k.id},${k.ruleLabel}`).join("\n")}\n`;
+    for (const role of ["human", "model"]) {
+      writeFileSync(join(thirdDir, `labels-${role}.csv`), realLabels);
+      validation(["bind", thirdDir, role, JSON.parse(readFileSync(join(thirdDir, "prune-manifest.json"), "utf8")).sheetSha256], { log: quiet, fail: quiet });
+    }
+    // A fixture's manifest names a stand-in state, so each step is told to run under it.
+    const realState = stateOf(JSON.parse(readFileSync(join(thirdDir, "manifest.json"), "utf8")));
+    analysis(thirdDir, fx.prereg, { state: realState });
+    const realSaid = [];
+    const realScore = validation(["score", thirdDir], { log: quiet, fail: (m) => realSaid.push(m), state: realState });
+    const realReport = realScore || tables(["--analysis", join(thirdDir, "analysis.json"), "--score", join(thirdDir, "score.json"), "--out", join(thirdDir, "final-report.md"), "--run", thirdDir], { log: quiet, fail: (m) => realSaid.push(m), state: realState });
+    add("R: a real pass, real analysis, score and report, checked against the run", "allowed", { code: realReport, said: realSaid.join(" ") || "reported" });
+    const realText = existsSync(join(thirdDir, "final-report.md")) ? readFileSync(join(thirdDir, "final-report.md"), "utf8") : "";
+    const realFrame = JSON.parse(readFileSync(join(thirdDir, "audit-frame.json"), "utf8"));
+    const realRows = realText.split("\n").filter((l) => /^\| C(?:1|2|3|4|5|8|9|10|11) \|/.test(l));
+    add("R: real-page views say so exactly when the headline is not estimable", "allowed", truth(realRows.length > 0 && (realFrame.notEstimable ? realText.includes(NOT_VALIDATED) : !realText.includes(NOT_VALIDATED)) && realText.indexOf("Headline audit") < realText.indexOf("## Claims"), `headline ${realFrame.headline}, ${realText.split(NOT_VALIDATED).length - 1} warnings`));
     const headerMiss = join(falseFired.results, "header-miss");
     cpSync(thirdDir, headerMiss, { recursive: true });
     rmSync(join(headerMiss, "prune-manifest.json"));
@@ -917,7 +937,7 @@ export async function runAcceptance() {
     const oneStratum = (eligible, withheld) => auditFrame(Array.from({ length: eligible }, (_, i) => ({ status: "ok", evidence: { class: { label: "challenge" }, ...(i < withheld ? { textWithheld: { kinds: { email: 1 }, fields: 1 } } : {}) } })));
     add("E30: exactly 2.0% stands", "allowed", truth(!oneStratum(50, 1).notEstimable && !oneStratum(150, 3).notEstimable, "1 of 50, 3 of 150"));
     add("E30: just over 2.0% doesn't", "allowed", truth(oneStratum(49, 1).notEstimable && oneStratum(149, 3).notEstimable, "1 of 49, 3 of 149"));
-    add("E30: a small frame alone doesn't decide the headline", "allowed", truth(!oneStratum(10, 0).notEstimable && !oneStratum(10, 0).strata.challenge.ownFigures, "10 rows, no figures of its own"));
+    add("E30: a small frame alone doesn't decide the headline", "allowed", truth(!oneStratum(10, 0).notEstimable && !oneStratum(10, 0).labels.challenge.figures, "10 rows, no figures of its own"));
     const reportedFrame = scoreLabels(key, labels(3), labels(3), { frame, resamples: 10 });
     add("E30: the score says the headline first, and keeps the rest", "allowed", truth(Object.keys(reportedFrame)[0] === "headline" && reportedFrame.frame.share > 0 && Boolean(reportedFrame.worstCase.page) && Boolean(reportedFrame.metrics), Object.keys(reportedFrame).slice(0, 3).join(" ")));
     const scoredRows = drawn.map((d, i) => ({ ...d, id: i + 1, human: d.ruleLabel }));
@@ -994,6 +1014,13 @@ export async function runAcceptance() {
     add("a compressed answer is no candidate page", "allowed", truth(classify({ status: 200, headers: { "content-encoding": "gzip" }, body: "" }).label === "body-unavailable", "classify"));
     const beaten = "User-agent: Penthera-Research\nDisallow: /\nAllow: /\n";
     add("the early opt-out agrees with the matcher", "allowed", truth(!wholeSiteStop(beaten) && robotsVerdict(beaten, "/") === "allowed", "robots"));
+
+    // Package 9: a worker that says it withheld and didn't. Raw, callbacks, reports, temp files, stdout, stderr.
+    writeFileSync(join(root, "stubs", "marker.mjs"), `import { parentPort, workerData } from "node:worker_threads"; const fires = ${JSON.stringify(fires("canary-marker"))}; const { row } = workerData; const place = row.host.split(".")[0]; const page = { title: place === "a-title" ? fires : "plain", text: place === "a-text" ? fires : "plain", noscript: place === "a-noscript" ? fires : "plain" }; parentPort.postMessage({ record: { ...row, status: "ok", httpStatus: 200, checks: [], finalHost: row.host, score: 1, counters: {}, evidence: { bodySha256: "h", textWithheld: { kinds: { email: 1 }, fields: 1 }, pageExcerpt: page, excerpt: place === "a-error" ? fires : "plain", others: [{ kind: "x", excerpt: place === "a-others" ? fires : "plain" }] } } });`);
+    const markerRun = await canaryRun(root, "marker");
+    const markerRows = raw(join(markerRun.dir, "run"));
+    add("M: a marker beside text leaves no canary in any file, temp folder, stdout or stderr", "allowed", truth(!markerRun.leaked && markerRows.length === Object.keys(CANARY_PAGES).length && markerRows.every((r) => r.evidence.textWithheld && r.evidence.pageExcerpt.text === undefined && r.evidence.excerpt === undefined), `${markerRows.length} records, ${markerRun.said.length} bytes of output`));
+    auditChainRows(root, add, truth);
 
     add("audit labels complete", "allowed", scored(labels(3)));
     add("audit labels incomplete", "refused", scored(labels(2)), /no label/);

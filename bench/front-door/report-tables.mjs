@@ -1,0 +1,183 @@
+#!/usr/bin/env node
+/**
+ * E20-R2 report: the one step that joins the claims and the audit, so numbers reach the
+ * report by code and neither can appear without the other. Prints no site. It groups
+ * nothing itself, so the floor on small groups stays the analysis's job.
+ *
+ *   node bench/front-door/report-tables.mjs --analysis <analysis.json> --score <score.json> --out <final-report.md> [--run <run folder>]
+ *
+ * Exits 3 and writes nothing unless the two files belong together. With --run, on a machine
+ * that holds the whole run and the key, it also proves the chain from the raw file and
+ * scores the labels again. Amendment 3: the headline stands above the claims, and when the
+ * audit is not estimable, every real-page view says so.
+ */
+import { createHash } from "node:crypto";
+import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { selfHashHolds } from "./record-checks.mjs";
+import { LABEL_STRATA, MIN_AUDIT_FRAME, overWithheldLimit, scoreRun, stateOf, STATE_FIELDS, SUPPRESSED, verifyDraw } from "./validation-sample.mjs";
+
+export const NOT_VALIDATED = "; candidate-page not validated on this run";
+export const SCOPE_LINE = "Audit figures describe non-withheld records, not the run as a whole.";
+export const NOT_THE_RESULT = "These figures are for the frame, and are not the audit's result.";
+const PROVENANCE = Object.freeze(["manifestSha256", "rawSha256", "drawProofSha256", "frameSha256", "sheetSha256", "keySha256"]);
+const DIGEST = /^[0-9a-f]{64}$/;
+const hash = (b) => createHash("sha256").update(b).digest("hex");
+
+const refuse = (why) => { throw new Error(`Refused: ${why}.`); };
+
+/** The headline a frame's own counts give, by the exact test. */
+const headlineOf = (frame) => (Object.values(frame.strata).some((g) => overWithheldLimit(g.withheld, g.eligible)) ? "not estimable" : "stands, on its frame");
+
+/** Why this score can't be reported, from what it says of itself. A hand edit has to agree with the counts. */
+function scoreProblem(s) {
+  const p = s.provenance;
+  for (const name of PROVENANCE) if (!DIGEST.test(p?.[name] ?? "")) return `the score has no ${name}`;
+  for (const role of ["human", "model"]) for (const name of ["labelsSha256", "manifestSha256"]) if (!DIGEST.test(p?.[role]?.[name] ?? "")) return `the score has no ${name} for the ${role} labels`;
+  for (const name of STATE_FIELDS) if (!DIGEST.test(p?.state?.[name] ?? "")) return `the score has no ${name}`;
+  const frame = s.frame;
+  if (!frame?.strata || !frame.labels) return "the score has no frame";
+  if (hash(`${JSON.stringify(frame, null, 2)}\n`) !== p.frameSha256) return "the score's frame is not the one its hash names";
+  for (const [name, g] of Object.entries(frame.strata)) {
+    if (g.frame !== g.eligible - g.withheld || g.withheld < 0 || g.overLimit !== overWithheldLimit(g.withheld, g.eligible)) return `the frame's ${name} row doesn't add up`;
+  }
+  const headline = headlineOf(frame);
+  if (s.headline !== headline || frame.headline !== headline || frame.notEstimable !== (headline === "not estimable")) return "the score's headline doesn't match its frame";
+  for (const [label, strata] of Object.entries(LABEL_STRATA)) {
+    const size = strata.reduce((n, name) => n + frame.strata[name].frame, 0);
+    if (frame.labels[label]?.frame !== size || frame.labels[label].figures !== (size >= MIN_AUDIT_FRAME)) return `the frame's ${label} label doesn't add up`;
+    for (const block of [s.metrics?.[label], s.worstCase?.[label]]) {
+      if (!block) return `the score has no ${label} figures`;
+      if (size < MIN_AUDIT_FRAME && block.suppressed !== SUPPRESSED) return `${label} has figures under 20 in frame`;
+      if (block.suppressed && Object.entries(block).some(([k, v]) => k !== "frame" && k !== "suppressed" && v !== null)) return `suppressed ${label} carries a number`;
+    }
+  }
+  const total = Object.values(frame.labels).reduce((n, l) => n + l.frame, 0);
+  if (total < MIN_AUDIT_FRAME && (s.kappa !== null || s.humanVsAgent?.kappa !== null)) return "kappa has a figure under 20 in frame";
+  return null;
+}
+
+/** Throws unless the two files name one run, one state, and agree with themselves. */
+export function joined(analysis, score) {
+  if (!selfHashHolds(analysis)) refuse("analysis.json was changed after it was written");
+  if (!selfHashHolds(score)) refuse("score.json was changed after it was written");
+  const problem = scoreProblem(score);
+  if (problem) refuse(problem);
+  const a = analysis.provenance, s = score.provenance;
+  if (!DIGEST.test(a?.manifestSha256 ?? "") || a.manifestSha256 !== s.manifestSha256) refuse("the analysis and the score are of different runs: manifestSha256 differs");
+  if (!DIGEST.test(a.rawSha256 ?? "") || a.rawSha256 !== s.rawSha256) refuse("the analysis didn't read the raw file the draw left: rawSha256 differs");
+  for (const name of STATE_FIELDS) if (a.state?.[name] !== s.state[name]) refuse(`the analysis and the score ran under different states: ${name} differs`);
+  // The analysis builds the frame from the raw file on its own, so a frame edited in one file shows.
+  if (JSON.stringify(analysis.auditFrame) !== JSON.stringify(score.frame)) refuse("the analysis and the score hold different audit frames");
+}
+
+/** With the whole run to hand: the chain from the raw file, this checkout, and the score worked out again. */
+export function checkAgainstRun(dir, score, state = stateOf()) {
+  const bound = verifyDraw(dir);
+  if (bound.problem) refuse(bound.problem);
+  for (const name of PROVENANCE) if (score.provenance[name] !== bound[name]) refuse(`this score doesn't match the run: ${name} differs`);
+  const again = scoreRun(dir, { state });
+  if (again.problem) refuse(again.problem);
+  const figures = ({ selfSha256: _self, scoredAt: _at, ...rest }) => JSON.stringify(rest);
+  for (const name of STATE_FIELDS) if (state[name] !== score.provenance.state[name]) refuse(`this checkout is not the score's: ${name} differs`);
+  if (figures(score) !== figures(again)) refuse("this score's figures don't follow from its inputs");
+}
+
+const pct = (v) => (typeof v === "number" ? (v * 100).toFixed(1) : "n/a");
+const ci = (c) => (Array.isArray(c) && typeof c[0] === "number" ? `${pct(c[0])} to ${pct(c[1])}` : "n/a");
+const num = (v) => (typeof v === "number" ? v.toFixed(3) : "n/a");
+
+/** The report's text, in the registered order. Nothing here can fail a check: `joined` ran first. */
+export function assemble(a, s, { checkedAgainstRun = false } = {}) {
+  const out = [];
+  const table = (head, rows) => out.push(`| ${head.join(" | ")} |`, `|${head.map(() => "---").join("|")}|`, ...rows.map((r) => `| ${r.join(" | ")} |`), "");
+  const title = (t) => out.push(`## ${t}`, "");
+  const notEstimable = s.frame.notEstimable;
+  const view = (v) => (v ? `${pct(v.diff)} (${ci(v.ci)}), orgs ${v.orgsA}/${v.orgsB}, ${v.direction}` : "");
+  const real = (cell) => (notEstimable ? `${cell}${NOT_VALIDATED}` : cell);
+  const realView = (v) => (v ? real(view(v)) : "");
+  const p = s.provenance;
+
+  out.push("# E20-R2 results", "");
+  title("Provenance");
+  table(["Input", "SHA-256"], [["Commit", p.commit ?? "n/a"], ["Manifest", p.manifestSha256], ["Raw, after the draw", p.rawSha256], ["Draw proof", p.drawProofSha256], ["Audit frame", p.frameSha256], ["Sheet", p.sheetSha256], ["Key", p.keySha256], ["Human labels", p.human.labelsSha256], ["Human label manifest", p.human.manifestSha256], ["Model labels", p.model.labelsSha256], ["Model label manifest", p.model.manifestSha256], ["Score", s.selfSha256], ["Analysis", a.selfSha256], ["Classifier", p.state.classifierSha256], ["Protocol", p.state.protocolSha256], ["Code", p.state.codeSha256]]);
+  out.push(`Checked against the run folder: ${checkedAgainstRun ? "yes" : "no"}.`, "");
+
+  const over = Object.entries(s.frame.strata).filter(([, g]) => g.overLimit).map(([name, g]) => `${name} ${g.withheld} of ${g.eligible}`);
+  out.push(notEstimable ? `**Headline audit: not estimable.** Over 2.0% withheld: ${over.join("; ")}. It changes no claim's decision.` : "**Headline audit: stands, on its frame.**", "");
+  out.push(SCOPE_LINE, "");
+
+  title("Primary refusal endpoint");
+  table(["Graded", "Signature-backed", "95% interval", "All refusals", "Original rules"], [[a.primaryRefusal?.n ?? "n/a", pct(a.primaryRefusal?.share), ci(a.primaryRefusal?.ci), pct(a.refusals?.all), pct(a.refusals?.registered)]]);
+
+  title(`Claims C1 to C11, on ${(a.level * 100).toFixed(2)}% intervals`);
+  table(["Claim", "Comparison", "Check", "Predicted", "Served", "Real page", "Decision"], a.claims.filter((c) => c.S).map((c) => [c.id, c.label, `\`${c.check}\``, c.predicted, view(c.S), realView(c.R), c.decision]));
+
+  title("CSP controls scripts");
+  table(["Claim", "Comparison", "Served", "Real page", "Decision"], (a.cspControlsScripts ?? []).map((c) => [c.id, c.label, view(c.S), realView(c.R), c.decision]));
+
+  title("Standardized figures");
+  const standard = (d) => (d ? `${pct(d.diff)} (${ci(d.ci)})` : "");
+  table(["Claim", "Served", "Real page"], Object.keys(a.standardized ?? {}).map((id) => [id, standard(a.standardized[id]), a.standardizedR?.[id] ? real(standard(a.standardizedR[id])) : ""]));
+
+  title("The E20-matched reading");
+  table(["Claim", "Comparison", "Served", "Real page", "Decision"], (a.replicationAsE20 ?? []).map((c) => [c.id, c.label, view(c.S), realView(c.R), c.decision]));
+
+  title("C12 to C15, descriptive");
+  table(["Claim", "What", "n", "Value", "Interval or lower bound"], a.claims.filter((c) => !c.S).map((c) => [c.id, c.label, c.n ?? "n/a", typeof c.diff === "number" ? pct(c.diff) : num(c.kappa), c.ci ? ci(c.ci) : `${num(c.lower)} (threshold ${c.threshold})`]));
+
+  title("Worst-case bounds of the claims");
+  table(["Claim", "Low", "High", "Coverage A", "Coverage B"], Object.entries(a.bounds ?? {}).map(([id, b]) => [id, pct(b.low), pct(b.high), pct(b.coverageA), pct(b.coverageB)]));
+  title("Sites skipped, per list and reason");
+  const reasons = [...new Set(Object.values(a.skipsByCohort ?? {}).flatMap((c) => Object.keys(c)))].sort();
+  table(["List", ...reasons], Object.entries(a.skipsByCohort ?? {}).map(([c, r]) => [c, ...reasons.map((k) => r[k] ?? 0)]));
+  title("DNS coverage");
+  table(["List", "Read", "Domain exists", "No such domain", "Unknown"], Object.entries(a.dnsCoverage ?? {}).map(([c, d]) => [c, d.read, d.exists, d.nxdomain, d.unknown]));
+
+  const w = a.textWithheld;
+  title("Text withheld");
+  out.push(`${w.records} of ${w.of} records with evidence, ${pct(w.share)}%. Findings by kind: ${JSON.stringify(w.kinds)}. Fires are counts, never verdicts.`, "");
+  for (const [name, group] of [["List", w.byCohort], ["Audit stratum", w.byStratum], ["Label", w.byLabel], ["HTTP status", w.byStatus], ["Edge", w.byEdge]]) {
+    table([name, "Withheld", "Of", "Share"], Object.entries(group ?? {}).map(([k, v]) => [k, v.records, v.of, `${pct(v.of ? v.records / v.of : 0)}%`]));
+  }
+
+  title("The audit's detail");
+  out.push(`Withheld overall: ${s.frame.withheld} of ${s.frame.eligible}, ${pct(s.frame.share)}%. ${s.rows} rows, ${s.unsure} unsure.`, "");
+  table(["Stratum", "Eligible", "Withheld", "Share", "Over 2.0%", "Frame", "Drawn", "Target", "Shortfall"], Object.entries(s.frame.strata).map(([k, g]) => [k, g.eligible, g.withheld, `${pct(g.share)}%`, g.overLimit ? "yes" : "no", g.frame, g.drawn, g.target, g.shortfall]));
+  title(notEstimable ? "Frame figures, not the audit's result" : "Audit figures, on the frame");
+  const cell = (block, text) => block.suppressed ?? text;
+  table(["Label", "Frame", "Precision", "95% interval", "Worst case", "Recall", "95% interval", "Worst case"], Object.entries(s.metrics).map(([l, m]) => {
+    const c = s.worstCase[l];
+    return [l, s.frame.labels[l].frame, cell(m, pct(m.precision)), cell(m, ci(m.precisionCi)), cell(c, pct(c.precision)), cell(m, pct(m.recall)), cell(m, ci(m.recallCi)), cell(c, pct(c.recall))];
+  }));
+  if (notEstimable) out.push(NOT_THE_RESULT, "");
+  const kappa = s.kappaSuppressed ?? `${num(s.kappa)}, with unsure as disagreement ${num(s.kappaUnsureAsDisagreement)}`;
+  const model = s.humanVsAgent.kappaSuppressed ?? `kappa ${num(s.humanVsAgent.kappa)}, ${s.humanVsAgent.disagreements} disagreements`;
+  out.push(`${notEstimable ? "Frame only, not the audit's result: kappa" : "Kappa"} ${kappa}. Kappa has no worst-case bound. Human against the model, ${s.humanVsAgent.bothAnswered} rows: ${model}.`, "");
+
+  if (a.privacyDeviation) { title("Privacy deviation"); out.push(`A person reviewed and recorded a false fire. Note hash \`${a.privacyDeviation.noteSha256}\`.`, ""); }
+  return out.join("\n");
+}
+
+export function main(args, { log = console.log, fail = console.error, state } = {}) {
+  const at = (flag) => (args.includes(flag) ? args[args.indexOf(flag) + 1] : undefined);
+  const [analysisFile, scoreFile, outFile, run] = [at("--analysis"), at("--score"), at("--out"), at("--run")];
+  if (!analysisFile || !scoreFile || !outFile) { fail("Usage: report-tables.mjs --analysis <analysis.json> --score <score.json> --out <final-report.md> [--run <run folder>]"); return 2; }
+  try {
+    for (const file of [analysisFile, scoreFile]) if (!existsSync(file)) refuse(`there is no ${file}`);
+    const analysis = JSON.parse(readFileSync(analysisFile, "utf8")), score = JSON.parse(readFileSync(scoreFile, "utf8"));
+    joined(analysis, score);
+    if (run) checkAgainstRun(run, score, state);
+    const text = `${assemble(analysis, score, { checkedAgainstRun: Boolean(run) })}\n`;
+    writeFileSync(`${outFile}.tmp`, text, { mode: 0o600 });
+    renameSync(`${outFile}.tmp`, outFile);
+    log(JSON.stringify({ report: outFile, notEstimable: score.frame.notEstimable, checkedAgainstRun: Boolean(run) }));
+    return 0;
+  } catch (e) {
+    fail(e.message.startsWith("Refused") ? e.message : `Refused: ${e.message}.`);
+    return 3;
+  }
+}
+
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) process.exitCode = main(process.argv.slice(2));

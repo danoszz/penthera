@@ -19,6 +19,7 @@ import { fileURLToPath } from "node:url";
 import { siteKey, siteOrg } from "./psl.mjs";
 import { isEligible, selfHashed, unfinishedRun, withheldCounts } from "./record-checks.mjs";
 import { PREREG_R, recordedHashR, studyState } from "./replicate.mjs";
+import { auditFrame } from "./validation-sample.mjs";
 import { seeded } from "./replicate.mjs";
 import { newcombe } from "./run.mjs";
 
@@ -421,7 +422,7 @@ export function traitsByCohort(rows, checks = KAPPA_CHECKS, min = 20) {
   return Object.fromEntries(cohorts.map((c) => [c, traitTable(inCohort(rows, c), checks, min)]));
 }
 
-export function main(args, { fail = console.error, preregText } = {}) {
+export function main(args, { fail = console.error, preregText, state = studyState() } = {}) {
   const at = (n) => args[args.indexOf(n) + 1];
   if (!args.includes("--pass1")) { fail("Usage: analyze-r.mjs --pass1 <raw> [--pass2 <raw>] --e20 <tranco raw> <yc raw> [--out file]"); return 2; }
   const problem = unfinishedRun(dirname(at("--pass1")));
@@ -461,6 +462,7 @@ export function main(args, { fail = console.error, preregText } = {}) {
   out.challengeByEdge = challengeByEdge(p1);
   out.skipsByCohort = skipsByCohort(all);
   out.textWithheld = withheldCounts(all);
+  out.auditFrame = auditFrame(all);
   out.cspControlsScripts = cspValueClaims(p1);
   if (all.some((r) => r.dns?.listed)) {
     const decided = dnsClaims(all);
@@ -472,9 +474,9 @@ export function main(args, { fail = console.error, preregText } = {}) {
   }
   if (args.includes("--industries")) out.industries = industryTable(p1, new Map(readFileSync(at("--industries"), "utf8").split(/\r?\n/).slice(1).filter(Boolean).map((l) => l.split(",")).map(([h, i]) => [h, i])));
   if (args.includes("--e20-excluded")) out.replicationAsE20 = replicationAsE20(p1, new Set(readFileSync(at("--e20-excluded"), "utf8").split(/\r?\n/).map((l) => l.trim().toLowerCase()).filter(Boolean)));
-  // The run this came from and the state it ran under, for the final report to check.
+  // The run this came from and the state it ran under, for the report to check.
   const sha = (f) => createHash("sha256").update(readFileSync(f)).digest("hex");
-  const { codeSha256, protocolSha256, classifierSha256, pslSha256, lockfileSha256 } = studyState();
+  const { codeSha256, protocolSha256, classifierSha256, pslSha256, lockfileSha256 } = state;
   out.provenance = { manifestSha256: sha(join(dirname(at("--pass1")), "manifest.json")), rawSha256: sha(at("--pass1")), state: { codeSha256, protocolSha256, classifierSha256, pslSha256, lockfileSha256 } };
   const text = JSON.stringify(selfHashed(JSON.parse(JSON.stringify(out))), null, 2) + "\n";
   if (args.includes("--out")) writeFileSync(at("--out"), text); else process.stdout.write(text);
