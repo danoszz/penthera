@@ -311,9 +311,10 @@ const DOMAIN_LABEL = /[\p{L}\p{N}][\p{L}\p{N}\p{M}-]*/uy;
 const DOMAIN_JOIN = /[.。．｡](?=[\p{L}\p{N}_-])| [.。．｡] ?| dot | ?[([{] ?dot ?[)\]}] ?/uy;
 const SENTENCE_DOT = /[.。．｡] /y;
 const LAST_LABEL = /^(?:\p{L}[\p{L}\p{M}]+|xn--[a-z0-9-]*[a-z0-9])$/u;
-// What may close a token: a space, the end, or closing punctuation up to one of them. So `x.com/a`, `x.com?a=b`,
-// `x.com:443`, `x.com..y` and `x.com-` aren't domains.
-const TOKEN_EDGE = /[,;:!?.)\]}>"'`”’»]*(?: |$)/y;
+// A candidate is whole unless what follows shows it goes on as something else. A fire costs one record's text
+// and a miss keeps an address, so this lists what rejects and all else is an edge. Punctuation of a query, fragment,
+// port or sentence only counts up to a space or the end, so `x.com:443`, `x.com?a=b` and `x.com..y` aren't domains.
+const TOKEN_EDGE = /[.:?#。．｡]*(?:$| |[^\s\p{L}\p{N}\p{M}_\-/\\@=&%+~.:?#。．｡])/uy;
 // A name holds 253 characters, and spelled dots or spaces around them add a few to each label.
 const MAX_DOMAIN_CHARS = 1024;
 

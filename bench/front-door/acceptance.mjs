@@ -818,6 +818,7 @@ export async function runAcceptance() {
     add("R: a real pass, real analysis, score and report, checked against the run", "allowed", { code: realReport, said: realSaid.join(" ") || "reported" });
     const realText = existsSync(join(thirdDir, "final-report.md")) ? readFileSync(join(thirdDir, "final-report.md"), "utf8") : "";
     const realFrame = JSON.parse(readFileSync(join(thirdDir, "audit-frame.json"), "utf8"));
+    add("R: a report from a finished run names its commit", "allowed", truth(Boolean(realManifest.gitAtStart?.commit) && realText.includes(`| Commit | ${realManifest.gitAtStart.commit} |`), "gitAtStart"));
     const realRows = realText.split("\n").filter((l) => /^\| C(?:1|2|3|4|5|8|9|10|11) \|/.test(l));
     add("R: real-page views say so exactly when the headline is not estimable", "allowed", truth(realRows.length > 0 && (realFrame.notEstimable ? realText.includes(NOT_VALIDATED) : !realText.includes(NOT_VALIDATED)) && realText.indexOf("Headline audit") < realText.indexOf("## Claims"), `headline ${realFrame.headline}, ${realText.split(NOT_VALIDATED).length - 1} warnings`));
     const headerMiss = join(falseFired.results, "header-miss");

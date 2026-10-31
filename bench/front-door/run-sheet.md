@@ -254,7 +254,7 @@ node bench/front-door/validation-sample.mjs draw $RUN
 
 The analysis needs the pass 1 and E20 raw files, which stay on the laptop, so the server can't run it. The key stays on the server until both label files exist.
 
-`[laptop]` A clean, detached checkout of the run's commit, used for the analysis and the report. Take the commit from `git.commit` in `manifest.json`. Nothing else may be open in it:
+`[laptop]` A clean, detached checkout of the run's commit, used for the analysis and the report. Take the commit from `gitAtStart.commit` in `manifest.json`. Nothing else may be open in it:
 
 ```bash
 git clone --no-hardlinks <repository> ~/study/e20r-checkout && git -C ~/study/e20r-checkout checkout --detach <run commit>
@@ -264,6 +264,12 @@ git clone --no-hardlinks <repository> ~/study/e20r-checkout && git -C ~/study/e2
 
 ```bash
 npm ci && npx -y node@22.23.4 -v
+```
+
+`[laptop]` The same run, named as on the server:
+
+```bash
+export RUN=bench/front-door/results/e20r-pass3
 ```
 
 `[laptop]` Pull the run folder without the key. It still holds the sample's text, so it never goes into a chat:
@@ -360,8 +366,8 @@ Every failed run ends in a prune or a purge. A prune reads the file back and pri
 |---|---|---|
 | Usage error | 2 | Fix the command. Nothing ran. |
 | Refused by the gate | 3 | Read the reason. Nothing ran. |
-| Something changed during the run | 4 | Do what the runner printed. Pilot: seal, then prune. Pass 2: prune. The run decides nothing. |
-| Stopped: resolver failures, stop file, source address, signal | 5 | Do what the runner printed. Pilot: seal, then prune. Pass 2: prune, and report what ran as partial. |
+| Something changed during the run | 4 | Do what the runner printed. Pilot: seal, then prune. A pass: prune. The run decides nothing. |
+| Stopped: resolver failures, stop file, source address, signal | 5 | Do what the runner printed. Pilot: seal, then prune. A pass: prune, and report what ran as partial. |
 | Hard kill, crash or full disk | none | Prune only. The run counts as interrupted. |
 | Prune refuses, or the privacy report isn't clean | 3 or 1 | Stop. A person reviews the flagged fields first (below). |
 

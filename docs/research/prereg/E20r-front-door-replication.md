@@ -22,7 +22,7 @@
 | Industry map SHA-256 | `78df4910d953379f21d935aeb3ef658d85cbef036539e1a31362c9ad7e26e075` |
 | E20 exclusion file SHA-256 | `246127f639968afc906d59f155f6a993982f3a33c0655718234955319ebe4c34` |
 | Legacy classifier SHA-256 | `7023106f7bd73c1e4122d80e9479f63a4a04091f1426327be70621951fe71d3b` (`bench/front-door/legacy/classify-7023106f.mjs`, the detector that stopped pass 2) |
-| Frozen classifier SHA-256 | `942b002aab6dfe630ce589831e2ca4e90c6409a1efa1cca43abdfb9c06ca2245` (`bench/front-door/classify.mjs`) |
+| Frozen classifier SHA-256 | `449f964708f7f3f165c4f5f1a6d43600890c864dc94e90f78c77d4fd4abc0a99` (`bench/front-door/classify.mjs`) |
 | Public Suffix List SHA-256 | `d3e6243b51695327984abb3e2a5aa7077096867f75121e031e6a5a3840ca8bcd` (commit `9dfbe81931367b3f0af21035c36ae7eeb830dd88`, fetched 30 Oct 2026, private suffixes included) |
 | Registration commit | The commit that merges this file to `main` |
 | T1k list SHA-256 | `d670a3c1910fe7baa4883dcb8320b1ec99d7d29f9d22954b9288ae678540674e` (`tranco-ZJ8PG-top1000.csv`) |
@@ -827,10 +827,9 @@ hash. It can't sit elsewhere, because the detector is what the stop reads.
 - **What changed.** Inside `scrubMisses`, the helpers it calls and the constants they use, and nowhere
   else in the file. After a bare `at`, or an `@` set apart by spaces or brackets, what follows counts
   only if it is a whole domain: past an opening bracket or quote, one or more labels joined by dots, the
-  word `dot` or a bracketed dot, ending at a space, the end of the text or closing punctuation, in a label of at least two letters, or in
-  punycode. A label starts with a letter or number, ends with one or a combining mark, may hold hyphens
+  word `dot` or a bracketed dot, ending in a label of at least two letters, or in punycode, that nothing carries on from. A label starts with a letter or number, ends with one or a combining mark, may hold hyphens
   inside, and takes Unicode letters and numbers. `$29.`, `5:30.`, `Joe's.`, `100%.` and paths hold
-  characters no label can, and web URLs and anything followed by a path, query or port fail the same test. What precedes it must look like a local
+  characters no label can, and web URLs, and anything followed by a path, query, fragment or port, fail the same test. What precedes it must look like a local
   part, and one of our own scrub tokens or `<redacted>` never does. Wide forms, invisible characters and
   spaces spelled as entities don't break the reading. A JWT now has to open at a token's edge, so
   `keyJ.value` isn't one.
@@ -840,7 +839,7 @@ hash. It can't sit elsewhere, because the detector is what the stop reads.
   backstop for retained addresses, so it stays strict there, and a fire no longer costs a run. See
   "Withheld text".
 - **Old hash.** `7023106f7bd73c1e4122d80e9479f63a4a04091f1426327be70621951fe71d3b`.
-- **New hash.** `942b002aab6dfe630ce589831e2ca4e90c6409a1efa1cca43abdfb9c06ca2245`.
+- **New hash.** `449f964708f7f3f165c4f5f1a6d43600890c864dc94e90f78c77d4fd4abc0a99`.
 - **No graded result changes.** `classify`, `classifyRegistered`, `scrub`, `evidenceOf` and every other
   export keep their source, byte for byte, so a label, a stored excerpt or a grade can't differ. The detector's reach changed in both directions, so its effect was measured, below. Pilot round 1 isn't regraded, and its seal isn't redone. Its raw file is pruned,
   so a replay would read no excerpts, and we don't count one as evidence.

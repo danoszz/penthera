@@ -61,7 +61,7 @@ The audit sheet goes to one labeler and to a hosted model. The 12-month deletion
 - `fragment` and `longHex` fires can't be tightened by what a character may be, so they are left to withholding.
 - Withheld records leave the audit's frame, and they aren't missing at random. Audit metrics describe non-withheld records, with worst-case bounds beside them. The headline audit is not estimable past 2.0% withheld in any stratum, so in a stratum under 50 records one withheld record decides it. A label whose pooled frame is under 20 gives no figures of its own.
 - Withholding covers page and error text. A miss in a header, cookie, DNS field or check still goes to the final privacy report and a person.
-- A name that runs straight on after closing punctuation, as Chinese and Japanese text can, or a possessive such as `example.x.com's`, isn't read as a whole domain.
+- The scrub runs before the cut, and the detector reads what is stored after it. So an address form only the detector catches can be split at the 4,096-character cut, as `john at exam`, and stay. It is rare, and it isn't complete enough to fire.
 - A bare `at` needs a local part in the 16 characters before it. Spelled forms other than `dot`, such as `john at example d0t com`, aren't read.
 - The frozen detector in `legacy/` runs only for the legacy finding report. That report names record order and field path, so it stays on the server.
 - Pass 3 learns which sites to skip from the stopped pass's pruned raw file. A purge deletes that file, so a purged pass 2 can't be followed by pass 3.

@@ -362,7 +362,7 @@ export function scoreRun(dir, { state = studyState(), ...opts } = {}) {
   const side = ({ labelsSha256, manifestSha256 }) => ({ labelsSha256, manifestSha256 });
   const frame = JSON.parse(readFileSync(join(dir, "audit-frame.json"), "utf8"));
   const scored = scoreLabels(JSON.parse(readFileSync(join(dir, "validation-key.json"), "utf8")), human.text, model.text, { frame, ...opts });
-  return JSON.parse(JSON.stringify({ ...scored, provenance: { ...bound, human: side(human), model: side(model), state: stateOf(state), runState: stateOf(manifest), runRuntimeSha256: manifest.runtimeSha256, aggregateSha256: manifest.aggregateSha256 ?? null, commit: manifest.git?.commit ?? null } }));
+  return JSON.parse(JSON.stringify({ ...scored, provenance: { ...bound, human: side(human), model: side(model), state: stateOf(state), runState: stateOf(manifest), runRuntimeSha256: manifest.runtimeSha256, aggregateSha256: manifest.aggregateSha256 ?? null, commit: manifest.gitAtStart?.commit ?? manifest.git?.commit ?? null } }));
 }
 
 /** All text out, for a pilot or for a pass that stopped, and read back to prove it. */
