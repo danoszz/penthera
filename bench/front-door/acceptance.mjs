@@ -891,6 +891,7 @@ export async function runAcceptance() {
     add("A8: callbacks and aggregation never see the text", "allowed", truth(seenByCallback.length === 8 && !seenByCallback.some((r) => Object.values(SAMPLES).some((t) => r.includes(t))) && !Object.values(SAMPLES).some((t) => JSON.stringify(kindRun.aggregate).includes(t)), "onRecord and the aggregate"));
 
     const pilotAt = (name) => ({ ...fx, results: join(root, name), roundsLog: join(root, `${name}.log`) });
+    const sealOf = (at) => join(at.results, "e20r-pilot-1");
     // Every normal DMARC record is stored as `rua=mailto:<redacted>@...`, by the real read, so a round must seal with one.
     const withDmarc = pilotAt("pilot-dmarc");
     const dmarcTxt = (name) => (name.startsWith("_dmarc.") ? Promise.resolve([["v=DMARC1; p=reject; rua=mailto:dmarc@example.com"]]) : stub());
@@ -899,7 +900,6 @@ export async function runAcceptance() {
     const dmarcStored = rawOf(sealOf(withDmarc)).filter((r) => r.dns?.listed?.dmarcRecord?.includes("<redacted>@example.com")).length;
     const dmarcGate = await gate(withDmarc);
     add("a round whose records hold a real DMARC rua seals and clears the gate", "allowed", { code: dmarcSealed || dmarcGate.code || (dmarcStored ? 0 : 3), said: `${dmarcStored} records hold it, ${dmarcGate.said}` }, /authorized/);
-    const sealOf = (at) => join(at.results, "e20r-pilot-1");
     for (const n of [0, 1, 2]) {
       Object.assign(plant, { text: fires(`pilot-form-${n}`), pages: n, errors: 0 });
       const at = pilotAt(`pilot-${n}`);
