@@ -1846,7 +1846,7 @@ h1, h2, h3 { text-wrap: balance; }
  * every other control is white (the ink colour, so black in the light
  * theme), so the eye lands on blue. */
 /* --fix-top: where the header ends, measured by ui.js (the logotype scales with the viewport). */
-.hero[data-mode="fix"] :is(.poster, .hero-text, .loop), .hero[data-mode="fix"] + .slab { display: none; }
+.hero[data-mode="fix"] :is(.poster, .hero-text, .loop), .hero[data-mode="fix"] + .slab, .hero[data-mode="fix"] + .slab + .get { display: none; }
 .report-back {
   display: inline-flex; align-items: center; gap: 10px; min-height: var(--target); padding: 0 14px 0 10px;
   font-family: var(--px); font-size: var(--t-small); line-height: 1; color: var(--text-1); background: none; border: 1px solid var(--hair); cursor: pointer;
@@ -2443,4 +2443,34 @@ h1.ask-sub + .ask-sub { margin-top: var(--sp-12); }
 @media (prefers-reduced-motion: reduce) {
   .consent[open], .prompt-dialog[open] { animation: none; }
   .btn:active, .glass:active, .cmd:active, .brand:active, .gopro-btn:active, .rail-links a:active, .rail-download:active { transform: none; }
+}
+
+/* ── Home, short ──────────────────────────────────────────────────────── */
+
+/* The problem beside the film, then Get started on the same grey, so the page
+ * changes ground once here. Headlines run wide and the steps between sections
+ * close up. Last in the file, so it wins over the section rules above. */
+main > .slab { padding-bottom: var(--sp-64); }
+main > .slab + .get { padding-top: 0; padding-bottom: var(--sp-80); background: var(--slab); }
+:is(.get, .ba, .tour, .trust, .compare, .faq, .about) > h2 { max-width: 24ch; }
+main > :is(.ba, .tour, .compare, .faq, .about) { padding-top: var(--sp-96); }
+main > .trust { margin-top: var(--sp-96); padding-top: var(--sp-96); padding-bottom: var(--sp-96); }
+.about { padding-bottom: var(--sp-96); }
+.trust .pb, .trust .limits { margin-top: var(--sp-64); }
+.get .start-here { margin-top: var(--sp-16); }
+.get .ways { margin-top: var(--sp-32); }
+.get .prompts-title { margin-top: 0; }
+.get .agent + .agent { margin-top: var(--sp-4); }
+.trust .pb-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.get .hero-actions { margin: var(--sp-24) 0 var(--sp-24); }
+.agents-body { padding-bottom: var(--sp-24); }
+@media (min-width: 1000px) {
+  main > .slab { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-48); align-items: center; }
+  .slab .hero-text, .slab .loop { margin: 0; }
+  .map-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .map-cell, .map-cell:nth-child(even) { border-top: 0; border-left: 1px solid var(--frame); padding: var(--sp-24); }
+  .map-cell:first-child { border-left: 0; }
+  .map-n { font-size: var(--t-h2); }
+  .trust .pb-cards { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .faq-list { max-width: none; display: grid; grid-template-columns: 1fr 1fr; column-gap: var(--sp-48); align-items: start; }
 }

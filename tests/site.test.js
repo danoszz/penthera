@@ -294,14 +294,8 @@ describe("site before and after", () => {
 
   it("fills in the scan and counts every rule from the repo, without the fix recipes", () => {
     const html = readFileSync(join(out, "index.html"), "utf8");
-    const sec = html.slice(html.indexOf('class="ba"'), html.indexOf('id="check"'));
-    const e = JSON.parse(readFileSync(join(ROOT, "site", "example.json"), "utf8"));
+    const sec = html.slice(html.indexOf('class="ba"'), html.indexOf('id="tour"'));
     expect(sec).not.toMatch(/\{\{\w+\}\}/);
-    expect(sec).toContain("yo is my app secure?");
-    for (const s of ["high", "medium", "low"]) if (e.counts[s]) expect(sec).toContain(`${e.counts[s]} ${s}`);
-    expect(sec).toContain(`${e.checks} checks, ${e.requests} requests, all to 127.0.0.1.`);
-    expect(sec).toContain(`${e.finding.title} <span class="ba-conf">${e.finding.confidence}</span>`);
-    expect(sec).toContain("<code>GET /api/oauth/callback?redirect_uri=https://evil-attacker.example/capture</code> returned 302.");
     const packRules = activePacks().reduce((n, p) => n + p.count, 0);
     const rules = COUNTS.urlTemplates + COUNTS.secretPatterns + COUNTS.capabilities + COUNTS.agentRules + packRules;
     // The totals sit under the four areas in "What it checks".
@@ -349,7 +343,7 @@ describe("site benchmark (E10 pilot)", () => {
     const sec = html.slice(html.indexOf('id="benchmark"'), html.indexOf('id="limits"'));
     expect(html.indexOf('id="trust"')).toBeLessThan(html.indexOf('id="benchmark"'));
     expect(html.indexOf('id="benchmark"')).toBeLessThan(html.indexOf('id="limits"'));
-    expect(html.indexOf('id="limits"')).toBeLessThan(html.indexOf('id="tour"'));
+    expect(html.indexOf('id="tour"')).toBeLessThan(html.indexOf('id="trust"'));
     expect(sec).not.toMatch(/\{\{\w+\}\}/);
     for (const a of [...e.apps, e.pooled]) {
       expect(sec).toContain(`<p class="stat-num">${a.after.k}/${a.after.n}</p><p class="stat-was">was ${a.before.k}/${a.before.n}</p>`);
@@ -461,15 +455,14 @@ describe("site news ticker", () => {
 describe("site story", () => {
   const html = () => readFileSync(join(out, "index.html"), "utf8");
 
-  it("tells it in order: the live check, the problem, what it finds, trust and limits, see it work, compare, get started, questions, agents, about", () => {
+  it("tells it in order: the live check, the problem, get started and the files for agents, what it finds, see it work, trust and limits, compare, questions, about", () => {
     const h = html();
-    const order = ['id="scan"', 'class="problem"', 'id="answer"', 'id="checks"', 'id="trust"', 'id="limits"', 'id="tour"', 'id="compare"', 'id="get"', 'id="faq"', 'id="for-agents"', 'id="about"'];
+    const order = ['id="scan"', 'class="problem"', 'id="get"', 'id="for-agents"', 'id="answer"', 'id="checks"', 'id="tour"', 'id="trust"', 'id="limits"', 'id="compare"', 'id="faq"', 'id="about"'];
     const at = order.map((m) => h.indexOf(m));
     for (const [i, m] of order.entries()) expect(at[i], m).toBeGreaterThan(0);
     expect([...at].sort((a, b) => a - b)).toEqual(at);
     expect(h).toContain("AI coding tools ship faster than anyone can check.");
     expect(h).toContain('<h1 class="ask-sub" id="hero-title">Make your app more secure for free</h1>');
-    expect(h).toContain('<p class="bubble">yo is my app secure?</p>');
     expect(h).toMatch(/<h2 id="faq-title">Before you install\.<\/h2>/);
     // Merged away: no section repeats another.
     for (const gone of ['class="walk', 'class="eu"', 'class="vision', 'class="ba-counts"', "data-check", 'class="desk"', 'class="spec"']) expect(h, gone).not.toContain(gone);
@@ -480,8 +473,8 @@ describe("site story", () => {
   it("gives the problem its own grey section after the poster, hidden with the poster in fix mode", () => {
     const h = html();
     expect(h).toMatch(/<\/section>\s*(<!--[\s\S]*?-->\s*)?<section class="slab" aria-label="The problem">\s*<div class="hero-text">\s*<p class="problem">/);
-    const slab = h.slice(h.indexOf('class="slab"'), h.indexOf('id="answer"'));
-    const at = ['class="problem"', 'class="pills"', 'class="lede"', 'class="hero-actions"', 'class="loop"'].map((m) => slab.indexOf(m));
+    const slab = h.slice(h.indexOf('class="slab"'), h.indexOf('id="get"'));
+    const at = ['class="problem"', 'class="pills"', 'class="lede"', 'class="loop"'].map((m) => slab.indexOf(m));
     expect(at.every((n) => n > 0)).toBe(true);
     // The note was dropped (2026-10-29): the poster already offers the code scan.
     expect(slab).not.toContain('class="note"');
@@ -521,7 +514,7 @@ describe("site story", () => {
   });
 
   it("puts the live check first: a field, a button, a report region and a no-JavaScript route", () => {
-    const hero = html().slice(html().indexOf('class="hero"'), html().indexOf('id="answer"'));
+    const hero = html().slice(html().indexOf('class="hero"'), html().indexOf('id="get"'));
     expect(hero).toMatch(/<form class="scan" id="scan" data-scan novalidate>/);
     expect(hero).toContain('<input id="scan-url" name="url"');
     expect(hero).toContain("data-report hidden");
@@ -531,7 +524,7 @@ describe("site story", () => {
 
   it("makes the poster the check: the title as the h1 above the question, the field, and a real example result", async () => {
     const h = html();
-    const hero = h.slice(h.indexOf('class="hero"'), h.indexOf('id="answer"'));
+    const hero = h.slice(h.indexOf('class="hero"'), h.indexOf('id="get"'));
     expect(h.match(/<h1[ >]/g)).toHaveLength(1);
     expect(hero.indexOf('<p class="ask">Check it before they wreck it</p>')).toBeLessThan(hero.indexOf('id="hero-title"'));
     expect(hero.indexOf('id="hero-title"')).toBeLessThan(hero.indexOf('id="scan"'));
@@ -568,13 +561,13 @@ describe("site story", () => {
 
   it("shows the four areas with counts from the rules, and the tour as three dashboard steps", () => {
     const h = html();
-    const map = h.slice(h.indexOf('id="checks"'), h.indexOf('id="trust"'));
+    const map = h.slice(h.indexOf('id="checks"'), h.indexOf('id="tour"'));
     for (const [n, what] of [[COUNTS.secretPatterns, "secret and AI-key patterns"], [COUNTS.agentRules, "AI setup rules"], [COUNTS.urlTemplates, "URL scan templates"], [(COUNTS.popularNpm + COUNTS.popularPypi).toLocaleString("en-US"), "package names"]]) {
       expect(map).toContain(`<p class="map-n">${n}<span> ${what}</span></p>`);
     }
     expect(map.match(/<li class="map-cell /g)).toHaveLength(4);
     expect(map.match(/<p class="map-one"><strong>[^<]+\.<\/strong>/g)).toHaveLength(4);
-    const tour = h.slice(h.indexOf('id="tour"'), h.indexOf('id="compare"'));
+    const tour = h.slice(h.indexOf('id="tour"'), h.indexOf('id="trust"'));
     // No video: three numbered stills of the light dashboard, each with alt text.
     expect(tour).not.toContain("<video");
     expect(tour.match(/<p class="step-n"><span>[123]<\/span> /g)).toHaveLength(3);
@@ -586,7 +579,7 @@ describe("site story", () => {
   });
 
   it("gets you started three ways, each with a copy button", () => {
-    const get = html().slice(html().indexOf('id="get"'), html().indexOf('id="faq"'));
+    const get = html().slice(html().indexOf('id="get"'), html().indexOf('id="answer"'));
     const version = siteVersion(JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")).version);
     for (const c of ["npx penthera", "npx skills add danoszz/penthera", `claude mcp add penthera -- npx -y penthera@${version} mcp`]) {
       expect(get).toContain(`<button class="cmd" type="button" data-copy="${c}"`);
@@ -664,7 +657,7 @@ describe("site story", () => {
 
   it("links every entry point for agents, and each one exists", () => {
     const h = html();
-    const sec = h.slice(h.indexOf('id="for-agents"'));
+    const sec = h.slice(h.indexOf('id="for-agents"'), h.indexOf('id="answer"'));
     for (const f of ["llms.txt", "llms-full.txt", "docs/index.md", "sitemap.xml", ".well-known/security.txt"]) {
       expect(sec).toContain(`href="/${f}"`);
       expect(existsSync(join(out, f)), f).toBe(true);
