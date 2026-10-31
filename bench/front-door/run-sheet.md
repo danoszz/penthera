@@ -186,7 +186,7 @@ node bench/front-door/pilot-report.mjs --privacy $RUN
 node bench/front-door/validation-sample.mjs draw $RUN
 ```
 
-`draw` prints `sampled` and `withheldFromDraw`, and writes `audit-frame.json`. Withheld records keep their label and grade, and stay out of the audit's frame. A stratum marked `estimable: false` is reported as not estimable. There is no further pass.
+`draw` prints `sampled` and `withheldFromDraw`, and writes `audit-frame.json`. Withheld records keep their label and grade, and stay out of the audit's frame. The headline audit is not estimable if any stratum is over 2.0% withheld: `headline` says so, and `score` prints it first. Nothing follows from that but the report: no further pass, draw or labels.
 
 ## 5. Bring the data to the laptop
 

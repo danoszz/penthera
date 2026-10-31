@@ -53,11 +53,11 @@ The audit sheet goes to one labeler and to a hosted model. The 12-month deletion
 ## After the stopped pass 2
 
 - The detector now skips a bracketed `at` whose next word is one of our own tokens. Stored text is scrubbed, so that neighbour is ours unless a page itself prints such a token.
-- After a bare `at`, the detector counts only what could be a domain: a label of letters, digits and hyphens, past an opening bracket or quote, then a dot and a word. It still finds `john at (example.com)`, which the scrub leaves in place, and it can't tell that form from prose such as `Look at (example.com). Open daily`.
+- After a bare `at`, the detector counts only what could be a domain: past an opening bracket or quote, a label that starts and ends with a letter or number, then a dot and a word. Paths no longer fire, which reverses the earlier package's choice, because `/` can't be in a label. It still finds `john at (example.com)`, which the scrub leaves in place, and it can't tell that form from prose such as `Look at (example.com). Open daily`.
 - Withholding protects the study's write paths. It doesn't protect process memory, swap, a core dump or a compromised host.
 - From pilot round 2, a fire doesn't stop a run. The record's title, text, `noscript` and error excerpts are withheld before anything is written. So a real address that fires is never studied, and nobody can say afterwards whether a fire was true. Fires are a count, per kind, never a verdict.
 - `fragment` and `longHex` fires can't be tightened by what a character may be, so they are left to withholding.
-- Withheld records leave the audit's frame, and they aren't missing at random. Audit metrics describe non-withheld records, with worst-case bounds beside them. A stratum under 20 rows or with over 10% withheld says "not estimable". Those two numbers are judgment calls.
+- Withheld records leave the audit's frame, and they aren't missing at random. Audit metrics describe non-withheld records, with worst-case bounds beside them. The headline audit is not estimable past 2.0% withheld in any stratum, so in a stratum under 50 records one withheld record decides it. A frame under 20 gives no figures of its own.
 - Withholding covers page and error text. A miss in a header, cookie, DNS field or check still goes to the final privacy report and a person.
 - The frozen detector in `legacy/` runs only for the legacy finding report. That report names record order and field path, so it stays on the server.
 - Pass 3 learns which sites to skip from the stopped pass's pruned raw file. A purge deletes that file, so a purged pass 2 can't be followed by pass 3.

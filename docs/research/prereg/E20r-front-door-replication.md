@@ -13,7 +13,7 @@
 | Runs | Pass 1 no earlier than 12 hours after the updated study page is live, pass 2 seven days later |
 | Amendment | **One pass only.** Amendment 1 (30 Oct 2026, before any data) replaces every mention of pass 2 below. See the end of this file |
 | Amendment 2 | **Adopted.** 31 Oct 2026, effective through the commit that merges this row to `main`. E20-R2, a prospective corrected remeasurement after the pass 1 data was seen. See the end of this file. The runner refuses a pilot or pass 2 unless this row says Adopted |
-| Amendment 3 | **Draft.** Not adopted. E20-R2 after a false stop: a detector fix, pilot round 2, and pass 3. See the end of this file. The runner refuses pilot round 2 and pass 3 until this row says Adopted |
+| Amendment 3 | **Draft.** Not adopted. E20-R2 after a false stop: a detector fix, withheld text, an audit-quality rule, a stated deviation, pilot round 2, and pass 3. See the end of this file. The runner refuses pilot round 2 and pass 3 until this row says adopted. |
 | Source address | `178.104.243.225` |
 | Prior opt-outs SHA-256 | `e25d88b24aa1d4122cd78e65af9c8febfd9f7309959ae1ae89446ccc90b07126` (`prior-optouts.txt`, 95 sites) |
 | Pass 1 raw SHA-256 | `ef791bee6c9598880af6da7f11db023e96e6d75b219670e45317ee9575e453dd` |
@@ -22,7 +22,7 @@
 | Industry map SHA-256 | `78df4910d953379f21d935aeb3ef658d85cbef036539e1a31362c9ad7e26e075` |
 | E20 exclusion file SHA-256 | `246127f639968afc906d59f155f6a993982f3a33c0655718234955319ebe4c34` |
 | Legacy classifier SHA-256 | `7023106f7bd73c1e4122d80e9479f63a4a04091f1426327be70621951fe71d3b` (`bench/front-door/legacy/classify-7023106f.mjs`, the detector that stopped pass 2) |
-| Frozen classifier SHA-256 | `72f67dcb46157d9ad1af123216f8c29ce94898a5ade326ba496db6805a3d4f4f` (`bench/front-door/classify.mjs`) |
+| Frozen classifier SHA-256 | `fbbca91fcca98049bd15bd5c37f39ac3662d1670840f4d852799849c84ae3df1` (`bench/front-door/classify.mjs`) |
 | Public Suffix List SHA-256 | `d3e6243b51695327984abb3e2a5aa7077096867f75121e031e6a5a3840ca8bcd` (commit `9dfbe81931367b3f0af21035c36ae7eeb830dd88`, fetched 30 Oct 2026, private suffixes included) |
 | Registration commit | The commit that merges this file to `main` |
 | T1k list SHA-256 | `d670a3c1910fe7baa4883dcb8320b1ec99d7d29f9d22954b9288ae678540674e` (`tranco-ZJ8PG-top1000.csv`) |
@@ -785,84 +785,251 @@ a third adjudicator.** The figures are reported as checked by one person.
 through the commit that merges them to `main`. The runner reads both. It overrides Amendment 2 where
 they differ.
 
-**What happened.** Pass 2 stopped itself at 188 of 7,031 sites at 10:30 UTC on 31 October 2026. Its
-in-flight check flagged an email in `evidence.pageExcerpt.text` of one record.
+**What happened.** Pass 2 stopped itself at 10:30 UTC on 31 October 2026, 2 minutes after it began.
+It had processed 188 of its 7,031 records. 177 of those were visits. The other 11 were sites on a skip
+list, 9 on the exclusion list and 2 earlier opt-outs, which were never visited. Its in-flight check
+flagged an email in `evidence.pageExcerpt.text` of one record.
 
-**The suspected false fire.** The scrub replaces an address and leaves `at <email>.` The frozen
-detector joins the words after a bare `at`, so `Reach us at <email>. Open daily` reads `<email>. Open`
-as a name and a top-level domain. The exact trigger needs both the period and an alphabetic word after
-it: `Reach us at <email>.` alone doesn't fire. This is a finding of code review on a synthetic string.
-Nobody has yet confirmed it on the real record.
+**The false fire.** The scrub replaces an address and leaves `at <email>.` The frozen detector joins
+the words after a bare `at`, so `Reach us at <email>. Open daily` reads `<email>. Open` as a name and a
+top-level domain. The exact trigger needs both the period and an alphabetic word after it: `Reach us at
+<email>.` alone doesn't fire. That reasoning came from code review on a synthetic string. The person's
+review below is the evidence that this fire was false. This file doesn't say which words tripped it.
 
 **The legacy finding.** The frozen detector is kept under its hash, and is used for this alone. Before
-any prune, `pilot-report.mjs --legacy-findings` scans the original raw file and writes a private
+any prune, `pilot-report.mjs --legacy-findings` scanned the original raw file and wrote a private
 report, bound to the manifest and the raw hash, with record order and field path and no flagged text.
+It gave 1 finding and reproduced the stop. The gates don't trust that report's summary: they check
+every finding's order, path, kind and count, and derive for themselves that one sits at a path the
+stop reads.
 
-**A person's review.** A named person inspects those records on the server, printing them to no shared
-place, and records the review with a note. The review is bound to the finding report's hash. A clean
-scan can't be called a false fire without that report. Only then is the text pruned; `prune` refuses
-this stop before the review.
+**A person's review.** Daan van der Zwaag read the flagged field of the one flagged record on the
+server, on 31 October 2026, as the run sheet sets out, and found no email address in any form. The
+review was recorded at 12:27:03 UTC with a note, SHA-256
+`eaf6d5767391ce342ebf0f3bb14b6305f6fcdc20ca85054bf5a6014084dc833c`, and is bound to the finding report's
+hash. That person is the study's maintainer, so this isn't an independent check. The text was then pruned,
+at 12:27:13 UTC. `prune` refuses this stop before the review, and a clean scan can't be called a false
+fire without that report.
 
-**If it doesn't hold.** If the legacy scan doesn't reproduce the stop, or the person finds a real
-address, this amendment doesn't apply. Pass 2 goes to purge, and a further run needs a new amendment.
+**The pruned file.** The privacy report is clean over the 188 records, and the prune proof binds the
+original raw hash to the pruned file, SHA-256 starting `3e2cd5393328`, which is the file on disk.
 
 **The partial run.** It is reported as a partial run with its coverage, and it decides no claim. Its
-records aren't pooled with any other run.
+records aren't pooled with any other run. Nobody reads its results before pass 3 ends.
 
-**The change.** `classify.mjs` holds both the labels and the detector, `scrubMisses`, so the fix
-changes its frozen hash. It can't sit elsewhere, because the detector is what the stop reads.
+### The detector
 
-- **What changed.** Inside `scrubMisses`, and nowhere else in the file. A bracketed `at`, or a bare `at`
-  before something with a dot, no longer counts when what follows opens with one of our own scrub tokens,
-  from the detector's own list. A bare `at` also doesn't count before a web URL, as a separate case:
-  a scheme can't open an address, and such text is common on pages.
-- **What still counts.** Everything else, on purpose, for a bare `at`: bracketed and quoted domains, such
-  as `john at (example.com)`, and paths. So ordinary prose such as `Look at (example.com). Open daily` can
-  stop a run again. This detector is the backstop for retained addresses, so it takes the false stop
-  over the missed address. Across the 685,712 stored strings of pass 1 that aren't hashes, after the
-  scrub, these forms appear 0 times, and the detector fires 0 times. That says little: pass 1 stored only
-  2,413 page excerpts, nearly all from error pages, while pass 2 stored normal pages and fired once in
-  188 sites. `--replay` over those 188 records gives the better count.
-- **Why.** The stop reads this detector, so the fix can't sit elsewhere. Exempting only our own tokens is
-  the smallest change that answers the stop.
+`classify.mjs` holds both the labels and the detector, `scrubMisses`, so the fix changes its frozen
+hash. It can't sit elsewhere, because the detector is what the stop reads.
+
+- **What changed.** Inside `scrubMisses`, and nowhere else in the file. After a bare `at`, what follows
+  counts only if it could open a domain: past an opening bracket or quote, a valid label, then a dot, or
+  the word `dot`, and a word. A valid label starts and ends with a letter or number, may hold hyphens
+  inside, and takes Unicode letters and numbers and punycode. `$29.`, `5:30.`, `Joe's.`, `100%.` and
+  paths hold characters no label can, and our own scrub tokens and web URLs fail the same test. A JWT
+  now has to open at a token's edge, so `keyJ.value` isn't one.
+- **What still counts.** Bracketed and quoted domains, such as `john at (example.com)`, on purpose. So
+  `Look at (example.com). Open daily` still fires. This detector is the backstop for retained addresses,
+  so it stays strict there, and a fire no longer costs a run. See "Withheld text".
 - **Old hash.** `7023106f7bd73c1e4122d80e9479f63a4a04091f1426327be70621951fe71d3b`.
-- **New hash.** `280c4633f3d003371203957774b867889e596db9bd8b716f2e0e9c1fb49efbac`.
+- **New hash.** `fbbca91fcca98049bd15bd5c37f39ac3662d1670840f4d852799849c84ae3df1`.
 - **No graded result changes.** `classify`, `classifyRegistered`, `scrub`, `evidenceOf` and every other
   export keep their source, byte for byte, so a label, a stored excerpt or a grade can't differ. The
-  change only adds conditions that skip a count, so the detector can fire less, never more. A pilot round
-  that passed its privacy rule still passes it. Run over the 7,031 records and 691,594 stored strings of
-  pass 1, the old and new file gave 0 label differences, 0 scrub differences and 0 changes in any
-  detector count. Pilot round 1's raw file is on the server, and `pilot-report.mjs --replay` can be run on
-  it. Its seal isn't redone, and it is not regraded.
+  detector fires less, apart from one narrow case: it now accepts any letters after the dot, where the
+  old test took ASCII. Pilot round 1 isn't regraded, and its seal isn't redone. Its raw file is pruned,
+  so a replay would read no excerpts, and we don't count one as evidence.
 - **What it departs from.** "No rule changes after pass 2 starts". This touches only what the stop check
   and the privacy reports read. The scrub and the labels are unchanged.
 
-**Pilot round 2.** The code changed, so a new pilot round is required, as the next round, on other
-sites and under the same rules. It also skips the 188 sites. The gate of Amendment 2 applies to it in
-full, and pass 3 refuses unless it started after the stopped pass.
+**How often it fires.** We ran `pageExcerpt` and each detector over 17,039 clean development pages of
+BrowseSafe, a public corpus of synthetic web pages, as counts only. It holds no study data.
 
-**Pass 3.** A new pass replaces pass 2 under the rules of Amendment 2, with `--pass 3`, in its own
-fixed folder `e20r-pass3`, with pass 2's seed, 2021, because nothing here needs another. Everything
-Amendment 2 says of pass 2 as the run that decides claims applies to pass 3. It runs once. The lock on
-pass 2 stays, so pass 2 can't start again. Pilot round 2 and pass 3 refuse unless the stopped pass is
-pass 2 itself, real and unchanged at its end, stopped for exactly this registered privacy reason, with
-its original raw hash and count, a legacy report with a finding at the place the stop reads, a named
-review bound to that report and to the manifest and original raw hash, and a prune proof that matches
-its raw file. Any other partial run is not covered: SIGTERM, resolver failures, the stop file or a
-changed source address need a new amendment.
+| Detector | Clean pages that fire | Rate |
+|---|---:|---:|
+| The one that stopped pass 2 | 235 | 1.38% |
+| First fix, own tokens and URLs only | 82 | 0.48% |
+| This one | 7 | 0.04% |
 
-**Nobody gets a second visit.** Pass 3 skips the 50 sites of pilot round 1 and all 188 sites of the
-stopped pass, and they are counted. The sites come from the pruned raw file of the stopped pass, so a
-purged pass can't be followed by pass 3.
+<GAP-DETECTOR-RECOUNT>
 
-**Precision.** That is 238 of 7,031 sites, or 3.4%, out of pass 3. Pilot round 2 takes up to 50 more,
-which are dropped for good too, so pass 3 can have 288 sites fewer, or 4.1%, and 6,743 sites. Intervals
-widen by about 2% at that size. The order of the stopped pass was fixed before collection, by the seed.
-Its stopping position was outcome-dependent: the last record is in because of what it held, and the
-number of sites before it depends on earlier responses. So the removal isn't claimed to be at random.
-Pilot sites are drawn evenly across the claim lists, so the smaller lists lose a larger share. The
-analysis reports skipped sites per cohort and reason, and a site keeps the first reason it was skipped.
+The last row was written after reading the shapes behind the second, on the same corpus, so it is
+in-sample, and the real rate may be higher. Pass 3 should see about 3,350 2xx pages. At 0.04% that is
+about 1.4 fires, and about a 1 in 4 chance of none. So a tighter detector doesn't remove the problem. A
+run that ended at the first fire would still probably not finish, and a false fire in the last pilot
+round would leave no route to pass 3.
 
-**Limits.** Sites in the stopped pass were visited under Amendment 2 and aren't in the claims. The
-decision to run again came after the stop. The scrub's forms and the detector's other limits don't
-change.
+### Withheld text
+
+This replaces "A stop in flight" of Amendment 2 for scrub misses, and its zero tolerance for scrub
+misses in page and error text, for pilot round 2 and pass 3. Pilot round 1 and pass 2 aren't changed.
+The stop on resolver failures stays.
+
+- **The rule.** The visit's thread checks the page and error text with the detector, once labels and
+  checks are done. On any fire it removes `evidence.pageExcerpt.title`, `.text` and `.noscript`,
+  `evidence.excerpt` and every `evidence.others[].excerpt`, and marks the record `textWithheld`, with
+  counts per detector kind and of fields, and nothing else. Only then does the record leave the thread.
+  The runner repeats the check before anything is written, aggregated, logged or passed on. The run
+  goes on.
+- **What stays.** Labels, signatures, checks and score, CSP and traits, status, header names, kept
+  header values, cookie names, body hashes, counters, robots outcomes, DNS, cohorts and order. They were
+  computed on the response in memory, as for every other record.
+- **What a fire means.** The detector saw a shape it doesn't trust. It may be a missed address, ordinary
+  text, or both, and nobody can tell afterwards, because the text is gone by design. Fires are reported
+  as counts, and never as false.
+- **Its limit.** This covers the study's own write paths. It says nothing of process memory, swap, a
+  core dump or a compromised host.
+- **Pass 3 doesn't stop on this.** However many records are withheld, pass 3 goes on. No count of fires
+  ends the only run that decides claims. Once a fire's text is gone, a high count is no longer a storage
+  risk. It is a sign about the audit, and the audit-quality rule handles it.
+- **Claims.** Withheld records count in every claim, because their labels and checks are intact.
+- **Reporting.** Withheld records and their share, overall and by cohort, by audit stratum and label, by
+  HTTP status class, by edge or platform group, and by detector kind. A group under 20 sites joins
+  `other`. A record with several findings counts once as a record, and each finding counts for its kind.
+- **Everything else stays.** The final privacy report still reads every stored field, headers and DNS
+  included, and a miss there goes to a person, as Amendment 2 says.
+
+### Pilot round 2
+
+The code changed, so a new pilot round is required, as the next round, on other sites and under the same
+rules, as this section changes them. It also skips the 188 records of the stopped pass. The gate of
+Amendment 2 applies to it in full, and pass 3 refuses unless it started after the stopped pass.
+
+- **Its limit on withheld text.** The round fails if more than 2 of its 50 records are withheld. This is
+  a check for systematic failure, set before the round. Zero, one or two can seal and take a `go`.
+- **The excerpt rule.** Readable 2xx responses are 2xx responses less those withheld. Amendment 2's 90%
+  excerpt rule now applies to readable 2xx responses, and withheld 2xx responses are reported apart.
+- **Other fields.** Scrub misses in any field the round still stores keep zero tolerance.
+- **It is the last live round.** A failed round 2 can't lead to pass 3 without a new amendment.
+- **Its text.** See "Text copies" below.
+
+### Audit quality
+
+Set by the outside reviewer's answer, before pilot round 2 and before any pass 3 data, and not changed
+after. Withheld records have no text, so nobody can label them. The audit therefore covers
+**non-withheld records only**. Its precision, recall and kappa describe that frame, and not the run as a
+whole. Withheld records aren't missing at random: on the corpus they lean towards particular shapes of
+page.
+
+For each audited stratum, `N` is every audit-eligible record in it before withholding, which means its
+graded records, withheld ones included. `W` is the withheld ones, and `F = N - W` is the frame. The
+withheld share is `w = W / N`. The draw takes its rows and weights from `F`.
+
+- **The rule.** The headline audit is **not estimable** if `w` exceeds 2.0% in any audited stratum. The
+  test is on the exact fraction, with no rounding. Otherwise the headline audit stands, on its frame.
+- **Always reported, whichever way it goes.** The withheld share overall and per stratum, and the
+  worst-case bounds below. When the audit is not estimable, the figures for its frame stay in a table,
+  marked as not the audit's result.
+- **Sample sizes don't change.** Each stratum draws its registered rows, or every row of its frame if
+  that is fewer, and the shortfall is reported. A stratum with `F` under 20 gives no precision or recall
+  of its own, because this study quotes no group under 20. That alone doesn't make the headline not
+  estimable.
+- **One small stratum can decide it.** In a stratum under 50 records, one withheld record is over 2.0%.
+  That is the rule working as written, and it won't be relaxed afterwards.
+
+**Worst-case bounds.** Each treats every withheld rule label as wrong. `TP`, `C` and `A` are the weighted
+totals of the frame for a label: rule and human agree, rule says it, human says it. `W_L` is the withheld
+records whose rule label is that label, and `W_other` the other withheld records in audited strata.
+
+- Precision: `TP / (C + W_L)`.
+- Recall: `TP / (A + W_other)`.
+
+Kappa has no bound, and says so.
+
+**"Audit not estimable" is an outcome.** It is reported in the summary, beside the claims. It changes no
+claim's decision and no main analysis, which rest on the registered rules. The real-page view of each
+HTTP claim then carries a line saying its `candidate-page` label wasn't validated on this run.
+
+**What it never triggers.** No pass 4, no second draw, no substitute rows, no new labeling to recover a
+stratum, and no change to this rule.
+
+### Text copies
+
+**Deviation.** Amendment 2 says pruning can't reach a copy made before it ran, "so none is made". One was
+made.
+
+`pilot-label-sheet.csv` was built from pilot round 1 at 10:21:53 UTC on 31 October 2026, before that
+round's prune at 10:27:41, to check its labels and its go decision. It held 47 rows: 22 titles, 15
+visible texts and 23 error excerpts, 29,087 characters in all. A key beside it mapped rows to sites.
+Copies sat on the server and on the maintainer's laptop, and in one zip file. An AI agent, a hosted
+model, read it and labeled it, so that text reached that provider, and no deletion here can reach what
+the provider keeps. One row, a generic error page, also reached another AI session while the study was
+checked. The outside labeler also received the sheet, and confirmed deleting it on 31 October 2026.
+
+Every copy we hold, and the key, were deleted on 31 October 2026, on the maintainer's instruction.
+Their hashes before deletion:
+
+- Sheet: `b1257bf709f15e858965aa8bc1e532bd3075d7b0ea34e8857d2c97ea93fb10da`.
+- Key: `ff01d3f78f563f1ba61f7efeb6c34bd901121d6becdfc35c235ccb4866a38a71`.
+- Zip: `f69f243bf1040cb0d7703962eff4e2e4597ba805995970164f5272729e22b96b`.
+
+The model's labels stay, as `id,label` rows. With the key gone they can't be tied to a site. The gate's
+proof that a round's text is gone covers its raw file only, so it didn't catch this, and it can't.
+
+**Pilot round 2.** If anyone reads that round's text, a sheet is made on the server only, read there by
+a named person, and deleted before the prune. It goes to no laptop, no labeler and no hosted model.
+
+**Pass 3.** The draw writes the audit sheet on the server, and the key stays there until both sets of
+labels exist. One copy of the sheet goes to the maintainer's machine, and from it to the one labeler and
+the model, as Amendment 2 says. The labeler deletes theirs, and the date is recorded. Our copies stay
+until the 12-month deletion.
+
+Neither rule is enforced by code. They are rules for the people running the study.
+
+### Pass 3
+
+A new pass replaces pass 2 under the rules of Amendment 2, with `--pass 3`, in its own fixed folder
+`e20r-pass3`, with pass 2's seed, 2021, because nothing here needs another. Everything Amendment 2 says
+of pass 2 as the run that decides claims applies to pass 3. It runs once. The lock on pass 2 stays, so
+pass 2 can't start again. Pilot round 2 and pass 3 refuse unless the stopped pass is pass 2 itself, real
+and unchanged at its end, stopped for exactly this registered privacy reason, with its original raw hash
+and count, a validated legacy finding at a place the stop reads, a named review bound to that report and
+to the manifest and original raw hash, and a prune proof that matches its raw file. Any other partial
+run is not covered: SIGTERM, resolver failures, the stop file or a changed source address need a new
+amendment.
+
+### No site is visited twice under E20-R2
+
+Pass 3 skips the 50 sites of pilot round 1, the sites of pilot round 2 and every site in the stopped
+pass's 188 records, and they are counted. The sites come from the pruned raw file of the stopped pass, so
+a purged pass can't be followed by pass 3. These sites were visited once in pass 1, and pass 3 will visit
+the others for the second time, as Amendment 2 says.
+
+### Precision
+
+Of the 7,031 listed sites, 389 can't be visited, because of the exclusion list and earlier opt-outs. That
+leaves 6,642. Pass 3 loses up to 277 of them, 4.2%, and can visit up to 6,365, before robots rules:
+
+- 50 sites of pilot round 1.
+- 177 sites visited in the stopped pass. Its other 11 records were already on a skip list.
+- Up to 50 sites of pilot round 2.
+
+The loss isn't even, because pilots draw only from the claim lists. Overall, intervals widen by about
+2%. The claim lists, with both pilot rounds counted:
+
+| List | Sites that can be visited | Lost | Share | Intervals wider by about |
+|---|---:|---:|---:|---:|
+| YC-25 | 316 | 29 | 9.2% | 5% |
+| YC-new | 416 | 33 | 7.9% | 4% |
+| T100k | 866 | 44 | 5.1% | 3% |
+| T1k | 918 | 45 | 4.9% | 3% |
+| YC-old | 607 | 28 | 4.6% | 2% |
+
+The order of the stopped pass was fixed before collection, by the seed. Its stopping position was
+outcome-dependent: the last record is in because of what it held, and the number of sites before it
+depends on earlier responses. So the removal isn't claimed to be at random. The analysis reports skipped
+sites per cohort and reason, and a site keeps the first reason it was skipped.
+
+### Review
+
+The outside reviewer's technical go of 31 October in Amendment 2 was given on Amendment 2. It doesn't
+cover this amendment. That reviewer gave a technical no-go on packages 6 and 7.
+<GAP-REVIEW-STATUS> This is not an ethics endorsement, and no independent human ethics board reviewed
+this study.
+
+### Limits
+
+Sites in the stopped pass were visited under Amendment 2 and aren't in the claims. The decision to run
+again came after the stop. This changes a stop rule after a stop. It was written before pilot round 2,
+with no claim's data read, it stores less than the rule it replaces, and it can't move a label or a grade.
+The scrub's forms and the detector's other limits don't change. Rates for the detector come from a
+synthetic corpus and one real fire, and the tightened detector was fitted on that corpus.

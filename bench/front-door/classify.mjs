@@ -297,9 +297,10 @@ const opensWithOwnToken = (text) => {
   while (i < text.length && "([{\"'".includes(text[i])) i++;
   return OWN_TOKENS.some((t) => text.startsWith(t, i));
 };
-// What can follow a bare `at` as an address: a label of letters, digits and hyphens, past an opening
-// bracket or quote, then a dot and a word. `$29.`, `5:30.`, `Joe's.` and `100%.` hold characters no domain can.
-const DOMAIN_AFTER_AT = /^[([{<"'`“‘«]*[\p{L}\p{N}-]+(?:\s*\.\s*|\s+dot\s+)\p{L}{2,}(?![\p{L}\p{N}])/u;
+// What can follow a bare `at` as an address: past an opening bracket or quote, a valid label, then a dot
+// and a word. A label starts and ends with a letter or number, with hyphens only inside. `$29.`, `5:30.`,
+// `Joe's.`, `100%.` and paths hold characters no label can, and our own tokens and web URLs fail the same test.
+const DOMAIN_AFTER_AT = /^[([{<"'`“‘«]*[\p{L}\p{N}](?:[\p{L}\p{N}-]*[\p{L}\p{N}])?(?:\s*\.\s*|\s+dot\s+)\p{L}{2,}(?![\p{L}\p{N}])/u;
 // A JWT opens at a token's edge. `keyJ.value` holds the letters and isn't one.
 const JWT_AT_EDGE = /(?:^|[^A-Za-z0-9_-])eyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]/;
 

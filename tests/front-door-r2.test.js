@@ -24,7 +24,7 @@ import { legacyFindings } from "../bench/front-door/legacy-findings.mjs";
 import { decidePilot, replayRaw, main as reportMain, pilotReport, sealPilot, stopRules, privacyReport } from "../bench/front-door/pilot-report.mjs";
 import { falseFireReviewed, LEGACY_CLASSIFIER_SHA256, legacyProblem, PRIVACY_STOP, withheldCounts, withholdText, MIN_ELIGIBLE, MIN_GRADED, NO_PRIVACY, pageTextMissed, purgeState, recordMisses, resolverFailed, unfinishedRun } from "../bench/front-door/record-checks.mjs";
 import { main as analyzeMain, challengeByEdge, secondaryCohorts, skipsByCohort } from "../bench/front-door/analyze-r.mjs";
-import { main as validationMain, purgeRun, auditFrame, worstCaseBounds, blindSheet, drawSample, parseLabels, pruneExcerpt, prunePilot, rewriteRun, scoreLabels, stratumOf, weightedMetrics } from "../bench/front-door/validation-sample.mjs";
+import { main as validationMain, purgeRun, auditFrame, overWithheldLimit, worstCaseBounds, blindSheet, drawSample, parseLabels, pruneExcerpt, prunePilot, rewriteRun, scoreLabels, stratumOf, weightedMetrics } from "../bench/front-door/validation-sample.mjs";
 import { runAcceptance } from "../bench/front-door/acceptance.mjs";
 import { passiveReport } from "../api/_lib/tier1.mjs";
 import { scoreOf } from "../api/_lib/grade.mjs";
@@ -1479,6 +1479,9 @@ describe("Amendment 3", () => {
     for (const text of ["Plans starting at $29. Cancel anytime", "Starts at $29/mo. Cancel anytime", "Doors open at 5:30. Tickets on sale", "Dinner at Joe's. Then drinks", "Reach us at 24/7. Support is free", "Grade at 100%. Great work", "Sold at ₹99. Buy now", "Open at 9:30am. Closed Sunday", "a_b at c_d.com"]) expect(scrubMisses(scrub(text)).email, text).toBe(0);
     for (const text of ["john at example.com", "john at 3m.com", "john at my-shop.nl", "john at (my-shop.nl)", "jan at münchen.de", "jan at 例え.テスト", "jan at (müller.at)", "jan at example.ελ"]) expect(email(text), text).toBeGreaterThan(0);
     expect(email("jan at example.c")).toBe(0);
+    // A label starts and ends with a letter or number, hyphens inside, punycode included.
+    for (const text of ["john at xn--bcher-kva.de", "john at a-b-c.com", "john at 3-m.nl", "john at (xn--mnchen-3ya.de)"]) expect(email(text), text).toBeGreaterThan(0);
+    for (const text of ["john at -name.com", "john at name-.com", "john at (-name.com)", "john at --x--.com", "john at $29.com", "john at 5:30.com", "john at joe's.com", "john at /docs/guide.html", "john at a/b.com"]) expect(email(text), text).toBe(0);
   });
 
   it("a JWT counts at a token's edge, not inside a word", () => {
@@ -1499,8 +1502,11 @@ describe("Amendment 3", () => {
     expect(out.checks).toEqual(record.checks);
     const counts = withheldCounts([out, { ...out, cohorts: { T1k: {} } }, record]);
     expect(counts).toMatchObject({ records: 2, kinds: { fragment: 2, email: 2 } });
-    expect(counts.byCohort.T1k).toEqual({ records: 2, of: 3, kinds: { fragment: 2, email: 2 } });
-    expect(counts.byCohort["YC-new"]).toEqual({ records: 1, of: 2, kinds: { fragment: 1, email: 1 } });
+    // Both cohorts are under 20, so they fold into `other`.
+    expect(counts.byCohort).toEqual({ other: { records: 3, of: 5, kinds: { fragment: 3, email: 3 }, share: 0.6 } });
+    const big = withheldCounts(Array.from({ length: 20 }, (_, i) => ({ ...(i ? record : out), httpStatus: 503, cohorts: { T1k: {} } })));
+    expect(big.byCohort.T1k).toMatchObject({ records: 1, of: 20, share: 0.05 });
+    expect(big.byStatus).toHaveProperty("5xx");
     for (const group of ["byStratum", "byLabel", "byStatus", "byEdge"]) expect(Object.values(counts[group]).reduce((n, g) => n + g.records, 0), group).toBe(2);
     expect(withholdText(out)).toBe(out);
     expect(pageTextMissed(out)).toBe(false);
@@ -1515,13 +1521,37 @@ describe("Amendment 3", () => {
     expect(rules(pilotReport([...Array.from({ length: 8 }, () => rec()), blank, withheld]))).toContain("under 90% of 2xx responses have an excerpt");
   });
 
-  it("the audit frame says what's left, and a depleted stratum is not estimable", () => {
+  it("the audit-quality rule, on the exact fraction", () => {
+    const stratum = (eligible, withheld) => Array.from({ length: eligible }, (_, i) => ({ host: `h${i}.org`, status: "ok", evidence: { class: { label: "candidate-page" }, ...(i < withheld ? { textWithheld: { kinds: { email: 1 }, fields: 1 } } : {}) } }));
+    for (const [eligible, withheld, over] of [[50, 1, false], [49, 1, true], [100, 2, false], [99, 2, true], [150, 3, false], [149, 3, true], [1000, 20, false], [1000, 21, true], [50000, 1000, false], [50000, 1001, true], [10, 0, false]]) {
+      expect(overWithheldLimit(withheld, eligible), `${withheld} of ${eligible}`).toBe(over);
+      expect(auditFrame(stratum(eligible, withheld)).notEstimable, `${withheld} of ${eligible}`).toBe(over);
+    }
+    // A small frame loses its own figures, and that alone doesn't decide the headline.
+    expect(auditFrame(stratum(10, 0))).toMatchObject({ headline: "stands, on its frame", notEstimable: false });
+    expect(auditFrame(stratum(10, 0)).strata["candidate-page"].ownFigures).toBe(false);
+  });
+
+  it("the score says the headline first, and keeps the frame's figures beside it", () => {
+    const key = [1, 2, 3].map((id) => ({ id, stratum: "candidate-page", stratumSize: 3, ruleLabel: "page" }));
+    const csv = "id,label\n1,page\n2,page\n3,page\n";
+    const frame = auditFrame(Array.from({ length: 49 }, (_, i) => ({ host: `h${i}.org`, status: "ok", evidence: { class: { label: "candidate-page" }, ...(i ? {} : { textWithheld: { kinds: { email: 1 }, fields: 1 } }) } })));
+    const scored = scoreLabels(key, csv, csv, { frame, resamples: 10 });
+    expect(Object.keys(scored)[0]).toBe("headline");
+    expect(scored).toMatchObject({ headline: "not estimable", kappaWorstCase: "no bound" });
+    expect(scored.note).toMatch(/not the audit's result/);
+    expect(scored.metrics.page.precision).toBe(1);
+    expect(scored.frame.share).toBeCloseTo(1 / 49);
+  });
+
+  it("the audit frame says what's left", () => {
     const rec = (i, label, withheld) => ({ host: `h${i}.org`, status: "ok", evidence: { class: { label, rule: "x" }, ...(withheld ? { textWithheld: { kinds: { email: 1 }, fields: 1 } } : {}) } });
     const frame = auditFrame([...Array.from({ length: 100 }, (_, i) => rec(i, "candidate-page", i < 5)), ...Array.from({ length: 30 }, (_, i) => rec(200 + i, "challenge", i < 10)), ...Array.from({ length: 10 }, (_, i) => rec(300 + i, "unrecognized-error-response", false))]);
     expect(frame.scope).toBe("non-withheld records");
-    expect(frame.strata["candidate-page"]).toMatchObject({ frame: 95, withheld: 5, estimable: true });
-    expect(frame.strata.challenge).toMatchObject({ frame: 20, withheld: 10, estimable: false });
-    expect(frame.strata["unrecognized-error-response"]).toMatchObject({ frame: 10, estimable: false });
+    expect(frame.strata["candidate-page"]).toMatchObject({ eligible: 100, frame: 95, withheld: 5, overLimit: true, ownFigures: true });
+    expect(frame.strata.challenge).toMatchObject({ eligible: 30, frame: 20, withheld: 10, overLimit: true, ownFigures: true });
+    expect(frame.strata["unrecognized-error-response"]).toMatchObject({ frame: 10, overLimit: false, ownFigures: false, drawn: 10, shortfall: 10 });
+    expect(frame).toMatchObject({ headline: "not estimable", notEstimable: true, eligible: 140 });
     expect(frame.withheld).toBe(15);
     expect(frame.withheldByRule).toEqual({ page: 5, challenge: 10, block: 0, error: 0 });
   });

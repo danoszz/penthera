@@ -27,9 +27,11 @@ import { fileURLToPath } from "node:url";
 import { dispositionOf, falseFireReviewed, NO_PRIVACY, PRIVACY_STOP, PURGED_FILES, recordMisses, STRATA, stratumOf, unfinishedRun } from "./record-checks.mjs";
 import { holdsText, PASS_SEED, seeded, shuffled } from "./replicate.mjs";
 
-// A stratum this small, or with this much withheld, can't speak for its label.
+// A frame this small gives no precision or recall of its own.
 export const MIN_AUDIT_FRAME = 20;
-export const MAX_WITHHELD_SHARE = 0.1;
+// The headline audit is not estimable past 2.0% withheld in any stratum: 1 in 50, as whole numbers, with no rounding.
+export const MAX_WITHHELD = Object.freeze({ records: 1, per: 50 });
+export const overWithheldLimit = (withheld, eligible) => withheld * MAX_WITHHELD.per > MAX_WITHHELD.records * eligible;
 export const LABELS = Object.freeze(["page", "challenge", "block", "error"]);
 export const ANSWERS = Object.freeze([...LABELS, "unsure"]);
 const RULE_LABEL = Object.freeze({ "candidate-page": "page", challenge: "challenge", block: "block", "unrecognized-error-response": "error" });
@@ -38,9 +40,10 @@ export const BOOTSTRAP = Object.freeze({ resamples: 20_000, seed: PASS_SEED[2] }
 export { STRATA, stratumOf };
 
 /**
- * The audit's frame: graded records that kept their text, per stratum, beside what was
- * withheld. Withheld rows aren't missing at random, so a stratum says "not estimable" when
- * it's too small or too much of it is gone, and the withheld count feeds the worst-case bounds.
+ * The audit's frame. For each stratum, `eligible` is its graded records before withholding,
+ * `withheld` the ones that lost their text and `frame` the rest, which the draw uses. Withheld
+ * rows aren't missing at random, so the headline audit is not estimable when any stratum is over
+ * the limit. A small frame loses its own figures, and that alone doesn't decide the headline.
  */
 export function auditFrame(records) {
   const graded = records.filter((r) => r.status === "ok");
@@ -49,10 +52,14 @@ export function auditFrame(records) {
     const all = graded.filter((r) => stratumOf(r) === stratum);
     const withheld = all.filter((r) => r.evidence?.textWithheld).length;
     const frame = all.length - withheld;
-    strata[stratum] = { frame, withheld, drawn: Math.min(frame, STRATA[stratum]), target: STRATA[stratum], estimable: frame >= MIN_AUDIT_FRAME && withheld / all.length <= MAX_WITHHELD_SHARE };
+    const drawn = Math.min(frame, STRATA[stratum]);
+    strata[stratum] = { eligible: all.length, withheld, share: all.length ? withheld / all.length : 0, overLimit: overWithheldLimit(withheld, all.length), frame, drawn, target: STRATA[stratum], shortfall: STRATA[stratum] - drawn, ownFigures: frame >= MIN_AUDIT_FRAME };
   }
   for (const r of graded) if (r.evidence?.textWithheld && stratumOf(r)) withheldByRule[RULE_LABEL[r.evidence.class.label]]++;
-  return { scope: "non-withheld records", strata, withheld: Object.values(withheldByRule).reduce((a, b) => a + b, 0), withheldByRule };
+  const withheld = Object.values(withheldByRule).reduce((a, b) => a + b, 0);
+  const eligible = Object.values(strata).reduce((n, g) => n + g.eligible, 0);
+  const notEstimable = Object.values(strata).some((g) => g.overLimit);
+  return { headline: notEstimable ? "not estimable" : "stands, on its frame", notEstimable, scope: "non-withheld records", withheld, eligible, share: eligible ? withheld / eligible : 0, strata, withheldByRule };
 }
 
 /** Precision and recall if the rule label were wrong on every withheld row. */
@@ -201,8 +208,8 @@ export function scoreLabels(key, humanText, agentText, { frame, ...opts } = {}) 
   const pairs = {};
   for (const r of rows) if (r.human !== r.agent) pairs[`human ${r.human}, agent ${r.agent}`] = (pairs[`human ${r.human}, agent ${r.agent}`] ?? 0) + 1;
   return {
+    ...(frame ? { headline: frame.headline, ...(frame.notEstimable ? { note: "These figures are for the frame, and are not the audit's result." } : {}), auditScope: frame.scope, frame, worstCase: worstCaseBounds(rows, frame.withheldByRule), kappaWorstCase: "no bound" } : {}),
     ...weightedMetrics(rows, opts),
-    ...(frame ? { auditScope: frame.scope, frame, worstCase: worstCaseBounds(rows, frame.withheldByRule) } : {}),
     humanVsAgent: {
       rows: rows.length, humanUnsure: rows.filter((r) => r.human === "unsure").length, agentUnsure: rows.filter((r) => r.agent === "unsure").length,
       bothAnswered: both.length,

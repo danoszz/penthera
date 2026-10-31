@@ -120,9 +120,12 @@ export function withholdText(r) {
 /** A record that may leave for a disk: both sides of the worker boundary run this. */
 export const safeRecord = (r) => (pageTextMissed(r) ? withholdText(r) : r);
 
-/** Withheld records, overall and by group, with each group's own total. Counts only. */
+// A group under this many sites joins `other`, as nothing in this study quotes a smaller one.
+const MIN_REPORTED_GROUP = 20;
+
+/** Withheld records, overall and by group, with each group's total and share. Counts only. */
 export function withheldCounts(records) {
-  const out = { records: 0, kinds: {}, byCohort: {}, byStratum: {}, byLabel: {}, byStatus: {}, byEdge: {} };
+  const out = { records: 0, of: 0, kinds: {}, byCohort: {}, byStratum: {}, byLabel: {}, byStatus: {}, byEdge: {} };
   const bump = (into, key, kinds) => {
     const g = (into[key] ??= { records: 0, of: 0, kinds: {} });
     g.of++;
@@ -133,6 +136,7 @@ export function withheldCounts(records) {
   for (const r of records) {
     if (!r.evidence) continue;
     const kinds = r.evidence.textWithheld?.kinds;
+    out.of++;
     if (kinds) {
       out.records++;
       for (const [kind, n] of Object.entries(kinds)) out.kinds[kind] = (out.kinds[kind] ?? 0) + n;
@@ -140,9 +144,25 @@ export function withheldCounts(records) {
     for (const c of Object.keys(r.cohorts ?? {})) bump(out.byCohort, c, kinds);
     bump(out.byStratum, stratumOf(r) ?? "none", kinds);
     bump(out.byLabel, r.evidence.class?.label ?? "none", kinds);
-    bump(out.byStatus, String(r.httpStatus ?? "none"), kinds);
+    bump(out.byStatus, r.httpStatus ? `${Math.floor(r.httpStatus / 100)}xx` : "none", kinds);
     bump(out.byEdge, r.platform?.edge ?? "unknown", kinds);
   }
+  for (const name of ["byCohort", "byStratum", "byLabel", "byStatus", "byEdge"]) out[name] = reported(out[name]);
+  out.share = out.of ? out.records / out.of : 0;
+  return out;
+}
+
+/** Small groups folded into `other`, and each group's share of its own total. */
+function reported(groups) {
+  const out = {};
+  for (const [key, g] of Object.entries(groups)) {
+    const into = g.of < MIN_REPORTED_GROUP ? (out.other ??= { records: 0, of: 0, kinds: {} }) : (out[key] = g);
+    if (into === g) continue;
+    into.records += g.records;
+    into.of += g.of;
+    for (const [kind, n] of Object.entries(g.kinds)) into.kinds[kind] = (into.kinds[kind] ?? 0) + n;
+  }
+  for (const g of Object.values(out)) g.share = g.records / g.of;
   return out;
 }
 

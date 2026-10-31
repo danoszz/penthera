@@ -910,9 +910,16 @@ export async function runAcceptance() {
     add("E27: the draw never picks a withheld record", "allowed", truth(drawn.every((d) => !auditRows.find((r) => r.host === d.host).evidence.textWithheld), `${drawn.length} rows`));
     add("E28: stratum sizes and weights use the non-withheld frame", "allowed", truth(drawn.filter((d) => d.stratum === "candidate-page").length === 150 && drawn.find((d) => d.stratum === "candidate-page").stratumSize === 300, "300 of 400 in the frame"));
     const counted = (await import("./record-checks.mjs")).withheldCounts(auditRows);
+    add("E29: withheld is reported as a share, and small groups join other", "allowed", truth(counted.byCohort.T1k.share === 0.25 && counted.byCohort["YC-new"].share === 0.4 && counted.byStatus["2xx"].of === 400 && !("none" in counted.byStatus), "by cohort, status class and share"));
     add("E29: counts reconcile overall and by every group", "allowed", truth(counted.records === 110 && ["byCohort", "byStratum", "byLabel", "byStatus", "byEdge"].every((g) => Object.values(counted[g]).reduce((n, v) => n + v.records, 0) === 110) && counted.kinds.email === 100 && counted.kinds.fragment === 10, "110 in every group"));
     const frame = auditFrame(auditRows);
-    add("E30: a depleted stratum is not estimable", "allowed", truth(frame.strata.challenge.estimable === false && frame.strata["candidate-page"].estimable === false && frame.strata.challenge.frame === 15, "15 left of 25, and 25% withheld"));
+    add("E30: a stratum over 2.0% makes the headline not estimable", "allowed", truth(frame.notEstimable && frame.headline === "not estimable" && frame.strata.challenge.overLimit && frame.strata.challenge.frame === 15, "10 of 25 withheld"));
+    const oneStratum = (eligible, withheld) => auditFrame(Array.from({ length: eligible }, (_, i) => ({ status: "ok", evidence: { class: { label: "challenge" }, ...(i < withheld ? { textWithheld: { kinds: { email: 1 }, fields: 1 } } : {}) } })));
+    add("E30: exactly 2.0% stands", "allowed", truth(!oneStratum(50, 1).notEstimable && !oneStratum(150, 3).notEstimable, "1 of 50, 3 of 150"));
+    add("E30: just over 2.0% doesn't", "allowed", truth(oneStratum(49, 1).notEstimable && oneStratum(149, 3).notEstimable, "1 of 49, 3 of 149"));
+    add("E30: a small frame alone doesn't decide the headline", "allowed", truth(!oneStratum(10, 0).notEstimable && !oneStratum(10, 0).strata.challenge.ownFigures, "10 rows, no figures of its own"));
+    const reportedFrame = scoreLabels(key, labels(3), labels(3), { frame, resamples: 10 });
+    add("E30: the score says the headline first, and keeps the rest", "allowed", truth(Object.keys(reportedFrame)[0] === "headline" && reportedFrame.frame.share > 0 && Boolean(reportedFrame.worstCase.page) && Boolean(reportedFrame.metrics), Object.keys(reportedFrame).slice(0, 3).join(" ")));
     const scoredRows = drawn.map((d, i) => ({ ...d, id: i + 1, human: d.ruleLabel }));
     const bounds = worstCaseBounds(scoredRows, frame.withheldByRule);
     add("E31: worst-case bounds count all withheld rows", "allowed", truth(bounds.page.precision < 0.76 && bounds.page.precision > 0.74 && frame.withheld === 110, `page precision ${bounds.page.precision.toFixed(3)}`));
