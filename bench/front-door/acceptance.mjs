@@ -447,7 +447,10 @@ export async function runAcceptance() {
     const analysis = (dir, preregText = fx.prereg, more = {}) => {
       const said = [];
       const i = fx.inputs;
-      const code = analyze(["--pass1", join(dir, "raw.jsonl"), "--pass2", i["Pass 1 raw"], "--e20", i["E20 Tranco raw"], i["E20 YC raw"], "--industries", i["Industry map"], "--e20-excluded", i["E20 exclusion file"], "--out", join(dir, "analysis.json")], { fail: (m) => said.push(m), preregText, ...more });
+      // A fixture's manifest names a stand-in state, so the analysis is told to run under it.
+      const manifestFile = join(dir, "manifest.json");
+      const state = existsSync(manifestFile) ? stateOf(JSON.parse(readFileSync(manifestFile, "utf8"))) : undefined;
+      const code = analyze(["--pass1", join(dir, "raw.jsonl"), "--pass2", i["Pass 1 raw"], "--e20", i["E20 Tranco raw"], i["E20 YC raw"], "--industries", i["Industry map"], "--e20-excluded", i["E20 exclusion file"], "--out", join(dir, "analysis.json")], { fail: (m) => said.push(m), preregText, state, ...more });
       return { code, said: said.join(" ") || "analyzed" };
     };
     const onLast = (act) => { let n = 0; return (_k, total) => { if (++n === total) act(); }; };
@@ -805,11 +808,13 @@ export async function runAcceptance() {
       validation(["bind", thirdDir, role, JSON.parse(readFileSync(join(thirdDir, "prune-manifest.json"), "utf8")).sheetSha256], { log: quiet, fail: quiet });
     }
     // A fixture's manifest names a stand-in state, so each step is told to run under it.
-    const realState = stateOf(JSON.parse(readFileSync(join(thirdDir, "manifest.json"), "utf8")));
+    const realManifest = JSON.parse(readFileSync(join(thirdDir, "manifest.json"), "utf8"));
+    const realState = { ...stateOf(realManifest), runtimeSha256: realManifest.runtimeSha256 };
     analysis(thirdDir, fx.prereg, { state: realState });
     const realSaid = [];
     const realScore = validation(["score", thirdDir], { log: quiet, fail: (m) => realSaid.push(m), state: realState });
-    const realReport = realScore || tables(["--analysis", join(thirdDir, "analysis.json"), "--score", join(thirdDir, "score.json"), "--out", join(thirdDir, "final-report.md"), "--run", thirdDir], { log: quiet, fail: (m) => realSaid.push(m), state: realState });
+    const i = fx.inputs;
+    const realReport = realScore || tables(["--analysis", join(thirdDir, "analysis.json"), "--score", join(thirdDir, "score.json"), "--out", join(thirdDir, "final-report.md"), "--run", thirdDir, "--pass2", i["Pass 1 raw"], "--e20", i["E20 Tranco raw"], i["E20 YC raw"], "--industries", i["Industry map"], "--e20-excluded", i["E20 exclusion file"]], { log: quiet, fail: (m) => realSaid.push(m), state: realState, preregText: fx.prereg });
     add("R: a real pass, real analysis, score and report, checked against the run", "allowed", { code: realReport, said: realSaid.join(" ") || "reported" });
     const realText = existsSync(join(thirdDir, "final-report.md")) ? readFileSync(join(thirdDir, "final-report.md"), "utf8") : "";
     const realFrame = JSON.parse(readFileSync(join(thirdDir, "audit-frame.json"), "utf8"));
@@ -1028,7 +1033,7 @@ export async function runAcceptance() {
     const markerRun = await canaryRun(root, "marker");
     const markerRows = raw(join(markerRun.dir, "run"));
     add("M: a marker beside text leaves no canary in any file, temp folder, stdout or stderr", "allowed", truth(!markerRun.leaked && markerRows.length === Object.keys(CANARY_PAGES).length && markerRows.every((r) => r.evidence.textWithheld && r.evidence.pageExcerpt.text === undefined && r.evidence.excerpt === undefined), `${markerRows.length} records, ${markerRun.said.length} bytes of output`));
-    auditChainRows(root, add, truth);
+    auditChainRows(root, add, truth, { inputs: fx.inputs, preregText: fx.prereg });
 
     const protocolNow = readFileSync(PREREG_R, "utf8");
     const liveClassifier = sha256(readFileSync(join(HERE, "classify.mjs")));

@@ -1,6 +1,6 @@
 # E20-R2 known limits
 
-For an outside reviewer. These are the gaps that remain in the runner and its gate after five reviews. The protocol is `docs/research/prereg/E20r-front-door-replication.md`, Amendment 2.
+For an outside reviewer. These are the gaps that remain in the runner and its gate after nine reviews. The protocol is `docs/research/prereg/E20r-front-door-replication.md`, Amendment 2.
 
 ## The gate proves what a run recorded, not what a person did
 
@@ -8,7 +8,7 @@ For an outside reviewer. These are the gaps that remain in the runner and its ga
 - **A determined operator can get past every lock.** The locks stop mistakes, not intent. Someone can edit the runner, change the deps seam, delete the rounds log, or run from a fresh clone. The honest record of a run is the public commit plus what the maintainer reports.
 - **The rounds log is one file.** Deleting a round's folder and its log line together leaves no trace, and the two-round cap counts what's there.
 - **Label manifests record what the operator says.** `bind` takes the hash the kit showed the labeler, so a mix-up is refused. It can't show the labeler saw that sheet.
-- **Prune proofs, seals, privacy reports, the validation key, score and analysis** are bound to the run by plain hashes. Each binding catches a mix-up between runs. None catches an operator who rewrites both sides. `report-tables.mjs` with `--run` rebuilds the frame, sheet, key and score, and the analysis's figures rest on its self-hash alone.
+- **Prune proofs, seals, privacy reports, the validation key, score and analysis** are bound to the run by plain hashes. Each binding catches a mix-up between runs. None catches an operator who rewrites both sides. `report-tables.mjs` rebuilds the frame, sheet, key, score and analysis from the run and the private inputs, so an edit to one file with a fresh self-hash fails. Someone who rewrites the raw file, manifest and proof together still passes.
 - **Registered analysis inputs are checked by hash only.** The files stay private, so a reader can't recompute the hashes.
 - **The repeat lock lives on one machine.** A fresh clone has no `e20r-pass2` folder, so a second start from there would revisit sites.
 - **The commit check trusts GitHub and a clean tree.** It proves the checkout is the tip of `main` at the start, not what the Node process loaded afterwards.
@@ -61,6 +61,7 @@ The audit sheet goes to one labeler and to a hosted model. The 12-month deletion
 - `fragment` and `longHex` fires can't be tightened by what a character may be, so they are left to withholding.
 - Withheld records leave the audit's frame, and they aren't missing at random. Audit metrics describe non-withheld records, with worst-case bounds beside them. The headline audit is not estimable past 2.0% withheld in any stratum, so in a stratum under 50 records one withheld record decides it. A label whose pooled frame is under 20 gives no figures of its own.
 - Withholding covers page and error text. A miss in a header, cookie, DNS field or check still goes to the final privacy report and a person.
+- A name that runs straight on after closing punctuation, as Chinese and Japanese text can, or a possessive such as `example.x.com's`, isn't read as a whole domain.
 - A bare `at` needs a local part in the 16 characters before it. Spelled forms other than `dot`, such as `john at example d0t com`, aren't read.
 - The frozen detector in `legacy/` runs only for the legacy finding report. That report names record order and field path, so it stays on the server.
 - Pass 3 learns which sites to skip from the stopped pass's pruned raw file. A purge deletes that file, so a purged pass 2 can't be followed by pass 3.

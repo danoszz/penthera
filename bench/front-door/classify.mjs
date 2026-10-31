@@ -307,14 +307,17 @@ const OWN_LOCAL = new RegExp(`(?:${[...OWN_TOKENS, "<redacted>"].join("|")})$`);
 const ADDRESS_LOCAL = /[\p{L}\p{N}._%+-]["'`”’»)\]}>*]*$/u;
 const DOMAIN_OPENING = /[([{<"'`“‘«*]*/y;
 const DOMAIN_LABEL = /[\p{L}\p{N}][\p{L}\p{N}\p{M}-]*/uy;
-const DOMAIN_DOT = / ?[.。．｡] ?| dot | ?[([{] ?dot ?[)\]}] ?/y;
+// Dots that join labels, and a dot that may instead end a sentence.
+const DOMAIN_JOIN = /[.。．｡](?=[\p{L}\p{N}_-])| [.。．｡] ?| dot | ?[([{] ?dot ?[)\]}] ?/uy;
+const SENTENCE_DOT = /[.。．｡] /y;
 const LAST_LABEL = /^(?:\p{L}[\p{L}\p{M}]+|xn--[a-z0-9-]*[a-z0-9])$/u;
-const LABEL_GOES_ON = /^[\p{L}\p{N}\p{M}_-]/u;
-const LABEL_FOLLOWS_DOT = /^[.。．｡][\p{L}\p{N}_-]/u;
+// What may close a token: a space, the end, or closing punctuation up to one of them. So `x.com/a`, `x.com?a=b`,
+// `x.com:443`, `x.com..y` and `x.com-` aren't domains.
+const TOKEN_EDGE = /[,;:!?.)\]}>"'`”’»]*(?: |$)/y;
 // A name holds 253 characters, and spelled dots or spaces around them add a few to each label.
 const MAX_DOMAIN_CHARS = 1024;
 
-/** Does a whole domain open at `start`? Stops at the first character that can't belong to one. */
+/** Is this a whole domain, read to its end? One bad label or character anywhere in it means no. */
 function opensDomain(text, start) {
   DOMAIN_OPENING.lastIndex = start;
   let at = start + DOMAIN_OPENING.exec(text)[0].length;
@@ -326,15 +329,21 @@ function opensDomain(text, start) {
     if (!label || label.endsWith("-")) return false;
     at += label.length;
     labels++;
-    const next = text.slice(at, at + 4);
-    if (labels > 1 && LAST_LABEL.test(label) && !LABEL_GOES_ON.test(next) && !LABEL_FOLLOWS_DOT.test(next)) return true;
-    DOMAIN_DOT.lastIndex = at;
-    const dot = DOMAIN_DOT.exec(text);
+    DOMAIN_JOIN.lastIndex = at;
+    const join = DOMAIN_JOIN.exec(text)?.[0];
+    if (join) {
+      tight ||= /^[.。．｡]$/.test(join);
+      at += join.length;
+      continue;
+    }
+    const whole = labels > 1 && LAST_LABEL.test(label);
+    TOKEN_EDGE.lastIndex = at;
+    if (whole) return TOKEN_EDGE.test(text);
+    // `night. Open` can be a spaced name. `3.99. Open` is a price and a sentence: a name doesn't turn loose after a tight dot.
+    SENTENCE_DOT.lastIndex = at;
+    const dot = !tight && SENTENCE_DOT.exec(text)?.[0];
     if (!dot) return false;
-    // `3.99. Open` is a price and a sentence: a name doesn't turn loose after a tight dot.
-    if (tight && /^ ?[.。．｡] /.test(dot[0])) return false;
-    tight ||= /^[.。．｡]$/.test(dot[0]);
-    at += dot[0].length;
+    at += dot.length;
   }
   return false;
 }

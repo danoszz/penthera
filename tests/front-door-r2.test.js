@@ -24,10 +24,13 @@ import { legacyFindings } from "../bench/front-door/legacy-findings.mjs";
 import { decidePilot, replayRaw, main as reportMain, pilotReport, sealPilot, stopRules, privacyReport } from "../bench/front-door/pilot-report.mjs";
 import { falseFireReviewed, LEGACY_CLASSIFIER_SHA256, legacyProblem, PRIVACY_STOP, withheldCounts, withholdText, MIN_ELIGIBLE, MIN_GRADED, NO_PRIVACY, pageTextMissed, purgeState, recordMisses, resolverFailed, unfinishedRun } from "../bench/front-door/record-checks.mjs";
 import { main as analyzeMain, challengeByEdge, secondaryCohorts, skipsByCohort } from "../bench/front-door/analyze-r.mjs";
-import { main as validationMain, purgeRun, auditFrame, overWithheldLimit, worstCaseBounds, blindSheet, drawSample, parseLabels, pruneExcerpt, prunePilot, rewriteRun, scoreLabels, stratumOf, weightedMetrics } from "../bench/front-door/validation-sample.mjs";
+import { main as validationMain, purgeRun, stateOf, auditFrame, overWithheldLimit, worstCaseBounds, blindSheet, drawSample, parseLabels, pruneExcerpt, prunePilot, rewriteRun, scoreLabels, stratumOf, weightedMetrics } from "../bench/front-door/validation-sample.mjs";
 import { runAcceptance } from "../bench/front-door/acceptance.mjs";
 import { passiveReport } from "../api/_lib/tier1.mjs";
 import { scoreOf } from "../api/_lib/grade.mjs";
+
+// A fixture run names a stand-in state, so the analysis is told to run under it.
+const runState = (dir) => stateOf(JSON.parse(readFileSync(join(dir, "manifest.json"), "utf8")));
 
 // A run mode, named so a scanner for hardcoded passwords reads no literal after `pass:`.
 const PILOT_RUN = "pilot";
@@ -891,7 +894,7 @@ describe("the analysis", () => {
     writeFileSync(join(dir, "x.txt"), "\n");
     const hashOf = (f) => createHash("sha256").update(readFileSync(join(dir, f))).digest("hex");
     const preregText = [["Pass 1 raw", "p.jsonl"], ["E20 Tranco raw", "t.jsonl"], ["E20 YC raw", "y.jsonl"], ["Industry map", "i.csv"], ["E20 exclusion file", "x.txt"]].map(([l, f]) => `| ${l} SHA-256 | \`${hashOf(f)}\` |`).join("\n");
-    const analyze = () => analyzeMain(["--pass1", join(dir, "raw.jsonl"), "--pass2", join(dir, "p.jsonl"), "--e20", join(dir, "t.jsonl"), join(dir, "y.jsonl"), "--industries", join(dir, "i.csv"), "--e20-excluded", join(dir, "x.txt"), "--out", join(dir, "o.json")], { fail: () => undefined, preregText });
+    const analyze = () => analyzeMain(["--pass1", join(dir, "raw.jsonl"), "--pass2", join(dir, "p.jsonl"), "--e20", join(dir, "t.jsonl"), join(dir, "y.jsonl"), "--industries", join(dir, "i.csv"), "--e20-excluded", join(dir, "x.txt"), "--out", join(dir, "o.json")], { state: runState(dir), fail: () => undefined, preregText });
     expect(analyze()).toBe(3);
     writeFileSync(join(dir, "manifest.json"), JSON.stringify({ kind: "pass", finishedAt: "x", immutableAtFinish: { ok: true }, rawSha256: createHash("sha256").update(lines(rows)).digest("hex") }));
     expect(analyze()).toBe(3);
@@ -1395,9 +1398,9 @@ describe("package 3 criteria", () => {
     writeFileSync(join(dir, "one.txt"), "x");
     const said = [];
     const fail = (m) => said.push(m);
-    expect(analyzeMain(["--pass1", join(dir, "raw.jsonl"), "--e20", "a", "b"], { fail, preregText: "" })).toBe(3);
+    expect(analyzeMain(["--pass1", join(dir, "raw.jsonl"), "--e20", "a", "b"], { fail, state: runState(dir), preregText: "" })).toBe(3);
     expect(said.at(-1)).toMatch(/Pass 1 raw" was not given/);
-    expect(analyzeMain(["--pass1", join(dir, "raw.jsonl"), "--pass2", join(dir, "one.txt"), "--e20", "a", "b"], { fail, preregText: "| Pass 1 raw SHA-256 | `" + "0".repeat(64) + "` |" })).toBe(3);
+    expect(analyzeMain(["--pass1", join(dir, "raw.jsonl"), "--pass2", join(dir, "one.txt"), "--e20", "a", "b"], { fail, state: runState(dir), preregText: "| Pass 1 raw SHA-256 | `" + "0".repeat(64) + "` |" })).toBe(3);
     expect(said.at(-1)).toMatch(/does not match its frozen hash/);
   });
 

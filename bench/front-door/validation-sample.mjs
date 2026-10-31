@@ -259,9 +259,17 @@ export function scoreLabels(key, humanText, agentText, { frame, ...opts } = {}) 
 }
 
 const PRIVATE = Object.freeze({ mode: 0o600 });
-export const STATE_FIELDS = Object.freeze(["codeSha256", "protocolSha256", "classifierSha256", "pslSha256", "lockfileSha256"]);
+// What a result rests on. The score, the analysis and the report all run from the run's own commit, so each
+// must equal the manifest. A laptop's Node binary can't match the server's, so the version is what's compared.
+export const STATE_FIELDS = Object.freeze(["codeSha256", "classifierSha256", "protocolSha256", "amendmentSha256", "studyPageSha256", "pslSha256", "lockfileSha256", "node"]);
 /** The study state a score or an analysis ran under, for the report to compare. */
-export const stateOf = (state = studyState()) => Object.fromEntries(STATE_FIELDS.map((k) => [k, state[k]]));
+export const stateOf = (state = studyState()) => Object.fromEntries(STATE_FIELDS.map((k) => [k, state[k] ?? (k === "node" ? process.version : undefined)]));
+/** Where a state departs from the run's manifest, by name, or null. */
+export function stateProblem(manifest, state) {
+  const now = stateOf(state), run = stateOf(manifest);
+  const field = STATE_FIELDS.find((k) => now[k] !== run[k]);
+  return field ? `this checkout is not the run's: ${field} differs` : null;
+}
 const hash = (b) => createHash("sha256").update(b).digest("hex");
 const readRaw = (file) => readFileSync(file, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
 
@@ -343,18 +351,18 @@ function checkedLabels(dir, role, sheetSha256) {
 }
 
 /** The score of this run's bound inputs, with every input's hash, or what's wrong with them. Scoring twice gives the same figures. */
-export function scoreRun(dir, { state = stateOf(), ...opts } = {}) {
+export function scoreRun(dir, { state = studyState(), ...opts } = {}) {
   const bound = verifyDraw(dir);
   if (bound.problem) return bound;
   const manifest = JSON.parse(readFileSync(join(dir, "manifest.json"), "utf8"));
-  // The protocol can gain a dated note after a run. The code and the classifier can't change under its audit.
-  for (const field of ["codeSha256", "classifierSha256"]) if (state[field] !== manifest[field]) return { problem: `this checkout is not the run's: ${field} differs` };
+  const departs = stateProblem(manifest, state);
+  if (departs) return { problem: departs };
   const human = checkedLabels(dir, "human", bound.sheetSha256), model = checkedLabels(dir, "model", bound.sheetSha256);
   for (const side of [human, model]) if (side.problem) return side;
   const side = ({ labelsSha256, manifestSha256 }) => ({ labelsSha256, manifestSha256 });
   const frame = JSON.parse(readFileSync(join(dir, "audit-frame.json"), "utf8"));
   const scored = scoreLabels(JSON.parse(readFileSync(join(dir, "validation-key.json"), "utf8")), human.text, model.text, { frame, ...opts });
-  return JSON.parse(JSON.stringify({ ...scored, provenance: { ...bound, human: side(human), model: side(model), state, runProtocolSha256: manifest.protocolSha256, commit: manifest.git?.commit ?? null } }));
+  return JSON.parse(JSON.stringify({ ...scored, provenance: { ...bound, human: side(human), model: side(model), state: stateOf(state), runState: stateOf(manifest), runRuntimeSha256: manifest.runtimeSha256, aggregateSha256: manifest.aggregateSha256 ?? null, commit: manifest.git?.commit ?? null } }));
 }
 
 /** All text out, for a pilot or for a pass that stopped, and read back to prove it. */

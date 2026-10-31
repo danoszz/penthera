@@ -4,19 +4,23 @@
  * report by code and neither can appear without the other. Prints no site. It groups
  * nothing itself, so the floor on small groups stays the analysis's job.
  *
- *   node bench/front-door/report-tables.mjs --analysis <analysis.json> --score <score.json> --out <final-report.md> [--run <run folder>]
+ *   node bench/front-door/report-tables.mjs --run <run folder> --analysis <analysis.json> --score <score.json> --out <final-report.md>
+ *       --pass2 <pass 1 raw> --e20 <tranco raw> <yc raw> --industries <csv> --e20-excluded <file>
  *
- * Exits 3 and writes nothing unless the two files belong together. With --run, on a machine
- * that holds the whole run and the key, it also proves the chain from the raw file and
- * scores the labels again. Amendment 3: the headline stands above the claims, and when the
- * audit is not estimable, every real-page view says so.
+ * Runs where the whole run, the key and the private inputs are. It proves the chain from the
+ * raw file, runs the analysis and the score again from their inputs, and compares every field.
+ * The self-hashes aren't keyed, so nothing is taken from them alone. Exits 3 and writes nothing
+ * on any refusal, and there is no unchecked way to write a report. Amendment 3: the headline
+ * stands above the claims, and when the audit is not estimable, every real-page view says so.
  */
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { selfHashHolds } from "./record-checks.mjs";
-import { LABEL_STRATA, MIN_AUDIT_FRAME, overWithheldLimit, scoreRun, stateOf, STATE_FIELDS, SUPPRESSED, verifyDraw } from "./validation-sample.mjs";
+import { join, resolve } from "node:path";
+import { analysisOf } from "./analyze-r.mjs";
+import { selfHashed, selfHashHolds } from "./record-checks.mjs";
+import { studyState } from "./replicate.mjs";
+import { LABEL_STRATA, MIN_AUDIT_FRAME, overWithheldLimit, scoreRun, STATE_FIELDS, stateProblem, SUPPRESSED, verifyDraw } from "./validation-sample.mjs";
 
 export const NOT_VALIDATED = "; candidate-page not validated on this run";
 export const SCOPE_LINE = "Audit figures describe non-withheld records, not the run as a whole.";
@@ -24,6 +28,15 @@ export const NOT_THE_RESULT = "These figures are for the frame, and are not the 
 const PROVENANCE = Object.freeze(["manifestSha256", "rawSha256", "drawProofSha256", "frameSha256", "sheetSha256", "keySha256"]);
 const DIGEST = /^[0-9a-f]{64}$/;
 const hash = (b) => createHash("sha256").update(b).digest("hex");
+
+// Every top-level key of analysis.json is printed or listed here with a reason. A new key needs one or the other.
+export const PRINTED_KEYS = Object.freeze(["level", "claims", "traits", "traitsByCohort", "refusals", "privacyDeviation", "primaryRefusal", "bounds", "standardized", "standardizedR", "secondaryCohorts", "challengeByEdge", "skipsByCohort", "textWithheld", "cspControlsScripts", "dnsGradedOnlyReading", "dnsBeside", "dnsCoverage", "industries", "replicationAsE20", "provenance", "selfSha256"]);
+export const NOT_PRINTED = Object.freeze({
+  experiment: "names the study, which the title does",
+  resamples: "fixed in the code and printed in provenance as an option",
+  auditFrame: "must equal the score's frame, which the audit's detail prints",
+});
+export const PART_TWO = "Secondary figures. Their intervals are naive row-level, with no clustering, and they corroborate nothing.";
 
 const refuse = (why) => { throw new Error(`Refused: ${why}.`); };
 
@@ -35,7 +48,7 @@ function scoreProblem(s) {
   const p = s.provenance;
   for (const name of PROVENANCE) if (!DIGEST.test(p?.[name] ?? "")) return `the score has no ${name}`;
   for (const role of ["human", "model"]) for (const name of ["labelsSha256", "manifestSha256"]) if (!DIGEST.test(p?.[role]?.[name] ?? "")) return `the score has no ${name} for the ${role} labels`;
-  for (const name of STATE_FIELDS) if (!DIGEST.test(p?.state?.[name] ?? "")) return `the score has no ${name}`;
+  for (const name of STATE_FIELDS) if (!p?.state?.[name] || !p.runState?.[name]) return `the score has no ${name}`;
   const frame = s.frame;
   if (!frame?.strata || !frame.labels) return "the score has no frame";
   if (hash(`${JSON.stringify(frame, null, 2)}\n`) !== p.frameSha256) return "the score's frame is not the one its hash names";
@@ -72,24 +85,34 @@ export function joined(analysis, score) {
   if (JSON.stringify(analysis.auditFrame) !== JSON.stringify(score.frame)) refuse("the analysis and the score hold different audit frames");
 }
 
-/** With the whole run to hand: the chain from the raw file, this checkout, and the score worked out again. */
-export function checkAgainstRun(dir, score, state = stateOf()) {
+/**
+ * Against the whole run: the chain from the raw file, this checkout against the manifest, and
+ * the score and the analysis worked out again from their inputs, compared field for field.
+ */
+export function checkAgainstRun(dir, analysis, score, inputs, { state = studyState(), preregText } = {}) {
   const bound = verifyDraw(dir);
   if (bound.problem) refuse(bound.problem);
   for (const name of PROVENANCE) if (score.provenance[name] !== bound[name]) refuse(`this score doesn't match the run: ${name} differs`);
+  const manifest = JSON.parse(readFileSync(join(dir, "manifest.json"), "utf8"));
+  const departs = stateProblem(manifest, state);
+  if (departs) refuse(departs);
+  if (hash(readFileSync(join(dir, "aggregate.json"))) !== manifest.aggregateSha256) refuse("the aggregate file is not the run's");
   const again = scoreRun(dir, { state });
   if (again.problem) refuse(again.problem);
   const figures = ({ selfSha256: _self, scoredAt: _at, ...rest }) => JSON.stringify(rest);
-  for (const name of STATE_FIELDS) if (state[name] !== score.provenance.state[name]) refuse(`this checkout is not the score's: ${name} differs`);
   if (figures(score) !== figures(again)) refuse("this score's figures don't follow from its inputs");
+  const said = [];
+  const redone = analysisOf(["--pass1", join(dir, "raw.jsonl"), ...inputs], { fail: (m) => said.push(m), state, preregText });
+  if (!redone) refuse(said.join(" ").replace(/^Refused: |\.$/g, ""));
+  if (JSON.stringify(selfHashed(redone)) !== JSON.stringify(analysis)) refuse("this analysis doesn't follow from its inputs");
 }
 
 const pct = (v) => (typeof v === "number" ? (v * 100).toFixed(1) : "n/a");
 const ci = (c) => (Array.isArray(c) && typeof c[0] === "number" ? `${pct(c[0])} to ${pct(c[1])}` : "n/a");
 const num = (v) => (typeof v === "number" ? v.toFixed(3) : "n/a");
 
-/** The report's text, in the registered order. Nothing here can fail a check: `joined` ran first. */
-export function assemble(a, s, { checkedAgainstRun = false } = {}) {
+/** The report's text, in the registered order. It checks nothing and writes nothing: only `main` writes, after every check. */
+export function assemble(a, s, { runtimeNow = null } = {}) {
   const out = [];
   const table = (head, rows) => out.push(`| ${head.join(" | ")} |`, `|${head.map(() => "---").join("|")}|`, ...rows.map((r) => `| ${r.join(" | ")} |`), "");
   const title = (t) => out.push(`## ${t}`, "");
@@ -101,8 +124,7 @@ export function assemble(a, s, { checkedAgainstRun = false } = {}) {
 
   out.push("# E20-R2 results", "");
   title("Provenance");
-  table(["Input", "SHA-256"], [["Commit", p.commit ?? "n/a"], ["Manifest", p.manifestSha256], ["Raw, after the draw", p.rawSha256], ["Draw proof", p.drawProofSha256], ["Audit frame", p.frameSha256], ["Sheet", p.sheetSha256], ["Key", p.keySha256], ["Human labels", p.human.labelsSha256], ["Human label manifest", p.human.manifestSha256], ["Model labels", p.model.labelsSha256], ["Model label manifest", p.model.manifestSha256], ["Score", s.selfSha256], ["Analysis", a.selfSha256], ["Classifier", p.state.classifierSha256], ["Protocol", p.state.protocolSha256], ["Code", p.state.codeSha256]]);
-  out.push(`Checked against the run folder: ${checkedAgainstRun ? "yes" : "no"}.`, "");
+  table(["Input", "SHA-256"], [["Commit", p.commit ?? "n/a"], ["Manifest", p.manifestSha256], ["Raw, after the draw", p.rawSha256], ["Draw proof", p.drawProofSha256], ["Audit frame", p.frameSha256], ["Sheet", p.sheetSha256], ["Key", p.keySha256], ["Human labels", p.human.labelsSha256], ["Human label manifest", p.human.manifestSha256], ["Model labels", p.model.labelsSha256], ["Model label manifest", p.model.manifestSha256], ["Score", s.selfSha256], ["Analysis", a.selfSha256], ["Classifier", p.state.classifierSha256], ["Protocol now", p.state.protocolSha256], ["Protocol of the run", p.runState.protocolSha256], ["Code", p.state.codeSha256], ["Public Suffix List", p.state.pslSha256], ["Lockfile", p.state.lockfileSha256], ["Amendment", p.state.amendmentSha256], ["Study page", p.state.studyPageSha256], ["Node version", p.state.node], ["Node binary of the run, not compared", p.runRuntimeSha256], ["Node binary now, not compared", runtimeNow ?? "n/a"], ["Aggregate file, with MX and NS counts", p.aggregateSha256 ?? "n/a"], ...Object.entries(a.provenance.inputs ?? {}), ...Object.entries(a.provenance.options ?? {}).map(([name, value]) => [`Option: ${name}`, value])]);
 
   const over = Object.entries(s.frame.strata).filter(([, g]) => g.overLimit).map(([name, g]) => `${name} ${g.withheld} of ${g.eligible}`);
   out.push(notEstimable ? `**Headline audit: not estimable.** Over 2.0% withheld: ${over.join("; ")}. It changes no claim's decision.` : "**Headline audit: stands, on its frame.**", "");
@@ -157,22 +179,57 @@ export function assemble(a, s, { checkedAgainstRun = false } = {}) {
   out.push(`${notEstimable ? "Frame only, not the audit's result: kappa" : "Kappa"} ${kappa}. Kappa has no worst-case bound. Human against the model, ${s.humanVsAgent.bothAnswered} rows: ${model}.`, "");
 
   if (a.privacyDeviation) { title("Privacy deviation"); out.push(`A person reviewed and recorded a false fire. Note hash \`${a.privacyDeviation.noteSha256}\`.`, ""); }
+
+  // Part 2. Every row and field the analysis holds, read off the data so none can be left out.
+  out.push("# Part 2", "", PART_TWO, "");
+  const cellOf = (v) => (Array.isArray(v) ? v.map(cellOf).join(" to ") : typeof v === "number" ? (Number.isInteger(v) ? v : v.toFixed(3)) : v === null || v === undefined ? "n/a" : typeof v === "object" ? JSON.stringify(v) : v);
+  const fields = (rows) => {
+    const keys = [...new Set(rows.flatMap((r) => Object.keys(r)))];
+    table(keys, rows.map((r) => keys.map((k) => cellOf(r[k]))));
+  };
+  const traitRows = (head, group) => {
+    const checks = [...new Set(Object.values(group).flatMap((g) => Object.keys(g.shares ?? {})))];
+    table([head, "Sites", ...checks], Object.entries(group).map(([name, g]) => [name, g.sites, ...checks.map((c) => (g.suppressed ? "under 20" : pct(g.shares[c])))]));
+  };
+  title("Secondary cohorts");
+  fields(a.secondaryCohorts ?? []);
+  title("Checks by site trait");
+  traitRows("Trait", a.traits ?? {});
+  for (const [cohort, group] of Object.entries(a.traitsByCohort ?? {})) { out.push(`List: ${cohort}`, ""); traitRows("Trait", group); }
+  title("Checks by industry");
+  const { suppressedGroups = 0, ...industries } = a.industries ?? {};
+  out.push(`Groups under 20, not shown: ${suppressedGroups}.`, "");
+  const industryChecks = [...new Set(Object.values(industries).flatMap((g) => Object.keys(g.shares ?? {})))];
+  table(["Industry", "Sites", "Median score", ...industryChecks], Object.entries(industries).map(([name, g]) => [name, g.sites, cellOf(g.median), ...industryChecks.map((c) => pct(g.shares[c]))]));
+  title("Challenge share by edge");
+  fields(Object.entries(a.challengeByEdge ?? {}).map(([edge, g]) => ({ edge, ...g })));
+  title("DNS beside the decision");
+  for (const [name, list] of Object.entries(a.dnsBeside ?? {})) {
+    out.push(`Measure: ${name === "rejectOnly" ? "p=reject" : name}`, "");
+    table(["Claim", "Comparison", "Check", "Served", "Decision"], list.map((c) => [c.id, c.label, `\`${c.check}\``, view(c.S), c.decision]));
+  }
+  title("Graded-only DNS reading");
+  out.push("Decides nothing.", "");
+  table(["Claim", "Comparison", "Check", "Served", "Real page", "Decision"], (a.dnsGradedOnlyReading ?? []).map((c) => [c.id, c.label, `\`${c.check}\``, view(c.S), realView(c.R), c.decision]));
   return out.join("\n");
 }
 
-export function main(args, { log = console.log, fail = console.error, state } = {}) {
-  const at = (flag) => (args.includes(flag) ? args[args.indexOf(flag) + 1] : undefined);
+export function main(args, { log = console.log, fail = console.error, ...deps } = {}) {
+  const at = (flag, offset = 1) => (args.includes(flag) ? args[args.indexOf(flag) + offset] : undefined);
   const [analysisFile, scoreFile, outFile, run] = [at("--analysis"), at("--score"), at("--out"), at("--run")];
-  if (!analysisFile || !scoreFile || !outFile) { fail("Usage: report-tables.mjs --analysis <analysis.json> --score <score.json> --out <final-report.md> [--run <run folder>]"); return 2; }
+  if (!analysisFile || !scoreFile || !outFile) { fail("Usage: report-tables.mjs --run <run folder> --analysis <analysis.json> --score <score.json> --out <final-report.md> --pass2 <raw> --e20 <tranco raw> <yc raw> --industries <csv> --e20-excluded <file>"); return 2; }
   try {
+    if (!run) refuse("the report needs --run, because nothing unchecked may become the final report");
+    const inputs = ["--pass2", at("--pass2"), "--e20", at("--e20"), at("--e20", 2), "--industries", at("--industries"), "--e20-excluded", at("--e20-excluded")];
+    if (inputs.some((v) => !v)) refuse("the report needs every registered input, to run the analysis again");
     for (const file of [analysisFile, scoreFile]) if (!existsSync(file)) refuse(`there is no ${file}`);
     const analysis = JSON.parse(readFileSync(analysisFile, "utf8")), score = JSON.parse(readFileSync(scoreFile, "utf8"));
     joined(analysis, score);
-    if (run) checkAgainstRun(run, score, state);
-    const text = `${assemble(analysis, score, { checkedAgainstRun: Boolean(run) })}\n`;
+    checkAgainstRun(run, analysis, score, inputs, deps);
+    const text = `${assemble(analysis, score, { runtimeNow: (deps.state ?? studyState()).runtimeSha256 })}\n`;
     writeFileSync(`${outFile}.tmp`, text, { mode: 0o600 });
     renameSync(`${outFile}.tmp`, outFile);
-    log(JSON.stringify({ report: outFile, notEstimable: score.frame.notEstimable, checkedAgainstRun: Boolean(run) }));
+    log(JSON.stringify({ report: outFile, notEstimable: score.frame.notEstimable }));
     return 0;
   } catch (e) {
     fail(e.message.startsWith("Refused") ? e.message : `Refused: ${e.message}.`);

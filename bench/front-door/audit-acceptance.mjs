@@ -3,16 +3,17 @@
  * draw to the report. Each row runs through `main()`, as a run would. Nothing leaves the
  * machine, and the files stay in the caller's folder.
  */
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { scrub, scrubMisses } from "./classify.mjs";
 import { pageTextMissed, safeRecord, selfHashed, withheldCounts, withholdText } from "./record-checks.mjs";
-import { NOT_THE_RESULT, NOT_VALIDATED, main as report } from "./report-tables.mjs";
+import { assemble, joined, NOT_PRINTED, NOT_THE_RESULT, NOT_VALIDATED, PART_TWO, PRINTED_KEYS, main as report } from "./report-tables.mjs";
 import { codeFiles, studyState } from "./replicate.mjs";
 import { sha256 } from "./run.mjs";
 import { auditFrame, main as validation, scoreLabels, stateOf, SUPPRESSED, NO_ANSWERS } from "./validation-sample.mjs";
+import { main as analyze } from "./analyze-r.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const quiet = () => undefined;
@@ -40,7 +41,8 @@ export function finishedRun(dir, rows) {
   mkdirSync(dir, { recursive: true });
   const raw = `${rows.map((r) => JSON.stringify(r)).join("\n")}\n`;
   writeFileSync(join(dir, "raw.jsonl"), raw);
-  const manifest = { study: "E20-R2", kind: "pass", pass: 3, git: { commit: "c".repeat(40) }, ...studyState(), finishedAt: "2026-11-07T00:00:00.000Z", immutableAtFinish: { ok: true }, rawSha256: sha256(Buffer.from(raw)) };
+  writeFileSync(join(dir, "aggregate.json"), "{}\n");
+  const manifest = { study: "E20-R2", kind: "pass", pass: 3, git: { commit: "c".repeat(40) }, ...studyState(), node: process.version, aggregateSha256: sha256(Buffer.from("{}\n")), finishedAt: "2026-11-07T00:00:00.000Z", immutableAtFinish: { ok: true }, rawSha256: sha256(Buffer.from(raw)) };
   put(join(dir, "manifest.json"), manifest);
   put(join(dir, "privacy-report.json"), { clean: true, rawSha256: manifest.rawSha256, manifestSha256: sha256(readFileSync(join(dir, "manifest.json"))) });
   return dir;
@@ -62,7 +64,7 @@ export function scoredRun(dir, { resamples = 200, change } = {}) {
 const VIEW = { diff: 0.1, ci: [0.05, 0.15], orgsA: 30, orgsB: 30, direction: "as predicted" };
 
 /** An analysis of this run, in the shape analyze-r.mjs writes, with one view of each kind. */
-export function analysisOf(dir) {
+export function fixtureAnalysis(dir) {
   const manifest = json(join(dir, "manifest.json"));
   const rows = readFileSync(join(dir, "raw.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
   const claim = (id) => ({ id, label: "x minus y", check: "csp", predicted: "-", S: VIEW, R: VIEW, decision: "supported" });
@@ -79,18 +81,18 @@ export function analysisOf(dir) {
 const count = (text, needle) => text.split(needle).length - 1;
 
 /** Every row of this package, handed to `add`. */
-export function auditRows(root, add, truth) {
+export function auditRows(root, add, truth, { inputs, preregText }) {
   const FULL = { "candidate-page": 160, challenge: 50, "block-signature": 50, "block-unrecognized-403": 30, "unrecognized-error-response": 20 };
   const at = (name) => join(root, "audit", name);
   mkdirSync(at(""), { recursive: true });
-  const reportOf = (dir, analysis = analysisOf(dir), score = json(join(dir, "score.json"))) => {
-    put(join(dir, "analysis.json"), analysis);
-    const scoreFile = join(dir, "score-used.json");
-    put(scoreFile, score);
-    const out = join(dir, "final-report.md");
-    rmSync(out, { force: true });
-    const got = say(report, ["--analysis", join(dir, "analysis.json"), "--score", scoreFile, "--out", out]);
-    return { ...got, text: existsSync(out) ? readFileSync(out, "utf8") : null };
+  // The branches and the checks on the two files alone, through the test API: `assemble` writes no file.
+  const reportOf = (dir, analysis = fixtureAnalysis(dir), score = json(join(dir, "score.json"))) => {
+    try {
+      joined(JSON.parse(JSON.stringify(analysis)), JSON.parse(JSON.stringify(score)));
+      return { code: 0, said: "ok", text: assemble(analysis, score) };
+    } catch (e) {
+      return { code: 3, said: e.message, text: null };
+    }
   };
 
   // Both branches, end to end, from one withheld record's difference.
@@ -118,9 +120,9 @@ export function auditRows(root, add, truth) {
   refused("R6: a flipped headline", written(reportOf(stands, undefined, edited(scoreA, (s) => { s.headline = "not estimable"; s.frame.headline = "not estimable"; s.frame.notEstimable = true; rehash(s); }))), /headline doesn't match/);
   refused("R6: a hidden not estimable", written(reportOf(flips, undefined, edited(scoreB, (s) => { s.headline = "stands, on its frame"; s.frame.headline = "stands, on its frame"; s.frame.notEstimable = false; rehash(s); }))), /headline doesn't match/);
   refused("R6: a score edited by hand, self-hash left", written(reportOf(stands, undefined, { ...scoreA, kappa: 0.1 })), /changed after/);
-  refused("R7: an analysis from another run", written(reportOf(stands, analysisOf(flips))), /manifestSha256 differs/);
-  refused("R7: a score from another run", written(reportOf(flips, analysisOf(flips), scoreA)), /manifestSha256 differs/);
-  const analysisWith = (dir, change) => { const { selfSha256: _s, ...fields } = analysisOf(dir); const next = JSON.parse(JSON.stringify(fields)); change(next); return selfHashed(next); };
+  refused("R7: an analysis from another run", written(reportOf(stands, fixtureAnalysis(flips))), /manifestSha256 differs/);
+  refused("R7: a score from another run", written(reportOf(flips, fixtureAnalysis(flips), scoreA)), /manifestSha256 differs/);
+  const analysisWith = (dir, change) => { const { selfSha256: _s, ...fields } = fixtureAnalysis(dir); const next = JSON.parse(JSON.stringify(fields)); change(next); return selfHashed(next); };
   refused("R7: an analysis of the raw file before the draw", written(reportOf(stands, analysisWith(stands, (x) => { x.provenance.rawSha256 = json(join(stands, "manifest.json")).rawSha256; }))), /rawSha256 differs/);
   for (const field of ["classifierSha256", "protocolSha256", "codeSha256"]) refused(`R8: ${field} differs, by name`, written(reportOf(stands, analysisWith(stands, (x) => { x.provenance.state[field] = "0".repeat(64); }))), new RegExp(`${field} differs`));
   for (const missing of ["sheetSha256", "keySha256", "frameSha256", "drawProofSha256"]) refused(`R9: the score has no ${missing}`, written(reportOf(stands, undefined, edited(scoreA, (s) => { delete s.provenance[missing]; }))), new RegExp(missing));
@@ -139,20 +141,68 @@ export function auditRows(root, add, truth) {
   const chain = at("chain");
   finishedRun(chain, records({ ...FULL, "candidate-page": 170 }, { challenge: 1, "candidate-page": 1 }, "x"));
   scoredRun(chain, { resamples: 20_000 });
-  const untouched = (dir, change) => {
-    const copy = `${dir}-${Math.random().toString(36).slice(2, 8)}`;
-    cpSync(dir, copy, { recursive: true });
-    change(copy);
-    put(join(copy, "analysis.json"), analysisOf(dir));
+  // The registered command, in full, on a copy of the run with one thing changed.
+  const REGISTERED = ["--pass2", inputs["Pass 1 raw"], "--e20", inputs["E20 Tranco raw"], inputs["E20 YC raw"], "--industries", inputs["Industry map"], "--e20-excluded", inputs["E20 exclusion file"]];
+  const reported = (d, { args = ["--run", d, ...REGISTERED], ...deps } = {}) => {
     const said = [];
-    const code = report(["--analysis", join(copy, "analysis.json"), "--score", join(copy, "score.json"), "--out", join(copy, "final.md"), "--run", copy], { log: quiet, fail: (m) => said.push(m) });
-    return { code, said: said.join(" ") || "ok", wrote: existsSync(join(copy, "final.md")) };
+    const code = report(["--analysis", join(d, "analysis.json"), "--score", join(d, "score.json"), "--out", join(d, "final.md"), ...args], { log: quiet, fail: (m) => said.push(m), preregText, ...deps });
+    const wrote = existsSync(join(d, "final.md"));
+    // A refusal that left a file is no refusal, so it can't pass a refused row.
+    return { code: code && wrote ? 0 : code, said: `${said.join(" ") || "ok"}${code && wrote ? " and it wrote a file" : ""}` };
   };
-  add("P1: a whole chain reports, with the run checked", "allowed", untouched(chain, quiet));
+  analyze(["--pass1", join(chain, "raw.jsonl"), ...REGISTERED, "--out", join(chain, "analysis.json")], { preregText, fail: quiet });
+  let copies = 0;
+  const copied = (change = quiet) => {
+    const copy = `${chain}-${++copies}`;
+    cpSync(chain, copy, { recursive: true });
+    change(copy);
+    return copy;
+  };
+  const bump = (file, change) => { const v = json(file); change(v); put(file, v); };
+  const untouched = (_dir, change, deps) => reported(copied(change), deps);
+  const wholeDir = copied();
+  add("P1: a whole chain reports, every part recomputed", "allowed", reported(wholeDir));
+  const finalText = existsSync(join(wholeDir, "final.md")) ? readFileSync(join(wholeDir, "final.md"), "utf8") : "";
+  const manifestNow = json(join(chain, "manifest.json"));
+  add("P1: provenance shows every enforced hash, both protocols, both binaries, inputs and the aggregate", "allowed", truth(finalText.includes(`| Protocol now | ${manifestNow.protocolSha256} |`) && finalText.includes(`| Protocol of the run | ${manifestNow.protocolSha256} |`) && finalText.includes("| Node binary of the run, not compared |") && finalText.includes("| Node binary now, not compared |") && [manifestNow.pslSha256, manifestNow.lockfileSha256, manifestNow.amendmentSha256, manifestNow.studyPageSha256, manifestNow.classifierSha256, manifestNow.codeSha256, manifestNow.aggregateSha256, process.version, sha256(readFileSync(inputs["Pass 1 raw"]))].every((h) => finalText.includes(h)), "all in the table"));
+  const chainAnalysis = json(join(chain, "analysis.json"));
+  const unlisted = Object.keys(chainAnalysis).filter((k) => !PRINTED_KEYS.includes(k) && !(k in NOT_PRINTED));
+  add("G1: every key of a real analysis is printed or listed with a reason", "allowed", truth(!unlisted.length, unlisted.join(" ") || `${Object.keys(chainAnalysis).length} keys`));
+  add("G2: a key is printed or listed, never both", "allowed", truth(!PRINTED_KEYS.some((k) => k in NOT_PRINTED), "two lists"));
+  const part = finalText.slice(Math.max(0, finalText.indexOf(PART_TWO)));
+  const partOrder = ["## Secondary cohorts", "## Checks by site trait", "## Checks by industry", "## Challenge share by edge", "## DNS beside the decision", "## Graded-only DNS reading"].map((h) => part.indexOf(h));
+  add("G3: Part 2 opens with the registered line, after the rest, in order", "allowed", truth(finalText.indexOf("## The audit's detail") < finalText.indexOf(PART_TWO) && partOrder.every((n, i) => n > 0 && (i === 0 || n > partOrder[i - 1])) && part.includes("Decides nothing."), partOrder.join(" ")));
+  const secondaryRows = (chainAnalysis.secondaryCohorts ?? []).length;
+  add("G4: Part 2 prints every secondary row", "allowed", truth(secondaryRows > 0 && part.split("\n").filter((l) => l.includes("naive row-level") && l.startsWith("|")).length >= secondaryRows, `${secondaryRows} rows`));
+
+  const freshAnalysis = (d, change) => { const { selfSha256: _s, ...fields } = json(join(d, "analysis.json")); const next = JSON.parse(JSON.stringify(fields)); change(next); put(join(d, "analysis.json"), selfHashed(next)); };
+  refused("A1: a claim's decision edited, with a fresh self-hash", untouched(chain, (d) => freshAnalysis(d, (x) => { x.claims[0].decision = "supported, by hand"; })), /analysis doesn't follow from its inputs/);
+  refused("A1: an effect edited, with a fresh self-hash", untouched(chain, (d) => freshAnalysis(d, (x) => { x.claims[0].S = { ...x.claims[0].S, diff: 0.42 }; })), /analysis doesn't follow from its inputs/);
+  refused("A1: a secondary row edited, with a fresh self-hash", untouched(chain, (d) => freshAnalysis(d, (x) => { x.secondaryCohorts[0] = { ...x.secondaryCohorts[0], judgedA: 9999 }; })), /analysis doesn't follow from its inputs/);
+  refused("A1: a field added, with a fresh self-hash", untouched(chain, (d) => freshAnalysis(d, (x) => { x.note = "by hand"; })), /analysis doesn't follow from its inputs/);
+  refused("A1: an analysis edited, self-hash left", untouched(chain, (d) => bump(join(d, "analysis.json"), (x) => { x.claims[0].decision = "by hand"; })), /changed after/);
+  const noRun = copied();
+  refused("A2: no --run writes nothing", reported(noRun, { args: REGISTERED }), /needs --run/);
+  refused("A2: no registered input writes nothing", reported(noRun, { args: ["--run", noRun] }), /every registered input/);
+  const wrongInput = copied();
+  refused("A3: a registered input that isn't the frozen one", reported(wrongInput, { args: ["--run", wrongInput, ...REGISTERED.map((v) => (v === inputs["Industry map"] ? join(wrongInput, "manifest.json") : v))] }), /Industry map does not match/);
+  refused("A3: an aggregate file that isn't the run's", untouched(chain, (d) => writeFileSync(join(d, "aggregate.json"), "[]\n")), /aggregate file/);
+  const realState = { ...studyState(), node: process.version };
+  const WRONG = [["protocolSha256", "0".repeat(64)], ["amendmentSha256", "0".repeat(64)], ["studyPageSha256", "0".repeat(64)], ["pslSha256", "0".repeat(64)], ["lockfileSha256", "0".repeat(64)], ["node", "v0.0.0"], ["codeSha256", "0".repeat(64)], ["classifierSha256", "0".repeat(64)]];
+  const stepRun = at("steps");
+  finishedRun(stepRun, records(FULL, {}, "s"));
+  validation(["draw", stepRun], { log: quiet, fail: quiet });
+  for (const role of ["human", "model"]) { writeFileSync(join(stepRun, `labels-${role}.csv`), labelsFor(stepRun)); validation(["bind", stepRun, role, json(join(stepRun, "prune-manifest.json")).sheetSha256], { log: quiet, fail: quiet }); }
+  for (const [field, value] of WRONG) {
+    const state = { ...realState, [field]: value }, why = new RegExp(`${field} differs`);
+    refused(`A4: score, ${field} isn't the run's`, say((args, o) => validation(args, { ...o, state }), ["score", stepRun]), why);
+    refused(`A4: analysis, ${field} isn't the run's`, say((args, o) => analyze(args, { fail: o.fail, preregText, state }), ["--pass1", join(stepRun, "raw.jsonl"), ...REGISTERED, "--out", join(stepRun, "a.json")]), why);
+    refused(`A4: report, ${field} isn't the run's`, untouched(chain, quiet, { state }), why);
+  }
+  add("A4: no refused step wrote its file", "allowed", truth(!existsSync(join(stepRun, "score.json")) && !existsSync(join(stepRun, "a.json")), "no score, no analysis"));
   const other = at("other");
   finishedRun(other, records(FULL, {}, "y"));
   scoredRun(other);
-  const bump = (file, change) => { const v = json(file); change(v); put(file, v); };
   refused("P2: an altered sheet", untouched(chain, (d) => bump(join(d, "validation-sheet.json"), (s) => { s[0].excerpt = "changed"; })), /sheet is not the one/);
   refused("P2: an altered sheet with its proof rewritten", untouched(chain, (d) => { bump(join(d, "validation-sheet.json"), (s) => { s[0].excerpt = "changed"; }); bump(join(d, "prune-manifest.json"), (p) => { p.sheetSha256 = sha256(readFileSync(join(d, "validation-sheet.json"))); }); }), /doesn't match the raw file/);
   refused("P3: sheet and key swapped", untouched(chain, (d) => { const s = readFileSync(join(d, "validation-sheet.json")); writeFileSync(join(d, "validation-sheet.json"), readFileSync(join(d, "validation-key.json"))); writeFileSync(join(d, "validation-key.json"), s); }), /not the one/);
@@ -251,8 +301,8 @@ export function auditRows(root, add, truth) {
 
   // The detector's grammar, both ways through the scrub.
   const caught = (t) => scrubMisses(t).email > 0 && (scrub(t).includes("<email>") || scrubMisses(scrub(t)).email > 0);
-  for (const t of ["john at example.x.com", "john at example.a-b.com", "john at example.3m.com", "john at a.b.c.d.e.f.g.h.i.j.k.l.m.n.o.p.com", "john at example.xn--80ak6aa92e.com", "john at xn--e1afmkfd.xn--p1ai", "john at example.испытание.рф", "john at 例子.测试.中国", "john at ตัวอย่าง.ไทย", "john at उदाहरण.भारत", "john at (example.x.com)", "john at [example.a-b.com]", "john at <example.3m.com>", 'john at "example.x.com"', "john at 'example.a-b.com'", "john at example dot x dot com", "john at example . a-b . com", "john at example (dot) co (dot) uk", "john (at example.x.com)", "john(at example.x.com)", '"john" at example.x.com', "john @ example.x.com", "(info) @ example.x.com", "john @ [example.x.com]", "john ａｔ example.x.com", "john&nbsp;at&nbsp;example.x.com", "john at exam​ple.x.com", "JOHN AT EXAMPLE.X.COM"]) add(`D: fires on ${t}`, "allowed", truth(caught(t), `raw ${scrubMisses(t).email}, after scrub ${scrubMisses(scrub(t)).email}`));
-  for (const t of ["see it at $29. Open daily", "open at 5:30. Open daily", "meet at Joe's. Open daily", "up at 100%. Open daily", "priced at 3.99. Open daily", "open at 7.30am. Then more", "see it at /docs/guide.html today", "see it at https://example.org/x today", "Reach us at <email>. Open daily", "Reach us at (<email>). Open daily", "<redacted>@example.com", "rua=mailto:<redacted>@example.com", "<email>@example.com", "<token>@example.com", "<id>@a.bc", "<email> at example.x.com", "<number> at example.co.uk", "john at -example.com", "john at example-.com", "john at example.-x.com", "john at example.x-.com", "john at example.com-", "john at example.c0m", "john at example.x"]) add(`D: quiet on ${t}`, "allowed", truth(scrubMisses(t).email === 0 && scrubMisses(scrub(t)).email === 0, "no finding"));
+  for (const t of ["john at example.x.com", "john at example.a-b.com", "john at example.3m.com", "john at a.b.c.d.e.f.g.h.i.j.k.l.m.n.o.p.com", "john at example.xn--80ak6aa92e.com", "john at xn--e1afmkfd.xn--p1ai", "john at example.испытание.рф", "john at 例子.测试.中国", "john at ตัวอย่าง.ไทย", "john at उदाहरण.भारत", "john at (example.x.com)", "john at [example.a-b.com]", "john at <example.3m.com>", 'john at "example.x.com"', "john at 'example.a-b.com'", "john at example dot x dot com", "john at example . a-b . com", "john at example (dot) co (dot) uk", "john (at example.x.com)", "john(at example.x.com)", '"john" at example.x.com', "john @ example.x.com", "(info) @ example.x.com", "john @ [example.x.com]", "john ａｔ example.x.com", "john&nbsp;at&nbsp;example.x.com", "john at exam​ple.x.com", "john at example.x.com.", "john at example.x.com, thanks", "john at example.x.com; thanks", "john at example.x.com!", "john at example.x.com?", "john at example.x.com:", "john at (example.x.com).", "john at example.x.com...", "john at example.x.com — thanks", "JOHN AT EXAMPLE.X.COM"]) add(`D: fires on ${t}`, "allowed", truth(caught(t), `raw ${scrubMisses(t).email}, after scrub ${scrubMisses(scrub(t)).email}`));
+  for (const t of ["see it at $29. Open daily", "open at 5:30. Open daily", "meet at Joe's. Open daily", "up at 100%. Open daily", "priced at 3.99. Open daily", "open at 7.30am. Then more", "see it at /docs/guide.html today", "see it at https://example.org/x today", "Reach us at <email>. Open daily", "Reach us at (<email>). Open daily", "<redacted>@example.com", "rua=mailto:<redacted>@example.com", "<email>@example.com", "<token>@example.com", "<id>@a.bc", "<email> at example.x.com", "<number> at example.co.uk", "see it at example.com/path today", "see it at example.com?x=y today", "see it at example.com#part today", "see it at example.com:443 today", "see it at example.com..bad today", "see it at example.com dot -bad today", "see it at example.x.com/a.b today", "john at example.x.com/path", "john at example.x.com:8080", "john at example.x.com?x", "john at example.x.com=y", "john at -example.com", "john at example-.com", "john at example.-x.com", "john at example.x-.com", "john at example.com-", "john at example.c0m", "john at example.x"]) add(`D: quiet on ${t}`, "allowed", truth(scrubMisses(t).email === 0 && scrubMisses(scrub(t)).email === 0, "no finding"));
   const started = performance.now();
   for (const t of ["at a. ".repeat(40_000), `x at ${"a.".repeat(100_000)}`, "x at ".repeat(40_000)]) scrubMisses(t);
   add("D: the walk stays bounded on hostile text", "allowed", truth(performance.now() - started < 2000, `${Math.round(performance.now() - started)} ms`));

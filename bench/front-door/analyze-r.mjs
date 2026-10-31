@@ -19,7 +19,7 @@ import { fileURLToPath } from "node:url";
 import { siteKey, siteOrg } from "./psl.mjs";
 import { isEligible, selfHashed, unfinishedRun, withheldCounts } from "./record-checks.mjs";
 import { PREREG_R, recordedHashR, studyState } from "./replicate.mjs";
-import { auditFrame } from "./validation-sample.mjs";
+import { auditFrame, stateOf, stateProblem } from "./validation-sample.mjs";
 import { seeded } from "./replicate.mjs";
 import { newcombe } from "./run.mjs";
 
@@ -422,19 +422,27 @@ export function traitsByCohort(rows, checks = KAPPA_CHECKS, min = 20) {
   return Object.fromEntries(cohorts.map((c) => [c, traitTable(inCohort(rows, c), checks, min)]));
 }
 
-export function main(args, { fail = console.error, preregText, state = studyState() } = {}) {
+/**
+ * The analysis of one run from its registered inputs, as plain JSON, or null after a refusal.
+ * It reads no clock and no path into its output, so the same inputs give the same bytes, and
+ * the report runs it again to prove a saved analysis.
+ */
+export function analysisOf(args, { fail = console.error, preregText, state = studyState() } = {}) {
   const at = (n) => args[args.indexOf(n) + 1];
-  if (!args.includes("--pass1")) { fail("Usage: analyze-r.mjs --pass1 <raw> [--pass2 <raw>] --e20 <tranco raw> <yc raw> [--out file]"); return 2; }
   const problem = unfinishedRun(dirname(at("--pass1")));
-  if (problem) { fail(`Refused: this run can't decide claims: ${problem}.`); return 3; }
+  if (problem) { fail(`Refused: this run can't decide claims: ${problem}.`); return null; }
   // The gate read raw.jsonl, so nothing else in the folder may stand in for it.
-  if (basename(at("--pass1")) !== "raw.jsonl") { fail("Refused: --pass1 takes the run's raw.jsonl, the file the gate checked."); return 3; }
+  if (basename(at("--pass1")) !== "raw.jsonl") { fail("Refused: --pass1 takes the run's raw.jsonl, the file the gate checked."); return null; }
+  const departs = stateProblem(JSON.parse(readFileSync(join(dirname(at("--pass1")), "manifest.json"), "utf8")), state);
+  if (departs) { fail(`Refused: ${departs}.`); return null; }
   // The other inputs stay private, so their frozen hashes are what ties a result to them.
   const prereg = preregText ?? readFileSync(PREREG_R, "utf8");
   const given = (flag, offset = 1) => (args.includes(flag) ? args[args.indexOf(flag) + offset] : undefined);
+  const inputs = {};
   for (const [label, file] of [["Pass 1 raw", given("--pass2")], ["E20 Tranco raw", given("--e20")], ["E20 YC raw", given("--e20", 2)], ["Industry map", given("--industries")], ["E20 exclusion file", given("--e20-excluded")]]) {
-    if (!file || !existsSync(file)) { fail(`Refused: the registered input "${label}" was not given.`); return 3; }
-    if (recordedHashR(prereg, label) !== createHash("sha256").update(readFileSync(file)).digest("hex")) { fail(`Refused: ${label} does not match its frozen hash.`); return 3; }
+    if (!file || !existsSync(file)) { fail(`Refused: the registered input "${label}" was not given.`); return null; }
+    inputs[label] = createHash("sha256").update(readFileSync(file)).digest("hex");
+    if (recordedHashR(prereg, label) !== inputs[label]) { fail(`Refused: ${label} does not match its frozen hash.`); return null; }
   }
   const i = args.indexOf("--e20");
   const e20 = { T1k: e20Index(load(args[i + 1])), "YC-new": e20Index(load(args[i + 2])) };
@@ -476,9 +484,17 @@ export function main(args, { fail = console.error, preregText, state = studyStat
   if (args.includes("--e20-excluded")) out.replicationAsE20 = replicationAsE20(p1, new Set(readFileSync(at("--e20-excluded"), "utf8").split(/\r?\n/).map((l) => l.trim().toLowerCase()).filter(Boolean)));
   // The run this came from and the state it ran under, for the report to check.
   const sha = (f) => createHash("sha256").update(readFileSync(f)).digest("hex");
-  const { codeSha256, protocolSha256, classifierSha256, pslSha256, lockfileSha256 } = state;
-  out.provenance = { manifestSha256: sha(join(dirname(at("--pass1")), "manifest.json")), rawSha256: sha(at("--pass1")), state: { codeSha256, protocolSha256, classifierSha256, pslSha256, lockfileSha256 } };
-  const text = JSON.stringify(selfHashed(JSON.parse(JSON.stringify(out))), null, 2) + "\n";
+  out.provenance = { manifestSha256: sha(join(dirname(at("--pass1")), "manifest.json")), rawSha256: sha(at("--pass1")), inputs, options: { level: LEVEL, resamples: RESAMPLES, kappaResamples: KAPPA_RESAMPLES, seed: SEED }, state: stateOf(state) };
+  return JSON.parse(JSON.stringify(out));
+}
+
+export function main(args, opts = {}) {
+  const at = (n) => args[args.indexOf(n) + 1];
+  const { fail = console.error } = opts;
+  if (!args.includes("--pass1")) { fail("Usage: analyze-r.mjs --pass1 <raw> [--pass2 <raw>] --e20 <tranco raw> <yc raw> [--out file]"); return 2; }
+  const out = analysisOf(args, opts);
+  if (!out) return 3;
+  const text = JSON.stringify(selfHashed(out), null, 2) + "\n";
   if (args.includes("--out")) writeFileSync(at("--out"), text); else process.stdout.write(text);
   return 0;
 }

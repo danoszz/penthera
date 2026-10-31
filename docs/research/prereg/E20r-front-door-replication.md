@@ -22,7 +22,7 @@
 | Industry map SHA-256 | `78df4910d953379f21d935aeb3ef658d85cbef036539e1a31362c9ad7e26e075` |
 | E20 exclusion file SHA-256 | `246127f639968afc906d59f155f6a993982f3a33c0655718234955319ebe4c34` |
 | Legacy classifier SHA-256 | `7023106f7bd73c1e4122d80e9479f63a4a04091f1426327be70621951fe71d3b` (`bench/front-door/legacy/classify-7023106f.mjs`, the detector that stopped pass 2) |
-| Frozen classifier SHA-256 | `c79fd69519fb3813b11271c2a401d36d2a61ce55d80131cd3ccd9f0d3b86f324` (`bench/front-door/classify.mjs`) |
+| Frozen classifier SHA-256 | `942b002aab6dfe630ce589831e2ca4e90c6409a1efa1cca43abdfb9c06ca2245` (`bench/front-door/classify.mjs`) |
 | Public Suffix List SHA-256 | `d3e6243b51695327984abb3e2a5aa7077096867f75121e031e6a5a3840ca8bcd` (commit `9dfbe81931367b3f0af21035c36ae7eeb830dd88`, fetched 30 Oct 2026, private suffixes included) |
 | Registration commit | The commit that merges this file to `main` |
 | T1k list SHA-256 | `d670a3c1910fe7baa4883dcb8320b1ec99d7d29f9d22954b9288ae678540674e` (`tranco-ZJ8PG-top1000.csv`) |
@@ -827,10 +827,10 @@ hash. It can't sit elsewhere, because the detector is what the stop reads.
 - **What changed.** Inside `scrubMisses`, the helpers it calls and the constants they use, and nowhere
   else in the file. After a bare `at`, or an `@` set apart by spaces or brackets, what follows counts
   only if it is a whole domain: past an opening bracket or quote, one or more labels joined by dots, the
-  word `dot` or a bracketed dot, ending at a token's edge in a label of at least two letters, or in
+  word `dot` or a bracketed dot, ending at a space, the end of the text or closing punctuation, in a label of at least two letters, or in
   punycode. A label starts with a letter or number, ends with one or a combining mark, may hold hyphens
   inside, and takes Unicode letters and numbers. `$29.`, `5:30.`, `Joe's.`, `100%.` and paths hold
-  characters no label can, and web URLs fail the same test. What precedes it must look like a local
+  characters no label can, and web URLs and anything followed by a path, query or port fail the same test. What precedes it must look like a local
   part, and one of our own scrub tokens or `<redacted>` never does. Wide forms, invisible characters and
   spaces spelled as entities don't break the reading. A JWT now has to open at a token's edge, so
   `keyJ.value` isn't one.
@@ -840,7 +840,7 @@ hash. It can't sit elsewhere, because the detector is what the stop reads.
   backstop for retained addresses, so it stays strict there, and a fire no longer costs a run. See
   "Withheld text".
 - **Old hash.** `7023106f7bd73c1e4122d80e9479f63a4a04091f1426327be70621951fe71d3b`.
-- **New hash.** `c79fd69519fb3813b11271c2a401d36d2a61ce55d80131cd3ccd9f0d3b86f324`.
+- **New hash.** `942b002aab6dfe630ce589831e2ca4e90c6409a1efa1cca43abdfb9c06ca2245`.
 - **No graded result changes.** `classify`, `classifyRegistered`, `scrub`, `evidenceOf` and every other
   export keep their source, byte for byte, so a label, a stored excerpt or a grade can't differ. The detector's reach changed in both directions, so its effect was measured, below. Pilot round 1 isn't regraded, and its seal isn't redone. Its raw file is pruned,
   so a replay would read no excerpts, and we don't count one as evidence.
@@ -971,10 +971,19 @@ HTTP claim then carries a line saying its `candidate-page` label wasn't validate
 stratum, and no change to this rule.
 
 **One report.** `bench/front-door/report-tables.mjs` is the only step that joins the claims and the
-audit. It is part of the study's frozen code, and it refuses inputs that don't belong together. The
-headline stands above the claims, and when the audit is not estimable, every real-page view it prints
-says so. The chain from the run to that report is bound by hashes: the manifest and post-draw raw file,
-the audit frame, sheet and key, each labeler's labels, the score and the analysis.
+audit. It is part of the study's frozen code. It works the score and the analysis out again from the
+run's own files and the registered inputs, and writes nothing if either differs from what it was given.
+The headline stands above the claims, and when the audit is not estimable, every real-page view it
+prints says so. The same file holds the registered secondary figures, which corroborate nothing. MX and
+NS counts stay in the run's aggregate file. The chain from the run to that report is bound by hashes:
+the manifest and post-draw raw file, the audit frame, sheet and key, each labeler's labels, the score and
+the analysis.
+
+**One state.** The score, the analysis and the report run from the run's own commit and refuse anything
+else: code, classifier, protocol, study page, suffix list, lockfile and Node version must all match the
+run's manifest. So this file doesn't change between the start of pass 3 and the final report. Dated notes
+go on `main` after that. A laptop's Node binary can't match the server's, so the version is compared and
+the two binaries' hashes are only printed.
 
 ### Text copies
 
