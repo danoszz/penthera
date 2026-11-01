@@ -1017,7 +1017,7 @@ main > .desk { padding-top: clamp(var(--sp-64), 8vw, 120px); }
 @media (min-width: 900px) { .eu-list li + li { padding-left: var(--sp-24); border-left: 1px solid var(--hair); } }
 .eu-list h3 { margin-bottom: var(--sp-8); }
 .eu-list p { color: var(--text-2); }
-.eu-list a { display: inline-block; margin-top: var(--sp-8); font-family: var(--px); font-size: var(--t-note); }
+.eu-list a { display: block; width: fit-content; margin-top: var(--sp-8); font-family: var(--px); font-size: var(--t-note); }
 .eu-note { margin-top: var(--sp-24); max-width: 70ch; font-family: var(--px); font-size: var(--t-note); color: var(--text-2); }
 
 .faq-list { margin-top: var(--sp-40); border-top: 1px solid var(--frame); max-width: 900px; }
