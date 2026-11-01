@@ -52,6 +52,25 @@ describe("All projects", () => {
     const scans = [scan("http://127.0.0.1:3000 + /shop", two), scan("http://127.0.0.1:3000", [], "2026-11-01T11:00:00.000Z")];
     expect(buildOverview({ scans }).mix.critical).toBe(2);
   });
+  it("doesn't let a later, narrower check hide a wider one's problems", () => {
+    const later = "2026-11-01T11:00:00.000Z";
+    const o = buildOverview({ scans: [scan("http://localhost:3000 + /app", two), scan("/app", [], later)] });
+    expect(o.apps).toBe(1);
+    expect(o.open).toBe(2);
+    expect(o.mix.critical).toBe(2);
+    expect(o.counted).toEqual(["http://localhost:3000 + /app"]);
+  });
+  it("lets a later check of the same or wider reach replace it", () => {
+    const later = "2026-11-01T11:00:00.000Z";
+    expect(buildOverview({ scans: [scan("/app", two), scan("http://localhost:3000 + /app", [], later)] }).open).toBe(0);
+    expect(buildOverview({ scans: [scan("http://localhost:3000", two), scan("http://localhost:3000 + /app", [], later)] }).open).toBe(0);
+  });
+  it("doesn't let a wider check that couldn't read the site replace the site's problems", () => {
+    const later = "2026-11-01T11:00:00.000Z";
+    const blocked = scan("http://localhost:3000 + /app", [], later);
+    blocked.data = { ...blocked.data, mode: "url+repo", modes: ["url", "repo"], reachable: false };
+    expect(buildOverview({ scans: [scan("http://localhost:3000", two), blocked] }).open).toBe(2);
+  });
   it("adds up different apps", () => {
     const o = buildOverview({ scans: [scan("/a", two), scan("/b", two)] });
     expect(o.apps).toBe(2);

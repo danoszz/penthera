@@ -11,7 +11,7 @@ import { findingId } from "../../../lib/memory/views.js";
 import { gradeFindings } from "../../../lib/agents/grade.js";
 import { buildReportModel, CONFIDENCE_LABELS } from "../../report/model.js";
 import { createHash } from "node:crypto";
-import { notRead } from "../../report/unread.js";
+import { notRead, siteUnread } from "../../report/unread.js";
 import { keyParts } from "../static/js/format.js";
 
 export const SEVERITIES = ["critical", "high", "medium", "low", "info"];
@@ -97,7 +97,8 @@ export function groupScans(scans) {
 /**
  * One row per app, so one app counts once. A folder is an app. An address joins a folder only
  * when that folder alone uses it: two folders on one address are two apps, and when it's unsure
- * they stay apart. A joined address is a different check, so the worse of the two is counted.
+ * they stay apart. Only a later check that reached everything an earlier one did replaces it, so
+ * a narrower check never hides a wider one's problems. Of the rows left, the worst counts.
  */
 function newestPerApp(tallied) {
   const owners = new Map();
@@ -105,17 +106,19 @@ function newestPerApp(tallied) {
     const { url, folder } = keyParts(t.key);
     if (url && folder) owners.set(url, new Set(owners.get(url)).add(folder));
   }
-  const newest = (a, b) => (!a || b.at > a.at ? b : a);
-  const rank = (t) => t.c.critical * 1e6 + t.c.high * 1e3 + actionable(t.c);
   const apps = new Map();
   for (const t of tallied) {
     const { url, folder } = keyParts(t.key);
     const shared = owners.get(url);
     const app = folder || (shared?.size === 1 ? [...shared][0] : t.key);
-    const e = apps.get(app) || {};
-    apps.set(app, folder ? { ...e, code: newest(e.code, t) } : { ...e, site: newest(e.site, t) });
+    apps.set(app, [...(apps.get(app) || []), t]);
   }
-  return [...apps.values()].map(({ code, site }) => (code && site ? (rank(site) > rank(code) ? site : code) : code || site));
+  const rank = (t) => t.c.critical * 1e6 + t.c.high * 1e3 + actionable(t.c);
+  // Within an app the only wider row is one with both parts, and an unread site reached nothing there.
+  const widerThan = (a, b) => { const { url, folder } = keyParts(a.key); return Boolean(url && folder) && a.key !== b.key && !a.siteUnread && a.at > b.at; };
+  return [...apps.values()].map((rows) => rows
+    .filter((t) => !rows.some((o) => widerThan(o, t)))
+    .sort((a, b) => rank(b) - rank(a) || b.at - a.at)[0]);
 }
 
 /** What a landed fix left for its owner in one folder, once each, oldest first. It stays until they mark it done. */
@@ -207,7 +210,7 @@ export function buildOverview({ scans = [], memory = [], runs = [], duties = () 
     // The run counts a fix when it lands, the scans once a later one misses it. Whichever is further.
     const mem = memory.find((m) => matchesProject(m.label, key) || matchesProject(m.label, keyParts(key).folder));
     const done = Math.max(gone.length, mem?.verifiedFixes || 0);
-    tallied.push({ key, c, gone: done, at: time(latest.data.timestamp) ?? latest.mtime });
+    tallied.push({ key, c, gone: done, at: time(latest.data.timestamp) ?? latest.mtime, siteUnread: Boolean(siteUnread(latest.data)) });
     const unread = notRead(latest.data) || onlyAudits(latest.data);
     const hidden = Array.isArray(latest.data.suppressed) ? latest.data.suppressed : [];
     const trend = series.length > 1 || !mem?.trend?.length
