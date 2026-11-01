@@ -463,9 +463,18 @@ describe("site story", () => {
     expect(h).toContain('<h1 class="ask-sub" id="hero-title">Make your app more secure for free</h1>');
     expect(h).toMatch(/<h2 id="faq-title">Before you install\.<\/h2>/);
     // Merged away: no section repeats another.
-    for (const gone of ['class="walk', 'class="eu"', 'class="vision', 'class="ba-counts"', "data-check", 'class="desk"', 'class="spec"']) expect(h, gone).not.toContain(gone);
+    for (const gone of ['class="walk', 'class="vision', 'class="ba-counts"', "data-check", 'class="desk"', 'class="spec"']) expect(h, gone).not.toContain(gone);
     // Each question is answered once: the FAQ no longer repeats the about and limits chapters.
     for (const q of ["What is Penthera, and why does it exist?", "What can't it do?"]) expect(h, q).not.toContain(q);
+  });
+
+  it("brings the EU flag back on its own blue ground, with the disclaimer", () => {
+    const h = html();
+    const eu = h.slice(h.indexOf('id="eu"'), h.indexOf('id="faq"'));
+    expect(h.indexOf('id="trust"')).toBeLessThan(h.indexOf('id="eu"'));
+    expect(h).toContain('class="eu band band-blue"');
+    expect(eu).toContain('class="eu-stars"');
+    expect(eu).toContain("Penthera does not make you compliant and does not certify anything. It is not affiliated with or endorsed by the European Union");
   });
 
   it("gives the problem its own grey section after the poster, hidden with the poster in fix mode", () => {

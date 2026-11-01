@@ -224,7 +224,7 @@ p { margin: 0; }
  * <symbol> (#i-lock). Integer scales only, so the pixels stay square. */
 .sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
 .lock { flex: none; width: 12px; height: 14px; fill: currentColor; shape-rendering: crispEdges; vertical-align: -2px; margin-right: var(--sp-8); }
-h3 > .lock { width: 24px; height: 28px; vertical-align: -4px; margin-right: var(--sp-12); }
+h3 > .lock, .eu-list .lock { width: 24px; height: 28px; vertical-align: -4px; margin-right: var(--sp-12); }
 
 /* ── Ticker ───────────────────────────────────────────────────────────── */
 /* Sourced security news (site/news.json), inverted, in Departure Mono. It
@@ -1001,6 +1001,25 @@ main > .desk { padding-top: clamp(var(--sp-64), 8vw, 120px); }
 .for-agents > .cmd code { white-space: normal; overflow-wrap: anywhere; line-height: var(--lh-ui); padding-block: 10px; }
 
 /* 07 · Questions: native <details>, no script. A + turns into a − when open. */
+/* EU rules. The flag is a flat plate on the lit blue band: 81 × 81 pixels at an
+ * integer scale, so they stay square. No hard shadow. */
+.eu-grid { display: grid; gap: var(--sp-40); align-items: center; }
+@media (min-width: 860px) { .eu-grid { grid-template-columns: 1fr auto; gap: var(--sp-64); } }
+.eu-lede { margin-top: var(--sp-24); max-width: 46ch; font-size: var(--t-lead); line-height: var(--lh-head); letter-spacing: var(--tr-head); color: var(--text-1); }
+.eu-mark { margin: 0; }
+.eu-mark svg { display: block; width: 243px; height: 243px; shape-rendering: crispEdges; outline: 1px solid var(--frame); }
+@media (min-width: 860px) { .eu-mark svg { width: 324px; height: 324px; } }
+.eu-ground { fill: #0000ed; }
+.eu-stars { fill: #ffffff; }
+.eu-list { list-style: none; margin: var(--sp-64) 0 0; padding: 0; display: grid; border-top: 1px solid var(--frame); }
+@media (min-width: 900px) { .eu-list { grid-template-columns: repeat(3, 1fr); } }
+.eu-list li { display: flex; align-items: flex-start; padding: var(--sp-24) var(--sp-24) var(--sp-24) 0; border-bottom: 1px solid var(--hair); }
+@media (min-width: 900px) { .eu-list li + li { padding-left: var(--sp-24); border-left: 1px solid var(--hair); } }
+.eu-list h3 { margin-bottom: var(--sp-8); }
+.eu-list p { color: var(--text-2); }
+.eu-list a { display: block; width: fit-content; margin-top: var(--sp-8); font-family: var(--px); font-size: var(--t-note); }
+.eu-note { margin-top: var(--sp-24); max-width: 70ch; font-family: var(--px); font-size: var(--t-note); color: var(--text-2); }
+
 .faq-list { margin-top: var(--sp-40); border-top: 1px solid var(--frame); max-width: 900px; }
 .faq-list details { border-bottom: 1px solid var(--hair); }
 .faq-list summary {

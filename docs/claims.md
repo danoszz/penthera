@@ -33,6 +33,7 @@ This is a short list of headline claims, not every sentence in the docs.
 | never pushes or opens pull requests | `README.md` | `tests/agent.test.js`: `rejects push, fetch, pull, remote, clone, ls-remote, submodule and other non-local git` | Checks the `git` commands the loop allows |
 | a deterministic re-scan and your tests decide | `README.md` | `tests/agent.test.js`: `reverts a fix whose verification fails and records fix_failed` | None |
 | as signed, versioned | `README.md` | `tests/rule-packs.test.js`: `refuses a pack.json changed after signing (signature mismatch)` | Signature checks only |
+| No run logs in, so it doesn't cover login or access rules | `README.md` | `tests/claims.test.js`: `no E10 run logs in` | Holds that no run logs in. That the answer keys score no login or access item comes from the results file |
 | 1st on npm and PyPI malware | `README.md` | `tests/bench-summary.test.js`: `README.md carries the summary publish.mjs writes, unchanged` | Checks the copy, not the score |
 | read only inside your project | `site/index.html` | `tests/mcp-tools.test.js`: `refuses paths outside the workspace: parent, absolute and through a symlink` | None |
 | reaches only loopback or hosts the | `AGENTS.md` | `tests/mcp-scope.test.js`: `refuses other hosts, on a first request and on a redirect` | None |

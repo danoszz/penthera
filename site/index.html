@@ -415,9 +415,29 @@
       </div>
     </section>
 
-    <!-- 04 · Before you install -->
+    <!-- 04 · Paperwork: what Penthera hands an auditor. Blue, so it never shares a ground with trust above or the questions below. -->
+    <section class="eu band band-blue" id="eu" aria-labelledby="eu-title">
+      <div class="eu-grid">
+        <div>
+          <p class="eyebrow" data-f="0">04 · Paperwork</p>
+          <h2 id="eu-title">Evidence for EU rules</h2>
+          <p class="eu-lede">Penthera turns what it finds into the paperwork EU cyber law asks for: drafts and evidence you can check, not a certificate.</p>
+        </div>
+        <figure class="eu-mark" aria-hidden="true">
+          <svg viewBox="0 0 81 81"><rect width="81" height="81" class="eu-ground"/><path d="M40 8h1v1h-1zM39 9h3v1h-3zM38 10h5v1h-5zM39 11h3v1h-3zM38 12h1v1h-1zM42 12h1v1h-1zM55 12h1v1h-1zM54 13h3v1h-3zM53 14h5v1h-5zM54 15h3v1h-3zM53 16h1v1h-1zM57 16h1v1h-1zM66 23h1v1h-1zM65 24h3v1h-3zM64 25h5v1h-5zM65 26h3v1h-3zM64 27h1v1h-1zM68 27h1v1h-1zM70 38h1v1h-1zM69 39h3v1h-3zM68 40h5v1h-5zM69 41h3v1h-3zM68 42h1v1h-1zM72 42h1v1h-1zM66 53h1v1h-1zM65 54h3v1h-3zM64 55h5v1h-5zM65 56h3v1h-3zM64 57h1v1h-1zM68 57h1v1h-1zM55 64h1v1h-1zM54 65h3v1h-3zM53 66h5v1h-5zM54 67h3v1h-3zM53 68h1v1h-1zM57 68h1v1h-1zM40 68h1v1h-1zM39 69h3v1h-3zM38 70h5v1h-5zM39 71h3v1h-3zM38 72h1v1h-1zM42 72h1v1h-1zM25 64h1v1h-1zM24 65h3v1h-3zM23 66h5v1h-5zM24 67h3v1h-3zM23 68h1v1h-1zM27 68h1v1h-1zM14 53h1v1h-1zM13 54h3v1h-3zM12 55h5v1h-5zM13 56h3v1h-3zM12 57h1v1h-1zM16 57h1v1h-1zM10 38h1v1h-1zM9 39h3v1h-3zM8 40h5v1h-5zM9 41h3v1h-3zM8 42h1v1h-1zM12 42h1v1h-1zM14 23h1v1h-1zM13 24h3v1h-3zM12 25h5v1h-5zM13 26h3v1h-3zM12 27h1v1h-1zM16 27h1v1h-1zM25 12h1v1h-1zM24 13h3v1h-3zM23 14h5v1h-5zM24 15h3v1h-3zM23 16h1v1h-1zM27 16h1v1h-1z" class="eu-stars"/></svg>
+        </figure>
+      </div>
+      <ul class="eu-list">
+        <li><svg class="lock" viewBox="0 0 12 14" aria-hidden="true"><use href="#i-lock"/></svg><div><h3>NIS2</h3><p>Directive (EU) 2022/2555. Repeatable technical evidence for the testable measures in Article 21(2), and drafts of the 24-hour, 72-hour and one-month incident reports. <a href="https://github.com/danoszz/penthera/blob/main/docs/compliance-nis2.md">NIS2 in Penthera</a></p></div></li>
+        <li><svg class="lock" viewBox="0 0 12 14" aria-hidden="true"><use href="#i-lock"/></svg><div><h3>Cyber Resilience Act</h3><p>Regulation (EU) 2024/2847. Article 14 reporting has applied since 11 September 2026: a timeline with due dates and a draft of every report, plus a CycloneDX AI-BOM. <a href="https://github.com/danoszz/penthera/blob/main/docs/compliance-cra.md">The CRA in Penthera</a></p></div></li>
+        <li><svg class="lock" viewBox="0 0 12 14" aria-hidden="true"><use href="#i-lock"/></svg><div><h3>Evidence an auditor can verify</h3><p>A bundle of scan results with hashes and an optional SSH signature, checked offline with <code>penthera evidence verify &lt;dir&gt;</code>. <a href="https://github.com/danoszz/penthera/blob/main/docs/evidence.md">How evidence works</a></p></div></li>
+      </ul>
+      <p class="eu-note">Penthera does not make you compliant and does not certify anything. It is not affiliated with or endorsed by the European Union; the stars mark the subject.</p>
+    </section>
+
+    <!-- 05 · Before you install -->
     <section class="faq" id="faq" aria-labelledby="faq-title">
-      <p class="eyebrow">04 · Questions</p>
+      <p class="eyebrow">05 · Questions</p>
       <h2 id="faq-title">Before you install.</h2>
       <div class="faq-list">
         <details>
@@ -463,8 +483,7 @@
         <details>
           <summary>Does it help with NIS2 and the Cyber Resilience Act?</summary>
           <div class="faq-a">
-            <p>It turns what it finds into evidence and drafts you can check, not a certificate. For NIS2 (Directive (EU) 2022/2555): repeatable technical evidence for the testable measures in Article 21(2), and drafts of the 24-hour, 72-hour and one-month incident reports (<a href="https://github.com/danoszz/penthera/blob/main/docs/compliance-nis2.md">NIS2 in Penthera</a>). For the CRA (Regulation (EU) 2024/2847), whose Article 14 reporting has applied since 11 September 2026: a timeline with due dates, a draft of every report and a CycloneDX AI-BOM (<a href="https://github.com/danoszz/penthera/blob/main/docs/compliance-cra.md">the CRA in Penthera</a>).</p>
-            <p>An auditor can check a signed bundle of scan results with hashes offline, with <code>penthera evidence verify &lt;dir&gt;</code> (<a href="https://github.com/danoszz/penthera/blob/main/docs/evidence.md">how evidence works</a>). Penthera does not make you compliant and does not certify anything, and it is not affiliated with or endorsed by the European Union.</p>
+            <p>Yes, with evidence and drafts. The <a href="#eu">EU section above</a> lists them for each law. You still decide what applies to you, fill in anything marked <code>NEEDS INPUT</code> and file the reports yourself. Most NIS2 measures are organizational, so policies, training and backups stay with you: Penthera records what you attest and can't check it. It doesn't make you compliant, and this isn't legal advice.</p>
           </div>
         </details>
         <details>
@@ -500,9 +519,9 @@
       </details>
     </section>
 
-    <!-- 05 · About: who builds it, and why. -->
+    <!-- 06 · About: who builds it, and why. -->
     <section class="about band band-grey" id="about" aria-labelledby="about-title">
-      <p class="eyebrow">05 · About</p>
+      <p class="eyebrow">06 · About</p>
       <h2 id="about-title">Why Penthera exists.</h2>
       <p class="about-text">I build Penthera in the open, at night, alongside my PhD in AI and architecture. In 15 years I designed and built more than 100 apps for startups and governments, some used by millions of people. Security was always expected of me, so I collected the tricks and scripts I run before anything ships. Penthera is that sanity check, for everyone.</p>
       <p class="about-text">AI coding tools let far more people build. The security basics have to keep up, or apps leak data and run up credit-card bills. I believe technology does more good than harm when it is designed for people. Penthera uses research-backed methods and what I learned building agents: readable rules, free and MIT-licensed, to help people check what they ship.</p>
