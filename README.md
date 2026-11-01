@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="site/media/social/og.png" alt="Two chat bubbles on blue. yo is my app secure? check it before they wreck it. Penthera." width="840">
+<img src="site/media/social/og.png" alt="Your elite cyber security agent. Audit your app/site/code before you publish to protect yourself, and your users. Free, open source, offline. Penthera." width="840">
 
 <br/><br/>
 
