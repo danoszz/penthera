@@ -143,6 +143,9 @@ penthera https://staging.example.com --repo . --framework nis2 \
 | `report-custom.md` | Your `--report-template` output, when given |
 | `nis2-readiness.md` | With `--readiness` |
 | `sbom.cdx.json` | CycloneDX SBOM, with `--sbom` |
+| `report-agent.md` | The agent brief |
+| `README.md` | What is in the bundle and how to check it |
+| `giants/` | Other tools' raw output, with `--giants` |
 | `manifest.json` | Tool version, command line (secrets redacted), timestamp, target, git commit, SHA-256 and size of every file above |
 | `manifest.json.sig` | SSH signature over `manifest.json`, with `--sign-key` |
 
@@ -152,7 +155,7 @@ The command line in the manifest has the values of `--auth-cookie`,
 
 ## Audience reports
 
-`--audience developer|owner|auditor` picks who the Markdown report is for. It
+`--audience developer|owner|auditor|agent` picks who the Markdown report is for. It
 applies to `--markdown <file>`. Without `--markdown`, the report goes to stdout.
 The default report (no `--audience`) is unchanged.
 

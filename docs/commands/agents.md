@@ -14,6 +14,10 @@ Desktop, VS Code and Copilot load, and grades the setup A to F. If it finds no
 agent config, it gives no grade and reports `Nothing to assess`, because an A
 would grade something it never read.
 
+A critical finding is an F. Otherwise the score is 100 minus 30, 15, 5 and 1 per
+critical, high, medium and low finding: A from 90, B from 75, C from 60, D from
+40. Exit 1 on a critical or high finding, 0 otherwise, 2 for a bad path.
+
 ```bash
 penthera agents                 # this repo: .mcp.json, .claude/, .cursor/, AGENTS.md, CLAUDE.md, skills/
 penthera agents --home          # + ~/.claude (hooks, permissions, plugins, skills), ~/.cursor/mcp.json, Claude Desktop, Cline and Roo Code

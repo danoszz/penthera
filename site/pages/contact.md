@@ -20,7 +20,7 @@ Penthera is an open-source project, maintained by Daan van der Zwaag. Pick the c
 - **A bug or a wrong finding:** open a [GitHub issue](https://github.com/danoszz/penthera/issues). Include the command, the Penthera version and the rule ID.
 - **A question or an idea:** start a [GitHub discussion](https://github.com/danoszz/penthera/discussions).
 - **A vulnerability in Penthera itself:** report it through a [private security advisory](https://github.com/danoszz/penthera/security/advisories/new), and not in a public issue. The [security policy](https://github.com/danoszz/penthera/blob/main/SECURITY.md) says what to expect.
-- **Research, press or Pro:** email daan@penthera.org.
+- **Research or press:** email daan@penthera.org.
 - **News from the project:** [@penthera_org on X](https://x.com/penthera_org).
 
 ## If you own a site

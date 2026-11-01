@@ -7,13 +7,13 @@ Penthera is maintained by one person with no budget, so the routine parts of
 getting the word out run by themselves. The rule is simple: **automation drafts
 and collects, a person posts.**
 
-- No social-media API tokens and no auto-posting. Every post is copied and
-  pasted by a person.
+- This repo's automation holds no social-media API tokens and posts nothing.
+  Its drafts are copied and pasted by a person.
 - No analytics, tracking pixels or telemetry. The numbers come from public
   pages and APIs that anyone can read.
 - Every workflow is SHA-pinned and has least-privilege permissions. Workflows
-  that write only open issues (`issues: write`). Only the demo-media workflow
-  pushes, and only to a `media/*` branch for a PR.
+  that write only open issues (`issues: write`). Only the demo-media and
+  news-feed workflows push, each only to its own branch for a PR.
 - Nothing can embarrass the project without a person in the loop: drafts land
   in issues, job summaries, a collapsed release section or a PR.
 
@@ -26,6 +26,7 @@ and collects, a person posts.**
 | Product-led footer | Every report | One line at the end of Markdown reports, audience reports, the PR comment and the evidence bundle README | `src/report/footer.js` |
 | Demo media | Every published release, on demand | A PR with re-rendered GIFs from `assets/tapes/*.tape` | `demo-media.yml` |
 | Monthly stats | 1st of the month, 07:00 UTC | Issue "Penthera this month: <Month YYYY>" with a table, month-over-month changes and a draft post | `monthly-stats.yml` → `scripts/marketing/monthly-stats.mjs` |
+| News feed | Daily 06:30 UTC | A PR with proposed lines for the site's ticker, checked by a person | `news-feed.yml` → `scripts/marketing/news-feed.mjs` |
 | Contributor flywheel | When an issue closes | If fewer than 3 `good first issue` issues are open: one reminder issue listing `TODO(good-first-issue)` markers | `contributor-flywheel.yml` → `scripts/marketing/contributor-flywheel.mjs` |
 
 ### Release post drafts
@@ -57,8 +58,7 @@ State is the issues themselves: an advisory counts as seen when its GHSA id is
 in an `incident-radar` issue or a radar batch comment from the look-back
 window. There is no state file or branch.
 
-Each issue's checklist: add the IOCs to a rule pack in `lib/rules/` (or the
-deps rules until rule packs exist), verify `penthera deps` flags a fixture
+Each issue's checklist: add the IOCs to a rule pack in `lib/rules/`, verify `penthera deps` flags a fixture
 lockfile with the package, then post. Do not post before detection is
 verified.
 

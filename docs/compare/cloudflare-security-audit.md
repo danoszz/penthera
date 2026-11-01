@@ -38,14 +38,14 @@ when Penthera reports nothing and you still want a second opinion.
 
 | | Penthera | security-audit skill |
 |---|---|---|
-| How it decides | Deterministic, readable rules; models may only propose fixes | A language model hunts and validates; fresh agents try to disprove each finding |
+| How it decides | Deterministic, readable rules; models may only propose | A language model hunts and validates; fresh agents try to disprove each finding |
 | Same answer every run | Yes | No. The authors say one run found "roughly half" of what repeated runs found ([README](https://github.com/cloudflare/security-audit-skill#readme)) |
 | What it reads | Source (Next.js, Express, Hono, Fastify), dependencies (npm, Python), AI tooling config | Any source, including native code, protocols, cloud config, mobile and desktop ([attack classes](https://github.com/cloudflare/security-audit-skill/tree/c1c8a8c/skills/security-audit)) |
 | Running app | URL scan of a target you own | No: it forbids probing deployed endpoints and works from source |
 | Dependencies | What each package can do, install firewall, typosquats, known malicious versions, runtime advisories | Supply-chain review of your repo's build and release setup |
 | AI tooling | `penthera agents`: skills, MCP servers, hooks, permissions | AI and LLM attack classes in your application code |
 | Fixes | Applied on a local branch, re-scanned and kept only if verified | Recommends the smallest fix; does not apply it |
-| Accuracy published | Precision and recall with 95% intervals on our own labs; real-world study pre-registered | No figures beyond the run-to-run note |
+| Accuracy published | Precision and recall with 95% intervals on our own labs and on four public datasets; real-world study pre-registered | No figures beyond the run-to-run note |
 | Needs | Node.js 22; no model, no account | A coding agent with tool use and parallel sub-agents, and model usage for every run |
 | Network | Only the target you name; `--offline` enforces it | Not stated in the README; depends on your agent and model provider |
 | License | MIT | MIT |

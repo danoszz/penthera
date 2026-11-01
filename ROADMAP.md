@@ -53,7 +53,6 @@ candidates first.
 | The agent brief | Your AI assistant gets one short reply after a scan: a verdict, what to act on, what to check first, likely noise, what was not checked. Rules fill it ([docs](docs/commands/brief.md)) |
 | Fewer false findings | Style maps are no longer passwords, `eval` in build output is not reported, and action plan steps fit the findings |
 | `--giants` merge fix | A key inside a private-key block that two tools find counts once |
-| [Pro, an experiment](https://penthera.org/pro) | Does anyone need more than the free agent? The waitlist measures it. Nothing is for sale, and the free tool stays complete |
 
 | In 2.1.0 (rc.1) | What it means for you |
 |---|---|
@@ -114,8 +113,8 @@ data allows, with every result published, losses included.
 
 | Item | Question it answers | State |
 |---|---|---|
-| Penthera Bench v1 and experiment E1 | "How accurate is it on code like mine?" | Pre-registered; tooling in review ([#61](https://github.com/danoszz/penthera/pull/61)) |
-| Pre-registrations for E2 to E5 | "Will the next feature actually help?" | Drafts in review ([#61](https://github.com/danoszz/penthera/pull/61)) |
+| Penthera Bench v1 and experiment E1 | "How accurate is it on code like mine?" | Pre-registered; tooling drafted, not merged ([#61](https://github.com/danoszz/penthera/pull/61)) |
+| Pre-registrations for E2 to E5 | "Will the next feature actually help?" | Drafted, not merged ([#61](https://github.com/danoszz/penthera/pull/61)) |
 | The registered E10 run | "How much does it find in apps it has not seen?" | Pilot published; protocol is a draft ([E10](docs/research/prereg/E10-known-vulnerable-apps.md)) |
 | E9: AI mode against rules alone | "Does AI mode find more?" | Planned; AI mode stays opt-in until it is measured |
 | Harness audit: a checklist, planned `harness-*`, `sandbox-*` and `scorer-*` rules, experiments E7 and E8 | "Am I running my AI agents properly?" | Specs in review: [checklist](docs/agents-safely.md), [rule spec](docs/research/spec-harness-rules.md), [E8 draft](docs/research/prereg/E8-harness-guardrails.md). No rule code before approval |
@@ -133,17 +132,17 @@ to report stays deterministic.
 
 | Area | Penthera today | Combined with | State |
 |---|---|---|---|
-| Secrets | F1 0.74 on CredData, ahead of gitleaks (0.52) and trufflehog (0.10) | gitleaks, trufflehog (verifies keys only with your opt-in, since it contacts the provider) | Planned |
-| Code | JS/TS injection: 0.70 on SecBench.js, ahead of CodeQL (0.64) and Semgrep (0.38) | Semgrep with local rules, for other languages; CodeQL only where its terms allow (open-source code, or your own licence) | Planned |
-| Dependencies | Capabilities, malware (1st on npm and PyPI, tied 1st to 3rd once the uncertainty is counted), licences, typosquats | osv-scanner, pip-audit, for known CVEs in your lockfiles | Planned |
-| Infrastructure | Runtime versions pinned in Dockerfiles and version files | trivy (container images, IaC), checkov (Terraform, Kubernetes, CI config) | Planned |
-| Live app | Passive checks, Nuclei-compatible templates, `--deep` injection probes | nuclei, the ZAP baseline scan | Planned |
-| E14: the combination against each tool alone | "Is the combined report better, or only longer?" | Same protocol as E11b on the same public benchmarks. Combined precision may not drop by more than 0.02 | Pre-registered ([E14](docs/research/prereg/E14-giants-combination.md)); [spec](docs/research/spec-giants.md) approved. Next: the build, then the dev-half rerun |
+| Secrets | F1 0.74 on CredData, ahead of gitleaks (0.52) and trufflehog (0.10) | gitleaks, trufflehog (verifies keys only with your opt-in, since it contacts the provider) | Shipped in 2.1.0 (`--giants`) |
+| Code | JS/TS injection: 0.70 on SecBench.js, ahead of CodeQL (0.64) and Semgrep (0.38) | Semgrep with local rules, for other languages; CodeQL only where its terms allow (open-source code, or your own licence) | Shipped in 2.1.0 (`--giants`) |
+| Dependencies | Capabilities, malware (1st on npm and PyPI, tied 1st to 3rd once the uncertainty is counted), licences, typosquats | osv-scanner, pip-audit, for known CVEs in your lockfiles | Shipped in 2.1.0 (`--giants`) |
+| Infrastructure | Runtime versions pinned in Dockerfiles and version files | trivy (container images, IaC), checkov (Terraform, Kubernetes, CI config) | Shipped in 2.1.0 (`--giants`) |
+| Live app | Passive checks, Nuclei-compatible templates, `--deep` injection probes | nuclei, the ZAP baseline scan | Shipped in 2.1.0 (`--giants`) |
+| E14: the combination against each tool alone | "Is the combined report better, or only longer?" | Same protocol as E11b on the same public benchmarks. Combined precision may not drop by more than 0.02 | Registered result published ([results](bench/public/RESULTS.md)) |
 
 How it works, and what it won't do:
 
 - **Your tools, not ours.** Penthera finds tools that are already installed.
-  It never downloads them or their rules at run time; `penthera init` can show
+  It never downloads them or their rules at run time; `penthera giants` shows
   the install command. Without a tool, its area is reported as not covered, not
   as clean.
 - **Offline stays the default.** A tool that needs the network (a registry
@@ -157,7 +156,6 @@ How it works, and what it won't do:
 
 | Item | Question it answers |
 |---|---|
-| A confirmation gate and rate limit for active modes | "Can `--deep` hit the wrong host by mistake?" In review ([#95](https://github.com/danoszz/penthera/pull/95)) |
 | `penthera ship` | "Is this build safe to ship?" One pass or fail over repo scan, `deps`, `agents` and a localhost or preview scan |
 | Preview-deployment scanning | "Is this pull request safe?" A GitHub Action that waits for the Vercel, Netlify or Cloudflare Pages preview, scans it and comments the result |
 | Framework presets | "Why is my first scan empty?" Routes, auth flows and headers for Next.js, SvelteKit, Remix, Nuxt and Astro |
@@ -179,7 +177,6 @@ How it works, and what it won't do:
 
 | Item | State |
 |---|---|
-| JS bundle key scan | Open ([#6](https://github.com/danoszz/penthera/issues/6)) |
 | LLM endpoint configuration checks | Parked; needs a narrower design |
 
 ## Later

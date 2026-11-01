@@ -73,15 +73,5 @@ https://docs.github.com/en/sponsors/receiving-sponsorships-through-github-sponso
 The maintainer intends to publish a short yearly note on total sponsorship
 income and what it paid for.
 
-Penthera stays free and complete. Pro is a separate experiment that measures
-whether teams need more; sponsorship is not tied to it
+Penthera stays free and complete
 ([GOVERNANCE.md](https://github.com/danoszz/penthera/blob/main/GOVERNANCE.md#money)).
-
-## Open questions for the maintainer
-
-- Are $100 and $500 right for startups and companies? They are deliberately
-  modest. Raise them if the first sponsors suggest so.
-- Is a quarterly call something you want to commit to? If not, drop it from the
-  Company tier before publishing, because published tiers cannot be edited.
-- Check with a tax adviser how sponsorship income should be reported in the
-  Netherlands before the first payout.

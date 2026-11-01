@@ -17,12 +17,18 @@ penthera hook run         # what the hook runs; try it on staged changes
 penthera hook uninstall   # removes it and puts your old hook back
 ```
 
+`penthera hook install --force` writes into `core.hooksPath` even when another
+tool manages it. `penthera hook run --verbose` also lists findings below the
+blocking severity.
+
 On staged content only (the git index, not your working tree):
 
 - secrets and AI provider keys in staged files;
-- `penthera agents` rules on staged `.mcp.json`, `CLAUDE.md`, `AGENTS.md`,
-  `.cursor/`, `.claude/` and `skills/`;
-- when `package-lock.json` is staged, the capability diff against HEAD's
+- `penthera agents` rules on staged agent config: `.mcp.json`, `CLAUDE.md`,
+  `AGENTS.md`, `GEMINI.md`, `.cursorrules`, `.windsurfrules`, VS Code and Gemini
+  settings, and folders such as `.claude/`, `.cursor/`, `.codex/`, `.agents/`
+  and `skills/`;
+- when `package-lock.json` or `npm-shrinkwrap.json` is staged, the capability diff against HEAD's
   lockfile and the license policy, for the packages this commit adds.
 
 ```

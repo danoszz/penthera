@@ -38,7 +38,7 @@ code scanning. Penthera runs from the action's own checkout: no npx and no
 install of Penthera from npm. One exception: `mode: agents` runs `npm ci` for
 its one dependency, `yaml`, when the checkout does not have it. On fork PRs the
 token is read-only, so the diff goes to the job summary instead. Inputs: `mode`, `path`, `base-ref`, `url`,
-`fail-on`, `comment`, `sarif`, `penthera-version`. Copy the full workflow, with
+`fail-on`, `comment`, `footer`, `sarif`, `penthera-version`, `github-token`. Copy the full workflow, with
 permissions and a lockfile paths filter, from
 [`docs/examples/pr-dependency-review.yml`](https://github.com/danoszz/penthera/blob/main/docs/examples/pr-dependency-review.yml).
 
@@ -82,7 +82,8 @@ To scan a preview URL and upload SARIF, see
 [scan in CI](scan.md#ci-integration) and the example
 [`docs/examples/github-actions-scan.yml`](https://github.com/danoszz/penthera/blob/main/docs/examples/github-actions-scan.yml).
 Pin the Penthera version, so every run is checked by the same rules, and use
-`--baseline` to show only what is new since the last scan. `penthera --repo .`
+`--baseline` for counts of what is new, or `--baseline ... -q` to report and
+gate on new findings only. `penthera --repo .`
 and `penthera deps` exit 1 on high or critical findings, so either works as a
 gate.
 

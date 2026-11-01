@@ -66,6 +66,9 @@ jobs:
       - name: AI disclosure trailers (CONTRIBUTING.md#use-of-generative-ai)
         run: node scripts/ci/provenance.mjs "origin/${{ github.base_ref }}" HEAD
 
+      - name: Docs follow the public surface (changelog.d/README.md)
+        run: node scripts/ci/docs-gate.mjs "origin/${{ github.base_ref }}" HEAD
+
   scan:
     runs-on: ubuntu-latest
 
