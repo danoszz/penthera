@@ -12,7 +12,7 @@ description: "penthera mcp runs Penthera as an MCP server."
 server. Your agent (Claude Code, Cursor, Codex, VS Code, Windsurf) starts it
 and calls its tools. It needs Node.js 22 or later.
 
-The MCP server is new in 1.9.0; the commands below pin 2.1.2, so an update never reaches you unless you change the pin.
+The commands below pin 2.1.2, so an update never reaches you unless you change the pin.
 
 Always pin the version. An unpinned `npx penthera` runs whatever version is
 newest on npm each time your agent starts, which is the risk that
@@ -89,11 +89,11 @@ Every tool is read-only. None writes a file, applies a fix, or runs a shell.
 | `scan_repo` | Secrets, code-execution sinks, API routes, runtime version pins in a project folder, plus a coverage ledger of what ran and what was skipped | none |
 | `check_dependencies` | What each npm or Python package can do (install scripts, shell, network, eval, credential access), known-malicious packages, typosquats | none |
 | `audit_ai_tooling` | The project's skills, MCP servers, hooks, permissions and rule files, graded A to F, or no grade if it finds no agent config. A `path` other than the workspace root can also be a skill folder or its `SKILL.md` | none |
-| `runtime_advisories` | Advisories and end of life for the PHP, nginx, Apache, Node.js, Python or OpenSSL a project pins or a `Server` header shows | none |
+| `runtime_advisories` | Advisories and end of life for the PHP, nginx, Apache, Node.js, Python, OpenSSL or MongoDB a project pins, or the PHP, nginx, Apache or OpenSSL a `Server` or `X-Powered-By` header shows | none |
 | `explain_finding` | What a finding's rule checks, why it matters, how to fix it, references and OWASP ids | none |
 | `scan_url` | A passive scan of a running app: TLS, headers, cookies, CORS, exposed files, OpenAPI and auth smoke checks | the target only (see below) |
 
-Each result has the findings as structured JSON, and as text the
+Each scan tool's result has the findings as structured JSON, and as text the
 [agent brief](brief.md): a verdict, what to act on, what to check first, what
 is likely noise, what was not checked, and what to run next. The text asks the
 assistant to pass the brief on as it is and to put its own view under "My
@@ -103,6 +103,12 @@ finding has a `rule`, a severity, a confidence label (`confirmed`, `likely`,
 result also lists what the tool did not check. By default a tool returns the 50
 most severe findings; ask for up to 200 with `max_findings`.
 
+Arguments: `path` and `max_findings` on the file tools, `prod` on
+`check_dependencies`, `url` and `profile` (`quick` or `standard`) on `scan_url`,
+`path` or `headers` on `runtime_advisories`, `id` on `explain_finding`. A result
+stays under 256 KB; past that the least severe findings drop and `truncated` is
+true.
+
 ## What it will not do
 
 - **Read outside your project.** A tool reads only inside the workspace: the
@@ -111,8 +117,8 @@ most severe findings; ask for up to 200 with `max_findings`.
 - **Attack anything.** `scan_url` sends no payloads: no injection probes, no
   fuzzing, no recon sources. For those, run `penthera <url> --deep` yourself,
   where Penthera asks you to confirm the target.
-- **Scan a host you did not name.** `scan_url` reaches `localhost` and
-  `127.0.0.1`. Any other host must be in the server's launch arguments, which
+- **Scan a host you did not name.** `scan_url` reaches loopback
+  (`localhost`, `*.localhost`, `127.x.x.x`, `[::1]`). Any other host must be in the server's launch arguments, which
   you write, not the model:
 
 ```bash

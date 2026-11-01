@@ -599,6 +599,53 @@ function textWithCode(parent, text) {
 
 // ── The bar wears the palette of the band beneath it ────────────────────────
 
+// ── The chat: the film's bubbles, live ───────────────────────────────────
+
+/** They arrive when the section does; a chip asks about one area. */
+function chat() {
+  const box = $("[data-chat]");
+  if (!box) return;
+  const q = $("[data-chat-q]"), a = $("[data-chat-a]");
+  const chips = [...document.querySelectorAll("[data-ask]")];
+  const areas = [...document.querySelectorAll(".map-cell")];
+  const opening = { q: q.textContent, a: a.textContent };
+  const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  let timer = 0;
+  // Restart the bubble's arrival: the class comes off, a frame passes, it goes back on.
+  const arrive = (el) => {
+    el.classList.remove("is-in");
+    void el.offsetWidth;
+    el.classList.add("is-in");
+  };
+  const say = (question, fill) => {
+    clearTimeout(timer);
+    q.textContent = question;
+    fill();
+    arrive(q);
+    a.classList.remove("is-in");
+    timer = setTimeout(() => arrive(a), still ? 0 : 520);
+  };
+  box.dataset.live = "";
+  new IntersectionObserver(([e], io) => {
+    if (!e.isIntersecting) return;
+    io.disconnect();
+    say(opening.q, () => {});
+  }, { threshold: 0.5 }).observe(box);
+  chips.forEach((chip, i) => chip.addEventListener("click", () => {
+    const on = chip.getAttribute("aria-pressed") === "true";
+    for (const c of chips) c.setAttribute("aria-pressed", String(c === chip && !on));
+    if (on) {
+      say(opening.q, () => { a.classList.remove("is-area"); a.textContent = opening.a; });
+      return;
+    }
+    say(`what about ${chip.textContent}?`, () => {
+      a.classList.add("is-area");
+      a.replaceChildren(...[...areas[i].children].map((n) => n.cloneNode(true)));
+    });
+  }));
+  for (const c of chips) c.setAttribute("aria-pressed", "false");
+}
+
 function barPalette() {
   const bar = $(".bar");
   const bands = [...document.querySelectorAll(".band")];
@@ -736,6 +783,7 @@ copyButtons();
 for (const a of document.querySelectorAll("a[data-track]")) a.addEventListener("click", () => count("link", { to: a.dataset.track }));
 metalLight();
 heroLoop();
+chat();
 tickerRest();
 dockOpen();
 

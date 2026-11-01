@@ -30,8 +30,8 @@ change these often; if a link says something else, the link wins.
 ## What Penthera adds
 
 - **It runs where your code is.** On your laptop or in your GitHub Actions,
-  with no account. A repo scan makes no outside connections; we are
-  [measuring that claim](https://github.com/danoszz/penthera/blob/main/docs/research/prereg/E17-offline-and-determinism.md).
+  with no account. A repo scan makes no outside connections
+  ([E17 results](https://github.com/danoszz/penthera/blob/main/bench/offline/RESULTS.md)).
 - **It checks your AI tooling too.** MCP servers, skills, hooks and pre-approved
   shell commands in the project, with `penthera agents`.
 - **The same commit gives the same result.** Written rules decide every

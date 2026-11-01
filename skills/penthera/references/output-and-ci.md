@@ -4,7 +4,8 @@
 
 | Format | Flag | Use |
 |--------|------|-----|
-| Terminal | *(default)* | Colored summary in the shell |
+| Terminal | *(default in a terminal or CI)* | Colored summary in the shell |
+| Agent brief | `--brief`, or the default with no terminal outside CI | Short fixed-shape summary for an AI assistant |
 | **Markdown** | `--markdown file.md` or `-o file.json` | Human-readable report with executive summary, findings tables, recommended actions, companion `.md` written automatically when using `-o` with `.json` |
 | JSON | `--json` or `-o file.json` | CI pipelines, baseline diffs, custom tooling |
 | SARIF | `--sarif file.sarif` | GitHub Security / Code Scanning |
@@ -22,8 +23,8 @@ Reports should go in `reports/` (gitignored). Do not write scan artifacts into `
 | Code | Meaning |
 |------|---------|
 | `0` | No critical or high rule fired. This run does not prove login, access rules or payments are right |
-| `1` | Critical or high findings detected |
-| `2` | Scan failed (unreachable target, bad config) |
+| `1` | Critical or high findings detected (other tools' too, with `--giants`) |
+| `2` | Scan failed (unreachable target, missing path, bad config, a tool the policy requires did not run) |
 
 Use exit codes in CI to fail builds on severe findings:
 
@@ -62,10 +63,4 @@ scheduled run never picks up code you have not reviewed.
 
 ## Agent reporting workflow
 
-After a scan:
-
-1. Read `reports/scan.md` (or path from `-o` / `--markdown`).
-2. Summarize by severity: critical → high → medium → low → info.
-3. For each critical/high finding, suggest a concrete fix.
-4. Mention exit code and whether CI would fail.
-5. If baseline was used, highlight **new** findings only.
+After a scan, reply with the agent brief in its order. Put your own view under **My read**. The full list is in `reports/scan.md` (or the path from `-o` / `--markdown`). Mention the exit code and whether CI would fail. To list new findings only, rerun with `--baseline <file> -q`; that also narrows the exit code.

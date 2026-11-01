@@ -211,15 +211,20 @@ package re-exports engine pieces via `exports` in `package.json`
 3. Add one changelog fragment in `changelog.d/` (see its
    [README](changelog.d/README.md)) instead of editing `CHANGELOG.md`, so
    parallel pull requests don't conflict. `npm test` checks the fragment.
-4. Update the docs you touched. They follow the [voice guide](docs/voice.md):
-   one user question per page, plain words, numbers over adjectives.
+4. Update the docs in the same pull request. They follow the
+   [voice guide](docs/voice.md): one user question per page, plain words,
+   numbers over adjectives. A change to the CLI, MCP tools, rules or the Action
+   needs a doc that owns it, or `docs: none, <reason>` in the fragment
+   ([how](changelog.d/README.md#when-a-change-needs-no-doc)). CI checks this
+   (`npm run docs:gate` runs it locally), and `npm test` fails if a `--help`
+   flag, a subcommand or an MCP tool has no docs.
 5. Sign off every commit, and add the AI trailers if an assistant helped (both
    below).
 6. Open the PR with a clear description and rationale. Do not bump versions;
    that happens only in a release.
 
 **What runs, and when.** A pull request gets a fast check: tests on Node 22 and
-24, CodeQL, the self-scan, the AI-trailer check, and the install check on Linux
+24, CodeQL, the self-scan, the AI-trailer check, the docs gate, and the install check on Linux
 and macOS with Node 22. Docs-, site- or benchmark-only changes skip the install
 check. A green pull request goes through the merge queue, which runs the full
 matrix (Linux, macOS and Windows on Node 22 and 24, plus the upgrade from the
@@ -255,7 +260,7 @@ the commit message:
 AI-Assisted: <tool> with <model and version>; <what it did, in one line>
 ```
 
-A `Co-Authored-By:` line for the AI is optional; the `AI-Assisted` line is the
+Do not add a `Co-Authored-By:` line for the AI. The `AI-Assisted` line is the
 disclosure.
 
 For example:
@@ -327,6 +332,8 @@ live once a maintainer approves it with 2FA. **Do not run `npm publish` locally.
    - `skills/penthera/SKILL.md` (`metadata.version`)
    - `.claude-plugin/plugin.json` (`version`)
    - `.claude-plugin/marketplace.json` (`metadata.version`)
+   - `plugin/.claude-plugin/plugin.json` (`version`), `plugin/skills/penthera/SKILL.md`
+     (a copy of the skill) and `plugin/.mcp.json` (the pin)
    - `CITATION.cff` (`version`)
    - `docs/METHODOLOGY.md` (the "How to cite" block)
    - `server.json` (`version` and `packages[0].version`) and the pins in
@@ -358,9 +365,13 @@ live once a maintainer approves it with 2FA. **Do not run `npm publish` locally.
 6. Approve the staged version with 2FA: npmjs.com → penthera → Staged Packages →
    Approve, or `npm stage list penthera` and `npm stage approve <stage-id>`.
    Check the file list and provenance before you approve.
-7. After the version is live, update the pinned versions users copy:
-   `README.md`, `AGENTS.md`, `docs/commands/mcp.md` and the
-   [Building in public](README.md#building-in-public) table. Move
+7. After the version is live, update every pin users copy: `penthera@<version>`
+   across `README.md`, `AGENTS.md`, `docs/`, `skills/penthera/SKILL.md` and
+   `llms-install.md`, the action SHA in `docs/commands/action.md` and
+   `docs/examples/`, and the
+   [Building in public](README.md#building-in-public) table. `ACTION_PIN` in
+   `src/cli/onboarding.js` stays on the release before `package.json`'s version,
+   so it moves in the next release. Move
    `FROM_VERSION` in `.github/workflows/install-matrix.yml` to the new release.
 8. Optional: `npm run package:skill` and attach the zip to the release for
    Claude.ai uploads.

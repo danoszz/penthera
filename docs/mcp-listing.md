@@ -35,7 +35,7 @@ MCP server it gives your coding agent six read-only tools:
   permissions, checked for hidden instructions, curl-pipe-shell, unpinned
   packages and inline secrets, graded A to F when it finds agent config;
 - `runtime_advisories`: published advisories and end of life for the PHP,
-  nginx, Apache, Node.js, Python or OpenSSL an app runs;
+  nginx, Apache, Node.js, Python, OpenSSL or MongoDB an app runs;
 - `explain_finding`: why a rule matters and how to fix it;
 - `scan_url`: a passive scan of a running app (headers, TLS, cookies, CORS,
   exposed files), loopback or hosts you list.

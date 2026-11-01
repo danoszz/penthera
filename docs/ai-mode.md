@@ -17,9 +17,8 @@ what a rule confirms becomes a finding, and the rest is shown as
 penthera --repo . --ai
 ```
 
-Whether AI mode finds more than the rules alone is not measured yet. A
-pre-registered experiment (E9) will measure it, and AI mode stays opt-in until
-it does.
+Whether AI mode finds more than the rules alone is not measured yet. A planned
+experiment (E9) will measure it, and AI mode stays opt-in until it does.
 
 ## What you need
 

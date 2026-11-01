@@ -9,8 +9,8 @@ Security fixes land on the latest minor release only. Upgrade to get them.
 
 | Version | Supported |
 | ------- | --------- |
-| 2.0.x   | Yes (`latest`) |
-| < 2.0   | No        |
+| 2.1.x   | Yes (`latest`) |
+| < 2.1   | No        |
 
 ## Reporting a vulnerability
 
@@ -47,7 +47,7 @@ cover scanning third-party systems: the authorization rules below still apply.
 ## Responsible use
 
 Penthera sends HTTP requests to targets you specify. Some modes (`--deep`,
-`--fuzz`, `--all`, `--profile deep`) send **attack payloads** (SQLi, SSTI, SSRF,
+`--fuzz`, `--adaptive`, `--all`, `--profile deep`) send **attack payloads** (SQLi, SSTI, SSRF,
 XSS, command injection, API fuzzing).
 
 **Only scan systems you own or have explicit written permission to test.**

@@ -13,6 +13,10 @@
  *
  *   - **What changed for users.** One or more bullets in the voice guide.
  *
+ * A `docs: none, <reason>` line right under `section:` tells the docs gate
+ * (scripts/ci/docs-gate.mjs) why a change to the public surface needs no doc.
+ * It never reaches CHANGELOG.md.
+ *
  * On release, fragments are grouped by section under `## [version] - date`,
  * after any notes already under [Unreleased], and the fragment files are removed.
  */
@@ -22,14 +26,16 @@ import { join } from "node:path";
 export const SECTIONS = ["Security", "Added", "Detection", "Changed", "Fixed", "Removed", "Site", "Docs"];
 const ROOT = new URL("..", import.meta.url).pathname;
 
-/** Parses one fragment's text into { section, body }, or throws with a reason. */
+/** Parses one fragment's text into { section, docsNone, body }, or throws with a reason. */
 export function parseFragment(text, name = "fragment") {
-  const m = /^section:\s*(\S.*?)\s*\n\s*\n([\s\S]*\S)\s*$/.exec(text);
+  const m = /^section:\s*(\S.*?)\s*\n(?:docs:(.*)\n)?\s*\n([\s\S]*\S)\s*$/.exec(text);
   if (!m) throw new Error(`${name}: expected "section: <name>", a blank line, then the notes`);
   const section = m[1];
+  const docsNone = m[2] === undefined ? null : /^\s*none,\s*(\S.{7,}?)\s*$/.exec(m[2])?.[1];
+  if (docsNone === undefined) throw new Error(`${name}: expected "docs: none, <reason>", with a reason of 8 characters or more`);
   if (!SECTIONS.includes(section)) throw new Error(`${name}: unknown section "${section}" (use one of ${SECTIONS.join(", ")})`);
-  if (!/^- /m.test(m[2])) throw new Error(`${name}: the notes should be "- " bullets`);
-  return { section, body: m[2] };
+  if (!/^- /m.test(m[3])) throw new Error(`${name}: the notes should be "- " bullets`);
+  return { section, docsNone, body: m[3] };
 }
 
 /** Reads every fragment in `dir`, sorted by file name. */

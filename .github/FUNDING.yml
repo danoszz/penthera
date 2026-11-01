@@ -1,5 +1,4 @@
 # Enables the "Sponsor" button on the GitHub repo.
-# The GitHub link goes live once the GitHub Sponsors profile is approved.
 # The custom link explains the tiers and what sponsorship does and does not buy.
 github: [danoszz]
 custom: ["https://github.com/danoszz/penthera/blob/main/docs/funding/sponsor-tiers.md"]

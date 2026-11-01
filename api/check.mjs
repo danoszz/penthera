@@ -27,6 +27,11 @@ export const LIMITS = [
   { key: "ip", window: DAY, max: 40, hint: "Come back tomorrow." },
   { key: "host", window: HOUR, max: 30, hint: "This site was checked often in the last hour; try again later." },
 ];
+/**
+ * The limits above, for agents to pace themselves. Policy only: each instance
+ * counts on its own, so a remaining count could be false and none is sent.
+ */
+export const RATE_LIMIT_POLICY = LIMITS.map((l) => `"${l.key}-${l.window / 1000}s";q=${l.max};w=${l.window / 1000}`).join(", ");
 const hits = new Map();
 
 /**
@@ -56,6 +61,7 @@ function send(res, status, body) {
     "Content-Type": "application/json; charset=utf-8",
     "Cache-Control": "no-store",
     "X-Content-Type-Options": "nosniff",
+    "RateLimit-Policy": RATE_LIMIT_POLICY,
   });
   res.end(JSON.stringify(body));
 }

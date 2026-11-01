@@ -139,9 +139,10 @@ export function openApi({ version, origin, root }) {
   const codes = apiErrorCodes(root);
   const byStatus = {};
   for (const [code, status] of Object.entries(codes)) (byStatus[status] ||= []).push(code);
+  const policyHeader = { "RateLimit-Policy": { description: "The limits in info.description, on every response from this endpoint: q requests per w seconds. No remaining count is sent, because each server instance counts on its own.", schema: { type: "string" } } };
   const errorResponses = Object.fromEntries(Object.keys(byStatus).sort().map((s) => [s, {
     description: byStatus[s].map((c) => `\`${c}\`: ${ERROR_HINTS[c] || "See error.message and error.hint."}`).join(" "),
-    ...(s === "429" ? { headers: { "Retry-After": { description: "Sent with `rate_limited`, not with `budget`. Seconds until every full limit lets a check through.", schema: { type: "integer", minimum: 1 } } } } : {}),
+    headers: { ...policyHeader, ...(s === "429" ? { "Retry-After": { description: "Sent with `rate_limited`, not with `budget`. Seconds until every full limit lets a check through.", schema: { type: "integer", minimum: 1 } } } : {}) },
     content: { "application/json": { schema: { $ref: "#/components/schemas/Error" }, example: { error: { code: byStatus[s][0], message: "…", hint: "…" } } } },
   }]));
   const str = { type: "string" };
@@ -155,9 +156,9 @@ export function openApi({ version, origin, root }) {
         "One endpoint, POST /api/check, with a JSON body. It loads /robots.txt for the opt-out, then what a browser would (the page, up to 14 of its scripts and stylesheets, /.well-known/security.txt), plus public DNS records, at most 20 requests, and grades what came back. No other paths, no payloads. Nothing is stored or logged. A site whose robots.txt disallows the user agent Penthera-QuickCheck is not checked.",
         "Only public http(s) sites on ports 80 and 443. For localhost, internal hosts or a full scan, run `npx penthera@" + version + " <url>` on your own machine.",
         `Every request must carry "consent": true, which states that you own the site or are authorized to test it and that you accept the terms: ${origin}/terms.`,
-        "Rate limits: 6 checks a minute and 40 a day per client address, and 30 an hour per target site. Each server instance counts on its own, so these numbers are approximate. To enforce them, the server keeps counts per client address and per target site in memory, for up to a day. A rate_limited 429 carries Retry-After, in seconds.",
+        "Rate limits: 6 checks a minute and 40 a day per client address, and 30 an hour per target site. Each server instance counts on its own, so these numbers are approximate. To enforce them, the server keeps counts per client address and per target site in memory, for up to a day. Every response from POST /api/check carries RateLimit-Policy with these limits, and no remaining count. A rate_limited 429 carries Retry-After, in seconds.",
         "Errors share one shape. A path under /api that is not a route answers 404 with the code unknown_endpoint.",
-        `Versioning: the URL carries no version. info.version is the Penthera release this spec was built from. Breaking changes and deprecations are listed in the changelog, with no fixed notice period: ${REPO}/blob/main/CHANGELOG.md.`,
+        `Versioning: the URL carries no version. info.version is the Penthera release this spec was built from. Adding a response field or a new error code is not a breaking change. Before a breaking change or a removal, the operation is marked \`deprecated: true\` in this spec, responses carry a \`Deprecation\` header, and the change is listed in the changelog: ${REPO}/blob/main/CHANGELOG.md.`,
       ].join("\n\n"),
       termsOfService: `${origin}/terms`,
       license: { name: "MIT", identifier: "MIT" },
@@ -189,6 +190,7 @@ export function openApi({ version, origin, root }) {
           responses: {
             200: {
               description: "The passive report.",
+              headers: policyHeader,
               content: { "application/json": { schema: { $ref: "#/components/schemas/Report" } } },
             },
             ...errorResponses,

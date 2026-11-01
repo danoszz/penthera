@@ -43,7 +43,7 @@ penthera deps --pr-comment deps.md     # short Markdown diff for a PR comment
 
 Every capability carries `file:line` evidence. It is a regex-and-tokenizer pass,
 not a full parser: deterministic, never executes package code, and fast enough
-for every PR (0.4 s for Penthera's own 61 packages, 5 to 16 s for real app
+for every PR (under 1 s for Penthera's own 145 packages, 5 to 16 s for real app
 trees of 500 to 1,700 packages). A capability is what code
 *can* do, not proof that it is malicious; the findings carry confidence
 labels (`potential` for obfuscation and typosquats).

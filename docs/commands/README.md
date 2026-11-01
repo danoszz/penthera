@@ -23,6 +23,8 @@ has the full flag list.
 | Agent Skill | [skill.md](skill.md) | Let Claude Code, Cursor and other agents drive Penthera |
 | `penthera brief`, `--brief` | [brief.md](brief.md) | One short, fixed-shape summary of one or more scans for your AI assistant to pass on |
 | `penthera mcp` | [mcp.md](mcp.md) | Penthera as an MCP server: six read-only tools your agent can call |
+| `penthera memory` | [local-loop.md](../local-loop.md#the-learning-store) | What the local store remembers: show, verify, forget, suppress |
+| `penthera evidence verify` | [evidence.md](../evidence.md) | Check a signed evidence bundle against its manifest |
 | `penthera ui` | [dashboard.md](../dashboard.md) | The local dashboard: one view with projects, findings, side cards, and the fix loop from the page |
 
 Compliance flags (`--framework nis2`, `--readiness`, `--cra`, `--aibom`, ...)

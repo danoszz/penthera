@@ -247,7 +247,9 @@ describe("OpenAPI for the live check", () => {
     const { LIMITS } = await import("../api/check.mjs");
     expect(LIMITS.map((l) => [l.key, l.window, l.max])).toEqual([["ip", 60_000, 6], ["ip", 86_400_000, 40], ["host", 3_600_000, 30]]);
     expect(spec.info.description).toContain("6 checks a minute and 40 a day per client address, and 30 an hour per target site");
-    expect(spec.info.description).toContain("Breaking changes and deprecations are listed in the changelog");
+    expect(spec.info.description).toContain("Before a breaking change or a removal");
+    expect(spec.info.description).toContain("`deprecated: true`");
+    expect(spec.info.description).toContain("`Deprecation` header");
     expect(spec.info.description).toContain("in memory, for up to a day");
     expect(spec.info.description).toContain("A rate_limited 429 carries Retry-After");
     expect(spec.info.description).toContain("unknown_endpoint");
@@ -256,6 +258,15 @@ describe("OpenAPI for the live check", () => {
     expect(res429.headers["Retry-After"].schema.type).toBe("integer");
     expect(res429.headers["Retry-After"].description).toContain("not with `budget`");
     expect(res429.description).toContain("`budget`");
+  });
+
+  it("documents RateLimit-Policy with the numbers api/check.mjs enforces, and no remaining count", async () => {
+    const { RATE_LIMIT_POLICY } = await import("../api/check.mjs");
+    expect(RATE_LIMIT_POLICY).toBe('"ip-60s";q=6;w=60, "ip-86400s";q=40;w=86400, "host-3600s";q=30;w=3600');
+    const { responses } = spec.paths["/api/check"].post;
+    for (const r of Object.values(responses)) expect(r.headers["RateLimit-Policy"].description).toContain("No remaining count");
+    expect(spec.info.description).toContain("carries RateLimit-Policy with these limits, and no remaining count");
+    expect(JSON.stringify(spec)).not.toMatch(/RateLimit-Remaining/);
   });
 
   it("says what the handler does with a large body and with extra fields", () => {

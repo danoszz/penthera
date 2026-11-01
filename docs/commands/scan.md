@@ -42,7 +42,7 @@ payloads (and, with `--deep`, the login burst above), so they need your
 confirmation before the first request:
 
 - In a terminal, Penthera asks. For a target on this machine (`localhost`,
-  `127.0.0.1`, `*.localhost`) a yes is enough; for any other target, type its
+  `*.localhost`, `127.x.x.x`, `[::1]`) a yes is enough; for any other target, type its
   hostname back.
 - In CI, Docker or a script, pass `--confirm-target <host>` with the target's
   hostname. Without it, or with a different host, the run stops with exit
@@ -68,7 +68,7 @@ penthera https://myapp.com
 # Staging plus source code, full report set
 penthera https://staging.myapp.com --repo . --all -o reports/scan.json --sarif reports/scan.sarif
 
-# Baseline diff: show only new findings since the last scan
+# Baseline diff: counts of new, resolved and unchanged findings (add -q to keep only the new ones)
 penthera https://myapp.com -o reports/scan.json --baseline reports/previous.json
 
 # Authenticated scan (session cookie or bearer token)
@@ -84,8 +84,8 @@ next to it. `penthera init` can add `reports/` to your `.gitignore`.
 | Code | Meaning |
 |------|---------|
 | `0` | No critical or high rule fired. This run does not prove login, access rules or payments are right |
-| `1` | Critical or high findings detected |
-| `2` | Scan failed (unreachable target, bad config) |
+| `1` | Critical or high findings detected (other tools' too, with `--giants`) |
+| `2` | Scan failed (unreachable target, missing path, bad config, a tool the policy requires did not run) |
 
 ---
 
@@ -93,8 +93,8 @@ next to it. `penthera init` can add `reports/` to your `.gitignore`.
 
 | Format | Flag | Use |
 |--------|------|-----|
-| Terminal | *(default)* | Colored summary plus top 3 fixes |
-| **Agent brief** | `--brief`, or the default when stdout is not a terminal | Verdict, act on, check first, likely noise, not checked, next: short, for an AI assistant ([brief.md](brief.md)) |
+| Terminal | *(default)* | Colored summary, findings and coverage |
+| **Agent brief** | `--brief`, or the default when stdout is not a terminal and not CI | Verdict, act on, check first, likely noise, not checked, next: short, for an AI assistant ([brief.md](brief.md)) |
 | **Markdown** | `--markdown file.md` or `-o file.json` | Human-readable report (exec summary, findings tables, fixes). Written next to `-o` automatically |
 | JSON | `--json` or `-o file.json` | CI pipelines, baseline diffs, custom tooling |
 | SARIF | `--sarif file.sarif` | GitHub Security / Code Scanning tab |
@@ -152,7 +152,7 @@ packages, the half we tuned on), strict recall went from 0.00 to 0.82, 95% CI
 `this` took it to 0.94, 95% CI 0.83 to 0.98 (46 of 49); 39 of 49 without the
 "runs its argument" cases. It flagged no command injection in 150 npm packages
 of the benign baseline (dev half), and nothing new in 16 app repositories. The
-sealed test half is not scored yet.
+sealed test half was scored once ([results](https://github.com/danoszz/penthera/blob/main/bench/public/RESULTS.md)).
 
 Limits. Only one helper call is followed, and only to a function the file
 calls by name. A field set from another field is not followed. Sanitizers are not recognized, so a
@@ -178,6 +178,16 @@ Penthera's own CI runs the full test suite on Node 22 and 24, self-scans a mock
 vulnerable API on every push, and runs CodeQL and OpenSSF Scorecard.
 
 ## Configuration
+
+Flags that tune any scan:
+
+| Flag | Use |
+|------|-----|
+| `--api-root <path>` | API routes directory (default: auto-detect) |
+| `--timeout <ms>` | Request timeout (default: 10000) |
+| `--concurrency <n>` | Concurrent requests (default: 15) |
+| `-v, --verbose` | Detailed output, and the terminal report instead of the brief |
+| `-q, --quiet` | Findings only. With `--baseline`, only the new ones |
 
 For live integration tests against your own routes:
 

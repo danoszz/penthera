@@ -57,6 +57,7 @@
     "bench": "node bench/run.js",
     "bench:known": "node bench/known-vuln/run.mjs",
     "docs:numbers": "node scripts/docs-numbers.mjs",
+    "docs:gate": "node scripts/ci/docs-gate.mjs origin/main",
     "changelog": "node scripts/changelog.mjs",
     "refresh:retire-db": "node scripts/refresh-retire-db.mjs",
     "rules:build": "node scripts/rules/build-pack.mjs",

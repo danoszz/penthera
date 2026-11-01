@@ -37,7 +37,10 @@ site/         penthera.org
 ## Rules
 
 1. **Add a changelog fragment** in `changelog.d/` with a `section:` line
-   ([format](changelog.d/README.md)). Do not edit `CHANGELOG.md`.
+   ([format](changelog.d/README.md)). Do not edit `CHANGELOG.md`. If you touch
+   the CLI, MCP tools, rules or the Action, update the doc that owns it, or
+   write `docs: none, <reason>` in the fragment. CI checks it
+   (`scripts/ci/docs-gate.mjs`).
 2. **Add the AI-Assisted trailer** to every commit you write. Do not add a
    `Co-Authored-By:` line. CI checks it (`scripts/ci/provenance.mjs`):
 
