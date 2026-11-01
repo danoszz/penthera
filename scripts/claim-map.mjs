@@ -20,7 +20,15 @@ const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const HELD_BY = /^`([^`]+)`: `([^`]+)`$/;
 
 /** Text as a reader sees it: HTML tags gone, each run of whitespace one space. */
-const flat = (s) => s.replace(/<[^>]+>/g, "").replace(/\s+/g, " ");
+function flat(s) {
+  let text = s;
+  let before;
+  do {
+    before = text;
+    text = text.replace(/<[^>]+>/g, "");
+  } while (text !== before);
+  return text.replace(/\s+/g, " ");
+}
 
 const TEST = new Set(["it", "test"]);
 const GROUP = new Set(["describe", "suite"]);
