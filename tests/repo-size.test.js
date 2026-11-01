@@ -13,7 +13,6 @@ const ALLOWED = {
   "site/media/social/reel.mp4": "the social reel",
   "assets/demo.gif": "the README demo",
   "assets/walkthrough.mp4": "the README walkthrough",
-  "bench/public/split/creddata.json": "ids and hashes for the published E11b split, used by --split test",
   "bench/front-door/psl/public_suffix_list.dat": "pinned input of the registered E20 study",
   "tests/fixtures/giants/semgrep/1.180.0/output.txt": "recorded tool output for the adapter test",
   "tests/fixtures/cyclonedx/bom-1.6.schema.json": "the SBOM schema tests validate against, read offline",
