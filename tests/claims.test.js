@@ -8,6 +8,7 @@ import { activePacks } from "../lib/rules/index.js";
 import { fuzzField } from "../lib/fuzzer.js";
 import { probeMethodConfusion } from "../lib/adaptive-probes.js";
 import { SecurityKnowledgeGraph } from "../lib/knowledge-graph.js";
+import { RUNS } from "../bench/known-vuln/apps.mjs";
 
 const ROOT = join(import.meta.dirname, "..");
 
@@ -102,6 +103,11 @@ describe("claims the map holds itself", () => {
     const total = totalRules(activePacks());
     expect(readRepo("README.md")).toContain(`**${total}** readable rules`);
     expect(readRepo("README.md")).toContain(`| ${total} in this release:`);
+  });
+
+  it("no E10 run logs in", () => {
+    expect(Object.keys(RUNS).length).toBeGreaterThan(0);
+    for (const [name, run] of Object.entries(RUNS)) expect(run.auth, name).toBe(false);
   });
 
   it("package.json has one runtime dependency", () => {
