@@ -1005,7 +1005,7 @@ main > .desk { padding-top: clamp(var(--sp-64), 8vw, 120px); }
  * integer scale, so they stay square. No hard shadow. */
 .eu-grid { display: grid; gap: var(--sp-40); align-items: center; }
 @media (min-width: 860px) { .eu-grid { grid-template-columns: 1fr auto; gap: var(--sp-64); } }
-.eu-lede { margin-top: var(--sp-24); max-width: 46ch; font-size: var(--t-lead); line-height: 1.2; letter-spacing: -0.02em; color: var(--text-1); }
+.eu-lede { margin-top: var(--sp-24); max-width: 46ch; font-size: var(--t-lead); line-height: var(--lh-head); letter-spacing: var(--tr-head); color: var(--text-1); }
 .eu-mark { margin: 0; }
 .eu-mark svg { display: block; width: 243px; height: 243px; shape-rendering: crispEdges; outline: 1px solid var(--frame); }
 @media (min-width: 860px) { .eu-mark svg { width: 324px; height: 324px; } }
