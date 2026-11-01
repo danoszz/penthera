@@ -7,8 +7,8 @@ import { api } from "./api.js";
 import { state, set, projectOf, TABS, simple } from "./state.js";
 import { createTyper } from "./typer.js";
 import { stackedBar, sparkline, matrix, halftone, meter } from "./charts.js";
-import { ago, duration, shortProject, plural, SEVERITIES } from "./format.js";
-import { START, EMPTY, SEV_WORD, AI, FIX_MODE, verdict } from "./copy.js";
+import { ago, checkResult, duration, keyParts, shortProject, plural, unticked, SEVERITIES, checkedWhat } from "./format.js";
+import { START, EMPTY, SEV_WORD, AI, FIX_MODE, alsoOpen, verdict } from "./copy.js";
 import { openWindow } from "./dialog.js";
 import { depsTab, aiTab, historyTab, proofTab } from "./panels.js";
 
@@ -21,6 +21,7 @@ let pending = null;
 let visible = [];
 
 export function stopStream() {
+  pending = null;
   closeApproval();
   es?.close();
   es = null;
@@ -34,7 +35,7 @@ export function renderCenter(el, ctx) {
   search.addEventListener("input", () => { set({ query: search.value }); });
   const title = state.sel.kind === "all" ? "All projects"
     : state.sel.kind === "project" ? shortProject(state.sel.key)
-      : state.sel.kind === "run" ? `Run :: ${state.sel.run?.kind || ""}` : "Fix loop run";
+      : state.sel.kind === "run" ? (simple() ? FIX_MODE.label : `Run :: ${state.sel.run?.kind || ""}`) : "Fix loop run";
   const doc = state.sel.kind === "all" || state.sel.kind === "project";
   // Check and fix (a run) has no side windows to toggle: Back leads out instead.
   const toolbar = h("div", { class: "win-bar" },
@@ -84,21 +85,27 @@ function projectView(col, ctx) {
   const when = ago(all ? o.lastScans[0]?.ts : p.lastScan);
   // The report: the verdict as the headline, the score as a 10 × 10 meter,
   // and one blue action. The project and its counts sit around them.
-  const mine = sorted(state.findings.filter((f) => !f.suppressed && !f.other && (all || f.project === key)));
-  const v = verdict({ counts, open, top: mine[0], scanned: true, when });
+  const mine = sorted(state.findings.filter((f) => !f.suppressed && !f.other && (all ? countedOnce(f) : f.project === key)));
+  const unread = all ? o.projects.find((x) => x.unread)?.unread : p.unread;
+  const suppressed = all ? o.projects.reduce((n, x) => n + (x.suppressed || 0), 0) : p.suppressed || 0;
+  const v = verdict({ counts, open, top: mine[0], scanned: true, when, unread, suppressed, nothing: !all && p.score == null && !unread && !suppressed });
   const scores = all ? o.projects.map((x) => x.score).filter(Number.isFinite) : [p.score].filter(Number.isFinite);
   const score = scores.length ? Math.min(...scores) : null;
-  const fix = easy && v.top && v.level !== "clear";
+  const shown = all ? o.projects.filter((x) => o.counted?.includes(x.key)) : [p];
+  // A run has already found nothing it can fix, so the button would only say so again.
+  const fix = easy && v.top && v.level !== "clear" && !shown.every((x) => x.nothingToFix);
   col.append(h("section", { class: ["report", "verdict", "plate", `v-${v.level}`], "aria-label": "Verdict" },
     h("div", { class: "report-main" },
       h("p", { class: "report-host" },
         h("span", { class: `grade grade-${all ? "x" : p.grade}`, title: all || p.score == null ? "" : `score ${p.score}/100` }, all ? "∑" : p.grade),
         h("span", { title: key || "" }, all ? "All projects" : shortProject(key)),
         h("span", {}, easy
-          ? (all ? `${plural(o.projects.length, "project")} · last checked ${when}` : `last checked ${when}`)
-          : (all ? `${plural(o.projects.length, "project")} · newest scan ${when}` : `${p.mode || "scan"} · last scan ${when} · ${plural(p.trend.length, "scan")}`))),
+          ? (all ? `${plural(o.apps ?? o.projects.length, "project")} · last checked ${when}` : `${checkedWhat(p.mode, p.unread)} · last checked ${when}`)
+          : (all ? `${plural(o.apps ?? o.projects.length, "project")} · newest scan ${when}` : `${p.mode || "scan"} · last scan ${when} · ${plural(p.trend.length, "scan")}`))),
       h("h1", { class: "verdict-text" }, v.text),
-      h("p", { class: "counts" }, h("b", {}, String(open)), easy ? " to fix · " : " open · ", h("b", {}, String(fixed)), " fixed"),
+      unread ? h("p", { class: "verdict-sub" }, v.sub) : null,
+      suppressed ? h("p", { class: "verdict-sub" }, `${suppressed} suppressed, not counted here. Review them with npx penthera memory show.`) : null,
+      v.level === "unread" && !open ? null : h("p", { class: "counts" }, h("b", {}, String(open)), easy ? " to fix · " : " open · ", h("b", {}, String(fixed)), " fixed"),
       v.top ? h("div", { class: "actions start" },
         fix ? h("button", { type: "button", class: "btn primary", onclick: () => ctx.newScan("loop", all ? null : key) }, "Fix problems for me…") : null,
         h("button", { type: "button", class: ["btn", fix ? "ink" : "primary", "first"], onclick: () => { state.focusPanel = true; ctx.openFinding(v.top); } }, easy ? "Show me the first one ▸" : `Open: ${v.top.title}`)) : null),
@@ -108,6 +115,8 @@ function projectView(col, ctx) {
       easy ? null : stackedBar(counts, { width: 24 }),
       easy ? null : sparkline(trend, { label: "open findings per scan" })),
   ));
+  const turn = yourTurn(shown.flatMap((x) => x.duties || []), ctx);
+  if (turn) col.append(turn);
 
   if (easy) {
     const list = h("ul", { class: "rows simple", id: "findings-list", "aria-label": "Problems to fix" });
@@ -119,15 +128,20 @@ function projectView(col, ctx) {
       col.append(h("details", { class: "passed" }, h("summary", {}, `${plural(done.length, "problem")} fixed since the check before`),
         h("ul", { class: "mini" }, done.map((r) => h("li", {}, h("span", { class: `sw sev-${r.severity}`, "aria-hidden": "true" }), h("span", { class: "grow muted" }, `✓ ${r.title}`))))));
     }
-    col.append(h("p", { class: "muted prose more" }, "Looking for dependencies, AI tooling, history or evidence for an auditor? Switch to Advanced in the Penthera menu."));
+    // The detail behind the list, one click away; each loads when it opens.
+    for (const [title, tab] of [["Dependencies", depsTab], ["AI tooling", aiTab]]) {
+      const body = h("div", {});
+      col.append(h("details", { class: "passed", ontoggle: (e) => { if (e.target.open && !body.childNodes.length) tab(body, all ? null : key); } }, h("summary", {}, title), body));
+    }
+    col.append(h("p", { class: "muted prose more" }, "Looking for history or evidence for an auditor? Switch to Advanced in the Penthera menu."));
     return;
   }
 
   col.append(tabStrip(ctx));
   const panel = h("div", { class: "tab-panel", role: "tabpanel", id: `tab-${state.tab}`, "aria-labelledby": `tabbtn-${state.tab}` });
   col.append(panel);
-  if (state.tab === "deps") return depsTab(panel);
-  if (state.tab === "ai") return aiTab(panel);
+  if (state.tab === "deps") return depsTab(panel, all ? null : key);
+  if (state.tab === "ai") return aiTab(panel, all ? null : key);
   if (state.tab === "history") return historyTab(panel, all ? null : key);
   if (state.tab === "proof") return proofTab(panel, all ? null : key);
 
@@ -226,7 +240,7 @@ function fillFindings(list, ctx) {
   const easy = simple();
   const fl = easy ? null : state.filter;
   const rows = sorted(state.findings
-    .filter((f) => !f.suppressed && (all || f.project === state.sel.key))
+    .filter((f) => !f.suppressed && (all ? countedOnce(f) : f.project === state.sel.key))
     .filter((f) => !fl || (!f.other && f.severity === fl.severity && (f.confidence || "likely") === fl.confidence))
     .filter((f) => easy || !state.source || sourcesOf(f).includes(state.source))
     .filter((f) => !q || `${f.title} ${f.category} ${f.location} ${f.project}`.toLowerCase().includes(q)));
@@ -235,10 +249,10 @@ function fillFindings(list, ctx) {
   let group = null;
   for (const f of rows) {
     const fixFirst = f.severity === "critical" || f.severity === "high";
-    const g = fixFirst ? "Fix first" : easy ? "When you have time" : "Then";
+    const g = groupOf(f, easy);
     if (g !== group) {
       group = g;
-      const n = rows.filter((x) => (x.severity === "critical" || x.severity === "high") === fixFirst).length;
+      const n = rows.filter((x) => groupOf(x, easy) === g).length;
       list.append(h("li", { class: "group-h" }, `${g} :: ${n}`));
     }
     const cur = state.finding && state.finding.id === f.id && state.finding.project === f.project;
@@ -251,11 +265,26 @@ function fillFindings(list, ctx) {
     h("span", { class: "tag" }, easy ? (all ? shortProject(f.project) : "▸") : all ? shortProject(f.project) : f.category || ""),
     !easy && f.location ? h("span", { class: "where" }, f.location) : null)));
   }
-  if (!rows.length) list.append(h("li", {}, empty(state.findings.length && q ? `${EMPTY.filtered}` : EMPTY.findings)));
+  const unread = (state.overview?.projects || []).some((p) => p.unread && (all || p.key === state.sel.key));
+  if (!rows.length) list.append(h("li", {}, empty(state.findings.length && q ? `${EMPTY.filtered}` : unread ? EMPTY.findingsUnread : EMPTY.findings)));
   const count = document.getElementById("findings-count");
-  if (count) count.textContent = q || fl || (!easy && state.source) ? `${rows.length} match` : easy ? plural(rows.length, "problem") : plural(rows.length, "open finding");
+  if (count) count.textContent = q || fl || (!easy && state.source) ? `${rows.length} match` : easy ? simpleCount(rows) : plural(rows.length, "open finding");
 }
 
+/** A row's heading in the list. In Simple, notes stand apart: they are not problems. */
+function groupOf(f, easy) {
+  if (f.severity === "critical" || f.severity === "high") return "Fix first";
+  if (!easy) return "Then";
+  return f.severity === "info" ? "Notes" : "When you have time";
+}
+
+/** The same count as the verdict's "to fix", with the notes named beside it. */
+function simpleCount(rows) {
+  const notes = rows.filter((f) => f.severity === "info").length;
+  return [plural(rows.length - notes, "problem"), notes ? plural(notes, "note") : null].filter(Boolean).join(", ");
+}
+
+/** The end of a check, in the list's own words: notes are not problems, and critical is not "serious". */
 /** j / k: move the selection and open the finding in the right panel. */
 export function moveFinding(step, ctx) {
   if (!visible.length) return;
@@ -338,7 +367,7 @@ function runView(col, ctx) {
   const setStatus = (st) => {
     status.textContent = st;
     status.className = `chip ${st === "running" ? "on" : st === "awaiting you" ? "blue" : st === "error" ? "inv" : ""}`;
-    stop.disabled = !(st === "running" || st === "awaiting you");
+    stop.hidden = !(st === "running" || st === "awaiting you");
   };
   setStatus(run.status === "running" ? "running" : run.status);
   stop.addEventListener("click", async () => {
@@ -389,37 +418,50 @@ function runView(col, ctx) {
       }
       case "status": {
         if (d.status === "running") break;
+        pending = null; // stop() sends no decision, so a replayed approval's timer must not open on a finished run
         if (state.pending) set({ pending: null });
         closeApproval();
         lines.classList.add("done");
         setStatus(d.status);
         clear(tail);
         const sum = d.summary;
-        if (d.status === "error") said.textContent = "Something went wrong. Open “Show what it is doing” for the reason.";
+        if (d.status === "error") said.textContent = sum?.error ? "It stopped." : "Something went wrong. Open “Show what it is doing” for the reason.";
         else if (d.status === "stopped") said.textContent = "Stopped. Everything applied so far was checked; nothing was published.";
+        else if (sum?.verdict) said.textContent = unticked(sum.verdict.headline);
         else if (sum?.totals) {
           const t = sum.totals;
           said.textContent = t.verified || t.failed || t.declined ? `Done. ${plural(t.verified, "fix", "fixes")} applied and checked${t.failed ? `, ${t.failed} undone` : ""}${t.declined ? `, ${t.declined} skipped` : ""}.` : "Nothing here can be fixed automatically.";
         } else if (sum?.counts) {
           // A check: say what it found, not "up to date".
-          const serious = (sum.counts.critical || 0) + (sum.counts.high || 0);
-          said.textContent = sum.total
-            ? `Done. ${plural(sum.total, "problem")} found${serious ? `, ${serious} serious` : ""}.`
-            : "Done. Penthera found no problems.";
+          said.textContent = checkResult({ ...sum, what: run.kind });
         } else said.textContent = "Done.";
         saidSub.textContent = run.kind === "loop" && d.status !== "error"
           ? (sum?.totals?.verified ? `The fix is on a separate branch on this computer${sum.branch ? `, ${sum.branch}, and your project is on it now` : ""}. Merge it when you are happy with it. Nothing was published. Problems with no automatic fix stay on your list.`
-            : "Open a problem on your list and copy its prompt for your coding agent.") : "";
-        if (easy) col.querySelector(".run-head h1").textContent = "Finished";
+            : "Nothing was changed. Anything still open is on your project page.") : "";
+        if (sum?.liveRemaining) saidSub.textContent += ` ${plural(sum.liveRemaining, "fixed problem")} still served by the running app until it restarts.`;
+        if (sum?.error) saidSub.textContent = `It stopped because: ${sum.error}`;
+        if (easy) col.querySelector(".run-head h1").textContent = sum?.unread || (sum?.verdict && !sum.verdict.clean) ? "Not done" : "Finished";
+        if (sum?.unread) col.querySelector(".report.verdict")?.classList.add("v-unread");
         if (sum?.totals) {
           const t = sum.totals;
           typer.push(`done: ${sum.stopReason} after ${plural(t.iterations, "round")} (${duration(sum.durationMs)})`, "ok");
           typer.push(`${t.verified} verified and committed :: ${t.failed} failed and reverted :: ${t.declined} skipped${sum.branch ? ` :: branch ${sum.branch}` : ""}`, t.failed ? "bad" : "ok");
         }
+        // Advanced has no verdict box, so "done" must not be the last word on a run that left problems.
+        if (!easy && sum?.verdict) typer.push(unticked(sum.verdict.headline), sum.verdict.clean ? "ok" : "bad");
         if (sum?.ai) tail.append(aiSummaryBlock(sum.ai));
+        if (sum?.ownerActions?.length || sum?.branch) tail.append(endOfFix(sum));
         tail.append(h("div", { class: "actions" },
-          run.repo || run.url ? h("button", { type: "button", class: "btn primary", onclick: () => ctx.refresh().then(() => set({ sel: { kind: "project", key: run.repo || run.url } })) }, easy ? "See my project ▸" : "Open the project ▸") : null));
-        ctx.refresh();
+          run.repo || run.url ? h("button", { type: "button", class: "btn primary", onclick: () => ctx.refresh().then(() => set({ sel: { kind: "project", key: sum?.project || state.overview?.projects?.find((p) => keyParts(p.key).folder === run.repo)?.key || run.repo || run.url } })) }, easy ? "See my project ▸" : "Open the project ▸") : null));
+        ctx.refresh().then(() => {
+          // The check spoke for itself, and the project may hold more from its other checks.
+          const p = state.overview?.projects?.find((x) => x.key === sum?.project || keyParts(x.key).folder === run.repo);
+          const notes = sum?.counts?.info || 0;
+          const more = sum?.counts && !sum.unread ? alsoOpen((sum.total || 0) - notes, p?.open) : "";
+          if (more) saidSub.textContent = more;
+          // A check of one part must not read as a check of the app.
+          if (sum?.counts && p?.unread?.noCode) said.textContent = checkResult({ ...sum, what: run.kind, codeUnchecked: true });
+        });
         announce(`Run ${d.status}`);
         break;
       }
@@ -435,6 +477,32 @@ function runView(col, ctx) {
   });
 }
 
+/** All projects lists one row of each app, as it counts them. */
+const countedOnce = (f) => !state.overview?.counted || state.overview.counted.includes(f.project);
+
+/** What only the owner can do, until they say it's done. The fix can't do these, and they matter most. */
+function yourTurn(duties, ctx) {
+  const done = state.meta?.settings?.done || [];
+  const left = [...new Map(duties.map((d) => [d.text, d])).values()].filter((d) => !done.includes(d.id));
+  if (!left.length) return null;
+  return h("section", { class: "section your-turn", "aria-label": "Your turn" },
+    h("h2", {}, h("span", {}, "Your turn"), h("span", {}, "Penthera can't do these for you")),
+    h("ul", { class: "mini" }, left.map((d) => h("li", {}, d.text, " ", h("button", { type: "button", class: "btn", onclick: async (e) => {
+      e.currentTarget.disabled = true;
+      state.meta.settings = await api.post("/api/settings", { doneAction: d.id });
+      ctx.refresh();
+    } }, "Done")))));
+}
+
+/** The last screen of a fix: the owner's steps and the way back to the main branch. */
+function endOfFix(sum) {
+  return h("section", { class: "section your-turn", "aria-label": "Your turn" },
+    h("h2", {}, h("span", {}, "Your turn")),
+    h("ul", { class: "mini" },
+      (sum.ownerActions || []).map((a) => h("li", {}, a)),
+      sum.branch && sum.mergeBase ? h("li", {}, h("span", {}, "When you're happy with the fix, put it on your main branch: ", h("code", {}, `git checkout ${sum.mergeBase} && git merge ${sum.branch}`))) : null));
+}
+
 /** Hex SHA-256 of the diff text as shown; the server only applies the diff whose hash matches. */
 async function sha256Hex(text) {
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
@@ -443,13 +511,21 @@ async function sha256Hex(text) {
 
 // ── The approval: a floating window, pinstriped because it waits on you ──
 
+/** One line per problem: the same header found on the site and in the code reads once. */
+const distinct = (findings) => [...new Map(findings.map((f) => [`${f.severity} ${f.title}`, f])).values()];
+
 let approval = null;   // { win, decide } while the window is open
 let decideFn = null;   // answers the waiting diff, window open or not
 
 function closeApproval() {
-  approval?.win.close();
+  closeApprovalWindows();
   approval = null;
   decideFn = null;
+}
+
+/** Every approval window on screen, tracked or not: one left behind would hide the finished run. */
+function closeApprovalWindows() {
+  for (const el of document.querySelectorAll("dialog .approval")) el.closest("dialog").close();
 }
 
 function decider(run, d, ty) {
@@ -491,6 +567,7 @@ function waitingNote(run, d, ty) {
 
 function openApproval(run, d, ty) {
   if (approval) return;
+  closeApprovalWindows();
   const p = d.plan;
   const easy = simple();
   const decide = decideFn || (decideFn = decider(run, d, ty));
@@ -500,7 +577,7 @@ function openApproval(run, d, ty) {
   const ack = p.truncated ? h("input", { type: "checkbox", id: "ap-ack", checked: decide.acknowledged || null }) : null;
   const body = h("div", { class: "approval" },
     h("h3", { id: "ap-h" }, easy ? `Penthera wants to change ${plural(files, "file")} to fix this:` : p.title),
-    h("ul", { class: "mini" }, p.findings.map((f) => h("li", {}, easy ? h("span", { class: `sev sev-${f.severity}` }, SEV_WORD[f.severity]) : sevBadge(f.severity), h("span", { class: "grow t1" }, f.title)))),
+    h("ul", { class: "mini" }, distinct(p.findings).map((f) => h("li", {}, easy ? h("span", { class: `sev sev-${f.severity}` }, SEV_WORD[f.severity]) : sevBadge(f.severity), h("span", { class: "grow t1" }, f.title)))),
     h("p", { id: "ap-d", class: easy ? "prose" : "muted" }, easy
       ? `${p.title}. It changes ${p.files.join(", ")} on a separate branch, scans for the problem again, and undoes the change if it is still there. Nothing is published. Try your app afterwards.`
       : `${p.recipe}${p.framework ? ` (${p.framework})` : ""} · ${p.files.join(", ")} · ${d.memory ? `memory: ${d.memory.verified} verified, ${d.memory.failed} failed` : "no history for this recipe yet"}`),
@@ -509,7 +586,7 @@ function openApproval(run, d, ty) {
       ? "[!] This change is too long to show in full here. Ask a developer to look at the rest in the project before you apply it."
       : `[!] Diff cut: showing the first ${shownDiff.length.toLocaleString()} of ${Number(p.fullLength).toLocaleString()} characters. Review the rest in the repo before applying.`) : null,
     p.truncated ? h("label", { class: "check", for: "ap-ack" }, ack, h("span", { class: "prose" }, " I have not seen the whole change and want to apply it anyway")) : null,
-    p.ownerActions?.length ? h("div", { class: "prose" }, h("b", {}, "After this, check:"), h("ul", { class: "mini" }, p.ownerActions.map((a) => h("li", {}, a)))) : null,
+    p.ownerActions?.length ? h("div", { class: "prose" }, h("b", {}, "After this, check:"), h("ul", { class: "mini" }, p.ownerActions.map((a) => h("li", {}, unticked(a))))) : null,
     p.redacted ? h("p", { class: "muted" }, "Secret values are masked here; the real patch uses them.") : null,
   );
   const apply = h("button", { type: "button", class: "btn primary", disabled: Boolean(ack && !ack.checked), onclick: () => decide("approve") }, easy ? "Apply this fix" : "Apply", h("kbd", {}, "y"));
@@ -526,7 +603,7 @@ function openApproval(run, d, ty) {
     const a = { y: "approve", n: "skip", q: "stop" }[e.key];
     if (a) { e.preventDefault(); decide(a); }
   });
-  win.el.addEventListener("close", () => { approval = null; }, { once: true });
+  win.el.addEventListener("close", () => { if (approval?.win === win) approval = null; }, { once: true });
   approval = { win, el: win.el, apply };
   announce(`Fix ${d.index} of ${d.total} is waiting for you: ${p.title}`);
   (ack && !ack.checked ? ack : apply).focus();
@@ -557,6 +634,7 @@ function pastRunView(col, ctx) {
           `${f.status === "verified" ? "OK " : f.status === "failed" ? "!! " : "-- "}${f.title} :: ${f.decision}${f.commit ? ` :: ${f.commit.slice(0, 10)}` : ""}`)),
       ]),
       h("div", { class: "ln ok" }, `done: ${l.stopReason} :: ${l.totals.verified} verified, ${l.totals.failed} failed, ${l.totals.declined + l.totals.skipped} skipped`),
+      l.findings?.left ? h("div", { class: "ln" }, `left: ${l.findings.left.critical} critical, ${l.findings.left.high} high, ${l.findings.left.medium} medium, ${l.findings.left.low} low`) : null,
       h("div", { class: "ln" }, `branch ${l.branch} :: nothing was pushed`),
     ),
     h("div", { class: "actions" }, h("button", { type: "button", class: "btn", onclick: () => set({ sel: { kind: "project", key: l.target.repo } }) }, "Open the project ▸")),

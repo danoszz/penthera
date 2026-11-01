@@ -8,6 +8,8 @@
  * nothing is written outside the project. `penthera-scan` keeps the URL-first
  * wizard (runScanWizard).
  */
+import { hintCommand } from "../utils/invocation.js";
+import { createGit } from "../agent/git.js";
 import { existsSync, mkdirSync, writeFileSync, appendFileSync, lstatSync, realpathSync } from "node:fs";
 import { resolve, join, relative, isAbsolute, sep, dirname } from "node:path";
 import { readFileSync } from "node:fs";
@@ -20,6 +22,7 @@ import { executeScan, writeScanReports } from "./run-scan.js";
 import { confirmActiveScan } from "./active-gate.js";
 import { detectProject, portsFromEnv } from "./detect.js";
 import { mdInline } from "../report/md-escape.js";
+import { nothingClaim, notRead, siteUnread } from "../report/unread.js";
 import { mergeResults } from "./merge-results.js";
 import { resolveLicensePolicy } from "./deps.js";
 import { isPrivateHost } from "../utils/url.js";
@@ -38,15 +41,15 @@ function countFindings(findings) {
   return c;
 }
 
-function summarize(findings) {
+function summarize({ findings }, claim) {
   const c = countFindings(findings);
   const parts = [];
   if (c.critical) parts.push(`${c.critical} critical`);
   if (c.high) parts.push(`${c.high} high`);
   if (c.medium) parts.push(`${c.medium} medium`);
   if (c.low) parts.push(`${c.low} low`);
-  if (parts.length === 0) return green("No issues found, looking good!");
-  return yellow(parts.join(" · "));
+  if (parts.length === 0) return claim ? yellow(claim) : green("No issues found, looking good!");
+  return `${yellow(parts.join(" · "))}${claim ? `\n  ${yellow(claim)}` : ""}`;
 }
 
 const SEV_RANK = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
@@ -91,7 +94,7 @@ function printScanFailure(url, err) {
   if (/unreachable/i.test(err.message)) {
     printError(`Couldn't reach ${url}. Is your app running?`);
     process.stdout.write(
-      `\n  ${dim("Tip:")} start your dev server, then run ${bold("penthera")} again.\n\n`,
+      `\n  ${dim("Tip:")} start your dev server, then run ${bold(hintCommand("penthera"))} again.\n\n`,
     );
     return;
   }
@@ -166,7 +169,8 @@ export async function runScanWizard() {
   const { merged, paths, hasSevere } = scanResult;
 
   process.stdout.write(`\n  ${hr()}\n`);
-  process.stdout.write(`  ${green("Done!")}  ${summarize(merged.findings)}\n`);
+  const claim = nothingClaim(merged);
+  process.stdout.write(`  ${claim ? bold("Finished") : green("Done!")}  ${summarize(merged, claim)}\n`);
   printTopFixes(merged.findings);
   process.stdout.write(`\n  ${bold("Read your report")}\n`);
   process.stdout.write(`  ${cyan(paths.markdown)}  ${dim("← start here (plain English)")}\n`);
@@ -177,14 +181,14 @@ export async function runScanWizard() {
   await initPrompt();
 
   const next = await choose("What next?", [
-    { id: "done", label: "Looks good, I'm done" },
+    { id: "done", label: claim ? "I'm done" : "Looks good, I'm done" },
     { id: "deeper", label: "Run a deeper scan (sends test payloads, needs permission)" },
     { id: "custom", label: "Custom setup (profiles, auth tokens, advanced flags)" },
   ]);
 
   if (next === "done") {
     closePrompt();
-    process.stdout.write(`\n  ${dim("Tip:")} re-run anytime with ${bold("penthera")} or ${bold("penthera <url>")}\n\n`);
+    process.stdout.write(`\n  ${dim("Tip:")} re-run anytime with ${bold(hintCommand("penthera"))} or ${bold(hintCommand("penthera <url>"))}\n\n`);
     process.exit(hasSevere ? 1 : 0);
   }
 
@@ -199,7 +203,7 @@ export async function runScanWizard() {
 
     try {
       const deep = await runSimpleScan({ url, repo, profile: "deep", activeConfirmed: true });
-      process.stdout.write(`\n  ${green("Deep scan complete.")}  ${summarize(deep.merged.findings)}\n`);
+      process.stdout.write(`\n  ${green("Deep scan complete.")}  ${summarize(deep.merged, nothingClaim(deep.merged))}\n`);
       process.stdout.write(`  ${cyan(deep.paths.markdown)}\n\n`);
       process.exit(deep.hasSevere ? 1 : 0);
     } catch (e) {
@@ -246,7 +250,7 @@ export async function runScanWizard() {
       authBearer: bearer || null,
       authCookie: cookie || null,
     });
-    process.stdout.write(`\n  ${green("Custom scan complete.")}  ${summarize(custom.merged.findings)}\n`);
+    process.stdout.write(`\n  ${green("Custom scan complete.")}  ${summarize(custom.merged, nothingClaim(custom.merged))}\n`);
     process.stdout.write(`  ${cyan(custom.paths.markdown)}\n\n`);
     process.stdout.write(`  ${dim("Expert mode:")} penthera --help\n\n`);
     process.exit(custom.hasSevere ? 1 : 0);
@@ -263,7 +267,7 @@ export async function runScanWizard() {
  * release before this version. Update after each release is tagged:
  * git rev-parse vX.Y.Z^{commit}. tests/init.test.js fails when it falls behind.
  */
-export const ACTION_PIN = Object.freeze({ tag: "v2.1.1", sha: "4dc8ac8f84985bf694ccee750bb4cdb67a0458f2" });
+export const ACTION_PIN = Object.freeze({ tag: "v2.1.2", sha: "695d035e16fe4129a9e0731f4fc9037b4375a895" });
 
 export const WORKFLOW_PATH = ".github/workflows/penthera.yml";
 export const AGENTS_WORKFLOW_PATH = ".github/workflows/penthera-agents.yml";
@@ -363,22 +367,29 @@ export function inside(root, path, p = { resolve, relative, isAbsolute, sep }) {
   return full;
 }
 
-function countLine(findings, un = null) {
+export function countLine(findings, un = null) {
+  if (un?.unread) return un.unread;
   if (un?.nothing) return "nothing found to assess";
   if (un?.none) return `not checked: 0 of ${un.total} packages installed or cached`;
   const c = countFindings(findings);
   const parts = ["critical", "high", "medium", "low"].filter((s) => c[s]).map((s) => `${c[s]} ${s}`);
+  if (un && !parts.length) return `${un.total - un.missing} of ${un.total} packages read`;
   const line = parts.length ? parts.join(" · ") : "no issues";
   return un ? `${line} in what was read, ${un.missing} of ${un.total} packages not read` : line;
 }
 
 /** A grade for what was read; "–" when nothing was, so nothing unread reads as an A. */
-function gradeArea(r) {
+export function gradeArea(r) {
   Object.assign(r, gradeFindings(r.merged.findings));
-  r.unchecked = r.merged.agents?.grade === null
+  const broken = r.merged.agents?.unparsed && r.merged.agents.grade === null ? r.merged.agents : undefined;
+  const site = notRead({ ...r.merged, deps: undefined, agents: broken });
+  r.unchecked = site
+    ? { none: true, unread: `${site.title} ${site.text}`, what: `${site.title} ${site.text}`, fix: broken ? "Fix the file's syntax, then check again." : siteUnread(r.merged) ? "Check your code instead: penthera --repo ." : "Check the folder that holds your code: penthera --repo ." }
+    : r.merged.agents?.grade === null
     ? { none: true, nothing: true, what: "No agent config at the paths Penthera reads, so there is nothing to grade.", fix: "If this project uses AI tooling, its config sits somewhere Penthera does not read yet." }
     : uncheckedDeps(r.merged.deps);
-  if (r.unchecked?.none) Object.assign(r, { grade: "–", score: null });
+  const c = countFindings(r.merged.findings);
+  if (r.unchecked?.none || (r.unchecked && !c.critical && !c.high)) Object.assign(r, { grade: "–", score: null });
 }
 
 /** Word-wrap `text` to the terminal (max 80 columns), each line prefixed by `indent`. */
@@ -481,8 +492,13 @@ function printFound(f, cwd) {
   out();
 }
 
+/** A repo with no commit yet: the fix loop needs one to branch from. */
+function noCommits(root) {
+  return createGit(root).tryRun("rev-parse", "--verify", "--quiet", "HEAD") === null;
+}
+
 /** Run one check and return its merged result (findings + actionPlan). */
-async function runCheck(id, ctx) {
+export async function runCheck(id, ctx) {
   const { root, offline, version } = ctx;
   if (id === "code") return (await executeScan({ repo: root, offline, json: true, version, onPhase: noop })).merged;
   if (id === "app") return (await executeScan({ url: ctx.url, offline, json: true, version, onPhase: noop })).merged;
@@ -509,7 +525,22 @@ export function fixFirst(results, limit = 3) {
     .map((a) => ({ action: a.action, area: a.area, severity: a.severity, why: (a.why || "").split(/(?<=\.)\s/)[0], findings: a.findings.length }));
 }
 
-function summaryMarkdown(results, top, ctx) {
+/** summary.json: the same rows as summary.md, and what each one could not read. */
+export function summaryJson(results, top, ctx, version) {
+  const notRead = (un) => (un?.unread ? { notRead: { site: un.unread } } : un && !un.nothing ? { notRead: { packages: un.missing, of: un.total } } : {});
+  return {
+    generatedAt: new Date().toISOString(),
+    version,
+    offline: ctx.offline,
+    checks: results.map((r) => ({
+      id: r.id, label: r.label, command: r.command,
+      ...(r.error ? { error: r.error } : { grade: r.grade, score: r.score, counts: countFindings(r.merged.findings), ...notRead(r.unchecked), report: { json: `${r.id}.json`, markdown: `${r.id}.md` } }),
+    })),
+    fixFirst: top,
+  };
+}
+
+export function summaryMarkdown(results, top, ctx) {
   const L = [`# Penthera summary, ${ctx.date}`, "", `Penthera ${ctx.version}, ${ctx.offline ? "offline" : "online"}.`, "", "| Area | Grade | Findings | Report |", "| --- | --- | --- | --- |"];
   for (const r of results) {
     L.push(r.error
@@ -590,14 +621,14 @@ export async function runInit(argv, { version = pkg.version } = {}) {
     out(`  ${dim("Nothing selected to check.")}`);
   } else if (dry) {
     out(`  ${bold("Would run")}  ${dim(ctx.offline ? "(offline)" : "(online)")}`);
-    for (const id of checks) out(`    ${AREAS[id].label.padEnd(13)} ${cyan(AREAS[id].cmd(ctx))}  ${dim(`→ ${join(relDir, `${id}.json`)}, ${id}.md`)}`);
+    for (const id of checks) out(`    ${AREAS[id].label.padEnd(13)} ${cyan(hintCommand(AREAS[id].cmd(ctx)))}  ${dim(`→ ${join(relDir, `${id}.json`)}, ${id}.md`)}`);
     out(`    ${"Summary".padEnd(13)} ${dim(`→ ${join(relDir, "summary.md")}, summary.json`)}`);
   } else {
     out(`  ${bold(`Running ${plural(checks.length, "check")}`)}  ${dim(ctx.offline ? "(offline)" : "(online)")}`);
     mkdirSync(dir, { recursive: true });
     for (const id of checks) {
       const label = AREAS[id].label;
-      const r = { id, label, command: AREAS[id].cmd(ctx) };
+      const r = { id, label, command: hintCommand(AREAS[id].cmd(ctx)) };
       if (process.stdout.isTTY) process.stdout.write(`    ${dim("…")} ${label.padEnd(13)} ${dim(r.command)}`);
       const t0 = Date.now();
       try {
@@ -618,16 +649,7 @@ export async function runInit(argv, { version = pkg.version } = {}) {
 
     const top = fixFirst(results);
     writeFileSync(join(dir, "summary.md"), summaryMarkdown(results, top, ctx));
-    writeFileSync(join(dir, "summary.json"), JSON.stringify({
-      generatedAt: new Date().toISOString(),
-      version,
-      offline: ctx.offline,
-      checks: results.map((r) => ({
-        id: r.id, label: r.label, command: r.command,
-        ...(r.error ? { error: r.error } : { grade: r.grade, score: r.score, counts: countFindings(r.merged.findings), ...(r.unchecked && !r.unchecked.nothing ? { notRead: { packages: r.unchecked.missing, of: r.unchecked.total } } : {}), report: { json: `${r.id}.json`, markdown: `${r.id}.md` } }),
-      })),
-      fixFirst: top,
-    }, null, 2) + "\n");
+    writeFileSync(join(dir, "summary.json"), `${JSON.stringify(summaryJson(results, top, ctx, version), null, 2)}\n`);
 
     out(`\n  ${hr()}`);
     out(`  ${bold("Summary")}`);
@@ -747,11 +769,12 @@ export async function runInit(argv, { version = pkg.version } = {}) {
   out(`\n  ${bold("What next")}`);
   const next = [
     ["penthera", "this wizard again"],
-    ...checks.map((id) => [AREAS[id].cmd(ctx), AREAS[id].label.toLowerCase()]),
-    ...(found.git ? [["penthera hook run", "check what is staged now"], ["penthera agent --loop", "fix findings on a local branch"]] : []),
+    ...checks.map((id) => [hintCommand(AREAS[id].cmd(ctx)), AREAS[id].label.toLowerCase()]),
+    ...(found.git ? [["penthera hook run", "check what is staged now"], ["penthera agent --loop", `${noCommits(ctx.root) ? "after a first commit: " : ""}fix findings on a local branch`]] : []),
     ["penthera ui --open", "the dashboard"],
     ["penthera --help", "every command"],
   ];
+  for (const row of next) row[0] = hintCommand(row[0]);
   const w = Math.max(...next.map(([c]) => c.length));
   for (const [c, why] of next) out(`    ${cyan(c.padEnd(w))}  ${dim(why)}`);
   out();

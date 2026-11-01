@@ -12,12 +12,13 @@ import { scanUrl } from "../scan-url.js";
 import { mergeResults } from "../cli/merge-results.js";
 import { resolveScanOptions } from "../cli/profiles.js";
 import { normalizeBaseUrl } from "../utils/url.js";
-import { buildActionPlan } from "../../lib/remediation/index.js";
+import { buildActionPlan, FALLBACK } from "../../lib/remediation/index.js";
 import { CATEGORY_REFERENCES, SOURCES } from "../../lib/references.js";
 import { RULE_OWASP, OWASP_NAMES } from "../../lib/agents/owasp.js";
 import { BUILT_IN_TEMPLATES } from "../../lib/templates.js";
 import { runtimeAdvisoriesForRepo, runtimeAdvisoriesForResponse } from "../../lib/advisories/index.js";
 import { stampProvenance } from "../../lib/provenance.js";
+import { reachLines, unreachableText } from "../report/reach.js";
 import { confinePath, checkTarget, ToolInputError } from "./workspace.js";
 import { buildResult, callResult, cleanText, DEFAULT_FINDINGS, MAX_FINDINGS } from "./results.js";
 
@@ -121,13 +122,13 @@ export const TOOLS = [
         skipRetireJs: p.skipRetireJs, skipParamDiscovery: p.skipParamDiscovery,
         offline: ctx.offline, scoped: true, allowHosts: ctx.offline ? [] : ctx.allowHosts, onPhase: () => {},
       });
-      if (!raw.reachable) throw new ToolInputError(`Target unreachable: ${url}. Is the app running?`);
+      if (!raw.reachable) throw new ToolInputError(`${unreachableText(raw, url)}. Is the app running?`);
       const merged = mergeResults([raw]);
       const blocked = (raw.egress?.blocked || []).map((b) => cleanText(b.host, 300));
       return buildResult({
         tool: "scan_url", target: url, findings: merged.findings, limits: URL_LIMITS, maxFindings: args.max_findings,
         extra: { profile: p.profile, offline: !!ctx.offline, blocked_hosts: blocked },
-        scan: { mode: "url", notChecked: blocked.length ? [`Requests that left the allowed scope were refused: ${blocked.join(", ")}. What they would have returned was not checked.`] : [] },
+        scan: { mode: "url", challenge: raw.challenge, reachable: raw.reachable, notChecked: [...(raw.challenge ? [] : reachLines([raw])), ...(blocked.length ? [`Requests that left the allowed scope were refused: ${blocked.join(", ")}. What they would have returned was not checked.`] : [])] },
       });
     },
   },
@@ -179,7 +180,7 @@ export const TOOLS = [
   {
     name: "explain_finding",
     title: "Explain a finding",
-    description: "Explain a finding's rule: what it checks, why it matters, how to fix it, effort, whether it is an owner action (rotate a key, change DNS), research references and OWASP MCP/Agentic ids. Pass the `rule` field of a finding (e.g. agents/mcp-unpinned, secrets, headers).",
+    description: "Explain a finding's rule: what it checks, why it matters, how to fix it, effort, whether it is an owner action (rotate a key, change DNS), research references and OWASP MCP/Agentic ids. Pass the `rule` field of a finding as `id` (e.g. agents/mcp-unpinned, secrets, headers).",
     inputSchema: {
       type: "object",
       properties: { id: { type: "string", minLength: 1, maxLength: 128, pattern: "^[A-Za-z0-9][A-Za-z0-9/_.:-]*$", description: "The finding's `rule`, e.g. agents/mcp-unpinned." } },
@@ -267,6 +268,10 @@ function explain(id) {
   const refs = (CATEGORY_REFERENCES[probe.category] || []).map((k) => SOURCES[k] ? { key: k, cite: SOURCES[k].cite, title: SOURCES[k].title, url: SOURCES[k].url } : null).filter(Boolean);
   const owasp = agentsRule ? (RULE_OWASP[agentsRule] || []).map((o) => ({ id: o, name: OWASP_NAMES[o] || o })) : [];
 
+  const general = plan.id === FALLBACK.id;
+  const limitsOf = known
+    ? general ? [`Penthera has only general advice for "${id}". The finding's own description and fix say more.`] : []
+    : [`"${id}" is not a rule Penthera knows; the guidance below is the generic review advice.`];
   const structured = {
     tool: "explain_finding",
     rule: id,
@@ -281,12 +286,13 @@ function explain(id) {
     references: refs,
     owasp,
     docs: agentsRule !== null ? "https://github.com/danoszz/penthera/blob/main/docs/commands/agents.md" : "https://github.com/danoszz/penthera/blob/main/docs/METHODOLOGY.md",
-    limits: known ? [] : [`"${id}" is not a rule Penthera knows; the guidance below is the generic review advice.`],
+    limits: limitsOf,
   };
   const text = [
     `${id}${known ? "" : " (unknown rule)"}: ${plan.action}.`,
     `Why: ${plan.why}`,
     `Fix: ${plan.fix}`,
+    ...limitsOf.filter(() => known),
     `Effort: ${plan.effort}${plan.ownerAction ? "; an owner action, not a code change a tool should make" : ""}.`,
     ...(owasp.length ? [`OWASP: ${owasp.map((o) => o.name).join(" · ")}`] : []),
   ].join("\n");

@@ -41,20 +41,19 @@ server.
 
 ## First visit: setup
 
-The first time a browser opens the dashboard, a three-screen setup runs (run
+The first time a browser opens the dashboard, a two-screen setup runs (run
 it again from **Penthera ▸ Set up…**):
 
 1. What Penthera does, in two sentences, and the rule: only check apps you own
    or have written permission to test.
-2. **Simple** or **Advanced**. Simple answers "is my app secure, and what do I
-   do?" in plain words with one button at a time. Advanced shows everything.
-   Switch any time in the Penthera menu or Settings; the choice is remembered
-   in this browser.
-3. Your project: the folder (one of the `--project` folders) and, optionally,
+2. Your project: the folder (one of the `--project` folders) and, optionally,
    where the app runs. **Check my app now** starts a first scan; **Skip** closes
-   setup. Closing it early keeps Simple.
+   setup.
 
-![Setup, choosing Simple or Advanced](https://github.com/danoszz/penthera/raw/main/assets/dashboard/ui-setup.jpg)
+It starts in Simple, which answers "is my app secure, and what do I do?" in
+plain words with one button at a time. Advanced shows everything. Switch any
+time in the Penthera menu or Settings. The choice, and that setup is done, are
+remembered in `~/.penthera/ui.json`, so a restart keeps them.
 
 ## The view
 
@@ -95,8 +94,7 @@ project with a run in progress shows a blinking square.
 A run streams into the centre in **check and fix** mode: the side windows
 step aside, and **Back** at the top left (or `Esc`) returns to the project. In
 Simple mode it is one sentence ("Fix 2 of 3
-is waiting for you to approve it.", "Done. 2 fixes applied and checked, 1
-undone.") with the raw output folded under "Show what it is doing". In Advanced
+is waiting for you to approve it.", "2 fixed, 1 critical left.") with the raw output folded under "Show what it is doing". In Advanced
 it is the transcript, with a gutter square per step: filled when done, hollow
 on the step in progress.
 
@@ -132,7 +130,7 @@ does too. A tap outside closes them.
 |---|---|
 | *As someone who is not a programmer, I want to know if my app is secure without learning security words.* | Simple mode: the verdict sentence, problems as Critical, Serious, Worth fixing or Minor, and one button at a time. |
 | *As a solo founder before launch, I want one sentence that says whether I can ship.* | The verdict at the top of every project. |
-| *As a first-time user, I want to be walked through setting up my project.* | The three-screen setup on the first visit. ![First run](https://github.com/danoszz/penthera/raw/main/assets/dashboard/ui-start.jpg) |
+| *As a first-time user, I want to be walked through setting up my project.* | The two-screen setup on the first visit. ![First run](https://github.com/danoszz/penthera/raw/main/assets/dashboard/ui-start.jpg) |
 | *As a founder with no security engineer, I want fixes applied only when I approve them.* | The approval window: Apply, Skip or Stop on every change; verified fixes land as local commits on a separate branch, failed ones are undone, nothing is pushed. |
 | *As a developer, I want to start a scan and be stopped before I hit a host I do not own.* | New scan…: a remote hostname must be typed back before the run starts. |
 | *As a product owner, I want one problem explained in plain words.* | Pick it: the inspector leads with what is wrong, how sure and what to do. |

@@ -12,7 +12,10 @@ A lockfile change is code you did not write, about to run with your app's access
 to files, network, environment and CI secrets. `penthera deps` reads
 `package-lock.json`, statically scans every installed package, and tells you
 what each one *can do*, and which packages are new or gained capabilities in an
-upgrade.
+upgrade. It does not check known vulnerabilities (CVEs), and every run says so.
+`penthera --repo . --giants` runs osv-scanner for those, if you have it installed.
+An install script over 4 KB reads as risky, and a code file that is almost all
+blank lines is skipped and named, so that package reads as unscanned.
 
 ```bash
 penthera deps                          # every package in node_modules
@@ -68,7 +71,11 @@ deprecations, and fetches old tarballs the cache does not have (verified the
 same way). To comment the capability diff on every PR that changes the
 lockfile, use the GitHub Action below.
 
-### npm and Python
+#A package Penthera can't read in full never reads as clean. A file full of blank
+lines is skipped and the package gets a high finding, "could not be scanned", which
+exits 1. A line over about 190 KB says it wasn't read in full.
+
+## npm and Python
 
 The same command reads Python projects: `uv.lock`, `poetry.lock`, `pdm.lock`,
 `Pipfile.lock` or `requirements*.txt` (pinned and `--hash` lines), and the

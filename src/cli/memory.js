@@ -127,7 +127,7 @@ export async function runMemoryCommand(argv, { out = (s) => process.stdout.write
 
     case "suppress": {
       const id = positionals[1];
-      if (!id || !/^[0-9a-f]{16}$/.test(id)) { err("  suppress needs a finding id (16 hex chars, the `fid` in --memory reports)"); return 2; }
+      if (!id || !/^[0-9a-f]{16}$/.test(id)) { err("  suppress needs a finding id (16 hex chars, the id printed next to each finding)"); return 2; }
       const reason = (opts.reason || "").trim();
       if (!reason) { err("  suppress needs --reason <text>"); return 2; }
       if (opts.expires && Number.isNaN(Date.parse(opts.expires))) { err("  --expires is not a date"); return 2; }
@@ -135,6 +135,7 @@ export async function runMemoryCommand(argv, { out = (s) => process.stdout.write
       if (!r.ok) { err(`  Memory chain is broken at line ${r.brokenAt}; not appending. Run \`penthera memory verify\`.`); return 1; }
       mem.append({ type: "fp_suppressed", data: { id, reason, actor: "user", ...(opts.expires ? { expires: opts.expires } : {}) } });
       out(`  Suppressed ${id} for ${clean(project.label)}`);
+      out("  This applies to --memory scans and the fix loop on this machine. For the pre-commit hook and your team, add it to penthera.suppress.json.");
       return 0;
     }
 

@@ -5,12 +5,12 @@
  * the recipes' static probes and secrets with the real secret scanner.
  */
 import { describe, it, expect, afterAll } from "vitest";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { cpSync, mkdtempSync, readFileSync, writeFileSync, rmSync, symlinkSync, existsSync, mkdirSync, linkSync, appendFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import {
-  RECIPES, planFixes, probeRepo, redactPlan, applyDiff, restoreFiles, createPatch, parsePatch, applyHunks,
+  RECIPES, planFixes, fixSummary, probeRepo, redactPlan, applyDiff, restoreFiles, createPatch, parsePatch, applyHunks,
 } from "../lib/fix/index.js";
 import { printPlan } from "../src/cli/fix.js";
 import { createModelFixer, assertLocalModelUrl, OLLAMA_ORIGIN } from "../lib/fix/model.js";
@@ -50,6 +50,335 @@ function commit(dir) {
 }
 
 const findingsFor = (dir) => [...scanSecrets(dir), ...probeRepo(dir)];
+
+describe("recipes that do not bite", () => {
+  const planFor = async (dir, title, category) => (await planFixes(dir, [{ title, category, severity: "high", url: category === "secrets" ? "routes/pay.js" : undefined }])).plans[0];
+  const STRIPE = `const STRIPE_KEY = "sk_${"live"}_51NfakefakefakefakefakefakeAB";\nexport default STRIPE_KEY;\n`; // split so a self-scan does not flag this file
+  const write = (dir, file, text) => { mkdirSync(join(dir, file, ".."), { recursive: true }); writeFileSync(join(dir, file), text); };
+
+  it("checks a moved secret just before the server listens, after dotenv has run", async () => {
+    const dir = repoFrom("express");
+    const server = readFileSync(join(dir, "server.js"), "utf-8");
+    expect(server).toMatch(/\.listen\(/);
+    write(dir, "routes/pay.js", STRIPE);
+    const plan = await planFor(dir, "", "secrets");
+    expect(plan.files).toContain("server.js");
+    applyDiff(dir, plan.diff, { allowDirty: true });
+    const fixed = readFileSync(join(dir, "server.js"), "utf-8").split("\n");
+    const listens = fixed.findIndex((l) => /\.listen\(/.test(l));
+    expect(fixed[listens - 1]).toMatch(/if \(!process\.env\.STRIPE_KEY\) throw new Error\("Set STRIPE_KEY before starting the server/);
+  });
+
+  it("never puts the check inside a braceless guard", async () => {
+    for (const guard of ["if (require.main === module)\n  app.listen(3000);\n", "if (require.main === module)\napp.listen(3000);\n", "if (ok) start();\nelse\n  app.listen(3000);\n"]) {
+      const dir = repoFrom("express");
+      write(dir, "server.js", readFileSync(join(dir, "server.js"), "utf-8").replace("app.listen(3000);\n", guard));
+      write(dir, "routes/pay.js", STRIPE);
+      const plan = await planFor(dir, "", "secrets");
+      expect(plan.diff, guard).toContain("process.env.STRIPE_KEY");
+      expect(plan.diff, guard).not.toContain("throw new Error");
+    }
+  });
+
+  it("puts the check inside a braced guard", async () => {
+    const dir = repoFrom("express");
+    write(dir, "server.js", readFileSync(join(dir, "server.js"), "utf-8").replace("app.listen(3000);\n", "if (require.main === module) {\n  app.listen(3000);\n}\n"));
+    write(dir, "routes/pay.js", STRIPE);
+    applyDiff(dir, (await planFor(dir, "", "secrets")).diff, { allowDirty: true });
+    expect(readFileSync(join(dir, "server.js"), "utf-8")).toMatch(/\{\n {2}if \(!process\.env\.STRIPE_KEY\) throw[^\n]*\n {2}app\.listen/);
+  });
+
+  it("refuses a multi-line guard and a line it cannot read", async () => {
+    for (const guard of ["if (require.main === module &&\n    !process.env.X)\n  app.listen(3000);\n", "if (ok) // start\n  app.listen(3000);\n", "if (main) // {\n  app.listen(3000);\n", "if (main) /* { */\n  app.listen(3000);\n", "if (ok)\n  // start\n  app.listen(3000);\n"]) {
+      const dir = repoFrom("express");
+      write(dir, "server.js", readFileSync(join(dir, "server.js"), "utf-8").replace("app.listen(3000);\n", guard));
+      write(dir, "routes/pay.js", STRIPE);
+      expect((await planFor(dir, "", "secrets")).diff, guard).not.toContain("throw new Error");
+    }
+  });
+
+  it("keeps a comment line above listen from blocking the check", async () => {
+    const dir = repoFrom("express");
+    write(dir, "server.js", readFileSync(join(dir, "server.js"), "utf-8").replace("app.listen(3000);\n", "// start the server\napp.listen(3000);\n"));
+    write(dir, "routes/pay.js", STRIPE);
+    expect((await planFor(dir, "", "secrets")).diff).toContain("throw new Error");
+  });
+
+  it("leaves a git-ignored .env.example alone and still moves the secret", async () => {
+    const dir = repoFrom("express");
+    write(dir, ".gitignore", ".env*\n");
+    write(dir, "routes/pay.js", STRIPE);
+    const plan = await planFor(dir, "", "secrets");
+    expect(plan.files).not.toContain(".env.example");
+    expect(plan.diff).toContain("process.env.STRIPE_KEY");
+    expect(plan.ownerActions.join(" ")).toMatch(/\.gitignore/);
+  });
+
+  it("says when nothing loads .env", async () => {
+    const dir = repoFrom("express");
+    write(dir, "routes/pay.js", STRIPE);
+    expect((await planFor(dir, "", "secrets")).ownerActions.join(" ")).toMatch(/Nothing in this app loads \.env/);
+    const pkg = JSON.parse(readFileSync(join(dir, "package.json"), "utf-8"));
+    write(dir, "package.json", JSON.stringify({ ...pkg, dependencies: { ...pkg.dependencies, dotenv: "^16.0.0" } }));
+    expect((await planFor(dir, "", "secrets")).ownerActions.join(" ")).not.toMatch(/Nothing in this app loads/);
+  });
+
+  it("masks a secret that sits in another fix's diff context", async () => {
+    const dir = repoFrom("express");
+    const key = `sk_${"live"}_51NfakefakefakefakefakefakeABCD`;
+    write(dir, "server.js", readFileSync(join(dir, "server.js"), "utf-8").replace("const app = express();", `const stripeKey = "${key}";\nconst app = express();`));
+    const { plans } = await planFixes(dir, [{ title: "Missing Content-Security-Policy", category: "headers", severity: "medium" }]);
+    expect(plans[0].diff).toContain(key);
+    const shown = redactPlan(plans[0]);
+    expect(shown.diff).not.toContain(key);
+    expect(shown.unchangedHidden).toBeGreaterThan(0);
+  });
+
+  it("adds a start-up check before Hono's serve()", async () => {
+    const dir = repoFrom("hono");
+    const entry = "src/index.ts";
+    write(dir, entry, 'import { serve } from "@hono/node-server";\nimport { Hono } from "hono";\nconst app = new Hono();\nconst stripeKey = "sk_' + 'live_51NfakefakefakefakefakefakeAB";\napp.get("/", (c) => c.text(stripeKey));\nserve({ fetch: app.fetch, port: 3000 });\n');
+    const finding = { title: "", category: "secrets", severity: "high", url: entry };
+    const plan = (await planFixes(dir, [finding])).plans[0];
+    expect(plan.diff).toMatch(/\+if \(!process\.env\.\w+\) throw new Error/);
+  });
+
+  it("adds no start-up check to a Next.js project", async () => {
+    const dir = repoFrom("next");
+    write(dir, "routes/pay.js", STRIPE);
+    const plan = await planFor(dir, "", "secrets");
+    expect(plan.diff).toContain("process.env.STRIPE_KEY");
+    expect(plan.diff).not.toContain("throw new Error");
+  });
+
+  it("allows the origins the code calls in connect-src, and only valid hosts", async () => {
+    const dir = repoFrom("express");
+    write(dir, "public/app.js", [
+      'const SUPABASE_URL = "https://abcdef.supabase.co";',
+      'fetch("https://api.example.com/v1/x");',
+      "fetch(\"https://evil.example.com'; script-src *\");",
+      'const docs = "https://docs.example.org/page";',
+      "",
+    ].join("\n"));
+    const plan = await planFor(dir, "Missing Content-Security-Policy", "headers");
+    const csp = plan.diff.split("\n").find((l) => l.includes("connect-src"));
+    expect(csp).toContain("connect-src 'self' https://abcdef.supabase.co https://api.example.com https://evil.example.com;");
+    expect(csp).not.toContain("script-src *");
+    expect(csp).not.toContain("docs.example.org");
+  });
+
+  it("leaves a CSP that exists but controls no scripts to the owner", async () => {
+    const dir = repoFrom("express");
+    const { plans } = await planFixes(dir, [{ title: "Content-Security-Policy does not control scripts", category: "headers", severity: "medium" }]);
+    expect(plans).toEqual([]);
+  });
+
+  it("leaves a next.config it cannot read safely to the owner", async () => {
+    const dir = repoFrom("next");
+    rmSync(join(dir, "next.config.mjs"), { force: true });
+    write(dir, "next.config.js", "const nextConfig = { images: { domains: [] }\n};\nmodule.exports = nextConfig;\n");
+    const { plans } = await planFixes(dir, [{ title: "Missing Content-Security-Policy", category: "headers", severity: "medium" }]);
+    expect(plans).toEqual([]);
+  });
+
+  it("lets Next.js use eval in development only", async () => {
+    const dir = repoFrom("next");
+    const plan = (await planFixes(dir, [{ title: "Missing Content-Security-Policy", category: "headers", severity: "medium" }])).plans[0];
+    const line = plan.diff.split("\n").find((l) => l.includes('key: "Content-Security-Policy"'));
+    expect(line).toContain('process.env.NODE_ENV === "development"');
+    const [dev, prod] = line.split(" : ");
+    expect(dev).toContain("'unsafe-eval'");
+    expect(prod).not.toContain("'unsafe-eval'");
+  });
+
+  it("plans headers for a one-line next.config, keeping its options", async () => {
+    const dir = repoFrom("next");
+    rmSync(join(dir, "next.config.mjs"), { force: true });
+    rmSync(join(dir, "next.config.js"), { force: true });
+    write(dir, "next.config.js", "/** @type {import('next').NextConfig} */\nconst nextConfig = { reactStrictMode: true };\nmodule.exports = nextConfig;\n");
+    const plan = await planFor(dir, "Missing Content-Security-Policy", "headers");
+    expect(plan.diff).toContain("+  reactStrictMode: true,");
+    expect(plan.diff).toContain("+  async headers() {");
+  });
+});
+
+describe("plans never print a secret", () => {
+  const fake = {
+    url: ["postgres://admin:", "Sup3rSecretPw", "@db.internal:5432/prod"],
+    aws: ["wJalrXUtnFEMI/K7MDENG/", "bPxRfiCYEXAMPLEKEY"],
+    slack: ["xoxb-", "123456789012-1234567890123-AbCdEfGhIjKlMnOpQrStUvWx"],
+  };
+  const shown = (line, sign = " ") => redactPlan({ diff: `--- a/x.js\n+++ b/x.js\n@@ -1,1 +1,1 @@\n${sign}${line}\n` });
+
+  it("masks a password in any URL, on any line", () => {
+    for (const sign of ["+", "-"]) {
+      const out = shown(`const db = "${fake.url.join("")}";`, sign);
+      expect(out.diff).not.toContain(fake.url[1]);
+      expect(out.redacted).toBe(true);
+    }
+  });
+
+  it("hides a context line that names a secret, and masks a token shape anywhere", () => {
+    expect(shown(`const AWS_SECRET_ACCESS_KEY = "${fake.aws.join("")}";`).diff).not.toContain(fake.aws[0]);
+    expect(shown('const dbPassword = "two words here";').diff).not.toContain("two words");
+    expect(shown(`const hook = "${fake.slack.join("")}";`).diff).not.toContain(fake.slack[1]);
+    expect(shown(`setSlack(\`${fake.slack.join("")}\`);`, "+").diff).not.toContain(fake.slack[1]);
+    expect(shown(`x = "${fake.aws.join("")}";`).diff).not.toContain(fake.aws[0]);
+    expect(shown(`DB_PASSWORD=${fake.url[1]}`, "+").diff).not.toContain(fake.url[1]);
+  });
+
+  it.each([
+    ["Slack webhook", `const hook = "https://hooks.slack.com/services/T0/B0/${"a1B2".repeat(6)}";`, "a1B2a1B2"],
+    ["key in a query", 'fetch("https://maps.example/geo?key=AbCd1234EfGh&x=1");', "AbCd1234"],
+    ["export", "export API_TOKEN=abc123def456", "abc123def"],
+    ["YAML", "password: hunter2hunter2", "hunter2"],
+    ["CRLF .env", "DB_PASSWORD=hunter2hunter2\r", "hunter2"],
+    ["--password=", "mysql -u root --password=Hunter2xyz db", "Hunter2xyz"],
+    ["--password with a space", "mysql -u root --password Hunter2xyz db", "Hunter2xyz"],
+    ["a token after an import", 'import a from "a"; const token = "Hunter2xyz";', "Hunter2xyz"],
+    ["a quote inside", `const password = "it's-a-Pa55word";`, "Pa55word"],
+  ])("masks %s on changed and context lines", (_, line, secret) => {
+    for (const sign of ["+", " "]) expect(shown(line, sign).diff).not.toContain(secret);
+  });
+
+  it.each([
+    ['const dbpass = "pl41n-w0rd-horse";', "pl41n"],
+    ["const pw='shorty1';", "shorty1"],
+    ["// password is letmein-comment-pw", "letmein"],
+    [`const v = "${"ab12".repeat(16)}";`, "ab12ab12"],
+    ['const id = "9f1c2d3e-1234-4abc-8def-0123456789ab";', "9f1c2d3e"],
+  ])("hides a context line it cannot trust: %s", (line, secret) => {
+    expect(shown(line).diff).not.toContain(secret);
+  });
+
+  it("masks a quoted hex key or UUID on a changed line", () => {
+    expect(shown(`const v = "${"ab12".repeat(16)}";`, "+").diff).not.toContain("ab12ab12ab12");
+    expect(shown('const id = "9f1c2d3e-1234-4abc-8def-0123456789ab";', "+").diff).not.toContain("1234-4abc");
+  });
+
+  it("masks a whole key block, in a diff and in one string", () => {
+    const body = ["MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC7", "xxTuvWxYz0123456789abcdefGHIJKLMNOPqrstuv", "short"];
+    const begin = ["-----BEGIN", "PRIVATE", "KEY-----"].join(" ");
+    const end = ["-----END", "PRIVATE", "KEY-----"].join(" ");
+    const diff = ["--- a/x.js", "+++ b/x.js", "@@ -1,6 +1,6 @@", " const key = `" + begin, ...body.map((l) => ` ${l}`), ` ${end}\`;`, " const app = express();", ""].join("\n");
+    const out = redactPlan({ diff });
+    for (const line of body) expect(out.diff).not.toContain(line);
+    const changed = redactPlan({ diff: diff.replace(/^ (?!const app)/gm, "+") });
+    for (const line of body) expect(changed.diff).not.toContain(line);
+    expect(out.diff).toMatch(/… \d+ lines unchanged/);
+    const inline = shown(`const k = "${begin}\\n${body[0]}\\n${end}";`, "+");
+    expect(inline.diff).not.toContain(body[0]);
+  });
+
+  it("ends a key block at its hunk or on the other side of the diff", () => {
+    const begin = ["-----BEGIN", "PRIVATE", "KEY-----"].join(" ");
+    const lost = redactPlan({ diff: ["--- a/x.js", "+++ b/x.js", "@@ -1,2 +1,2 @@", `-const k = \`${begin}`, "-MIIEvQIBADANBgkqhkiG9w0BAQEFAASC", "+const k = process.env.KEY;", "@@ -9,1 +9,1 @@", "-a();", "+b();", "--- a/y.js", "+++ b/y.js", ""].join("\n") });
+    expect(lost.diff).toContain("+const k = process.env.KEY;");
+    expect(lost.diff).toContain("+b();");
+    expect(lost.diff).toContain("+++ b/y.js");
+    expect(lost.diff).not.toContain("MIIEvQIBAD");
+  });
+
+  it.each([
+    ["// ", ""],
+    ["# ", ""],
+    ['"', '",'],
+    ["  ", ""],
+  ])("hides a whole deleted key block with lines shaped %s…%s", (before, after) => {
+    const begin = ["-----BEGIN", "RSA PRIVATE", "KEY-----"].join(" ");
+    const end = ["-----END", "RSA PRIVATE", "KEY-----"].join(" ");
+    const body = ["MIIEvQIBADANBgkqhkiG9w0BAQ", "shortTAIL=="];
+    const lines = [begin, ...body, end].map((l) => `-${before}${l}${after}`);
+    const out = redactPlan({ diff: ["--- a/x.js", "+++ b/x.js", "@@ -1,4 +1,1 @@", ...lines, "+const k = process.env.KEY;", "@@ -9,1 +9,1 @@", "-a();", "+b();", ""].join("\n") });
+    for (const l of body) expect(out.diff).not.toContain(l);
+    expect(out.diff).toContain("+const k = process.env.KEY;");
+    expect(out.diff).toContain("+b();");
+  });
+
+  it("masks a long base64 line on its own", () => {
+    expect(shown(`  "${"QUJD".repeat(14)}" +`).diff).not.toContain("QUJDQUJDQUJD");
+  });
+
+  it("keeps a module name beside a secret word on a changed line", () => {
+    expect(shown('const password = require("express");', "+").diff).toContain('require("express")');
+  });
+
+  it("shows no unchanged line at all, and leaves the applied diff alone", () => {
+    const leaks = ['const headers = { Authorization: "Basic dXNlcjpodW50ZXIyMTIz" };', 'encryptionKey = "enc-value-12"', "SIGNING_KEY=abcdefgh1234", "curl -u admin:pw https://x.example"];
+    const diff = ["--- a/x.js", "+++ b/x.js", "@@ -1,5 +1,5 @@", ...leaks.map((l) => ` ${l}`), "-old();", "+renew();", " tail();", ""].join("\n");
+    const out = redactPlan({ diff });
+    for (const l of leaks) expect(out.diff).not.toContain(l);
+    expect(out.diff).toContain("… 4 lines unchanged");
+    expect(out.diff).toContain("… 1 line unchanged");
+    expect(out.diff).toContain("+renew();");
+    expect(out.diff).toContain("-old();");
+    expect(out.redacted).toBe(false);
+    expect(out.unchangedHidden).toBe(5);
+    expect(diff).toContain(leaks[0]);
+  });
+
+  it("claims redacted only when it changed something, and leaves plain code alone", () => {
+    const plain = shown('app.get("/health", (req, res) => res.send("ok"));', "+");
+    expect(plain.redacted).toBe(false);
+    expect(plain.diff).toContain("/health");
+    expect(shown('fetch("https://api.example.com/v1/items");', "+").diff).toContain("api.example.com");
+  });
+});
+
+describe("the scan's fix line", () => {
+  it("counts findings a recipe could take, without reading the repo", () => {
+    expect(fixSummary([{ title: "Missing Content-Security-Policy", category: "headers" }, { title: "x", category: "secrets" }, { title: "x", category: "code-pattern" }])).toBe(2);
+  });
+
+  it("does not slow a repo scan on a big, secret-heavy repo", () => {
+    const dir = repoFrom("express");
+    const key = `sk_${"live"}_51Nfakefakefakefakefakefake`;
+    writeFileSync(join(dir, "big.js"), `app${".use('/".repeat(100_000)}\n`);
+    for (let i = 0; i < 200; i++) writeFileSync(join(dir, `s${i}.js`), `const a = "${key}${String(i).padStart(4, "0")}";\nconst b = "${key}${String(i).padStart(4, "1")}";\n`);
+    const start = Date.now();
+    const scan = spawnSync(process.execPath, [resolve("bin/penthera.js"), "--repo", dir, "--offline", "--json"], { encoding: "utf-8", maxBuffer: 1 << 28, env: { ...process.env, NO_COLOR: "1" } });
+    expect(scan.status).toBe(1);
+    expect(Date.now() - start).toBeLessThan(10_000);
+  }, 60_000);
+
+  it("finds a global limiter without stalling on a long line", () => {
+    const dir = repoFrom("express");
+    writeFileSync(join(dir, "big.js"), `app${".use('/".repeat(100_000)}\n`);
+    const start = Date.now();
+    probeRepo(dir);
+    expect(Date.now() - start).toBeLessThan(3_000);
+  }, 60_000);
+
+  it("fix --apply refuses a dirty tree before it asks", () => {
+    const dir = repoFrom("express");
+    const { plans } = JSON.parse(execFileSync(process.execPath, [resolve("bin/penthera.js"), "fix", "--plan", "--repo", dir, "--json"], { encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] }));
+    writeFileSync(join(dir, "scratch.js"), "x\n");
+    let status = 0;
+    let stderr = "";
+    try {
+      execFileSync(process.execPath, [resolve("bin/penthera.js"), "fix", "--apply", plans[0].id, "--repo", dir], { encoding: "utf-8", stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, NO_COLOR: "1" } });
+    } catch (e) { status = e.status; stderr = e.stderr; }
+    expect(status).toBe(2);
+    expect(stderr).toMatch(/uncommitted changes/);
+    expect(stderr).not.toMatch(/re-run with --yes/);
+  });
+
+  it("prints the command after a repo scan, and leaves the exit code and JSON alone", () => {
+    const dir = repoFrom("express");
+    const scan = (...extra) => {
+      try {
+        return { status: 0, out: execFileSync(process.execPath, [resolve("bin/penthera.js"), "--repo", dir, "--offline", ...extra], { encoding: "utf-8", env: { ...process.env, NO_COLOR: "1" } }) };
+      } catch (e) { return { status: e.status, out: e.stdout }; }
+    };
+    const text = scan();
+    expect(text.out).toMatch(/\d+ may be fixable:/);
+    expect(text.out).toContain("penthera fix --plan --repo");
+    const json = scan("--json");
+    expect(json.status).toBe(text.status);
+    expect(json.out).not.toMatch(/fixable:/);
+    expect(JSON.parse(json.out).brief.next[0].command).toContain("penthera fix --plan --repo");
+  });
+});
 
 describe("diff", () => {
   it("round-trips an edit, an insertion and a new file", () => {
@@ -144,6 +473,36 @@ describe("applyDiff safety", () => {
     // Control: plain git status in that repo does run it.
     git(dir, "status", "--porcelain");
     expect(existsSync(marker)).toBe(true);
+  });
+
+  it("lets Penthera's own untracked reports stay, and nothing else", () => {
+    const dir = repoFrom("express");
+    mkdirSync(join(dir, "reports/nested"), { recursive: true });
+    writeFileSync(join(dir, "reports/nested/scan.json"), "{}\n");
+    expect(assertCleanTree(dir)).toEqual(["reports/nested/scan.json"]);
+    const server = readFileSync(join(dir, "server.js"), "utf-8");
+    expect(applyDiff(dir, createPatch("server.js", server, server + "// patched\n")).applied).toBe(true);
+    git(dir, "checkout", "--", ".");
+
+    // A fix never writes over one of them.
+    expect(() => applyDiff(dir, createPatch("reports/nested/scan.json", "{}\n", "{\"a\":1}\n"))).toThrow(/uncommitted scan report/);
+    // A file beside the folder, or a folder of that name deeper in, is the user's.
+    writeFileSync(join(dir, "reports.js"), "x\n");
+    expect(() => assertCleanTree(dir)).toThrow(/uncommitted changes/);
+    rmSync(join(dir, "reports.js"));
+    mkdirSync(join(dir, "src/reports"), { recursive: true });
+    writeFileSync(join(dir, "src/reports/a.json"), "{}\n");
+    expect(() => assertCleanTree(dir)).toThrow(/uncommitted changes/);
+  });
+
+  it("does not excuse a tracked report that changed", () => {
+    const dir = repoFrom("express");
+    mkdirSync(join(dir, "reports"));
+    writeFileSync(join(dir, "reports/kept.json"), "{}\n");
+    git(dir, "add", "-A");
+    git(dir, "-c", "user.name=t", "-c", "user.email=t@l", "commit", "-qm", "track a report");
+    writeFileSync(join(dir, "reports/kept.json"), "{\"a\":1}\n");
+    expect(() => assertCleanTree(dir)).toThrow(/uncommitted changes/);
   });
 
   it("refuses a dirty tree or a non-git directory unless allowDirty", () => {

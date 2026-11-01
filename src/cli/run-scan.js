@@ -6,6 +6,8 @@ import { resolve, join } from "node:path";
 import { existsSync, mkdirSync } from "node:fs";
 import { scanUrl } from "../scan-url.js";
 import { scanRepo } from "../scan-repo.js";
+import { machineScanResult } from "./machine-result.js";
+import { unreachableText } from "../report/reach.js";
 import { mergeResults } from "./merge-results.js";
 import { resolveScanOptions } from "./profiles.js";
 import { activeModes, resolveRate } from "./active-gate.js";
@@ -79,7 +81,7 @@ export async function executeScan(config) {
     const urlResult = await scanUrl(normalizeBaseUrl(url), scanOpts);
     results.push(urlResult);
     if (!urlResult.reachable && !repo) {
-      throw new Error(`Target unreachable: ${url}`);
+      throw new Error(unreachableText(urlResult, url));
     }
   }
 
@@ -93,16 +95,7 @@ export async function executeScan(config) {
   }
 
   if (machine) {
-    const { auditMachine } = await import("../../lib/machine.js");
-    const machineResult = await auditMachine({ onPhase: scanOpts.onPhase });
-    results.push({
-      target: "this machine",
-      mode: "machine",
-      timestamp: new Date().toISOString(),
-      duration: 0,
-      machine: machineResult,
-      findings: machineResult.findings,
-    });
+    results.push(await machineScanResult({ onPhase: scanOpts.onPhase }));
   }
 
   const merged = mergeResults(results);

@@ -145,6 +145,8 @@ export async function runComment(opts, env = process.env, api = null) {
 export function runGate(opts) {
   const report = JSON.parse(readFileSync(opts.report, "utf-8"));
   const res = gate(report.findings, opts["fail-on"] || "none");
+  // A green job must not read as a check of a site nobody read.
+  if (report.challenge || report.reachable === false) console.log("::warning::Site not read: Penthera couldn't read the site, so this job says nothing about it.");
   if (res.fail) console.error(`penthera: ${res.count} finding(s) at or above ${opts["fail-on"]}; failing as requested by fail-on.`);
   return res;
 }

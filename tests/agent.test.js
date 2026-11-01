@@ -6,12 +6,13 @@
  * temp dir. Nothing is installed; the project test script is a tiny node file.
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { cpSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, existsSync, readdirSync, chmodSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { startMockServer } from "./fixtures/mock-server.js";
-import { runLoop, loopEgressContext, localModelFetch, fixBranchName, LoopError, LOOP_RUN_SCHEMA } from "../src/agent/loop.js";
+import { runLoop, loopVerdict, loopEgressContext, localModelFetch, fixBranchName, LoopError, LOOP_RUN_SCHEMA } from "../src/agent/loop.js";
+import { fingerprintFinding } from "../lib/audit-loop.js";
 import { assertAllowed, createGit, GitPolicyError, ALLOWED_SUBCOMMANDS } from "../src/agent/git.js";
 import { checkEgress, currentEgress } from "../src/utils/http.js";
 import { planFixes, probeRepo, createPatch } from "../lib/fix/index.js";
@@ -396,10 +397,235 @@ describe("agent loop: helpers", () => {
   it("keeps a second same-minute run on its own branch", async () => {
     const repo = fixtureRepo();
     const memoryRoot = tempDir();
-    const a = await runLoop({ repo, memoryRoot, ask: async () => "n", maxIterations: 1 });
+    const a = await runLoop({ repo, memoryRoot, ask: yes, maxIterations: 1 });
     git(repo, "checkout", "-q", "main");
     const b = await runLoop({ repo, memoryRoot, ask: async () => "n", maxIterations: 1 });
     expect(b.branch.fix).not.toBe(a.branch.fix);
+  });
+});
+
+describe("agent loop: the tree under a fix", () => {
+  it("applies every approved fix with an untracked reports/ folder beside them", async () => {
+    const repo = fixtureRepo();
+    mkdirSync(join(repo, "reports"));
+    writeFileSync(join(repo, "reports/scan.json"), "{}\n");
+    const run = await runLoop({ repo, memoryRoot: tempDir(), ask: yes, maxIterations: 2 });
+    expect(run.totals.verified).toBeGreaterThan(0);
+    expect(run.gaveUp).toEqual([]);
+    expect(git(repo, "status", "--porcelain").trim()).toBe("?? reports/");
+  });
+
+  it("stops at the first fix when the tree went dirty, not after more approvals", async () => {
+    const repo = fixtureRepo();
+    let asked = 0;
+    const run = await runLoop({
+      repo, memoryRoot: tempDir(), maxIterations: 2,
+      ask: async () => { asked++; writeFileSync(join(repo, "scratch.js"), "mine\n"); return "y"; },
+    });
+    expect(asked).toBe(1);
+    expect(run.stopReason).toBe("error");
+    expect(run.error).toMatch(/uncommitted changes/);
+    expect(run.totals.verified).toBe(0);
+  });
+});
+
+describe("agent loop: how a run ends", () => {
+  const run = (stopReason, left, verified = 0) => ({ stopReason, findings: { left }, totals: { verified } });
+  const none = { critical: 0, high: 0, medium: 0, low: 0 };
+
+  it("is clean only when it finished with no critical or high left", () => {
+    expect(loopVerdict(run("no-fixable-findings", none, 3))).toMatchObject({ clean: true, headline: "3 fixed, no critical or high left." });
+    expect(loopVerdict(run("no-fixable-findings", { ...none, medium: 2 }))).toMatchObject({ clean: true, headline: "0 fixed, no critical or high left, 2 lower." });
+    expect(loopVerdict(run("no-fixable-findings", { ...none, critical: 8 }, 1))).toMatchObject({ clean: false, headline: "1 fixed, 8 critical left." });
+    expect(loopVerdict(run("no-fixable-findings", { ...none, high: 2 }))).toMatchObject({ clean: false, headline: "0 fixed, 2 high left." });
+  });
+
+  it("never reads a partial run as clean", () => {
+    for (const stop of ["declined-or-failed-left", "max-iterations", "user-quit", "interrupted", "error"]) {
+      expect(loopVerdict(run(stop, none)).clean, stop).toBe(false);
+    }
+    expect(loopVerdict(run("user-quit", none)).headline).toMatch(/^Stopped early/);
+    expect(loopVerdict(run("no-fixable-findings", none)).headline).not.toContain("suppressed");
+    expect(loopVerdict(run("error", null))).toMatchObject({ clean: false, headline: "0 fixed. The run ended before a final scan." });
+  });
+
+  it("counts same-titled findings in different files, and suppressed ones as a scan does", async () => {
+    const repo = fixtureRepo();
+    const bug = (file) => ({ severity: "critical", title: "eval in source", category: "code-pattern", file });
+    const hidden = { severity: "critical", title: "Hidden", category: "code-pattern", url: "x.js" };
+    writeFileSync(join(repo, "penthera.suppress.json"), JSON.stringify({ version: 1, suppress: [{ fingerprint: fingerprintFinding(hidden), reason: "false positive here" }] }));
+    git(repo, "add", "-A");
+    git(repo, "commit", "-qm", "suppress");
+    const run = await runLoop({ repo, memoryRoot: tempDir(), ask: async () => "n", maxIterations: 1, deps: { scanRepo: async () => ({ findings: [bug("a.js"), bug("b.js"), hidden] }) } });
+    expect(run.findings.left.critical).toBe(3);
+    expect(Object.values(run.findings.left).reduce((a, b) => a + b)).toBe(run.findings.final + 1);
+    expect(run.findings.suppressed).toBe(1);
+    expect(loopVerdict(run).headline).toContain("(1 suppressed by you).");
+    expect(loopVerdict(run).headline).not.toContain("penthera ");
+    expect(loopVerdict(run).next).toBe("Review them with penthera memory show --repo . and penthera.suppress.json.");
+    expect(loopVerdict(run).clean).toBe(false);
+  });
+
+  it("says when --run-tests has no test script to run", async () => {
+    const said = [];
+    await runLoop({ repo: fixtureRepo(), memoryRoot: tempDir(), ask: async () => "n", maxIterations: 1, runTests: true, log: (l) => said.push(l) });
+    expect(said.join("\n")).toMatch(/no test script/);
+  });
+
+  it.each([["skip", "n"], ["stop", "quit"]])("leaves no empty branch after %s", async (_, answer) => {
+    const repo = fixtureRepo();
+    const run = await runLoop({ repo, memoryRoot: tempDir(), ask: async () => answer, maxIterations: 1 });
+    expect(run.branch.left).toBe(true);
+    expect(run.branch.removed).toBe(true);
+    expect(git(repo, "rev-parse", "--abbrev-ref", "HEAD").trim()).toBe("main");
+    expect(git(repo, "branch", "--list", "penthera/*").trim()).toBe("");
+  });
+
+  it("names the fixes you skipped in the ending, with no markup", () => {
+    const t = { verified: 1, declined: 2, skipped: 1 };
+    const none = { critical: 1, high: 0, medium: 0, low: 0 };
+    const v = loopVerdict({ stopReason: "declined-or-failed-left", findings: { left: none, suppressed: 1 }, totals: t });
+    expect(v.headline).toContain("1 fixed, 3 skipped, 1 critical left (1 suppressed by you).");
+    expect(v.headline).not.toContain("`");
+  });
+
+  it("does not count a suppressed finding twice in the ending", () => {
+    const left = { critical: 1, high: 0, medium: 0, low: 0 };
+    const v = loopVerdict({ stopReason: "no-fixable-findings", findings: { left, suppressed: 1 }, totals: { verified: 0 } });
+    expect(v.headline).toBe("0 fixed, 1 critical left (1 suppressed by you).");
+    expect(v.next).toMatch(/penthera memory show/);
+  });
+
+  it("continues on a fix branch instead of starting a new one", async () => {
+    const repo = fixtureRepo();
+    const a = await runLoop({ repo, memoryRoot: tempDir(), ask: yes, maxIterations: 1 });
+    const said = [];
+    const b = await runLoop({ repo, memoryRoot: tempDir(), ask: async () => "n", maxIterations: 1, log: (l) => said.push(l) });
+    expect(b.branch.fix).toBe(a.branch.fix);
+    expect(b.branch.left).toBeFalsy();
+    expect(git(repo, "rev-parse", "--abbrev-ref", "HEAD").trim()).toBe(a.branch.fix);
+    expect(said.join("\n")).toMatch(/continuing on penthera\/fix-/);
+    expect(git(repo, "branch", "--list", "penthera/*").trim().split("\n")).toHaveLength(1);
+  });
+
+  it("never reads as done when the site was not read", async () => {
+    const repo = fixtureRepo();
+    const run = await runLoop({
+      repo, url: "http://127.0.0.1:9", memoryRoot: tempDir(), ask: async () => "n", maxIterations: 1,
+      deps: { scanRepo: async () => ({ findings: [] }), scanUrl: async () => ({ mode: "url", reachable: false, findings: [] }) },
+    });
+    const v = loopVerdict(run);
+    expect(v.clean).toBe(false);
+    expect(v.headline).toMatch(/couldn't see your site/);
+  });
+
+  it("prints a real range when it continues on a fix branch", () => {
+    const repo = fixtureRepo();
+    const run = (args) => execFileSync(process.execPath, [resolve("bin/penthera.js"), "agent", "--loop", "--repo", repo, "--max-iterations", "1", ...args], {
+      input: "y\n".repeat(20), encoding: "utf-8", env: { ...process.env, NO_COLOR: "1", PENTHERA_HOME: tempDir() },
+    });
+    const safe = () => { try { return run([]); } catch (e) { return e.stdout; } };
+    safe();
+    const fix = git(repo, "rev-parse", "--abbrev-ref", "HEAD").trim();
+    expect(safe()).not.toContain(`${fix}..${fix}`);
+  }, 30_000);
+
+  it("says its counts differ from a scan's, and that a live scan needs repeating", () => {
+    const left = { critical: 0, high: 0, medium: 0, low: 0 };
+    const repoOnly = loopVerdict({ stopReason: "no-fixable-findings", findings: { left, suppressed: 0 }, totals: { verified: 2 }, target: {} });
+    expect(repoOnly.next).toMatch(/scan the URL again/);
+    expect(repoOnly.next).toMatch(/checks only penthera fix runs/);
+    expect(loopVerdict({ stopReason: "no-fixable-findings", findings: { left, suppressed: 0 }, totals: { verified: 0 }, target: {} }).next).toBeNull();
+  });
+
+  it("offers no branch to merge when no fix landed", () => {
+    const repo = fixtureRepo();
+    let out = "";
+    try {
+      out = execFileSync(process.execPath, [resolve("bin/penthera.js"), "agent", "--loop", "--repo", repo, "--max-iterations", "1"], {
+        input: "n\n".repeat(20), encoding: "utf-8", env: { ...process.env, NO_COLOR: "1", PENTHERA_HOME: tempDir() },
+      });
+    } catch (e) { out = e.stdout; }
+    expect(out).toMatch(/you are back on main/);
+    expect(out).not.toMatch(/Merge or push/);
+  }, 30_000);
+
+  it("says how to fix a folder with no git", async () => {
+    const dir = tempDir();
+    await expect(runLoop({ repo: dir, memoryRoot: tempDir(), ask: yes })).rejects.toThrow(/git init/);
+  });
+
+  it("tells a suite that was already failing from a fix that broke it", async () => {
+    const repo = fixtureRepo((d) => writeFileSync(join(d, "package.json"), JSON.stringify({ ...JSON.parse(readFileSync(join(d, "package.json"), "utf-8")), scripts: { test: "x" } })));
+    const said = [];
+    const run = await runLoop({
+      repo, memoryRoot: tempDir(), ask: yes, maxIterations: 2, runTests: true, log: (l) => said.push(l),
+      deps: { runTests: async () => ({ ok: false, exitCode: 1, durationMs: 1, output: "red" }) },
+    });
+    expect(run.testsBefore).toMatchObject({ ok: false });
+    expect(run.totals.verified).toBeGreaterThan(0);
+    expect(run.totals.failed).toBe(0);
+    expect(said.join("\n")).toMatch(/already fail/);
+    expect(loopVerdict(run).headline).toMatch(/already failing/);
+  });
+
+  it("does not teach memory that an interrupted fix failed", async () => {
+    const repo = fixtureRepo((d) => writeFileSync(join(d, "package.json"), JSON.stringify({ ...JSON.parse(readFileSync(join(d, "package.json"), "utf-8")), scripts: { test: "x" } })));
+    const stop = new AbortController();
+    const memoryRoot = tempDir();
+    let calls = 0;
+    const run = await runLoop({
+      repo, memoryRoot, ask: yes, maxIterations: 1, runTests: true, signal: stop.signal,
+      deps: { runTests: async () => {
+        if (++calls === 1) return { ok: true, exitCode: 0, durationMs: 1, output: "" };
+        stop.abort();
+        return { ok: false, exitCode: null, durationMs: 1, output: "killed" };
+      } },
+    });
+    expect(run.totals.failed).toBe(0);
+    expect(fixes(run)[0].status).toBe("interrupted");
+    expect(run.gaveUp).toEqual([]);
+    const events = openMemory(projectIdFor({ repo }).id, { root: memoryRoot }).events().map((e) => e.type);
+    expect(events).not.toContain("fix_failed");
+    expect(git(repo, "status", "--porcelain").trim()).toBe("");
+  });
+
+  it("restores the tree on SIGTERM during the tests", async () => {
+    const repo = fixtureRepo((d) => {
+      writeFileSync(join(d, "package.json"), JSON.stringify({ ...JSON.parse(readFileSync(join(d, "package.json"), "utf-8")), scripts: { test: "node t.cjs" } }));
+      writeFileSync(join(d, "t.cjs"), 'const fs = require("node:fs"); fs.appendFileSync(process.env.PENTHERA_T_LOG, "x"); if (fs.readFileSync(process.env.PENTHERA_T_LOG, "utf-8").length > 1) setTimeout(() => {}, 60000);\n');
+    });
+    const log = join(tempDir(), "runs");
+    const child = spawn(process.execPath, [resolve("bin/penthera.js"), "agent", "--loop", "--repo", repo, "--run-tests", "--max-iterations", "1"], {
+      stdio: ["pipe", "ignore", "ignore"], env: { ...process.env, NO_COLOR: "1", PENTHERA_HOME: tempDir(), PENTHERA_T_LOG: log },
+    });
+    child.stdin.write("y\n".repeat(10));
+    for (let i = 0; i < 300; i++) {
+      if (existsSync(log) && readFileSync(log, "utf-8").length > 1) break;
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    expect(readFileSync(log, "utf-8").length).toBeGreaterThan(1); // the kill lands during a fix's test run
+    child.kill("SIGTERM");
+    await new Promise((r) => child.on("close", r));
+    expect(git(repo, "status", "--porcelain").trim()).toBe("");
+  }, 30_000);
+
+  it("exits 1 from the CLI when a critical stays after every fix", () => {
+    const repo = fixtureRepo((dir) => writeFileSync(join(dir, "tool.js"), [
+      'import { exec } from "node:child_process";',
+      'export const run = (req) => exec("ls " + req.query.dir);',
+      "",
+    ].join("\n")));
+    let status = 0;
+    let stdout = "";
+    try {
+      stdout = execFileSync(process.execPath, [resolve("bin/penthera.js"), "agent", "--loop", "--repo", repo], {
+        input: "y\n".repeat(20), encoding: "utf-8", env: { ...process.env, NO_COLOR: "1", PENTHERA_HOME: tempDir() },
+      });
+    } catch (e) { status = e.status; stdout = e.stdout; }
+    expect(stdout).toMatch(/Not done: \d+ fixed, .*critical.* left\./);
+    expect(stdout).toMatch(/You are on branch penthera\/fix-/);
+    expect(status).toBe(1);
   });
 });
 
@@ -539,7 +765,7 @@ describe("agent loop: verifier integrity and the safe exit", () => {
     expect(first.status).toBe("failed");
     expect(first.reason).toMatch(/tests, test config or Penthera's own files changed/);
     expect(first.commit).toBeNull();
-    expect(testRuns).toBe(0);
+    expect(testRuns).toBe(1); // the run before any fix, not after the change
     expect(readFileSync(join(repo, "tests/app.test.js"), "utf-8")).toBe("// passes\n");
   });
 

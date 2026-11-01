@@ -82,7 +82,7 @@ npx skills add danoszz/penthera
 Cursor, Codex, VS Code and Windsurf. Pin the version:
 
 ```bash
-claude mcp add penthera -- npx -y penthera@2.1.2 mcp
+claude mcp add penthera -- npx -y penthera@2.2.0 mcp
 ```
 
 **In Claude Code, as a plugin.** From Claude Code's prompt:
@@ -213,7 +213,8 @@ What these numbers do not show: a benchmark is not your code. CredData replaces
 real secrets with look-alikes, which favors pattern rules like ours over tools
 that verify keys; the free tools ran on their defaults while Penthera was tuned
 on the other half; GuardDog helped build the malware dataset. Accuracy on real
-projects is experiment E1. Reproduce every table with
+projects is experiment E1. To reproduce every table, get the sealed split with
+`npm run bench:public -- --fetch-split`, then run
 `npm run bench:public -- --split test --final` and
 `npm run bench:public -- --competitors --split test --final`.
 
@@ -289,7 +290,7 @@ never fails CI. Whether it finds more than the rules alone is not measured yet
 | Scans: URL, repo, dependencies, AI tooling, installs, pre-commit hook | **Stable**: in every release since 1.x, covered by the tests and the release gate |
 | Fix loop and local dashboard (`penthera ui`) | **Stable**; the dashboard was redesigned in 1.9.0 |
 | MCP server, Agent Skill, Claude Code plugin | **Stable**, since 1.9.0 |
-| Gemini CLI extension | **Stable**: it installs the newest release (2.1.2) |
+| Gemini CLI extension | **Stable**: it installs the newest release (2.2.0) |
 | Evidence bundles, NIS2 and CRA drafts | **Stable** as readiness tooling, not a certification |
 | AI mode (`--ai`) | **Experimental**: whether it finds more than the rules alone is not measured yet ([AI mode](docs/ai-mode.md)) |
 | Live check on [penthera.org](https://penthera.org) | **Beta**: passive only, [terms](docs/live-check-terms.md) |
@@ -346,7 +347,9 @@ with `npm run docs:numbers` and `npm run bench`.
   propose a fix or a lead; a deterministic re-scan and your tests decide.
 - **Non-destructive by default.** Default scans send no attack payloads.
   Payload testing (`--deep`, `--fuzz`, `--adaptive`, `--all`) is opt-in, asks for a
-  confirmation bound to the target, and is rate-limited.
+  confirmation bound to the target, and is rate-limited. It can change data, so
+  read [what active modes can change](docs/commands/scan.md#what-active-modes-can-change)
+  first.
 - **Asks before it changes anything.** The fix loop works on a local branch,
   asks before every change by default, and never pushes or opens pull requests.
 - **No update channel to hijack.** Detection rules ship inside reviewed
@@ -358,11 +361,13 @@ with `npm run docs:numbers` and `npm run bench`.
   [internal audit](docs/internal-audit.md) of eight gates
   ([latest report](audit/REPORT.md)).
 
+The [claim map](docs/claims.md) ties these claims to the tests that hold them.
+
 **Verify it yourself.** In an empty folder:
 
 ```bash
-npm install penthera@2.1.2 && npm audit signatures
-npx penthera@2.1.2 rules list
+npm install penthera@2.2.0 && npm audit signatures
+npx penthera@2.2.0 rules list
 ```
 
 The first checks npm's registry signature and the build provenance of the
@@ -447,7 +452,7 @@ What changed, what we are measuring, and what comes next, in one place.
 
 | | Where it stands | Read more |
 |---|---|---|
-| **Latest release** | 2.1.2 (2026-10-31) on npm `latest`: `penthera agents ./some-skill` scans the skill, a run that fails or reads nothing no longer looks clean, `--repo <missing path>` exits 2 ([changes](CHANGELOG.md)) | [CHANGELOG](CHANGELOG.md), [roadmap](ROADMAP.md#now-212) |
+| **Latest release** | 2.2.0 (2026-11-01) on npm `latest`: a run that read nothing never reads as clean, `agent --loop` says what is left, and a CSP has to control scripts. Nine exit codes change ([upgrading](CHANGELOG.md#upgrading-from-21)) | [CHANGELOG](CHANGELOG.md), [roadmap](ROADMAP.md#now-220) |
 | **Research** | Public benchmarks (E11b) published: on a sealed half of four public datasets, 1st of the free tools on npm and PyPI malware (tied 1st to 3rd), 1st on JS library injection bugs (tied 1st to 4th), 2nd on leaked secrets ([summary](#public-benchmarks)). E10 pilot published: precision 0.88, recall 0.07 to 0.71 on two known-vulnerable apps after fixes (one labeller, not independent; a re-run is pending because default scans no longer send login checks). E1 on real code is pre-registered; E8 (agent guardrails) is a draft | [E11b results](bench/public/RESULTS.md), [E10 results](bench/known-vuln/RESULTS.md), [E1 pre-registration](docs/research/prereg/E1-real-world-accuracy.md), [agents safely](docs/agents-safely.md) |
 | **Next** | Real-world precision and recall with intervals (E1), published whatever the result | [Roadmap: next](ROADMAP.md#next), [research plan](docs/vision-2.0.md) |
 

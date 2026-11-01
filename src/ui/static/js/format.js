@@ -41,4 +41,41 @@ export function shortProject(key) {
   return parts.slice(-2).join("/") || key;
 }
 
+/** The URL and folder of a project key: a folder, an origin, or "<url> + <absolute folder>". */
+export function keyParts(key) {
+  const k = String(key ?? "");
+  const both = /^(https?:\/\/\S+) \+ (.+)$/.exec(k);
+  if (both) return { url: both[1], folder: both[2] };
+  return /^https?:\/\//.test(k) ? { url: k, folder: "" } : { url: "", folder: k };
+}
+
+/** Whether a run with this folder and URL belongs to a project. No project means the all-projects view. */
+export function runBelongs(project, repo, url) {
+  if (!project) return true;
+  const p = keyParts(project);
+  return Boolean((p.folder && repo === p.folder) || (p.url && url === p.url));
+}
+
 export const plural = (n, word, many = `${word}s`) => `${n} ${n === 1 ? word : many}`;
+
+/** What a check looked at, in words; report modes are for the Advanced view. */
+export const checkedWhat = (mode, unread) => {
+  if (unread && String(mode).includes("url")) return String(mode).includes("repo") ? "your code, not your site" : "site not read";
+  return ({ repo: "your code", url: "your site", "url+repo": "your site and code", deps: "your dependencies", agents: "your AI tools", "deps+agents": "your dependencies and AI tools", "agents+deps": "your dependencies and AI tools" })[mode] || "your app";
+};
+
+/** Rule text marks code with backticks; on this page they would print as typed. */
+export const unticked = (s) => String(s ?? "").replace(/`/g, "");
+
+/** The end of a check: what it found, or `claim` when it read nothing (src/report/unread.js). */
+export function checkResult({ counts = {}, total = 0, claim = null, what = null, codeUnchecked = false }) {
+  if (claim) return claim;
+  const part = { deps: "your dependencies", agents: "your AI tools" }[what];
+  const code = codeUnchecked ? " Your code hasn't been checked." : "";
+  const notes = counts.info || 0;
+  const found = total - notes;
+  const top = [counts.critical && `${counts.critical} critical`, counts.high && `${counts.high} serious`].filter(Boolean).join(", ");
+  if (found) return `Done. ${plural(found, "problem")} found${top ? `, ${top}` : ""}.${code}`;
+  if (part) return `No problems in ${part}${notes ? `, ${plural(notes, "note")}` : ""}.${code}`;
+  return notes ? `Done. No problems found, ${plural(notes, "note")}.` : "Done. Penthera found no problems.";
+}

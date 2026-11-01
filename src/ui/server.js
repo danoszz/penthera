@@ -6,9 +6,10 @@
  * reaches the filesystem), the API is JSON plus SSE for live runs, and every
  * request goes through the gate in ./security.js first.
  */
+import { randomBytes } from "node:crypto";
 import { createServer } from "node:http";
-import { readdirSync, readFileSync, lstatSync } from "node:fs";
-import { join, relative, extname, resolve } from "node:path";
+import { readdirSync, readFileSync, lstatSync, mkdirSync, renameSync, writeFileSync } from "node:fs";
+import { dirname, join, relative, extname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
 import {
@@ -56,16 +57,44 @@ function plain(res, status, text, headers = {}) {
 }
 
 /** The Settings screen's state. Offline is on by default in the dashboard. */
+// A finished owner step: a hash, so the file still says nothing about a project.
+const DONE_ID = /^[0-9a-f]{16}$/;
+const MAX_DONE = 500;
+
 export function createSettings(initial = {}) {
   const state = { offline: initial.offline !== false, memoryRoot: initial.memoryRoot, reportsDir: initial.reportsDir };
+  // The port is random, so the browser's storage starts empty on every restart.
+  // The mode lives in the data folder instead: one word, no paths, nothing about a project.
+  const file = initial.file;
+  if (file) try {
+    const saved = JSON.parse(readFileSync(file, "utf8"));
+    state.ux = validUx(saved.ux);
+    state.done = (Array.isArray(saved.done) ? saved.done : []).filter((id) => DONE_ID.test(id));
+  } catch { /* first run, or an unreadable file: setup runs */ }
+  state.done ||= [];
   return {
     get: () => ({ ...state }),
     update(body) {
       if (body && typeof body.offline === "boolean") state.offline = body.offline;
+      const ux = validUx(body?.ux);
+      const done = DONE_ID.test(body?.doneAction) && !state.done.includes(body.doneAction) ? body.doneAction : null;
+      if (ux || done) {
+        if (ux) state.ux = ux;
+        if (done) state.done = [...state.done, done].slice(-MAX_DONE);
+        if (file) try {
+          mkdirSync(dirname(file), { recursive: true, mode: 0o700 });
+          // Written beside it and renamed, so a symlink at `file` is replaced, never followed.
+          const next = `${file}.${process.pid}.${randomBytes(4).toString("hex")}.tmp`;
+          writeFileSync(next, `${JSON.stringify({ ux: state.ux, ...(state.done.length ? { done: state.done } : {}) })}\n`, { mode: 0o600, flag: "wx" });
+          renameSync(next, file);
+        } catch { /* read-only data folder: this session only */ }
+      }
       return { ...state };
     },
   };
 }
+
+const validUx = (ux) => (ux === "simple" || ux === "advanced" ? ux : undefined);
 
 /**
  * Start the dashboard.
@@ -94,7 +123,7 @@ export async function startUiServer(opts = {}) {
   }
   const home = process.env.PENTHERA_HOME ? resolve(process.env.PENTHERA_HOME) : join(homedir(), ".penthera");
   const memoryRoot = opts.memoryRoot || defaultMemoryRoot();
-  const settings = createSettings({ offline: true, memoryRoot, reportsDir });
+  const settings = createSettings({ offline: true, memoryRoot, reportsDir, file: opts.demo || opts.source ? null : join(dirname(memoryRoot), "ui.json") });
 
   let source = opts.source;
   let runDeps = opts.runDeps;
@@ -105,13 +134,14 @@ export async function startUiServer(opts = {}) {
   }
   if (!source) source = createDataSource({ projects, reportsDir, home, memoryRoot, settings, version: opts.version });
   if (!runDeps) {
-    const [{ runLoop }, { executeScan }, { scanDeps }, { scanAgents }, { createOllama }, { runAiMode, attachProposals }] = await Promise.all([
+    const [{ runLoop, loopVerdict }, { executeScan }, { scanDeps }, { scanAgents }, { createOllama }, { runAiMode, attachProposals }] = await Promise.all([
       import("../agent/loop.js"), import("../cli/run-scan.js"),
       import("../../lib/deps/index.js"), import("../../lib/agents/index.js"),
       import("../../lib/ai/ollama.js"), import("../../lib/ai/index.js"),
     ]);
     runDeps = {
       runLoop,
+      loopVerdict,
       executeScan,
       scanDeps,
       scanAgents,

@@ -12,7 +12,8 @@ import { parseArgs } from "node:util";
 import { resolve, dirname } from "node:path";
 import { existsSync, statSync, writeFileSync, mkdirSync } from "node:fs";
 import { createInterface } from "node:readline";
-import { runLoop, LoopError } from "../agent/loop.js";
+import { runLoop, loopVerdict, LoopError } from "../agent/loop.js";
+import { hintCommand } from "../utils/invocation.js";
 import { normalizeBaseUrl } from "../utils/url.js";
 import { printPlan, visible } from "./fix.js";
 import { bold, dim, green, red, yellow } from "./ansi.js";
@@ -144,6 +145,13 @@ export async function runAgent(argv) {
     process.exit(130);
   };
   process.on("SIGINT", onSigint);
+  // A kill leaves no second chance: put back the fix in flight, then go.
+  const onSigterm = () => {
+    controller.abort();
+    try { handle.revertPending?.(); } catch { /* the tree is left as it is, and the exit says so */ }
+    process.exit(143);
+  };
+  process.on("SIGTERM", onSigterm);
 
   const asker = createAsker(controller.signal);
   process.stdout.write(`\n  ${bold("penthera agent --loop")} ${dim(repo)}${url ? dim(` + ${url}`) : ""}\n`);
@@ -159,11 +167,13 @@ export async function runAgent(argv) {
   } catch (e) {
     asker.close();
     process.off("SIGINT", onSigint);
+    process.off("SIGTERM", onSigterm);
     process.stderr.write(`  ${red("Not started")} ${e.message}\n`);
     return e instanceof LoopError ? 2 : 1;
   }
   asker.close();
   process.off("SIGINT", onSigint);
+  process.off("SIGTERM", onSigterm);
 
   if (opts.output) {
     const out = resolve(opts.output);
@@ -172,18 +182,21 @@ export async function runAgent(argv) {
   }
 
   const t = run.totals;
-  process.stdout.write(`\n  ${bold("Done")}: ${run.stopReason} after ${t.iterations} iteration${t.iterations === 1 ? "" : "s"} (${(run.durationMs / 1000).toFixed(1)}s)\n`);
+  const verdict = loopVerdict(run);
+  process.stdout.write(`\n  ${bold(verdict.clean ? "Done" : "Not done")}: ${verdict.headline}\n`);
+  if (verdict.next) process.stdout.write(`  ${hintCommand(verdict.next)}\n`);
+  process.stdout.write(`  ${run.stopReason} after ${t.iterations} iteration${t.iterations === 1 ? "" : "s"} (${(run.durationMs / 1000).toFixed(1)}s)\n`);
   process.stdout.write(`  ${green(`${t.verified} verified`)}, ${t.failed ? red(`${t.failed} failed and reverted`) : "0 failed"}, ${t.conflicts ? `${yellow(`${t.conflicts} left for you (files changed meanwhile)`)}, ` : ""}${t.declined} declined, ${t.skipped} skipped\n`);
-  process.stdout.write(`  findings: ${run.findings.initial ?? "?"} → ${run.findings.final ?? "?"} (non-info)\n`);
+  process.stdout.write(`  last scan: ${run.findings.initial ?? "?"} → ${run.findings.final ?? "?"} findings to act on\n`);
   if (run.gaveUp.length) {
     process.stdout.write(`  ${yellow(`gave up on ${run.gaveUp.length}`)} (not retried this run; fix by hand): ${run.gaveUp.map((g) => `${visible(g.title)} (${visible(g.reason)})`).join("; ")}\n`);
   }
   if (run.error) process.stdout.write(`  ${red("Error")} ${visible(run.error)}\n`);
-  process.stdout.write(`  branch ${bold(run.branch.fix)}: review with  git log --stat ${run.branch.base || run.branch.baseSha.slice(0, 12)}..${run.branch.fix}\n`);
+  if (run.branch.left) process.stdout.write(`  No fixes landed, so you are back on ${bold(run.branch.base)}.${run.branch.removed ? "" : ` Branch ${run.branch.fix} is empty.`}\n`);
+  else process.stdout.write(`  You are on branch ${bold(run.branch.fix)}. Review it with  git log --stat ${(run.branch.base !== run.branch.fix && run.branch.base) || run.branch.baseSha.slice(0, 12)}..${run.branch.fix}\n`);
   if (opts.output) process.stdout.write(`  loopRun written to ${opts.output}\n`);
-  process.stdout.write(`  Nothing was pushed. Merge or push the branch yourself when you are happy with it.\n\n`);
+  process.stdout.write(run.branch.left ? "  Nothing was changed or pushed.\n\n" : "  Nothing was pushed. Merge or push the branch yourself when you are happy with it.\n\n");
 
-  if (run.stopReason === "error") return 1;
   if (run.stopReason === "interrupted") return 130;
-  return run.stopReason === "no-fixable-findings" ? 0 : 1;
+  return verdict.clean ? 0 : 1;
 }

@@ -9,6 +9,8 @@ import { resolveWstgTags } from "../lib/owasp-wstg.js";
 import { referencesFor } from "../lib/references.js";
 import { formatDepsTerminal, uncheckedDeps } from "../lib/deps/report.js";
 import { describeCoverage } from "../lib/coverage.js";
+import { nothingClaim, notRead, siteUnread, SITE_NOT_READ } from "./report/unread.js";
+import { hintCommand } from "./utils/invocation.js";
 import { giantsTerminalLines, foundByText } from "./report/giants.js";
 import { exitCodeOf, exitNote, exitReason } from "./report/exit.js";
 import { toolById } from "../lib/giants/tools.js";
@@ -376,8 +378,9 @@ export function printReport(result, opts = {}) {
     const un = uncheckedDeps(result.deps);
     if (un?.none) w(`  ${c.yellow("Not checked")}: no package code was read. See "Not read" above.`);
     else if (exitNote(result)) { /* the summary says why the run fails */ }
-    else if (un) w(`  ${c.green("No findings")} in the ${un.total - un.missing} packages read; ${c.yellow(`${un.missing} were not read`)} (see above).`);
+    else if (un) w(`  ${c.yellow(`${un.total - un.missing} of ${un.total} packages read`)}, nothing found in those (see above).`);
     else if (nothingToAssess(result)) w(`  ${c.yellow("Not checked")}: no agent config was read. See "Not read" above.`);
+    else if (nothingClaim(result)) w(`  ${c.yellow("Not checked")}: ${nothingClaim(result)}`);
     else w(`  ${c.green("No findings")}.`);
     w("");
   }
@@ -457,7 +460,7 @@ export function printReport(result, opts = {}) {
 
   // Summary
   w(`  ${c.dim(line())}`);
-  printSummaryLine(result, w);
+  printSummaryLine(result, w, opts);
   printInconclusiveLine(result, w, opts);
   w("");
 }
@@ -511,10 +514,10 @@ const printable = (s) => String(s).replace(/[\u0000-\u001f\u007f-\u009f]/g, "");
 
 /** An agents run that read no config has no grade: silence is not a pass. */
 function nothingToAssess(result) {
-  return !!result.agents && result.agents.grade == null;
+  return !!result.agents && result.agents.grade == null && !result.agents.unparsed;
 }
 
-function printSummaryLine(result, w) {
+function printSummaryLine(result, w, opts = {}) {
   const findings = result.findings || [];
   const counts = { critical: 0, high: 0, medium: 0, low: 0, info: 0 };
   for (const f of findings) counts[f.severity] = (counts[f.severity] || 0) + 1;
@@ -531,22 +534,35 @@ function printSummaryLine(result, w) {
   if (parts.length === 0 && note) {
     // The note below stands alone: nothing here reads as clean.
   } else if (parts.length === 0 && un) {
-    w(`  ${c.yellow(un.none ? `Not checked: 0 of ${un.total} packages read` : `No issues in what was read; ${un.missing} of ${un.total} packages not read`)}`);
+    w(`  ${c.yellow(`${un.none ? "Not checked: " : ""}${un.total - un.missing} of ${un.total} packages read`)}`);
+  } else if (parts.length === 0 && notRead(result) && !result.deps && (!result.agents || result.agents.unparsed)) {
+    // The line below stands alone: nothing here reads as clean.
   } else if (parts.length === 0 && nothingToAssess(result)) {
     w(`  ${c.yellow("Nothing to assess, which is not a clean result")}`);
+  } else if (parts.length === 0 && result.suppressed?.length) {
+    w(`  ${c.yellow(`${result.suppressed.length} suppressed, not counted. Nothing else found`)}`);
   } else if (parts.length === 0) {
     w(`  ${c.green("\u2713")} Clean scan, no issues found`);
   } else {
-    w(`  ${parts.join(c.dim(" \u00b7 "))}`);
+    w(`  ${[...parts, ...(result.suppressed?.length ? [c.yellow(`${result.suppressed.length} suppressed`)] : [])].join(c.dim(" \u00b7 "))}`);
   }
   if (note) w(`  ${c.red(printable(note))}`);
+  const unread = result.deps || (result.agents && !result.agents.unparsed) ? null : notRead(result);
+  if (unread) w(`  ${c.yellow(unread.title)} ${c.dim(unread.text)}`);
+  if (opts.limit) w(`  ${c.dim(printable(hintCommand(opts.limit)))}`);
   // A person at a terminal gets the same next step the brief gives an agent.
   const first = findings.find((f) => f.severity === "critical") || findings.find((f) => f.severity === "high");
   if (first) {
     w("");
     w(`  ${c.bold("Fix first:")} ${printable(first.title)}`);
     if (first.remediation) w(`  ${printable(first.remediation)}`);
-    w(`  ${c.dim("Next:")} npx penthera ui --open ${c.dim("walks you through every problem")}`);
+    w(`  ${c.dim("Next:")} npx penthera ui --open, then Check my app ${c.dim("to go through every problem")}`);
+  }
+  if (opts.fixes) {
+    const { count, command } = opts.fixes;
+    w("");
+    w(`  ${c.bold(count ? `${count} may be fixable:` : "Fixes:")} ${printable(hintCommand(command))}`);
+    w(`  ${c.dim("It also checks cookie flags, CORS and rate limits in your code, which this scan does not list.")}`);
   }
   const other = result.giants?.findings || [];
   if (other.length) {
@@ -739,13 +755,14 @@ export function formatSarif(result) {
       },
       results,
       invocations: [{
-        executionSuccessful: exitCodeOf(result) !== 2,
+        executionSuccessful: exitCodeOf(result) !== 2 && !siteUnread(result),
         startTimeUtc: result.timestamp,
         endTimeUtc: new Date().toISOString(),
         // No result, so no alert: an empty run must still say it read nothing,
         // and a run with a required tool missing must say so.
         ...(exitCodeOf(result) === 2 ? { toolExecutionNotifications: [{ level: "error", message: { text: exitReason(result) } }] } : {}),
         ...(exitCodeOf(result) !== 2 && nothingToAssess(result) ? { toolExecutionNotifications: [{ level: "warning", message: { text: result.agents.notChecked?.[0] || "Nothing to assess. This is not a clean result." } }] } : {}),
+        ...(siteUnread(result) ? { toolExecutionNotifications: [{ level: "error", message: { text: `${SITE_NOT_READ} ${siteUnread(result).text}` } }] } : {}),
       }],
     }, ...(aiRun ? [aiRun] : []), ...toolRuns],
   };

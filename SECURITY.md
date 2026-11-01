@@ -9,8 +9,8 @@ Security fixes land on the latest minor release only. Upgrade to get them.
 
 | Version | Supported |
 | ------- | --------- |
-| 2.1.x   | Yes (`latest`) |
-| < 2.1   | No        |
+| 2.2.x   | Yes (`latest`) |
+| < 2.2   | No        |
 
 ## Reporting a vulnerability
 
@@ -48,7 +48,8 @@ cover scanning third-party systems: the authorization rules below still apply.
 
 Penthera sends HTTP requests to targets you specify. Some modes (`--deep`,
 `--fuzz`, `--adaptive`, `--all`, `--profile deep`) send **attack payloads** (SQLi, SSTI, SSRF,
-XSS, command injection, API fuzzing).
+XSS, command injection, API fuzzing). They can change data on the target:
+[what active modes can change](docs/commands/scan.md#what-active-modes-can-change).
 
 **Only scan systems you own or have explicit written permission to test.**
 Unauthorized scanning may be illegal in your jurisdiction. Penthera is built for

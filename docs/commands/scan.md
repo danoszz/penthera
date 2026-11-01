@@ -56,6 +56,26 @@ penthera https://staging.myapp.com --profile deep --confirm-target staging.myapp
 penthera http://localhost:3000 --deep --rate 25
 ```
 
+### What active modes can change
+
+Active modes send real requests to real routes. Run them on a local or staging
+copy with data you can lose, and never on production. A safe-looking target can
+still store what these requests send.
+
+| Mode | What it sends | What that can change |
+|------|---------------|----------------------|
+| `--fuzz` | `POST` bodies to up to 5 API routes: long strings, wrong types, and injection strings, including `'; DROP TABLE users; --` | Creates records and can trigger emails or webhooks. A route with SQL injection could run that string and lose the table |
+| `--deep` | SQL, template and command injection strings, including `sleep 3` and `id`, on up to 10 API routes. `POST` bodies for the cross-site scripting (XSS) check. URLs for your server to fetch, such as cloud metadata and `localhost`. 8 failed logins on `/api/login` | A route with command injection runs those commands. Stored fields can keep the XSS strings, so they may run in a browser later. Sleep strings tie up database or server workers. The login burst can trip a block on the IP you scan from |
+| `--adaptive` | `DELETE`, `PUT`, `PATCH`, `POST` and `GET` to up to 15 routes, each method the route doesn't declare. `POST` bodies with `__proto__`. Guesses at cron secrets | An unprotected route can delete or overwrite data. A route that really runs a job can run it. A vulnerable Node.js process can stay polluted until it restarts |
+| `--all`, `--profile deep` | Both turn on `--deep`, `--fuzz` and recon. Neither turns on `--adaptive` | As for `--deep` and `--fuzz` |
+
+Any of these can also fill logs, raise alerts, trigger a firewall block or use
+up paid API quota.
+
+Active requests don't use `--auth-bearer` or `--auth-cookie`, so they test what
+a stranger can reach. Penthera sends placeholders such as `Bearer test-token`.
+They don't clean up after themselves: Penthera can't undo what a route stored.
+
 ## Quick start
 
 ```bash
@@ -87,9 +107,29 @@ next to it. `penthera init` can add `reports/` to your `.gitignore`.
 | `1` | Critical or high findings detected (other tools' too, with `--giants`) |
 | `2` | Scan failed (unreachable target, missing path, bad config, a tool the policy requires did not run) |
 
+A firewall that refuses the scan isn't a failed scan. The verdict is `Site not read`,
+with no grade, and the exit code follows the findings Penthera could still make, such
+as SPF and DMARC from DNS. So a refused scan can exit 0, and that doesn't mean the site
+is fine. A server's own 5xx exits 2.
+
+Hints print the command the way you ran it, so a run through npx suggests `npx penthera`.
+
+Two findings changed in 2.2. A Content-Security-Policy that names no script sources, or
+lets any host run them with `*`, `http:` or `https:`, gets "Content-Security-Policy does
+not control scripts" ([how to fix it](https://penthera.org/csp-that-controls-scripts)).
+A pattern that matches a whole file, such as `exec`, is one finding that lists the routes,
+not one per route.
+
+Every finding has an id, `fid` in `-o` JSON and beside the title in the terminal report.
+The brief doesn't print it. Use it with `penthera memory suppress <fid> --reason "..."`.
+
 ---
 
 ## Output
+
+Every scan says what it reached. It names any check that did not run, and a live
+scan says whether it sent injection probes. With `--repo`, `--deep` counts your
+routes, for example `--deep reached 3 of 13 routes in your code.`
 
 | Format | Flag | Use |
 |--------|------|-----|
@@ -163,7 +203,7 @@ means.
 
 ```yaml
 # Scan a staging URL on a schedule and upload results to GitHub Security.
-- run: npx penthera@2.1.2 "$PENTEST_URL" --profile standard --sarif reports/scan.sarif
+- run: npx penthera@2.2.0 "$PENTEST_URL" --profile standard --sarif reports/scan.sarif
 - uses: github/codeql-action/upload-sarif@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
   with:
     sarif_file: reports/scan.sarif

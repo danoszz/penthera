@@ -18,7 +18,11 @@
  * strings of our own. Nothing is stored or logged.
  */
 import { parseTarget, fetchBody, CheckError } from "./guard.mjs";
+import { botChallenge } from "../../lib/blackbox/challenge.js";
+import { siteUnread } from "../../src/report/unread.js";
 import { grade } from "./grade.mjs";
+
+const REFUSED_NEXT_STEP = "Scan your code instead: npx penthera --repo .";
 import { dnsChecks } from "./dns.mjs";
 import { runtimeAdvisoriesForResponse } from "../../lib/advisories/index.js";
 import {
@@ -122,7 +126,28 @@ export async function passiveReport(target, opts = {}) {
   }
   extra.push(...runtimeCheck(result.headers, pageUrl), ...dns, ...securityTxt);
 
-  return { tier: "passive", ...grade(result, { now: opts.now, extra, scope: SCOPE }) };
+  const refused = refusedOf(result);
+  return { tier: "passive", ...(refused ? { refused } : {}), ...grade(result, { now: opts.now, extra, scope: SCOPE }) };
+}
+
+/**
+ * Why the response says nothing about the site, or null: a firewall's page, by its own header, or
+ * a server error. Either can send strict headers, so a grade would be of that response.
+ */
+export function refusedOf(result) {
+  const challenge = botChallenge(result.headers);
+  const unread = siteUnread({ mode: "url", challenge, reachable: result.status < 500, httpStatus: result.status });
+  return unread ? { ...challenge, text: unread.text } : null;
+}
+
+/**
+ * What the public check returns when the site wasn't read: no score, because the grade would be
+ * of that response. DNS checks stay, since neither a firewall nor a down server touches those.
+ */
+export function ungraded({ score: _score, scoreVersion: _version, verdict: _verdict, ...report }) {
+  const checks = report.checks.filter((c) => c.category === "email");
+  const categories = report.categories.filter((c) => c.id === "email");
+  return { ...report, verdict: "We couldn't see your site", nextStep: REFUSED_NEXT_STEP, checks, categories };
 }
 
 /**

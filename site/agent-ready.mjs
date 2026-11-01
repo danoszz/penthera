@@ -211,12 +211,15 @@ export function openApi({ version, origin, root }) {
         },
         Report: {
           type: "object",
-          required: ["url", "tier", "score", "verdict", "redirects", "scope", "categories", "checks"],
+          required: ["url", "tier", "verdict", "redirects", "scope", "categories", "checks"],
           properties: {
             url: { type: "string", description: "The final URL, after redirects." },
             status: { type: "integer", description: "The HTTP status of the final response." },
             tier: { type: "string", const: "passive" },
-            score: { type: "integer", minimum: 0, maximum: 100, description: "The share of check weight that passed, as a percentage." },
+            score: { type: "integer", minimum: 0, maximum: 100, description: "The share of check weight that passed, as a percentage. Absent when refused is present." },
+            refused: { type: "object", properties: { provider: str, action: str, text: str }, description: "Present when a firewall or a server error answered instead of the site. The report then has no score, only DNS checks and nextStep." },
+            nextStep: { type: "string", description: "The one thing to do when the site couldn't be seen." },
+            scoreVersion: { type: "integer", minimum: 1, description: "The scoring rules this score came from. Scores of different versions aren't comparable." },
             verdict: { type: "string", description: "The score in words, such as \"Solid basics\" (90 or more) or \"Unsafe defaults\" (under 45)." },
             redirects: { type: "array", items: str, description: "Each URL that redirected, in order." },
             scope: { type: "string", description: "What was and was not checked." },

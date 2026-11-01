@@ -7,7 +7,7 @@
  *   npm run bench:public -- --only secbench      # one (creddata, secbench, malware)
  *   npm run bench:public -- --skip-fetch         # reuse what is in the cache
  *   npm run bench:public -- --split dev          # E11b: the dev half only (default all = E11 as registered)
- *   npm run bench:public -- --make-split         # E11b: write the sealed split manifests once
+ *   npm run bench:public -- --fetch-split        # E11b: download and verify the sealed split manifests
  *   npm run bench:public -- --competitors        # E11b: reference tools on the current split (competitors.mjs)
  *   npm run bench:public -- --competitors --split dev --only creddata --tools trufflehog,kingfisher  # a subset, merged into the results
  *
@@ -23,7 +23,7 @@ import { RESULTS, MALWARE_DIR, ensureDir, runOffline, sh } from "./common.mjs";
 import * as creddata from "./creddata.mjs";
 import * as secbench from "./secbench.mjs";
 import * as malware from "./malware.mjs";
-import { currentSplit, makeSplit } from "./split.mjs";
+import { currentSplit, fetchSplit } from "./split.mjs";
 
 const BENCHES = { creddata, secbench, malware };
 const argv = process.argv.slice(2);
@@ -38,8 +38,8 @@ if (argv.includes("--child")) {
   process.exit(0);
 }
 
-if (argv.includes("--make-split")) {
-  console.log(JSON.stringify(await makeSplit(), null, 2));
+if (argv.includes("--fetch-split")) {
+  console.log(JSON.stringify(await fetchSplit(), null, 2));
   process.exit(0);
 }
 // The sealed half is sealed for the reference tools too.

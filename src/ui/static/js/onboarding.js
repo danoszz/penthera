@@ -1,6 +1,6 @@
-// First-run setup: three screens in one window. Welcome, choose Simple or
-// Advanced, then the project and a first check. Back is always there, the
-// fraction says where you are, and closing it early keeps Simple mode.
+// First-run setup: two screens in one window. Welcome, then the project and a
+// first check. Back is always there, the fraction says where you are, and it
+// starts in Simple mode; Advanced is in the Penthera menu.
 import { h, announce } from "./dom.js";
 import { api } from "./api.js";
 import { state, set, folderFor } from "./state.js";
@@ -26,7 +26,7 @@ export function setup(ctx) {
   function go(n) {
     step = n;
     progress.textContent = `${n + 1} / ${SETUP.steps}`;
-    body.replaceChildren(...[welcome, mode, project][n]());
+    body.replaceChildren(...[welcome, project][n]());
     body.querySelector("[data-first]")?.focus();
   }
 
@@ -38,21 +38,6 @@ export function setup(ctx) {
       ...w.body.map((p) => h("p", { class: "prose" }, p)),
       h("p", { class: "gate prose" }, w.gate),
       nav(h("button", { type: "button", class: "btn primary", "data-first": "", onclick: () => go(1) }, "Start ▸")),
-    ];
-  }
-
-  function mode() {
-    const m = SETUP.mode;
-    const opt = (id, o) => {
-      const input = h("input", { type: "radio", name: "ux", value: id, checked: answers.ux === id, "data-first": answers.ux === id ? "" : null });
-      input.addEventListener("change", () => { answers.ux = id; });
-      return h("label", { class: "choice big" }, input, h("span", {}, h("span", { class: "t1" }, o.title), h("span", { class: "note prose" }, o.body)));
-    };
-    return [
-      h("h2", {}, m.title),
-      h("fieldset", {}, h("legend", { class: "sr" }, m.title), h("div", { class: "choices" }, opt("simple", m.simple), opt("advanced", m.advanced))),
-      h("p", { class: "muted prose" }, m.note),
-      nav(h("button", { type: "button", class: "btn primary", onclick: () => { ctx.setUx(answers.ux); go(2); } }, "Next ▸")),
     ];
   }
 

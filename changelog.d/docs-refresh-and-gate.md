@@ -1,5 +1,0 @@
-section: Docs
-
-- **The docs match 2.1.2.** Corrected the benchmark figures in the methodology and `init` pages (precision 0.92, recall 0.96), the rule and reference counts, the supported versions in `SECURITY.md`, and what `--baseline`, `--offline`, the brief, active modes and exit codes do. Added the flags, the MCP tool arguments, the `ioc-pypi-2026` pack and the MongoDB advisories that had no docs, and moved shipped items out of the roadmap's plans.
-- **Docs now change with the code.** A pull request that touches the CLI, MCP tools, rules or the GitHub Action must update a doc that owns it, or say `docs: none, <reason>` in its changelog fragment. `scripts/ci/docs-gate.mjs` checks this in CI, and `npm test` fails if a `--help` flag, a subcommand or an MCP tool has no docs.
-- **Pro leaves the roadmap and the contact page.** It's on ice, so `ROADMAP.md`, `/contact` and `GOVERNANCE.md` no longer point to it. The money rule in `GOVERNANCE.md` stays. The roadmap now says the E1 tooling and the E2 to E5 drafts are drafted, not merged.

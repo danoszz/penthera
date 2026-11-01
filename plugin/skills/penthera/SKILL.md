@@ -15,11 +15,11 @@ description: >
   of their own app, staging URL, localhost, repo, dependencies, or agent setup. Do
   NOT use for targets without explicit authorization.
 license: MIT
-compatibility: Node.js 22+, the Penthera CLI (npx -y penthera@2.1.2, npm install -g, or node bin/penthera.js from a checkout), network access to the target for URL scans. macOS only for --machine.
-allowed-tools: "Bash(penthera:*) Bash(npx -y penthera@2.1.2:*) Bash(npx --no-install penthera:*) Read"
+compatibility: Node.js 22+, the Penthera CLI (npx -y penthera@2.2.0, npm install -g, or node bin/penthera.js from a checkout), network access to the target for URL scans. macOS only for --machine.
+allowed-tools: "Bash(penthera:*) Bash(npx -y penthera@2.2.0:*) Bash(npx --no-install penthera:*) Read"
 metadata:
   author: danoszz
-  version: 2.1.2
+  version: 2.2.0
   category: security
 ---
 
@@ -56,12 +56,12 @@ Run it from the user's project folder: it creates `reports/` there. The skill's 
 Use whichever is available:
 
 ```bash
-penthera --version          # installed (npm install -g penthera@2.1.2, or npm link)
-npx -y penthera@2.1.2 --version   # nothing installed: npx fetches it
+penthera --version          # installed (npm install -g penthera@2.2.0, or npm link)
+npx -y penthera@2.2.0 --version   # nothing installed: npx fetches it
 node bin/penthera.js --version   # from a Penthera checkout
 ```
 
-All examples below use `penthera`; substitute `npx -y penthera@2.1.2` or `node bin/penthera.js` when needed.
+All examples below use `penthera`; substitute `npx -y penthera@2.2.0` or `node bin/penthera.js` when needed.
 
 To try a release candidate in someone's project, run it with `npx penthera@next ...` rather than `npm install penthera@next`. An install pins the exact rc in the lockfile, so it never moves to the final release, and it adds a dependency the project did not ask for. If the user does want it installed, use `-D` and point out the pin.
 
@@ -103,12 +103,29 @@ penthera agents . -o reports/agents.json
 penthera brief reports/repo.json reports/deps.json reports/agents.json
 ```
 
-Then reply to the user:
+The verdict decides how you open. Only `Nothing to fix` is a clean result, and even that isn't proof of safety.
+
+| Verdict | What it means | What to say |
+|---|---|---|
+| `Fix now` | A critical or high finding is in Act on | Lead with those findings |
+| `Review` | Something needs a look, or the run exits 1 or 2. The line under it gives the reason | Give the reason, then Act on and Check first |
+| `Site not read` | A firewall answered instead of the site | Say the site wasn't checked. Findings cover only what Penthera could still read, such as SPF and DMARC. Exit 0 here says nothing about the site. Don't try to get past the firewall: ask the user to scan a local or staging copy, or their own allowlisted address |
+| `Nothing to assess` | There was nothing to read: no agent config, or no package code | Say nothing was checked, and name what to run or install first |
+| `N suppressed` | Findings exist, and the user set them aside | Say how many, and how many are critical or high. Point to `penthera memory show --repo .` and `penthera.suppress.json`. Never say clean. A plain scan counts them anyway; `--memory` applies them |
+| `Nothing to fix` | No rule fired on what was read | Say what was read, and read out Not checked |
+
+Then:
 
 1. Pass the brief on in its order. Keep the verdict line, the reason line under it when there is one, and the section names.
 2. Do not move a finding between sections, change a severity or drop a group. The full list is in the `.md` reports.
 3. If you checked something yourself (opened the file, saw the "password" is a CSS class map), add it under a last section **My read** and say what you looked at. That section is your judgment, not Penthera's.
 4. End with the one change you would make first, and ask before changing files.
+
+To suppress a finding, take its id from the terminal report or the `fid` field of `-o` JSON: the brief doesn't print it. `penthera memory suppress <fid> --reason "<why>"` needs the user's reason. MCP tools don't read suppressions, so they always count everything.
+
+If you run Penthera through `npx`, its hints print `npx penthera`. Run them as printed.
+
+**Exit codes changed in 2.2.** Exit 1 now also means: `agent --loop` left a critical or high finding, suppressed ones included; `agent --loop --url` couldn't read the site; `agents` found a password in a connection string or instructions in an HTML comment; `deps` couldn't read a package. Exit 0 can now mean a firewall's 503, which used to exit 2. A plain exit 0 still doesn't prove login, access rules or payments are right. [Upgrading from 2.1](https://github.com/danoszz/penthera/blob/main/CHANGELOG.md#upgrading-from-21) has the full table.
 
 ## Destructive mode gate
 
@@ -121,6 +138,8 @@ These flags send **attack payloads**. Require explicit user confirmation before 
 - `--profile deep`, maximum coverage
 
 An agent has no terminal, so the CLI refuses these flags with exit 2 unless you pass `--confirm-target <host>`. Pass it only after the user confirms that exact host.
+
+These flags can create, overwrite or delete data on the target, so tell the user that before asking. Never run them on production ([what active modes can change](https://github.com/danoszz/penthera/blob/main/docs/commands/scan.md#what-active-modes-can-change)).
 
 If user asks for "full pentest" or "deep scan", confirm they own the target and accept payload-based testing.
 
@@ -139,7 +158,7 @@ penthera https://staging.example.com --profile standard -o reports/scan.json
 
 4. Reply with the agent brief it printed (see **Reply with the brief**).
 5. Recommend concrete fixes per finding.
-6. Note exit code: `0` = no critical/high; `1` = critical/high found, other tools' too with `--giants`; `2` = scan failed.
+6. Note exit code: `0` = no critical/high (not proof, and a `Site not read` run can exit 0); `1` = critical/high found, other tools' too with `--giants`; `2` = scan failed.
 
 ## Workflow 2: Repo + live combined
 

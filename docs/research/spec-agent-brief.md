@@ -33,7 +33,7 @@ Six sections, always in this order. An empty section is left out, except
 
 | # | Section | What goes in it | Decided by |
 |---|---|---|---|
-| 1 | **Verdict** | One line: `Fix now`, `Review`, `Nothing to fix` or `Nothing to assess`, plus the counts behind it | rules |
+| 1 | **Verdict** | One line: `Fix now`, `Review`, `Site not read`, `Nothing to fix`, `N suppressed` or `Nothing to assess`, plus the counts behind it | rules |
 | 2 | **Act on** | Findings that need a change: what, where (`file:line`), why in one clause, the fix in one line, the rule id | rules |
 | 3 | **Check first** | Heuristic findings a person has to look at before acting | rules |
 | 4 | **Likely noise** | Findings demoted by a deterministic reason, grouped by reason, one line per group | rules |
@@ -47,7 +47,12 @@ Six sections, always in this order. An empty section is left out, except
   run that exits 1 or 2 with nothing high in **Act on**. A line then gives the
   reason, and the JSON has `exit_code`, `exit_reason` and
   `likely_noise[].severe`.
+- `Site not read`: a firewall refused the scan, or the URL was down or answered with
+  a server error, so nothing describes the site. The exit code does not move.
 - `Nothing to fix`: both empty and exit 0. Still followed by **Not checked**.
+- `N suppressed`: both empty, but findings were suppressed, with the number of
+  critical or high ones. It never reads `Nothing to fix`. **Not checked** starts with
+  the same count and how to review them.
 - `Nothing to assess`: an agents audit that found no agent config. It has no
   grade. Still followed by **Not checked**.
 

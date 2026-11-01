@@ -3,8 +3,8 @@
  * tests/fixtures/init/app (an Express app with a lockfile and agent config).
  */
 import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from "vitest";
-import { cpSync, existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync } from "node:fs";
-import { join } from "node:path";
+import { cpSync, existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync, symlinkSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { execFileSync, spawn } from "node:child_process";
 import { startMockServer } from "./fixtures/mock-server.js";
@@ -366,4 +366,15 @@ describe("init building blocks", () => {
     expect(top.map((a) => a.action)).toEqual(["h1", "h2", "m"]);
     expect(top[0]).toMatchObject({ area: "AI tooling", why: "h1." });
   });
+});
+
+describe("the fix loop hint", () => {
+  it("says a repo with no commit needs one first", () => {
+    const dir = mkdtempSync(join(tmpdir(), "penthera-init-hint-"));
+    execFileSync("git", ["init", "-q", "-b", "main"], { cwd: dir });
+    writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "x", version: "1.0.0" }));
+    const out = execFileSync(process.execPath, [resolve("bin/penthera.js"), "init", "--yes"], { cwd: dir, encoding: "utf-8", env: { ...process.env, NO_COLOR: "1", PENTHERA_HOME: join(dir, ".h") } });
+    rmSync(dir, { recursive: true, force: true });
+    expect(out).toMatch(/after a first commit: fix findings/);
+  }, 30_000);
 });

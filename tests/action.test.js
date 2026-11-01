@@ -3,14 +3,14 @@
  * upsert against an injected (fake) API client, fork handling and fail-on.
  * Nothing here talks to GitHub.
  */
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { readFileSync, writeFileSync, mkdtempSync, mkdirSync, rmSync, existsSync, cpSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import YAML from "yaml";
 import { spawnSync } from "node:child_process";
 import {
-  MARKER, MAX_BODY, buildCommentBody, upsertComment, isForkPullRequest, gate, ghClient, runComment,
+  MARKER, MAX_BODY, buildCommentBody, upsertComment, isForkPullRequest, gate, ghClient, runComment, runGate,
 } from "../scripts/action/comment.mjs";
 
 const ROOT = resolve(import.meta.dirname, "..");
@@ -317,6 +317,28 @@ describe("runComment", () => {
 });
 
 describe("gate", () => {
+  it("warns when the site wasn't read, and only then", () => {
+    const dir = mkdtempSync(join(tmpdir(), "penthera-gate-"));
+    const logs = [];
+    const log = vi.spyOn(console, "log").mockImplementation((m) => logs.push(m));
+    try {
+      const run = (report) => {
+        const file = join(dir, "r.json");
+        writeFileSync(file, JSON.stringify({ findings: [], ...report }));
+        logs.length = 0;
+        return { res: runGate({ report: file, "fail-on": "high" }), logs: [...logs] };
+      };
+      const refused = run({ challenge: { provider: "Cloudflare" } });
+      expect(refused.res.fail).toBe(false);
+      expect(refused.logs[0]).toMatch(/^::warning::Site not read/);
+      expect(run({ reachable: false }).logs[0]).toMatch(/^::warning::/);
+      expect(run({ reachable: true }).logs).toEqual([]);
+    } finally {
+      log.mockRestore();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   const findings = [{ severity: "low" }, { severity: "high" }];
   it("applies fail-on thresholds", () => {
     expect(gate(findings, "none").fail).toBe(false);

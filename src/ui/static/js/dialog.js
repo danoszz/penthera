@@ -4,7 +4,7 @@
 import { h, announce, clear } from "./dom.js";
 import { api } from "./api.js";
 import { state, set, folderFor, liveRun, simple } from "./state.js";
-import { shortProject } from "./format.js";
+import { keyParts, shortProject } from "./format.js";
 import { KINDS, NOTES, ABOUT, SIMPLE_KINDS, AI, aiLines, AI_TEXT_VERSION, AI_CLOUD_HOST } from "./copy.js";
 
 const LOCAL = /^(localhost|127\.\d+\.\d+\.\d+|\[::1\]|[a-z0-9-]+\.localhost)$/i;
@@ -63,7 +63,7 @@ export function newScan(ctx, { kind = "scan", project = null } = {}) {
   const folder = h("select", { id: "ns-folder", "aria-describedby": "ns-folder-note" },
     folders.map((f) => h("option", { value: f, selected: f === folderFor(selected) }, shortProject(f))));
   const url = h("input", { type: "text", id: "ns-url", autocomplete: "off", spellcheck: "false", placeholder: "http://localhost:3000" });
-  if (selected && /^https?:/.test(selected)) url.value = selected;
+  url.value = keyParts(selected).url;
   const urlRow = h("div", { class: "field" }, h("label", { for: "ns-url" }, easy ? "Where your app runs " : "Running app URL ", h("span", { class: "muted" }, "(optional)")), url);
 
   const confirm = h("input", { type: "text", id: "ns-confirm", autocomplete: "off", spellcheck: "false" });
@@ -133,7 +133,7 @@ export function newScan(ctx, { kind = "scan", project = null } = {}) {
     h("label", { class: "check" }, offline, h("span", {}, h("span", { class: "t1" }, "Offline"), h("span", { class: "note prose" }, " :: contact only the target. Applies to every run started here."))),
     busy ? h("p", { class: "muted prose" }, "A run is in progress. Stop it or wait for it to finish first.") : null,
     err,
-    h("div", { class: "actions" }, h("span", { class: "grow muted" }, "Only scan what you own or may test."), cancel, start),
+    h("div", { class: "actions" }, h("span", { class: "grow muted" }, easy ? "Only check what you own or may test." : "Only scan what you own or may test."), cancel, start),
   );
   const win = openWindow({ title: easy ? "Check my app" : "New scan", body: form });
   cancel.addEventListener("click", win.close);

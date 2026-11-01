@@ -16,6 +16,8 @@
 import { randomBytes, createHash } from "node:crypto";
 import { normalizeBaseUrl, urlToFilename } from "../../utils/url.js";
 import { confineDir } from "./data.js";
+import { projectKey } from "./summarize.js";
+import { nothingClaim, notRead } from "../../report/unread.js";
 import { CONSENT_TEXT_VERSION, CLOUD_HOST, logConsent, readConsentLog } from "../../../lib/ai/consent.js";
 import { parseBudget } from "../../../lib/ai/hunt.js";
 import { loadPolicy } from "../../../lib/install/policy.js";
@@ -37,6 +39,9 @@ export class RunError extends Error {
 export const cleanLine = (s) => String(s ?? "").replace(ANSI, "").replace(CONTROL, "").slice(0, 4000);
 
 export const diffSha256 = (s) => createHash("sha256").update(String(s), "utf-8").digest("hex");
+
+/** A CLI flag means nothing on this page, so an error that offers one doesn't. */
+const forDashboard = (message) => (message ? String(message).replace(/, or pass --allow-dirty\.$/, ".") : message);
 
 export function isLocalHost(hostname) {
   return LOCAL_HOST.test(hostname);
@@ -116,6 +121,11 @@ export function createRunManager(deps) {
     for (const fn of run.listeners) fn(ev);
   }
 
+  /** The diff an approval showed stays in the run's event log only until the decision: it can hold context lines. */
+  function forgetDiff(run, approvalId) {
+    for (const ev of run.events) if (ev.type === "approval" && ev.data?.approvalId === approvalId) ev.data = { ...ev.data, plan: { ...ev.data.plan, diff: "" } };
+  }
+
   function publicRun(run) {
     return {
       id: run.id, kind: run.kind, status: run.status, repo: run.repo, url: run.url,
@@ -141,14 +151,14 @@ export function createRunManager(deps) {
       emit(run, "log", { text: `penthera agent --loop ${req.repo}${req.url ? ` + ${req.url}` : ""}` });
       emit(run, "log", { text: `local only: egress limited to ${req.url ? new URL(req.url).host : "no hosts (repo scan only)"}; nothing is pushed` });
       const loopRun = await deps.runLoop({
-        repo: req.repo, url: req.url, maxIterations: req.maxIterations, auto: "off", runTests: req.runTests,
+        repo: req.repo, url: req.url, maxIterations: req.maxIterations, auto: "off", runTests: req.runTests, approvalContext: true,
         log, signal: run.controller.signal,
         ask: (q) => new Promise((resolveAnswer) => {
           const approvalId = randomBytes(8).toString("hex");
           const p = q.plan || {};
           // The page shows at most MAX_DIFF characters. It says so (truncated,
           // fullLength), and an approval names the SHA-256 of what it showed.
-          const fullDiff = String(p.diff || "");
+          const fullDiff = String(q.contextDiff || p.diff || "");
           const diff = fullDiff.slice(0, MAX_DIFF);
           const request = {
             approvalId, iteration: q.iteration, index: q.index, total: q.total, memory: q.memory || null,
@@ -165,8 +175,13 @@ export function createRunManager(deps) {
         }),
       });
       run.summary = {
-        stopReason: loopRun.stopReason, error: loopRun.error, totals: loopRun.totals, findings: loopRun.findings,
-        branch: loopRun.branch?.fix || null, durationMs: loopRun.durationMs,
+        stopReason: loopRun.stopReason, error: forDashboard(loopRun.error), totals: loopRun.totals, findings: loopRun.findings,
+        verdict: deps.loopVerdict?.(loopRun) || null,
+        ownerActions: [...new Set(loopRun.iterations.flatMap((it) => it.fixes.filter((f) => f.status === "verified").flatMap((f) => f.ownerActions || [])))].map(cleanLine),
+        // A merge needs fixes to bring and another branch to bring them to.
+        mergeBase: !loopRun.totals?.verified || loopRun.branch?.removed || loopRun.branch?.base === loopRun.branch?.fix ? null : loopRun.branch?.base || null,
+        branch: loopRun.branch?.removed ? null : loopRun.branch?.fix || null, durationMs: loopRun.durationMs,
+        liveRemaining: loopRun.iterations.reduce((n, it) => n + it.fixes.reduce((m, f) => m + (f.verify?.liveRemaining || 0), 0), 0),
         iterations: loopRun.iterations.map((it) => ({
           n: it.n, durationMs: it.durationMs, findings: it.findings,
           fixes: it.fixes.map((f) => ({ title: f.title, recipe: f.recipe, decision: f.decision, status: f.status, commit: f.commit })),
@@ -174,7 +189,19 @@ export function createRunManager(deps) {
       };
       const file = deps.saveLoopRun?.(loopRun);
       if (file) emit(run, "log", { text: `loopRun written to ${file}` });
-      emit(run, "log", { text: `branch ${run.summary.branch}: nothing was pushed. Merge it yourself when you are happy with it.` });
+      emit(run, "log", { text: run.summary.branch ? `branch ${run.summary.branch}: nothing was pushed. Merge it yourself when you are happy with it.` : "No fix was kept, so the fix branch was removed. Nothing was pushed." });
+      // Project views read the newest report, so the fixes show there and not only in this run.
+      if (loopRun.totals.verified && !run.controller.signal.aborted) {
+        try {
+          // The same targets as the check it follows, so the result lands on the same project.
+          const r = await deps.executeScan({ url: req.url, repo: req.repo, profile: "standard", offline: deps.settings().offline, json: true, onPhase: () => {} });
+          const file = deps.writeReport(r.merged, `${req.url ? urlToFilename(req.url) : "repo"}_${new Date().toISOString().slice(0, 19).replace(/[T:]/g, "-")}.json`);
+          run.summary.project = projectKey(r.merged.target);
+          if (file) emit(run, "log", { text: `rescan written to ${file}` });
+        } catch (e) {
+          emit(run, "log", { text: `rescan failed: ${cleanLine(e.message)}` });
+        }
+      }
     } else if (req.kind === "deps" || req.kind === "agents") {
       const stamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, "-");
       emit(run, "log", { text: req.kind === "deps" ? `penthera deps ${req.repo} (offline)` : `penthera agents ${req.repo} (offline, read-only)` });
@@ -183,8 +210,8 @@ export function createRunManager(deps) {
         : await deps.scanAgents(req.repo, { onPhase: (m) => log(m) });
       const c = { critical: 0, high: 0, medium: 0, low: 0, info: 0 };
       for (const f of result.findings || []) if (c[f.severity] != null) c[f.severity]++;
-      const file = deps.writeReport(result, `${req.kind}_${stamp}.json`);
-      run.summary = { counts: c, total: (result.findings || []).length, file, grade: result.agents?.grade || null };
+      const file = deps.writeReport({ ...result, folder: req.repo }, `${req.kind}_${stamp}.json`);
+      run.summary = { counts: c, total: (result.findings || []).length, file, grade: result.agents?.grade || null, claim: nothingClaim(result) };
       log(`${req.kind === "deps" ? "deps" : "agents"} done: ${c.critical} critical, ${c.high} high, ${c.medium} medium, ${c.low} low${result.agents ? `, ${result.agents.grade ? `grade ${result.agents.grade}` : "nothing to assess"}` : ""}`);
       if (file) log(`report written to ${file}`);
     } else {
@@ -196,8 +223,9 @@ export function createRunManager(deps) {
       for (const f of r.merged.findings) if (c[f.severity] != null) c[f.severity]++;
       const base = `${req.url ? urlToFilename(req.url) : "repo"}_${new Date().toISOString().slice(0, 19).replace(/[T:]/g, "-")}.json`;
       const file = deps.writeReport(r.merged, base);
-      run.summary = { counts: c, total: r.merged.findings.length, file, ai: aiSummary(r.merged.ai) };
+      run.summary = { counts: c, total: r.merged.findings.length, file, ai: aiSummary(r.merged.ai), project: projectKey(r.merged.target), unread: notRead(r.merged), claim: nothingClaim(r.merged) };
       log(`scan done: ${c.critical} critical, ${c.high} high, ${c.medium} medium, ${c.low} low, ${c.info} info`);
+      if (run.summary.unread) log(`${run.summary.unread.title} ${run.summary.unread.text}`);
       if (file) log(`report written to ${file}`);
     }
   }
@@ -278,9 +306,14 @@ export function createRunManager(deps) {
     emit(run, "status", { status: "running" });
     execute(run, req)
       .then(() => { run.status = run.controller.signal.aborted ? "stopped" : "done"; })
-      .catch((e) => { run.status = "error"; emit(run, "log", { text: `error: ${cleanLine(e.message)}` }); })
+      .catch((e) => {
+        run.status = "error";
+        const error = forDashboard(cleanLine(e.message));
+        run.summary = { ...run.summary, error };
+        emit(run, "log", { text: `error: ${error}` });
+      })
       .finally(() => {
-        if (run.pending) { run.pending.resolve("quit"); run.pending = null; }
+        if (run.pending) { forgetDiff(run, run.pending.request.approvalId); run.pending.resolve("quit"); run.pending = null; }
         emit(run, "status", { status: run.status, summary: run.summary });
         for (const fn of run.listeners) fn(null);
         run.listeners.clear();
@@ -311,6 +344,7 @@ export function createRunManager(deps) {
       }
       const { resolve: done } = run.pending;
       run.pending = null;
+      forgetDiff(run, approvalId);
       emit(run, "decision", { approvalId, answer: a });
       if (a === "quit") run.controller.abort();
       done(a);
@@ -323,7 +357,7 @@ export function createRunManager(deps) {
       if (run.status !== "running") return publicRun(run);
       emit(run, "log", { text: "stopping after the current step" });
       run.controller.abort();
-      if (run.pending) { const { resolve: done } = run.pending; run.pending = null; done("quit"); }
+      if (run.pending) { const { request, resolve: done } = run.pending; run.pending = null; forgetDiff(run, request.approvalId); done("quit"); }
       return publicRun(run);
     },
 

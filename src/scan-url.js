@@ -46,18 +46,18 @@ import { runBuiltInTemplates, headerChangesAnswer } from "../lib/templates.js";
 import { fuzzEndpoint } from "../lib/fuzzer.js";
 import { checkTls } from "../lib/tls.js";
 import { runRecon, extractDomain } from "../lib/recon.js";
-import { runInjectionProbes } from "../lib/injections.js";
+import { injectionTargets, runInjectionProbes } from "../lib/injections.js";
 import { scanJsLibraries } from "../lib/retirejs.js";
 import { discoverAllParams } from "../lib/params.js";
 import { scanOpenApi, probeAuthEndpoints } from "../lib/blackbox/openapi.js";
-import { botChallenge, challengeFinding } from "../lib/blackbox/challenge.js";
+import { blockWarning, botChallenge, challengeFinding } from "../lib/blackbox/challenge.js";
 import { probeIdorBola } from "../lib/blackbox/idor.js";
 import { probeOAuthMisconfig } from "../lib/blackbox/oauth.js";
 import { auditSecurityHeaders } from "../lib/blackbox/headers.js";
 import { runtimeAdvisoriesForResponse } from "../lib/advisories/index.js";
 import { probeClientSideAuth } from "../lib/blackbox/client-auth.js";
 import { probeJwt } from "../lib/blackbox/jwt.js";
-import { probeEmailDns } from "../lib/blackbox/email-dns.js";
+import { probeEmailDns, sharedHostDomain } from "../lib/blackbox/email-dns.js";
 import { probeBundleSecrets } from "../lib/blackbox/bundle-secrets.js";
 import { resolveAuth } from "./utils/auth.js";
 import { normalizeBaseUrl, isPrivateHost, joinUrl } from "./utils/url.js";
@@ -123,6 +123,7 @@ async function scanUrlInContext(target, opts) {
   let bundleScanRan = false;
   const hostname = new URL(target).hostname;
   const isIpHost = /^\d{1,3}(\.\d{1,3}){3}$/.test(hostname) || hostname.includes(":");
+  const sharedHost = sharedHostDomain(hostname);
 
   const result = {
     target,
@@ -148,7 +149,11 @@ async function scanUrlInContext(target, opts) {
   progress("Checking target reachability...");
   try {
     const res = await safeFetch(target, { timeout, probe: "reachability" });
-    result.reachable = res != null && res.status < 500;
+    result.httpStatus = res?.status;
+    const blocked = res ? blockWarning(res.status, res.headers, target) : null;
+    if (blocked) result.findings.push(blocked);
+    // A firewall's 503 is a refusal, handled below. The server's own 5xx means the app is down.
+    result.reachable = res != null && (res.status < 500 || botChallenge(res.headers) != null);
   } catch {
     result.reachable = false;
   }
@@ -179,6 +184,38 @@ async function scanUrlInContext(target, opts) {
     }
   }
 
+  // DNS TXT/MX queries go to resolvers, not the target, so --offline skips them.
+  const checkEmailAuth = async () => {
+    if (local || isIpHost) return;
+    if (opts.offline) {
+      progress("Skipping email authentication (--offline: no DNS lookups for SPF, DMARC, MX)...");
+      return;
+    }
+    if (sharedHost) {
+      result.findings.push({
+        severity: "info",
+        title: "Mail checks skipped on a shared domain",
+        description: `${sharedHost} is the platform's domain, so its SPF and DMARC say nothing about ${hostname}. Check the domain you send mail from.`,
+        url: target,
+        category: "scan",
+        source: "email-dns-probe",
+        confidence: "confirmed",
+      });
+      return;
+    }
+    progress("Checking email authentication (SPF, DMARC)...");
+    try {
+      const emailResult = await probeEmailDns(extractDomain(target));
+      result.emailAuth = {
+        spf: emailResult.spf,
+        dmarc: emailResult.dmarc,
+        dmarcPolicy: emailResult.dmarcPolicy,
+        mxCount: emailResult.mxCount,
+      };
+      result.findings.push(...emailResult.findings);
+    } catch { /* DNS failure, non-critical */ }
+  };
+
   // ── Phase 3: Fingerprint ───────────────────────────────────────────────
   progress("Fingerprinting target...");
   result.fingerprint = await fingerprint(target);
@@ -189,6 +226,9 @@ async function scanUrlInContext(target, opts) {
   if (challenge) {
     result.challenge = challenge;
     result.findings.push(challengeFinding(challenge, target));
+    // A firewall guards the site, not its DNS, so the mail checks still mean what they say. They
+    // stay out of executedProbes: a refused scan must never read as covered.
+    await checkEmailAuth();
     result.duration = Date.now() - startTime;
     return result;
   }
@@ -215,7 +255,7 @@ async function scanUrlInContext(target, opts) {
   // ── Phase 4b: Security headers ─────────────────────────────────────────
   progress("Auditing security headers...");
   if (result.fingerprint?.headers) {
-    result.findings.push(...auditSecurityHeaders(result.fingerprint.headers, target, { local }));
+    result.findings.push(...auditSecurityHeaders(result.fingerprint.headers, target, { local, liveResponse: true }));
   }
 
   // ── Phase 4b2: Runtime advisories (PHP, nginx, Apache, ... versions) ───
@@ -433,23 +473,7 @@ async function scanUrlInContext(target, opts) {
   } catch { /* non-critical */ }
 
   // ── Phase 9b: Email authentication posture (SPF/DMARC via DNS) ─────────
-  // DNS TXT/MX queries go to resolvers, not the target, so --offline skips them.
-  if (!local && !isIpHost && opts.offline) {
-    progress("Skipping email authentication (--offline: no DNS lookups for SPF, DMARC, MX)...");
-  }
-  if (!local && !isIpHost && !opts.offline) {
-    progress("Checking email authentication (SPF, DMARC)...");
-    try {
-      const emailResult = await probeEmailDns(extractDomain(target));
-      result.emailAuth = {
-        spf: emailResult.spf,
-        dmarc: emailResult.dmarc,
-        dmarcPolicy: emailResult.dmarcPolicy,
-        mxCount: emailResult.mxCount,
-      };
-      result.findings.push(...emailResult.findings);
-    } catch { /* DNS failure, non-critical */ }
-  }
+  await checkEmailAuth();
 
   // ── Phase 10: Retire.js, Vulnerable JS Libraries ─────────────────────
   if (!opts.skipRetireJs) {
@@ -540,6 +564,7 @@ async function scanUrlInContext(target, opts) {
   // ── Phase 14-19: Injection Probes (--deep) ─────────────────────────────
   if (opts.deep) {
     progress("Running active injection probes (SQLi, SSTI, SSRF, redirect, CMDi, XSS)...");
+    result.deepReach = { found: filtered.length, probed: injectionTargets(filtered, 10).map((ep) => ep.path) };
     const injectionFindings = await runInjectionProbes(target, filtered, {
       onPhase: progress,
       maxEndpoints: 10,
@@ -649,7 +674,7 @@ async function scanUrlInContext(target, opts) {
   result.executedProbes = [
     "reachability", "endpoint-discovery", "openapi", "auth-hardening",
     "client-auth", "idor", "oauth", "sensitive-files", "cors", "cookie",
-    ...(!local && !isIpHost ? ["email-dns"] : []),
+    ...(!local && !isIpHost && !sharedHost ? ["email-dns"] : []),
     ...(result.tls ? ["tls"] : []),
     ...(result.fingerprint?.headers ? ["security-headers", "runtime-advisories"] : []),
     ...(auth.bearer ? ["jwt"] : []),

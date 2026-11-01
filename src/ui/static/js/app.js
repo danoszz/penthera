@@ -70,6 +70,7 @@ const ctx = {
   setup() { closeMenus(); setup(ctx); },
   setUx(ux) {
     try { localStorage.setItem(UX_KEY, ux); } catch { /* this page only */ }
+    api.post("/api/settings", { ux }).catch(() => { /* kept for this page */ });
     set({ ux, tab: "findings", filter: null });
     announce(`${ux === "simple" ? "Simple" : "Advanced"} mode`);
   },
@@ -167,13 +168,23 @@ state.ux = savedUx === "advanced" ? "advanced" : "simple";
   document.body.append(patternDefs());
   metalLight();
   try {
+    // A click that reached a stopped server has no one to tell. Say it once, for good.
+    addEventListener("unhandledrejection", (e) => {
+      if (e.reason?.status !== 0) return;
+      e.preventDefault();
+      if (!document.querySelector(".server-stopped")) document.body.append(h("p", { class: "err server-stopped", role: "alert" }, ERR.stopped));
+    });
     await signIn();
     state.meta = await api.get("/api/meta");
+    // Every restart is a new port, so the browser's copy is gone: the data folder remembers.
+    const known = state.meta.settings?.ux || savedUx;
+    state.ux = known === "advanced" ? "advanced" : "simple";
     renderMenubar(menubar, ctx);
     renderRight(right, ctx);
     await refresh();
     document.title = `Penthera${state.meta.demo ? " :: demo" : ""}`;
-    if (!savedUx) ctx.setup(); // first visit in this browser
+    // First visit for this data folder, unless the wizard has just been through it.
+    if (!known && !state.overview?.projects?.length) ctx.setup();
   } catch (e) {
     clear(center).append(h("div", { class: "col" },
       h("h1", {}, "Not signed in"),

@@ -21,13 +21,18 @@ npm run bench:public                             # all three
 npm run bench:public -- --only secbench          # one: creddata, secbench or malware
 npm run bench:public -- --only creddata --skip-fetch   # reuse the cache
 npm run bench:public -- --split dev              # E11b: score the dev half only
+npm run bench:public -- --fetch-split                    # E11b: download and verify the split manifests
 npm run bench:public -- --competitors --split dev        # E11b: reference secret scanners and GuardDog on dev
 npm run bench:public -- --competitors --split dev --only secbench --tools codeql,semgrep  # E11b: a subset of the SecBench.js tools
 ```
 
-E11b splits each benchmark into a dev half and a sealed test half
-([split/](split/), ids and hashes only; protocol in
+E11b splits each benchmark into a dev half and a sealed test half (protocol in
 [E11b-improvement-study.md](../../docs/research/prereg/E11b-improvement-study.md)).
+The split manifests hold ids and hashes only, no data. They are files on a GitHub
+Release, because large data stays out of the repo. `npm run bench:public --
+--fetch-split` downloads them to the cache and checks each against
+[split.sha256](split.sha256); every run checks that hash again. Only this
+benchmark fetches them, and only when you ask: Penthera itself never does.
 The default, `--split all`, reproduces E11 as registered. `--split test`
 is refused without `--final`: the test half runs once, at the end.
 
@@ -149,5 +154,5 @@ install` or `pip install` in that folder would matter.
 | `creddata.mjs` | Rule families, CSV reader, line matching, precision and recall |
 | `secbench.mjs` | Package resolution, sink matching, capability check |
 | `malware.mjs` | Sampling, extraction, root detection, flag rules, and the E11b payload kind of each npm sample (from its files alone, never from Penthera's result) |
-| `split.mjs`, `split/` | E11b: the seeded, stratified dev/test split and its manifests |
+| `split.mjs`, `split.sha256` | E11b: the seeded, stratified dev/test split, and the hash of each manifest |
 | `competitors.mjs` | E11b: pinned reference tools, run offline, scored the same way |

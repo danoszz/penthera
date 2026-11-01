@@ -218,9 +218,11 @@ package re-exports engine pieces via `exports` in `package.json`
    ([how](changelog.d/README.md#when-a-change-needs-no-doc)). CI checks this
    (`npm run docs:gate` runs it locally), and `npm test` fails if a `--help`
    flag, a subcommand or an MCP tool has no docs.
-5. Sign off every commit, and add the AI trailers if an assistant helped (both
+5. Keep datasets and other large files out of the repo. `npm test` fails on a
+   tracked file over 256 KB that has no reason in `tests/repo-size.test.js`.
+6. Sign off every commit, and add the AI trailers if an assistant helped (both
    below).
-6. Open the PR with a clear description and rationale. Do not bump versions;
+7. Open the PR with a clear description and rationale. Do not bump versions;
    that happens only in a release.
 
 **What runs, and when.** A pull request gets a fast check: tests on Node 22 and
@@ -305,7 +307,7 @@ quality from depending on anyone's free evenings.
   go into that release; features wait for the next one.
 - **No version bump or tag without the maintainer's go.**
 
-**Now:** 2.1.2 is on `latest` since 2026-10-31. See the [roadmap](ROADMAP.md#now-212)
+**Now:** 2.2.0 is on `latest` since 2026-11-01. See the [roadmap](ROADMAP.md#now-220)
 for what is in it.
 
 Between releases:

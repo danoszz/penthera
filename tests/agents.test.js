@@ -225,6 +225,17 @@ describe("rules: MCP servers", () => {
     expect(checkMcpServer({ name: "fs", file: "x", def: { command: "npx -y pkg@1.0.0" } })).toEqual([]);
   });
 
+  it("flags a password inside a connection string, whatever the variable is called", () => {
+    const check = (DATABASE_URL) => checkMcpServer({ name: "db", file: ".mcp.json", def: { command: "node", args: ["db.js"], env: { DATABASE_URL } } })
+      .filter((h) => h.rule === "mcp-inline-secret");
+    const [hit] = check("postgres://app:hunter2hunter@db.internal:5432/prod");
+    expect(hit.severity).toBe("high");
+    expect(hit.detail).not.toContain("hunter2hunter");
+    for (const safe of ["postgres://db.internal:5432/prod", "postgres://app:${DB_PASSWORD}@db.internal/prod", "https://host:8080/path@v1", "postgres://app@db/prod"]) {
+      expect(check(safe), safe).toEqual([]);
+    }
+  });
+
   it("flags inline secrets in env, headers and args, masked", () => {
     const hits = checkMcpServer({
       name: "gh", file: ".mcp.json",

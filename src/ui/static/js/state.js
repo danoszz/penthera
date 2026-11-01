@@ -1,3 +1,5 @@
+import { keyParts } from "./format.js";
+
 // One store for the single view. Renderers subscribe and redraw their window.
 export const state = {
   meta: null,
@@ -29,6 +31,9 @@ export const TABS = [
 const subs = new Set();
 export function on(fn) { subs.add(fn); return () => subs.delete(fn); }
 export function set(patch) {
+  // A finding from another project has no place beside this one.
+  const key = patch.sel?.kind === "project" ? patch.sel.key : null;
+  if (key && !("finding" in patch) && state.finding && state.finding.project !== key) Object.assign(patch, { finding: null, right: state.right === "finding" ? "none" : state.right });
   Object.assign(state, patch);
   for (const fn of subs) fn(patch);
 }
@@ -36,7 +41,8 @@ export function set(patch) {
 /** Every project key: scanned targets first, then project folders with no scans yet. */
 export function projectKeys() {
   const scanned = (state.overview?.projects || []).map((p) => p.key);
-  const folders = (state.meta?.projects || []).filter((f) => !scanned.includes(f));
+  const covered = scanned.map((k) => keyParts(k).folder);
+  const folders = (state.meta?.projects || []).filter((f) => !covered.includes(f));
   return [...scanned, ...folders];
 }
 
@@ -44,8 +50,7 @@ export const projectOf = (key) => (state.overview?.projects || []).find((p) => p
 
 /** The folder a run should use: the selected project if it is a folder, else the first project folder. */
 export function folderFor(key) {
-  if (key && key.startsWith("/")) return key;
-  return state.meta?.projects?.[0] || "";
+  return keyParts(key).folder || state.meta?.projects?.[0] || "";
 }
 
 /** The project the current view is about, if any (a run or past run counts as its project). */
