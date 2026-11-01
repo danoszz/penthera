@@ -158,7 +158,7 @@ export function openApi({ version, origin, root }) {
         `Every request must carry "consent": true, which states that you own the site or are authorized to test it and that you accept the terms: ${origin}/terms.`,
         "Rate limits: 6 checks a minute and 40 a day per client address, and 30 an hour per target site. Each server instance counts on its own, so these numbers are approximate. To enforce them, the server keeps counts per client address and per target site in memory, for up to a day. Every response from POST /api/check carries RateLimit-Policy with these limits, and no remaining count. A rate_limited 429 carries Retry-After, in seconds.",
         "Errors share one shape. A path under /api that is not a route answers 404 with the code unknown_endpoint.",
-        `Versioning: the URL carries no version. info.version is the Penthera release this spec was built from. Breaking changes and deprecations are listed in the changelog, with no fixed notice period: ${REPO}/blob/main/CHANGELOG.md.`,
+        `Versioning: the URL carries no version. info.version is the Penthera release this spec was built from. Adding a response field or a new error code is not a breaking change. Before a breaking change or a removal, the operation is marked \`deprecated: true\` in this spec, responses carry a \`Deprecation\` header, and the change is listed in the changelog: ${REPO}/blob/main/CHANGELOG.md.`,
       ].join("\n\n"),
       termsOfService: `${origin}/terms`,
       license: { name: "MIT", identifier: "MIT" },

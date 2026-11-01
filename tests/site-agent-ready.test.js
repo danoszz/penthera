@@ -247,7 +247,9 @@ describe("OpenAPI for the live check", () => {
     const { LIMITS } = await import("../api/check.mjs");
     expect(LIMITS.map((l) => [l.key, l.window, l.max])).toEqual([["ip", 60_000, 6], ["ip", 86_400_000, 40], ["host", 3_600_000, 30]]);
     expect(spec.info.description).toContain("6 checks a minute and 40 a day per client address, and 30 an hour per target site");
-    expect(spec.info.description).toContain("Breaking changes and deprecations are listed in the changelog");
+    expect(spec.info.description).toContain("Before a breaking change or a removal");
+    expect(spec.info.description).toContain("`deprecated: true`");
+    expect(spec.info.description).toContain("`Deprecation` header");
     expect(spec.info.description).toContain("in memory, for up to a day");
     expect(spec.info.description).toContain("A rate_limited 429 carries Retry-After");
     expect(spec.info.description).toContain("unknown_endpoint");
