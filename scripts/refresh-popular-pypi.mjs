@@ -44,5 +44,5 @@ writeFileSync(OUT, gzipSync(JSON.stringify({
   description: `Top ${names.length} most-downloaded PyPI projects (30 days), PEP 503 normalised, in rank order. Refreshed at release time by scripts/refresh-popular-pypi.mjs.`,
   count: names.length,
   names,
-}, null, 0) + "\n"));
+}, null, 0) + "\n", { level: 9 }));
 console.log(`Wrote ${names.length} names (data from ${updated}) to lib/deps/popular-pypi.json.gz`);

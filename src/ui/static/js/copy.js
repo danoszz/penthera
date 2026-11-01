@@ -3,12 +3,11 @@
 // exclamation marks, verbs first on buttons, empty states name the action
 // that fills them, errors give the cause then the fix.
 
-export const TAGLINE = "Your open-source cyber security agent"; // README headline
 
 export const START = {
   title: "Welcome",
   intro: "No reports yet. Start with a scan of something you own :: your localhost, a preview URL, or this repo. Results land in the reports folder and this view fills in.",
-  introSimple: "Nothing checked yet. Set up your project and run a first check: it takes a minute or two, and everything stays on this computer.",
+  introSimple: "Nothing checked yet. Set up your project and run a first check: it takes a minute or two.",
   gate: "Only scan apps you own or have written permission to test.",
   steps: [
     { kind: "scan", title: "Scan your app", body: "TLS, headers, cookies, CORS, auth, exposed APIs and leaked secrets." },
@@ -35,11 +34,13 @@ export const NOTES = {
 export const EMPTY = {
   projects: "No projects yet. Run a scan to add one.",
   runs: "No runs yet.",
-  findings: "No open findings in the latest scan.",
+  findings: "No open problems in the latest check.",
+  findingsUnread: "Nothing to list from what was read.",
   filtered: "Nothing matches the filter. Press Esc to clear it.",
-  deps: "No dependency report yet. Choose Scan ▸ Check dependencies in the menu bar.",
-  ai: "No AI tooling report yet. Choose Scan ▸ Audit AI tooling in the menu bar.",
+  deps: "No dependency check yet. Start one from the window that starts a scan, press n.",
+  ai: "No AI tooling check yet. Start one from the window that starts a scan, press n.",
   inspector: "Pick a finding to read it here in plain words, with its evidence and the fix.",
+  inspectorSimple: "Pick a problem to read it here in plain words, with what to do about it.",
   history: "No runs for this project yet.",
   evidence: "No bundles yet. Create one from the latest scan.",
   memory: "No memory yet. The fix loop and scans with --memory write it.",
@@ -54,6 +55,7 @@ export const FIX_MODE = { label: "Check and fix", back: "Back", backLabel: "Back
 
 export const ERR = {
   session: "The session ended. Restart penthera ui and open the new one-time link it prints.",
+  stopped: "penthera ui has stopped. Start it again and open the new one-time link it prints.",
 };
 
 export const KEYS = [
@@ -75,24 +77,20 @@ export const SEV_WORD = { critical: "Critical", high: "Serious", medium: "Worth 
 
 export const SIMPLE_KINDS = [
   { kind: "scan", title: "Check my app", body: "Looks at your app and code for security problems. Takes a minute or two.", button: "Check my app" },
+  { kind: "deps", title: "Check my dependencies", body: "Looks at what the packages you installed can do.", button: "Check my dependencies" },
+  { kind: "agents", title: "Check my AI tools", body: "Looks at your skills, MCP servers and hooks for hidden instructions.", button: "Check my AI tools" },
   { kind: "loop", title: "Fix problems for me", body: "Proposes a fix for each problem it knows how to fix. You approve every change; nothing is published. The rest stay on your list, with a prompt for your coding agent.", button: "Start fixing" },
 ];
 
 export const SETUP = {
-  steps: 3,
+  steps: 2,
   welcome: {
     title: "Welcome to Penthera",
     body: [
       "Penthera checks the apps you build for security problems, explains each one in plain words and can fix many of them for you.",
-      "Everything runs on this computer. Nothing is sent anywhere, and no change is made without your OK.",
+      "Penthera runs on this computer. It sends requests only to a site you name, or to a cloud model if you choose one, and it changes nothing without your OK.",
     ],
     gate: "Only check apps you own or have written permission to test.",
-  },
-  mode: {
-    title: "How much do you want to see?",
-    simple: { title: "Simple", body: "Is my app secure, and what do I do about it? Plain words, one list, one button at a time." },
-    advanced: { title: "Advanced", body: "Everything: dependencies, AI tooling, run history, evidence for auditors, confidence and the raw diffs." },
-    note: "You can switch any time in the Penthera menu.",
   },
   project: {
     title: "Your project",
@@ -105,15 +103,25 @@ export const SETUP = {
   },
 };
 
+/** The CLI's words (src/report/unread.js). The page can't import from there, and a test compares them. */
+export const SITE_NOT_READ = "We couldn't see your site.";
+
+/** A check speaks for itself, and the project may hold more: say so when the two would seem to disagree. */
+export const alsoOpen = (found, open) => (!found && open ? `Your project still has ${open === 1 ? "1 problem" : `${open} problems`} from its other checks.` : "");
+
 /** One sentence that answers "can I ship?" for a project or all of them. */
-export function verdict({ counts, open, top, scanned, when }) {
+export function verdict({ counts, open, top, scanned, when, unread, nothing, suppressed }) {
   if (!scanned) return { text: "Not checked yet.", sub: "Run a first check to see where you stand." };
   const c = counts?.critical || 0;
   const hi = counts?.high || 0;
-  const from = `From the check ${when}.`;
+  const title = unread?.title || SITE_NOT_READ;
+  const from = unread ? `${title} ${unread.text}` : `From the check ${when}.`;
   if (c) return { level: "stop", text: `Not ready to ship: ${c === 1 ? "1 critical problem" : `${c} critical problems`} to fix first.`, sub: from, top };
   if (hi) return { level: "fix", text: `Fix ${hi === 1 ? "1 serious problem" : `${hi} serious problems`} before you ship.`, sub: from, top };
+  if (unread) return { level: "unread", text: title, sub: unread.text, top: open ? top : undefined };
   if (open) return { level: "ok", text: `Nothing blocks a launch. ${open === 1 ? "1 smaller thing is" : `${open} smaller things are`} worth fixing.`, sub: from, top };
+  if (suppressed) return { level: "ok", text: `${suppressed} suppressed.`, sub: from };
+  if (nothing) return { level: "clear", text: "Nothing to assess.", sub: "The check read nothing here. This is not a clean result." };
   return { level: "clear", text: "Nothing open. The last check found no problems.", sub: from };
 }
 

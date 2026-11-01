@@ -44,6 +44,16 @@ export const COUNTS = {
   popularPypi,
 };
 
+/**
+ * Every readable rule in this release, the figure the README and the site quote.
+ * The `core` pack holds rules already counted above, so only the other packs add to it.
+ * @param {{name: string, count: number}[]} packs activePacks() from lib/rules
+ */
+export function totalRules(packs) {
+  const packed = packs.filter((p) => p.name !== "core").reduce((n, p) => n + p.count, 0);
+  return COUNTS.urlTemplates + COUNTS.secretPatterns + COUNTS.capabilities + COUNTS.agentRules + COUNTS.recipes + packed;
+}
+
 const rows = [
   ["URL scan templates (built in)", BUILT_IN_TEMPLATES.length],
   ["Secret and AI-key patterns", secretPatterns],

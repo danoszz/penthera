@@ -81,6 +81,7 @@ For "how do you know it works?"
 
 | Your question | Read |
 |---|---|
+| "Which test holds each claim?" | [Claim map](claims.md) |
 | "How does it decide, and what can't it see?" | [Methodology](METHODOLOGY.md), [known limitations](METHODOLOGY.md#known-limitations) |
 | "How accurate is it?" | [Public benchmarks](https://github.com/danoszz/penthera/blob/main/bench/public/RESULTS.md) against the free tools (E11b), our own [benchmark](https://github.com/danoszz/penthera/blob/main/bench/README.md) and [latest results](https://github.com/danoszz/penthera/blob/main/bench/RESULTS.md), the [E10 pilot](https://github.com/danoszz/penthera/blob/main/bench/known-vuln/RESULTS.md) on known-vulnerable apps |
 | "What will you measure next?" | [Research plan](vision-2.0.md), [pre-registrations](https://github.com/danoszz/penthera/blob/main/docs/research/prereg/E1-real-world-accuracy.md), [research notes](https://github.com/danoszz/penthera/tree/main/docs/research) |

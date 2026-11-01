@@ -4,6 +4,305 @@ All notable changes to Penthera are documented here. Versioning follows [SemVer]
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-11-01
+
+Penthera now says plainly what it read, what it fixed and what is left, on every surface. A run that read nothing never reads as clean.
+
+### Upgrading from 2.1
+
+Nine exit codes change, so a CI step can turn red or green after this upgrade.
+
+| Case | Was | Now |
+|---|---|---|
+| `agent --loop`, a critical or high finding remains, suppressed ones included | 0 | 1 |
+| `agent --loop --url`, the site couldn't be read | 0 | 1 |
+| `agent --loop` on a tree where only `.gitignore` or the wizard's workflow file changed | 2 | 0 or 1, as any run |
+| `agents`, a password in a connection string, such as `DATABASE_URL` in an MCP server's `env` | 0 | 1 |
+| `agents`, instructions hidden in an HTML comment in a skill | 0 | 1 |
+| `deps`, a package with a code file full of blank lines, which now reads as unscanned | 0 | 1 |
+| URL scan a firewall refused, with a high mail finding such as SPF ending in `+all` | 0 | 1 |
+| URL scan, a 503 that carries a firewall's challenge header | 2 | 0 |
+| URL scan on a shared platform domain such as `vercel.app`, where the only high finding was the platform's mail record | 1 | 0 |
+
+Other things that can move after you upgrade:
+
+- `deps` can also exit 1 on a line over about 190 KB, or a string with too many command words to check: it keeps the result of a full read's worst case.
+- Findings from whole-file patterns and their route paths have new titles, so a `--baseline` diff or memory shows them as fixed and new, once. With `--baseline -q` the exit code follows new findings, so that one run can exit 1.
+- The live check's score moves to `scoreVersion` 2. Scores of version 1 aren't comparable on CSP.
+
+### Known limits
+
+- `penthera init` writes a workflow pinned to v2.1.2, the release before this one. That version carries the `deps` stall on big bundles under Node 22, fixed here. If you see it, move the pin in your workflow to v2.2.0. `init` picks that up with the next release.
+- The dashboard has no coverage line: it doesn't say which checks didn't run. The CLI, the brief, MCP and the Action do.
+- A firewall's challenge served with status 200 and no firewall header still gets a grade, because nothing marks it as a challenge.
+- Real Windows and Safari are untested.
+
+### Detection
+
+- **A CSP has to control scripts to count.** A policy that names no script sources, or lets any host
+  run them with `*`, `http:` or `https:`, now gets its own finding, "Content-Security-Policy does not control scripts". The
+  live check stops passing such a policy, so its score moves to `scoreVersion` 2, and scores of
+  version 1 aren't comparable on CSP. `frame-ancestors` alone still counts for framing.
+- **More hidden instructions are caught.** An HTML comment in a skill that says to ignore the user, or to
+  send an env file, now counts as hidden instructions. It used to pass with grade A.
+
+### Changed
+
+docs: none, the count on All projects explains itself
+
+- **A narrower check can't hide a wider one.** On All projects, only a later check that reached everything an
+  earlier one did replaces it, so a code check no longer clears what a code and site check found.
+- **`agent --loop` exits 1 when any critical or high finding remains**, the same
+  bar as a scan. It used to exit 0 once nothing fixable was left, even with
+  critical findings open. In the loop suppressed findings count, as in a scan without `--memory`. A CI step that runs the loop can turn red. The summary,
+  in the CLI and the dashboard, now says what was fixed and what is left, names
+  the branch you are on, and a partial run never reads as clean. The dashboard
+  scans again after a run, so the project view shows the fixes.
+- **A repo scan now names `penthera fix`.** It ends with "N may be fixable" and the
+  command, and says it also checks cookie flags, CORS and rate limits. Findings,
+  exit codes and scores stay the same.
+- **One finding per file for whole-file patterns.** A repo scan copied each
+  `eval`, `innerHTML` or `exec` match to every route in the file, so one `exec`
+  in a six-route file read as six criticals. It is now one finding that lists
+  the routes. Route paths keep their mount prefix (`/api/calc`, not `/calc`).
+  Both change titles, so a `--baseline` diff or memory shows these findings as
+  fixed and new, once.
+- **The Next.js headers fix no longer breaks `next dev`.** The starter CSP allows
+  `'unsafe-eval'` in development only, because React's dev tools need it. A
+  production build's policy does not change.
+- **Safer fix recipes.** The secret recipe adds a clear start-up error to Express,
+  Fastify and Hono servers, so a missing env var stops the server at boot instead
+  of failing at the first request. The headers recipe adds the origins your code
+  calls to `connect-src`, and it now plans for a one-line `next.config`.
+- **Every scan says what it reached.** A run names checks that did not run, and
+  a live scan says whether it sent injection probes. With `--repo`, `--deep` says
+  how many of your routes it reached, for example "3 of 13".
+- **A brief no longer rolls a file's findings under its worst severity.** A file
+  with one critical and two highs reads `[critical 1, high 2]`.
+- **`agents` flags a password in a connection string**, such as `DATABASE_URL` in
+  an MCP server's `env`, whatever the variable is called. That is a high finding, so
+  such a config now exits 1 where it exited 0.
+- **`penthera deps` says what it did not check.** "Nothing to fix" read as all
+  clear on old packages. It checks what packages can do, not CVE databases, and
+  each run now says so and names `--giants`.
+- **`fix --plan` no longer prints a secret sitting beside a change.** A diff showed
+  nearby keys, tokens and URL passwords in full as context, in text and `--json`.
+  Plans now show changed lines only, with `… N lines unchanged`, and mask known
+  secret shapes on those lines. `redacted` is true only when a changed line was
+  masked. The applied diff is unchanged.
+- **Where a suppression applies is now plain.** A plain scan counts everything and
+  says how many findings are suppressed, every finding shows its id, and
+  `memory suppress` says what it covers. The hook reads `penthera.suppress.json`.
+- **The loop explains its numbers.** Its counts include checks only `penthera fix`
+  runs, and findings from a live scan stay until you scan the URL again. `init`
+  says the loop needs a first commit.
+- **A loop started on a fix branch continues on it**, and `--run-tests` prints
+  progress every 30 seconds. `fix --apply` checks the tree before it asks.
+- **Hints work under npx.** "What next", Next and the fix line print `npx penthera`
+  when you ran it that way.
+- **Suppressed findings never read as clean.** The brief, the summary and the exit
+  note say "N suppressed" instead of "Nothing to fix".
+- **`penthera deps` no longer stalls on big bundles.** Long comments in files such
+  as Next.js's webpack bundle became long runs of spaces, and two patterns took
+  minutes or more on them under Node 22. A package could also plant such a run.
+  Long runs of any space are now cut before matching, and those patterns are
+  bounded. Command patterns only see short pieces of a string. An install script
+  over 4 KB reads as risky, and a file full of blank lines is skipped and named,
+  so its package reads as unscanned, a high finding that exits 1. A line over about
+  190 KB, or a string with too many command words to check, says it was not read in
+  full and keeps the result of a full read's worst case.
+- **`--run-tests` no longer hangs on a server the tests left running.** The run
+  ends when the test script exits, or at the timeout, and stops what it started.
+  Ctrl-C stops the tests too.
+- **Default Next.js `.gitignore` no longer blocks a secret fix.** A git-ignored
+  `.env.example` is left alone and the fix goes ahead. The owner actions say when
+  nothing in the app loads `.env`.
+- **Folders named `reports` are named as not read**, at any depth, in the brief and
+  the Coverage section.
+- **A loop with no fixes returns you to your branch** and removes its empty fix
+  branch. The ending counts the fixes you skipped.
+- **A red test suite no longer blames every fix.** `--run-tests` runs the suite once
+  before any fix and says if it already fails.
+- **A stopped run leaves a clean tree and a clean memory.** SIGTERM restores the fix
+  in flight, and an interrupted fix is not recorded as failed.
+- **Hono gets the start-up check.** The secret recipe adds it before `serve()`.
+- **A site that was not read reads that way everywhere.** `agent --loop --url`, the
+  owner report, the Coverage section and SARIF all say so, and `scan_url` over MCP
+  reports a firewall refusal.
+- **Block pages known by their headers get a warning.** AWS WAF, AWS load balancer,
+  CloudFront and Akamai blocks say the site was probably not read. A bare 403 stays
+  graded: Penthera does not guess.
+- **Fixes no longer fail because of your own reports.** An untracked `reports/`
+  folder made every approved fix fail, in `penthera fix --apply`, `agent --loop`
+  and the dashboard. Apply now accepts what the loop accepts. If the project
+  changes during a run, the loop stops at the first failed fix and says why,
+  and the dashboard no longer leaves a finished fix window on screen.
+- Every page uses one type system, shown at /type and based on The Elements of Typographic Style: real quotation marks and apostrophes on every page, a serif column of about 65 characters on reading pages, and small sticker labels for every eyebrow and tag. The blog and its articles read like a teletext newspaper, always light on gray paper, with a full-width interactive title, white post cards with a category tag, colored page links, and the byline and an active section list in the margin.
+- The footer's status light no longer pulses.
+- Terms, Trust and landing pages share the articles' reading column, with contents in the margin. Website check and Lovable pages open on the check. Benchmarks carry the block title.
+- Link previews use a new blue card, and research pages get a plain one.
+- A 30-second film on how Penthera works replaces the homepage loop, with real output on a demo app.
+
+- **One spacing scale and one sticker.** Margins, padding and gaps take `--sp-*`
+  tokens, the hero pills share the sticker styles, and the steel button is a
+  `.btn`. The square and story cards use the blue bubbles, without a score.
+- **News is one page with Research and the blog.** `/news`, `/research` and `/blog` share a list with filters, a search and a feed at `/news/feed.xml`, and every view is a real page that works without a script.
+- **Penthera says what it is.** The site calls it a free, open-source security scanner and fixer for your app, with "Make your app more secure for free" under the headline. The field button reads Check my site, the dock reads Install, and the home page now says fixes stay on your machine and nothing is pushed.
+- **Benchmarks sit with News and Research.** `/benchmarks` opens on four scoreboard cards with every ranked tool, and the detail pages use the same paper, with limits beside the answer. Every score, interval and loss stays on the page.
+- The web measurement study is now called State of the Web 2026 in the footer, on `/news` and `/research`, and in `llms.txt`.
+- Every page has a share image now, including news, research, the blog and its posts. iPhones get a home-screen icon.
+- Benchmark share cards use the paper look, with each rank and its range large enough to read in a feed.
+- Fixed the live check's prompt button, which said "Copy failed" after copying. Localhost and other addresses the check can't reach now say what to run instead, before the consent step. The consent slider is clear by keyboard, and a network failure gets a plain message.
+- Trust, Terms, Contact and the landing pages now use the same paper as the news, research and blog pages. Research lists the studies first.
+- **A leaner package.** The popular-name lists are recompressed with the same content, and three unused
+  exports, one copied `--machine` block and the repo-only `pentest.config.example.js` are gone from the package. Behaviour doesn't change.
+- Pro is on ice: the site no longer links it, and /pro still works, unlisted and noindex.
+- **Dashboard: no stray words.** The Dependencies and AI tooling tabs no longer print "null", counts read "1 package", a fix loop in Advanced ends on its verdict, and a tab left open after `penthera ui` stops says so in place of "Failed to fetch".
+- **Dashboard: counts that agree.** The list and the end of a check now count problems and notes apart, and say critical when a problem is critical. The bar beside the setup's permission line is gone, Stop leaves a finished run, an unscanned project no longer says its field is clear, an approval lists each problem once, and rule text no longer prints backticks.
+- **Dashboard: a shorter first visit.** Setup is two screens and starts in Simple; Advanced stays in the Penthera menu. Simple says what each check looked at beside its age, in plain words.
+- **Dashboard: a site it couldn't read looks unread.** The verdict sits on a hollow dashed plate with no "0 open", and the inspector's field no longer implies anything about that site.
+- **A clear next step after every scan.** In a terminal, a scan with critical or high findings now ends with what to fix first and how to open the dashboard. In the dashboard, a problem with no automatic fix offers a prompt for your coding agent, the advice is the finding's own where it has one, and notes no longer read as problems.
+- The fix window shows what to check afterwards, and the result names the branch your fix is on. A run with nothing to fix says so.
+
+### Fixed
+
+- **The dashboard no longer grades around suppressed findings.** A project with suppressed critical or high findings read A, 100/100 with no mention of them. It now gives no grade and says how many are suppressed. Smaller suppressed findings keep the grade and are counted.
+- **The Dependencies tab says how many packages it read**, so "None found" can't read as clean when packages weren't read.
+- **`scan_url` says it sent no injection probes.** Its brief used to say it had skipped nothing.
+- **A GitHub Action run prints a warning when the site wasn't read**, so a green job doesn't read as a checked site.
+- **Agents are told what each verdict means.** The skill, the MCP server's instructions and every MCP result explain `Site not read`, `Nothing to assess` and `N suppressed`, and that none of them is clean.
+- **Your turn stays on screen.** What only you can do after a fix, like replacing a leaked key, shows on the
+  run's last screen with the merge command, and stays on the project until you mark it done.
+- **One app counts once.** All projects counts each app once, so a folder and its address no longer add up
+  to several projects' worth of problems. Two folders on one address stay two apps.
+- **The wizard's results land in the project.** No Welcome after the wizard, and no project made of the reports
+  folder.
+- **The wizard no longer blocks its own fix.** `penthera agent --loop` treats `.gitignore` and the wizard's
+  workflow file as allowed changes, where it used to stop with a dirty-tree error. Any other uncommitted file
+  still stops it, and the loop still won't patch a changed file. Other exit codes don't change.
+- **No dead button.** After a run that could fix nothing, "Fix problems for me" gives way until the next check.
+- **Deps and AI audits count in the dashboard.** A project's verdict, grade and list now include its
+  latest dependency check and AI tooling audit, each project shows its own reports, and Simple mode can
+  open both. The AI tooling tab lists its findings, and a folder with only an audit is now a project.
+- **The dashboard says why it stopped.** A run names its reason, such as uncommitted changes, and a
+  stopped server says so on any click.
+- **A run's log tells the truth.** It says when the site wasn't read, and it no longer names a fix branch
+  that was removed.
+- **The approval window shows context.** The dashboard shows the unchanged lines around a fix, with the same
+  masks, on the local screen only. A line that names a secret or holds a long quoted value stays hidden. A symlinked project keeps its dependency and AI tabs, and the dashboard's
+  settings file replaces a symlink instead of writing through it.
+- **No grade for a site Penthera couldn't read.** A folder beside a dead address, or a firewall's
+  challenge, used to read A, 100/100 in the dashboard, and the live check scored a challenge page as
+  "Solid basics", because that page sends strict headers of its own. The dashboard and the live check
+  now give no grade and say "We couldn't see your site", as the CLI does. The live check decides from
+  the firewall's own header only. Exit codes don't change.
+- **Fix works on a URL and folder project.** The dashboard filled the URL box with the whole project
+  name, so Fix failed by default. It also said Penthera couldn't fix findings it could, opened the wrong
+  page after a check, split fix results into a second project, and left the last project's finding open.
+- **Plainer words.** The welcome no longer says nothing leaves the computer, Simple mode says when the
+  running app still serves a fixed problem, and the dashboard stops offering `--allow-dirty`.
+- **The next step is true.** The dashboard now reads the reports `penthera init` writes, and the CLI's
+  hint says to run a check there, because a plain scan writes no report.
+- **`explain_finding` says more.** `code-pattern` gets real guidance, and a rule with only general advice
+  says so. The tool's text now names its `id` parameter.
+- **A partial read never reads clean.** A deps audit that read 1 of 4 packages says `1 of 4 packages read`, has
+  no A in the dashboard or the wizard, and reads `Review` in the brief. A serious finding keeps its grade,
+  because reading the rest can only lower it.
+- **A config that can't be parsed isn't a read.** With only a broken `.mcp.json`, the AI audit has no grade and
+  says `Nothing to assess`.
+- **A broken config beside a good one has no A either.** `penthera agents` and the wizard name the file they
+  couldn't parse and read `Review`, and a worse grade stands.
+- **A check of one part says so.** A dashboard deps run reads `No problems in your dependencies.`, and adds
+  `Your code hasn't been checked.` until it has.
+- **The counts agree.** A project's fixes match its run and All projects, and the sidebar's open count matches
+  the page.
+- **An empty folder has no grade.** `--repo` on a folder with nothing to read says `Nothing to assess`.
+- **No code scan, no grade.** A project with only a deps or AI audit says `Only your dependencies were checked.`
+  until its code is scanned. A plain 403 has no grade in the dashboard or the wizard.
+- **Smaller honest lines.** The brief no longer says `Scanned: live URL` for a site it couldn't read, and
+  All projects counts no fixes from a project that isn't on the dashboard.
+- **The fix window.** A context line starting `++ ` and a changed line starting `++ ` now pass through the
+  masks, line endings no longer count as hidden text, and a leftover temp file can't stop settings saving.
+
+Exit codes don't change.
+- **SPF and DMARC survive a firewall.** A scan that a firewall refuses used to stop before the mail
+  checks, though they read DNS and not the site. It now still reports them, and `--offline` still
+  skips them. A refused scan still never counts as covered. On a shared platform domain
+  such as `vercel.app`, the mail checks are skipped with a note, because those records are the
+  platform's.
+
+- **A refused scan never reads as clean.** When a firewall answers, the brief's verdict is `Site not read`
+  and the summary says so. A firewall's 503 counts as a refusal, a server's
+  own 5xx says what it answered, the brief lists tools that didn't run, and `frame-ancestors` now counts
+  for framing in the CLI as it does on the live check.
+
+- **Four exit codes change.** `agent --loop --url` exits 1 when it couldn't read the site, where it exited 0. A refused scan with a high mail finding, such as SPF ending in `+all`,
+  exits 1 where it exited 0, as any scan with a high finding does. A 503 that carries a firewall's
+  challenge header exits 0 where it exited 2, because it's a refusal, not a server down. A host on a shared
+  platform domain can exit 0 where it exited 1, because the platform's mail findings no longer count. A
+  refused scan otherwise exits as before, and a server's own 5xx still exits 2.
+- **Nothing read is never clean.** A deps audit with no package code to read says `Nothing to assess` and
+  has no grade, and the live check gives a server error no score. A 403 with no firewall's name on it
+  reads `Review`, because it may be a firewall's page. Exit codes don't change.
+- **The wizard grades only what it read.** A firewall's page in the running app check gets no grade, and the
+  brief names the site it couldn't read. In the dashboard a project with code findings names its unread
+  site, a check that found nothing says when the project holds more, and URL runs show in History.
+- **No success sentence without a read.** `penthera-scan`, the audience reports and the terminal no longer say
+  a run found nothing when it read nothing, compliance doesn't count an audit that read nothing as tested, and
+  `summary.json` names an unread site. A test renders every surface for every way a run can read nothing.
+- **The live check now reads two more forms of opt-out in robots.txt.** A file with
+  bare CR line ends, which RFC 9309 allows, and a `User-agent` line with words after
+  the name, such as `Penthera-QuickCheck bot`, used to be missed. Its other requests
+  and scores do not change.
+- **Dashboard: setup and the mode survive a restart.** Each start used a new port, so the browser forgot both. They now live in `~/.penthera/ui.json`, which holds only the mode.
+
+### Site
+
+- **`/openapi.json` states what counts as a breaking change.** A new response
+  field or error code doesn't. Before a breaking change or a removal, the
+  operation is marked `deprecated: true`, responses carry a `Deprecation`
+  header, and the changelog lists it.
+- **Two how-to pages.** `/enforce-dmarc` moves a domain from `p=none` to `p=reject` without losing mail, and `/csp-that-controls-scripts` shows which policies stop injected scripts and how to remove `'unsafe-inline'`. Each ends in the command that checks the result, and says what that command can't see.
+- **A new share image and README image.** "Your elite cyber security agent",
+  with what to do and how it runs.
+- **`POST /api/check` answers with `RateLimit-Policy`.** Agents can read the
+  limits from any response and pace themselves. It carries no remaining count,
+  because each server instance counts on its own.
+
+### Docs
+
+- **What active modes can change.** `docs/commands/scan.md` now lists what `--fuzz`, `--deep` and `--adaptive` send, and what that can create, overwrite or delete on the target. They don't use your `--auth-*` credentials, and they don't clean up.
+- **The claim map.** `docs/claims.md` ties 18 headline claims to the test that holds each one. `npm test` fails if a claim leaves its file, or if its test is renamed, removed, commented out or skipped, alone or with its group. It checks the link, not the test's strength.
+- **The plugin's skill stays a true copy.** `npm test` now compares `plugin/skills/penthera` with `skills/penthera` file by file.
+- **The E11b split manifests are moving to a release file.** `npm run bench:public -- --fetch-split` gets them, and `bench/public/split.sha256` pins each one, checked on every read. Only this benchmark uses them.
+- **Large files need a reason.** `npm test` now fails on a tracked file over 256 KB that isn't on the list in `tests/repo-size.test.js`, so datasets stay out of the repo.
+- **The site's rule count is right.** penthera.org said 143 readable rules: it counted the `core` pack twice and left out the fix recipes. It now says 132, as the README does, from one shared count.
+- **The docs match the code.** Corrected the benchmark figures in the methodology and `init` pages (precision 0.92, recall 0.96), the rule and reference counts, the supported versions in `SECURITY.md`, and what `--baseline`, `--offline`, the brief, active modes and exit codes do. Added the flags, the MCP tool arguments, the `ioc-pypi-2026` pack and the MongoDB advisories that had no docs, and moved shipped items out of the roadmap's plans.
+- **Docs now change with the code.** A pull request that touches the CLI, MCP tools, rules or the GitHub Action must update a doc that owns it, or say `docs: none, <reason>` in its changelog fragment. `scripts/ci/docs-gate.mjs` checks this in CI, and `npm test` fails if a `--help` flag, a subcommand or an MCP tool has no docs.
+- **Pro leaves the roadmap and the contact page.** It's on ice, so `ROADMAP.md`, `/contact` and `GOVERNANCE.md` no longer point to it. The money rule in `GOVERNANCE.md` stays. The roadmap now says the E1 tooling and the E2 to E5 drafts are drafted, not merged.
+- **E20-R2 Amendment 3.** Pass 2 stopped itself at 188 of 7,031 sites, on what looks like a
+  false alarm in the privacy detector reading the scrub's own `at <email>. Open` as an address. The
+  detector now reads whole domains and leaves our own tokens alone, `pilot-report.mjs --replay` and `--legacy-findings` report
+  counts, and a new `--pass 3` needs the registered stop reproduced, a named review bound to it, and a
+  prune. It skips those sites. From pilot round 2, text that fires the detector is withheld before
+  anything is written and counted per kind, so a fire no longer stops a run.
+  Audit figures cover non-withheld records, and one bound report joins them to the claims.
+  Trait, industry and refusal shares now carry counts and naive row-level Wilson intervals, a figure on
+  under 20 judged sites prints `under 20`, and a live start refuses any Node but v22.23.4.
+  The report prints the claims' registered row-level figures, each run's outcomes and TLS reason codes,
+  DMARC `pct` and `sp` detail, and where the two labelers differ.
+- **E20-R2 (adopted 31 Oct 2026).** Amendment 2 and the study page describe a corrected
+  replication of E20-R, a low-interaction active measurement: robots.txt at every
+  origin under RFC 9309, the exclusion list on every hop, no app page, DNS read
+  whether or not a site answers, a frozen classifier, CSP directive names, a
+  scrubbed excerpt of normal pages that is deleted after sampling, a pinned Public
+  Suffix List for the study only, a run manifest and a pilot with stop rules. The
+  page now says that stored evidence can contain addresses, and who sees it. It
+  sends nothing until the maintainer adopts it. The legacy E20 runner now works on
+  loopback only.
+
+The E20-R2 run sheet is `bench/front-door/run-sheet.md`. Runs now stop cleanly on a signal, a stop file or a changed source address, and analysis needs a clean privacy report. A failed privacy report ends in `purge`, which deletes the whole per-site file. `npm run e20r:preflight` runs the checks on the server.
+
 ## [2.1.2] - 2026-10-31
 
 ### Fixed

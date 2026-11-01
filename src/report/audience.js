@@ -9,6 +9,7 @@
  *   auditor    scope and method, confidence and provenance, egress, inconclusive
  *              probes, suppressions (who and why), loop timeline, NIS2 and OWASP
  */
+import { nothingClaim } from "./unread.js";
 import { buildReportModel, CONFIDENCE_LABELS } from "./model.js";
 import { mdInline } from "./md-escape.js";
 import { footerLines } from "./footer.js";
@@ -127,6 +128,8 @@ export function formatOwnerReport(m) {
   L.push("## In short", "");
   if (s.total === 0 && m.exitCode) {
     L.push(`Penthera checked ${md(m.target)}. ${md(m.exitNote)}`);
+  } else if (s.total === 0 && m.claim) {
+    L.push(`Penthera checked ${md(m.target)}. ${md(m.claim)}`);
   } else if (s.total === 0) {
     L.push(`Penthera checked ${md(m.target)} and found no problems in the areas it tested.`);
   } else {
@@ -137,6 +140,7 @@ export function formatOwnerReport(m) {
     if (s.info) parts.push(`${plural(s.info, "note")}`);
     L.push(`Penthera checked ${md(m.target)} and found ${parts.join(", ")}.`);
     if (s.serious) L.push("Look at the serious ones first: if they are real, an attacker could use them.");
+    else if (m.claim) L.push(md(m.claim));
     else if (!m.exitCode) L.push("Nothing here needs an emergency response.");
     if (m.exitNote) L.push(md(m.exitNote));
     if (s.seriousInTests) L.push(`${s.seriousInTests === s.serious ? (s.serious === 1 ? "It is" : "All of them are") : `${s.seriousInTests} of them ${s.seriousInTests === 1 ? "is" : "are"}`} in test or fixture files. If those values are made up, set them aside in penthera.suppress.json with a reason.`);
@@ -215,7 +219,7 @@ export function formatAuditorReport(m) {
       L.push(`| ${f.n} | ${f.fid ? code(f.fid) : "-"} | ${md(f.title)} | ${f.severity} | ${f.confidence} | ${md(f.source || "-")} / ${md(f.method || "-")} | ${when(f.collectedAt)} | ${f.location ? code(f.location) : "-"} |`);
     }
   } else {
-    L.push("No findings in the tested areas.");
+    L.push(m.claim ? md(m.claim) : "No findings in the tested areas.");
   }
   L.push("");
 
@@ -278,5 +282,5 @@ export function formatAudienceReport(result, audience, { version, footer = true 
   if (audience === "agent") return formatBrief(result.brief || buildBrief(result), { footer });
   const fmt = FORMATTERS[audience];
   if (!fmt) throw new Error(`Unknown --audience "${audience}". Use one of: ${AUDIENCES.join(", ")}.`);
-  return fmt({ ...buildReportModel(result, { version }), footer, exitCode: exitCodeOf(result), exitNote: exitNote(result) });
+  return fmt({ ...buildReportModel(result, { version }), claim: nothingClaim(result), footer, exitCode: exitCodeOf(result), exitNote: exitNote(result) });
 }

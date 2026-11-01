@@ -107,6 +107,7 @@
         "group": "The project",
         "pages": [
           "trust",
+          "claims",
           "funding/sponsor-tiers",
           "live-check-terms",
           "voice"

@@ -300,6 +300,15 @@ function cardShell(host, rescan) {
   return card;
 }
 
+// A firewall answered, so there is nothing to score: what happened, and the one next step.
+function refusedCard(report, rescan) {
+  const card = cardShell(new URL(report.url).host, rescan);
+  card.append(el("p", "card-verdict", report.verdict),
+    el("p", "card-clean", report.refused.text),
+    copyCmd("npx penthera --repo .", "refused-next-step", () => count("copy", { what: "refused-next-step" })));
+  return card;
+}
+
 function resultCard(report, rescan, openPrompt) {
   const card = cardShell(new URL(report.url).host, rescan);
   const fixes = failedChecks(report).length;
@@ -334,6 +343,7 @@ function resultCard(report, rescan, openPrompt) {
 // report as a file, and the full scan. A phone can't run npx, so it gets the
 // file and the star.
 function reportNext(report) {
+  if (report.refused) return "";
   const fixes = failedChecks(report);
   const box = el("section", "report-next");
   box.setAttribute("aria-label", "What to do next");
@@ -416,8 +426,8 @@ function renderReport(box, report, rescan) {
   const openPrompt = () => { const d = promptDialog(report); document.body.append(d); d.showModal(); };
   const time = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   const h = title(handoffTitle(report));
-  layout(box, [kicker(new URL(report.url).host, `checked ${time}`), h, handoff(report.url, failedChecks(report).length, openPrompt)],
-    resultCard(report, rescan, openPrompt), reportDetail(report));
+  layout(box, [kicker(new URL(report.url).host, `checked ${time}`), h, ...(report.refused ? [] : [handoff(report.url, failedChecks(report).length, openPrompt)])],
+    report.refused ? refusedCard(report, rescan) : resultCard(report, rescan, openPrompt), reportDetail(report));
   h.focus({ preventScroll: true });
 }
 

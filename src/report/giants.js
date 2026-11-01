@@ -30,12 +30,6 @@ export function pentheraPhrase(a) {
   return p ? (p.read ? `Penthera (${p.text})` : `Penthera: ${p.text}`) : "Penthera: not run";
 }
 
-/** The area's row text: what Penthera read, then each tool. */
-export function areaLine(a) {
-  const tools = a.tools.length ? a.tools.map(toolPhrase).join(", ") : "no other tool for this area";
-  return `${areaCovered(a) ? "covered" : "not covered"}; ${pentheraPhrase(a)}, ${tools}`;
-}
-
 /** "found by Penthera, gitleaks" for a finding that more than one tool reported, else null. */
 export function foundByText(f) {
   const by = f.foundBy || [];

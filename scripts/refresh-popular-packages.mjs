@@ -59,5 +59,5 @@ writeFileSync(OUT, gzipSync(JSON.stringify({
   description: `Top ${COUNT} most-downloaded plus all most-depended-on npm package names, interleaved by rank. Refreshed at release time by scripts/refresh-popular-packages.mjs.`,
   count: unique.length,
   names: unique,
-}, null, 0) + "\n"));
+}, null, 0) + "\n", { level: 9 }));
 console.log(`Wrote ${unique.length} names from ${SOURCE}@${meta.version} to lib/deps/popular-packages.json.gz`);

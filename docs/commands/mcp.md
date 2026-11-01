@@ -12,7 +12,7 @@ description: "penthera mcp runs Penthera as an MCP server."
 server. Your agent (Claude Code, Cursor, Codex, VS Code, Windsurf) starts it
 and calls its tools. It needs Node.js 22 or later.
 
-The commands below pin 2.1.2, so an update never reaches you unless you change the pin.
+The commands below pin 2.2.0, so an update never reaches you unless you change the pin.
 
 Always pin the version. An unpinned `npx penthera` runs whatever version is
 newest on npm each time your agent starts, which is the risk that
@@ -21,7 +21,7 @@ newest on npm each time your agent starts, which is the risk that
 **Claude Code**
 
 ```bash
-claude mcp add penthera -- npx -y penthera@2.1.2 mcp
+claude mcp add penthera -- npx -y penthera@2.2.0 mcp
 ```
 
 Add `--scope project` to write it to `.mcp.json` for the whole team.
@@ -29,7 +29,7 @@ Add `--scope project` to write it to `.mcp.json` for the whole team.
 **Codex**
 
 ```bash
-codex mcp add penthera -- npx -y penthera@2.1.2 mcp
+codex mcp add penthera -- npx -y penthera@2.2.0 mcp
 ```
 
 Or add it to `~/.codex/config.toml`:
@@ -37,7 +37,7 @@ Or add it to `~/.codex/config.toml`:
 ```toml
 [mcp_servers.penthera]
 command = "npx"
-args = ["-y", "penthera@2.1.2", "mcp"]
+args = ["-y", "penthera@2.2.0", "mcp"]
 ```
 
 **Cursor** (`.cursor/mcp.json`) and **Windsurf** (`~/.codeium/windsurf/mcp_config.json`):
@@ -47,7 +47,7 @@ args = ["-y", "penthera@2.1.2", "mcp"]
   "mcpServers": {
     "penthera": {
       "command": "npx",
-      "args": ["-y", "penthera@2.1.2", "mcp"]
+      "args": ["-y", "penthera@2.2.0", "mcp"]
     }
   }
 }
@@ -61,7 +61,7 @@ args = ["-y", "penthera@2.1.2", "mcp"]
     "penthera": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "penthera@2.1.2", "mcp"]
+      "args": ["-y", "penthera@2.2.0", "mcp"]
     }
   }
 }
@@ -94,7 +94,7 @@ Every tool is read-only. None writes a file, applies a fix, or runs a shell.
 | `scan_url` | A passive scan of a running app: TLS, headers, cookies, CORS, exposed files, OpenAPI and auth smoke checks | the target only (see below) |
 
 Each scan tool's result has the findings as structured JSON, and as text the
-[agent brief](brief.md): a verdict, what to act on, what to check first, what
+[agent brief](brief.md): a verdict, `Site not read` when a firewall refused `scan_url`, what to act on, what to check first, what
 is likely noise, what was not checked, and what to run next. The text asks the
 assistant to pass the brief on as it is and to put its own view under "My
 read". Every
@@ -122,7 +122,7 @@ true.
   you write, not the model:
 
 ```bash
-npx -y penthera@2.1.2 mcp --allow-host staging.example.com
+npx -y penthera@2.2.0 mcp --allow-host staging.example.com
 ```
 
   Only list hosts you are authorized to test. The same limit holds on every
@@ -141,8 +141,8 @@ npx -y penthera@2.1.2 mcp --allow-host staging.example.com
 ## Options
 
 ```bash
-npx -y penthera@2.1.2 mcp --offline
-npx -y penthera@2.1.2 mcp --help
+npx -y penthera@2.2.0 mcp --offline
+npx -y penthera@2.2.0 mcp --help
 ```
 
 | Flag | Meaning |

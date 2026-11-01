@@ -9,7 +9,9 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync, realpathSync } from
 import { randomUUID } from "node:crypto";
 import { scanUrl } from "./scan-url.js";
 import { scanRepo } from "./scan-repo.js";
+import { machineScanResult } from "./cli/machine-result.js";
 import { mergeResults } from "./cli/merge-results.js";
+import { reachLines, unreachableText } from "./report/reach.js";
 import { resolveScanOptions } from "./cli/profiles.js";
 import { compareWithBaseline } from "./cli/baseline.js";
 import { targetFromArg } from "./utils/url.js";
@@ -31,7 +33,7 @@ import { rateSuppliers, parseSupplierList, formatSuppliersMarkdown } from "../li
 import { bold, dim, yellow } from "./cli/ansi.js";
 import { wantBrief, wantExitNote, briefReports } from "./cli/brief.js";
 import { buildBrief, formatBrief, NOT_PROVEN_NOTE } from "./report/brief.js";
-import { exitCodeOf } from "./report/exit.js";
+import { exitCodeOf, isSevere } from "./report/exit.js";
 
 const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf-8"));
 
@@ -235,6 +237,16 @@ function initArgs(argv) {
   if (argv[0] === "init") return argv.slice(1);
   if (argv.length && argv.every((a) => ["--yes", "-y", "--dry-run"].includes(a))) return argv;
   return null;
+}
+
+/** The scan's "N may be fixable" line. It never fails a scan: without it the report is still complete. */
+async function fixLine(repo, findings) {
+  try {
+    const { fixSummary } = await import("../lib/fix/index.js");
+    return { count: fixSummary(findings), command: `penthera fix --plan --repo ${repo}` };
+  } catch {
+    return null;
+  }
 }
 
 export async function run() {
@@ -671,7 +683,7 @@ export async function run() {
       results.push(urlResult);
 
       if (!urlResult.reachable && !repo) {
-        printError(`Target unreachable: ${url}`);
+        printError(unreachableText(urlResult, url));
         process.exit(2);
       }
     }
@@ -704,16 +716,7 @@ export async function run() {
     }
 
     if (opts.machine) {
-      const { auditMachine } = await import("../lib/machine.js");
-      const machineResult = await auditMachine({ onPhase: scanOpts.onPhase });
-      results.push({
-        target: "this machine",
-        mode: "machine",
-        timestamp: new Date().toISOString(),
-        duration: 0,
-        machine: machineResult,
-        findings: machineResult.findings,
-      });
+      results.push(await machineScanResult({ onPhase: scanOpts.onPhase }));
     }
   } catch (e) {
     printError(`Scan failed: ${e.message}`);
@@ -722,6 +725,7 @@ export async function run() {
   }
 
   const merged = mergeResults(results);
+  let plainSuppressed = 0;
 
   if (aiPlan?.run) {
     const { runAiMode, attachProposals } = await import("../lib/ai/index.js");
@@ -772,6 +776,10 @@ export async function run() {
     const { applyMemoryToScan } = await import("../lib/memory/index.js");
     const { warnings } = applyMemoryToScan(merged, { repo: repo ? resolve(repo) : null, url });
     for (const w of warnings) process.stderr.write(`  \x1b[33mWARN\x1b[0m ${w}\n`);
+  } else if (url || repo) {
+    const { findingId, suppressedElsewhere } = await import("../lib/memory/index.js");
+    merged.findings = merged.findings.map((f) => ({ ...f, fid: findingId(f) })); // what `memory suppress` takes
+    plainSuppressed = suppressedElsewhere(merged.findings, { repo: repo ? resolve(repo) : null, url });
   }
 
   // Compliance framework mapping (e.g. --framework nis2)
@@ -841,7 +849,10 @@ export async function run() {
   }
 
   const mdOpts = { version: pkg.version, baseline: baselineStats, footer: !opts["no-footer"] };
-  merged.brief = buildBrief(merged, { reports: briefReports(opts) });
+  const fixes = repo ? await fixLine(repo, merged.findings) : null;
+  const reach = reachLines(results);
+  if (plainSuppressed) reach.unshift(`${plainSuppressed} finding${plainSuppressed === 1 ? " here is" : "s here are"} suppressed, but a plain scan counts everything. Add --memory to apply suppressions.`);
+  merged.brief = buildBrief(merged, { reports: briefReports(opts), fixes, limits: reach });
   const custom = customReport(merged, opts, { version: pkg.version, template: reportCtx.template });
 
   // Output
@@ -855,7 +866,7 @@ export async function run() {
     printFindings(merged.findings);
     printFindings((merged.giants?.findings || []).map((f) => ({ ...f, title: `${f.title} [${f.foundBy.join(", ")}]` })));
   } else {
-    printReport(merged, { verbose: opts.verbose });
+    printReport(merged, { verbose: opts.verbose, fixes, limit: reach.join(" ") });
   }
 
   if (opts.output) {
@@ -1011,7 +1022,8 @@ export async function run() {
   if (merged.giants?.requiredNotRun?.length) printError(`The policy file requires ${merged.giants.requiredNotRun.join(", ")}, which did not run (see Coverage by area).`);
   const code = exitCodeOf(merged);
   if (wantExitNote({ code, url, repo, opts, custom })) {
-    process.stderr.write(`  No critical or high rule fired. ${NOT_PROVEN_NOTE}\n\n`);
+    const hidden = (merged.suppressed || []).filter(isSevere).length;
+    process.stderr.write(`  ${hidden ? `${hidden} critical or high suppressed, so this exits 0.` : "No critical or high rule fired."} ${NOT_PROVEN_NOTE}\n\n`);
   }
   // Exit only once stdout has drained: on a pipe the write is asynchronous, and
   // exiting at once cut `--json` output off at the pipe buffer (64 KiB).

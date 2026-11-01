@@ -2,7 +2,7 @@
  * The agent brief (docs/research/spec-agent-brief.md): one short, fixed-shape
  * summary an AI assistant can pass on as it is. Rules fill every section:
  *
- *   Verdict       Fix now | Review | Nothing to fix | Nothing to assess, with the counts behind it
+ *   Verdict       Fix now | Review | Nothing to fix | Nothing to assess | Site not read, with the counts behind it
  *   Act on        findings that need a change, grouped by place and fix
  *   Check first   heuristic, low or dependency-capability findings
  *   Likely noise  findings demoted by a deterministic reason, one line per group
@@ -17,13 +17,16 @@ import { cleanText } from "../mcp/results.js";
 import { mdInline } from "./md-escape.js";
 import { footerLines } from "./footer.js";
 import { exitCodeOf, exitReason, isSevere } from "./exit.js";
+import { hintCommand } from "../utils/invocation.js";
+import { notRead, readNothing, siteUnread, SITE_NOT_READ } from "./unread.js";
+import { unreachableText } from "./reach.js";
 
 export const BRIEF_SCHEMA = "penthera.brief/1";
 // Exit 0 is not "safe to publish". Penthera tests these from outside; a pass shows
 // only that no rule matched, with or without a session cookie.
 export const NOT_PROVEN_NOTE = "This run does not prove login, access rules or payments are right.";
 
-export const VERDICTS = { fix: "Fix now", review: "Review", clean: "Nothing to fix", none: "Nothing to assess" };
+export const VERDICTS = { fix: "Fix now", review: "Review", clean: "Nothing to fix", none: "Nothing to assess", unread: "Site not read" };
 
 const SEV_ORDER = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
 const MAX_ITEMS = 8;
@@ -106,6 +109,14 @@ function groupFindings(list, keyOf) {
 
 const ruleOf = (f) => String(f.rule || f.templateId || f.category || "unknown");
 
+/** "critical 1, high 2" for a group of mixed severity, so its count does not read as all critical. */
+function severityMix(group) {
+  const counts = {};
+  for (const g of group) counts[g.severity] = (counts[g.severity] || 0) + 1;
+  const names = Object.keys(counts).sort((a, b) => (SEV_ORDER[a] ?? 9) - (SEV_ORDER[b] ?? 9));
+  return names.length > 1 ? names.map((n) => `${n} ${counts[n]}`).join(", ") : null;
+}
+
 function item(group) {
   const f = group[0];
   const paths = [...new Set(group.map(whereOf).filter(Boolean))];
@@ -114,6 +125,7 @@ function item(group) {
   return {
     title: text(sameWhere && titles.length > 1 ? `${paths[0]}: ${titles.length} findings` : group.length > 1 ? genericTitle(f) : f.title, 300),
     severity: f.severity,
+    mix: severityMix(group),
     confidence: f.confidence || "likely",
     count: group.length,
     where: paths.slice(0, MAX_EXAMPLES).map((p) => text(p, 300)),
@@ -158,19 +170,24 @@ function noiseGroup(group, reason) {
   };
 }
 
+const REPORTS_SKIPPED = "Folders named reports were not read, at any depth (src/reports too): Penthera treats them as its own output. Move anything else out of them to have it scanned.";
+
+const filesText = (n) => `${n} file${n === 1 ? "" : "s"}`;
+
 function coverageLines(coverage) {
   if (!coverage) return [];
   const out = [];
   for (const fam of coverage.families || []) {
     if (!fam.ran) {
-      const why = Object.entries(fam.skipped || {}).map(([k, n]) => `${n} files ${SKIP_LABELS[k] || k.replace(/-/g, " ")}`).join("; ");
+      const why = Object.entries(fam.skipped || {}).map(([k, n]) => `${filesText(n)} ${SKIP_LABELS[k] || k.replace(/-/g, " ")}`).join("; ");
       out.push(`${fam.label} did not run${why ? `: ${why}` : ""}.`);
       continue;
     }
     for (const [k, n] of Object.entries(fam.skipped || {})) {
-      if (n > 0) out.push(`${fam.label}: ${n} files ${SKIP_LABELS[k] || k.replace(/-/g, " ")} were not read.`);
+      if (n > 0) out.push(`${fam.label}: ${filesText(n)} ${SKIP_LABELS[k] || k.replace(/-/g, " ")} ${n === 1 ? "was" : "were"} not read.`);
     }
   }
+  if (coverage.excludedDirs?.includes("reports")) out.push(REPORTS_SKIPPED);
   if (coverage.truncated) out.push(`The file count stopped at ${coverage.files}; files past that were not counted.`);
   return out;
 }
@@ -186,10 +203,12 @@ function commandIn(f) {
  * scan merge into one brief).
  * @param {object|object[]} results
  * @param {{ reports?: string[], notRunCommand?: (n: object) => string }} [opts]
- *   reports: paths of the full reports, for Next; notRunCommand: how to name a
+ *   reports: paths of the full reports, for Next; fixes: what `penthera fix`
+ *   could do ({ count, command }); limits: what this kind of scan
+ *   never checks, for Not checked; moreNext: extra Next items; notRunCommand: how to name a
  *   scan that did not run (the MCP server names its tool instead of the CLI)
  */
-export function buildBrief(results, { reports = [], notRunCommand = (n) => String(n.command).replace("<path>", ".") } = {}) {
+export function buildBrief(results, { reports = [], fixes = null, limits = [], moreNext = [], notRunCommand = (n) => String(n.command).replace("<path>", ".") } = {}) {
   const list = (Array.isArray(results) ? results : [results]).filter(Boolean);
   const findings = list.flatMap((r) => r.findings || []);
   const modes = [...new Set(list.flatMap((r) => r.modes || (r.mode ? [r.mode] : [])))];
@@ -210,9 +229,14 @@ export function buildBrief(results, { reports = [], notRunCommand = (n) => Strin
   const noise = groupFindings(by.noise, (f) => `${noiseReason.get(f)}|${f.category}`)
     .map((g) => noiseGroup(g, noiseReason.get(g[0])));
 
-  const notChecked = [];
+  const notChecked = [...limits];
+  for (const r of list) for (const t of r.giants?.tools || []) if (t.status !== "ran") notChecked.push(`${t.id}: ${t.status}`);
   for (const r of list) notChecked.push(...coverageLines(r.coverage), ...(r.agents?.notChecked || []).map((l) => text(l, 300)), ...(r.notChecked || []).map((l) => text(l, 300)));
   const next = [];
+  if (fixes) {
+    const lead = fixes.count ? `${fixes.count} may be fixable. ` : "";
+    next.push({ command: text(fixes.command, 200), why: `${lead}It also checks cookie flags, CORS and rate limits in your code` });
+  }
   for (const f of by.info) {
     const cmd = commandIn(f);
     if (cmd) next.push({ command: text(cmd, 200), why: text(f.title, 200) });
@@ -224,15 +248,32 @@ export function buildBrief(results, { reports = [], notRunCommand = (n) => Strin
       if (!modes.includes(n.id)) next.push({ command: text(notRunCommand(n), 200), why: `${text(n.label, 100)} was not part of this run` });
     }
   }
+  next.push(...moreNext);
+  for (const r of list) if (r.challenge) notChecked.unshift(`${SITE_NOT_READ} ${siteUnread(r).text}`);
   if (!notChecked.length) notChecked.push("The scan reported nothing it skipped. No finding is still not proof of safety: Penthera reports what its rules match.");
 
   const actHigh = act.some((i) => i.severity === "critical" || i.severity === "high");
   if (!actHigh && modes.some((m) => m === "repo" || m === "url")) notChecked.unshift(NOT_PROVEN_NOTE);
-  // A null grade means the agents audit read nothing: no finding there is no result.
-  const nothingRead = list.length > 0 && !findings.length && list.every((r) => r.agents?.grade === null);
+  const nothingRead = list.length > 0 && findings.every((f) => f.severity === "info") && list.every(readNothing);
+  // A 403 with no firewall's name on it may still be a firewall's page, so it can't read as clean.
+  const forbidden = list.filter((r) => r.httpStatus === 403 && !r.challenge);
+  const partly = list.some((r) => notRead(r)?.partly);
+  for (const r of forbidden) notChecked.unshift(`${r.target} answered HTTP 403, which may be a firewall's page, so a clean result may say nothing about the site.`);
   // The verdict never reads as clean on a run that fails: it and the exit code agree.
   const exitCode = Math.max(0, ...list.map(exitCodeOf));
-  const verdict = actHigh ? VERDICTS.fix : act.length || check.length || exitCode ? VERDICTS.review : nothingRead ? VERDICTS.none : VERDICTS.clean;
+  // A firewall answered instead of the site, so nothing here describes it. The exit code doesn't move.
+  const unread = list.some(siteUnread);
+  // A target that was down or answered with a server error says nothing about the site either.
+  const unreachable = list.flatMap((r) => (r.siteUnread ? [r.siteUnread] : r.mode === "url" && r.reachable === false ? [r] : []));
+  for (const r of unreachable) notChecked.unshift(`${unreachableText(r, r.target)} The site was not checked.`);
+  // A suppressed finding still exists, so an empty list here is not a clean one.
+  const hidden = list.flatMap((r) => r.suppressed || []);
+  const hiddenSevere = hidden.filter(isSevere).length;
+  const hiddenText = `${hidden.length} suppressed${hiddenSevere ? ` (${hiddenSevere} critical or high)` : ""}`;
+  // First in the list, because the brief prints only the first few.
+  if (hidden.length) notChecked.unshift(`${hiddenText}: not counted here. Review them with \`penthera memory show --repo .\` and penthera.suppress.json.`);
+  const quiet = hidden.length ? hiddenText : VERDICTS.clean;
+  const verdict = actHigh ? VERDICTS.fix : unread ? VERDICTS.unread : act.length || check.length || exitCode || forbidden.length || partly ? VERDICTS.review : nothingRead ? VERDICTS.none : quiet;
 
   return {
     schema: BRIEF_SCHEMA,
@@ -240,11 +281,12 @@ export function buildBrief(results, { reports = [], notRunCommand = (n) => Strin
     exit_code: exitCode,
     exit_reason: exitCode === 2 || !actHigh ? exitReason(list) : null,
     target: text(targets.join(", "), 500),
-    scanned: modes,
+    scanned: unread ? modes.filter((m) => m !== "url") : modes,
     counts: {
       act: by.act.length,
       check: by.check.length,
       noise: by.noise.length,
+      suppressed: hidden.length,
       info: by.info.length,
       total: findings.length,
     },
@@ -290,7 +332,7 @@ export function formatBrief(b, { footer = false } = {}) {
       const where = whereText(i);
       const count = i.count > 1 && i.where.length > 1 ? ` (${i.count} findings)` : "";
       const tail = [i.why && md(i.why), i.fix && `Fix: ${md(i.fix)}`, i.rules.map(code).join(", ")].filter(Boolean).join(" ");
-      L.push(`${n + 1}. **${md(i.title)}**${count} [${i.severity}]${where ? ` in ${where}` : ""}. ${tail}`);
+      L.push(`${n + 1}. **${md(i.title)}**${count} [${i.mix || i.severity}]${where ? ` in ${where}` : ""}. ${tail}`);
     });
     if (b.act_on.length > MAX_ITEMS) L.push(`${b.act_on.length - MAX_ITEMS} more in the full report.`);
     L.push("");
@@ -299,7 +341,7 @@ export function formatBrief(b, { footer = false } = {}) {
     L.push("### Check first", "");
     for (const i of b.check_first.slice(0, MAX_ITEMS)) {
       const where = whereText(i);
-      L.push(`- **${md(i.title)}**${i.count > 1 ? ` (${i.count})` : ""} [${i.severity}, ${i.confidence}]${where ? ` in ${where}` : ""}.${i.why ? ` ${md(i.why)}` : ""}`);
+      L.push(`- **${md(i.title)}**${i.count > 1 ? ` (${i.count})` : ""} [${i.mix || i.severity}, ${i.confidence}]${where ? ` in ${where}` : ""}.${i.why ? ` ${md(i.why)}` : ""}`);
     }
     if (b.check_first.length > MAX_ITEMS) L.push(`- ${b.check_first.length - MAX_ITEMS} more in the full report.`);
     L.push("");
@@ -318,7 +360,7 @@ export function formatBrief(b, { footer = false } = {}) {
   L.push("");
   if (b.next.length || b.reports.length) {
     L.push("### Next", "");
-    for (const n of b.next) L.push(`- ${code(n.command)}: ${md(n.why)}`);
+    for (const n of b.next) L.push(`- ${code(hintCommand(n.command))}: ${md(hintCommand(n.why))}`);
     if (b.reports.length) L.push(`- Full report${b.reports.length > 1 ? "s" : ""}: ${b.reports.map(code).join(", ")}`);
     L.push("");
   }

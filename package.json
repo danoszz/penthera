@@ -1,6 +1,6 @@
 {
   "name": "penthera",
-  "version": "2.1.2",
+  "version": "2.2.0",
   "type": "module",
   "description": "Offline cyber security agent for your apps and AI coding tools. Open R&D: measured in public, improved every release.",
   "repository": {
@@ -23,7 +23,6 @@
     "skills",
     "docs/examples",
     "scripts/rules",
-    "pentest.config.example.js",
     "LICENSE",
     "README.md",
     "SECURITY.md"
@@ -100,6 +99,7 @@
   "license": "MIT",
   "devDependencies": {
     "@eslint/js": "10.0.1",
+    "acorn": "8.19.0",
     "ajv": "^8.20.0",
     "eslint": "10.13.0",
     "fast-check": "^4.10.2",

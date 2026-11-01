@@ -152,7 +152,75 @@ describe("whitebox routes and shell execs", () => {
     expect(routes.map((r) => r.url)).toEqual(["/run"]);
     expect(routes[0].securityPatterns).toContain("RISK:command-injection");
     const result = await scanRepo(dir);
-    expect(result.findings.map((f) => f.title)).toContain("command-injection in /run");
+    expect(result.findings.filter((f) => f.pattern === "command-injection").map((f) => f.description)).toEqual([expect.stringContaining("This file serves 1 route: /run.")]);
+  });
+
+  it("reports a whole-file pattern once and lists its routes", async () => {
+    const dir = repo("whole-file", {
+      "routes/tools.js": [
+        "import { exec } from 'node:child_process';",
+        "app.get('/a', (req, res) => res.send('a'));",
+        "app.get('/b', (req, res) => res.send('b'));",
+        "app.get('/run', (req, res) => { exec(`ping ${req.query.host}`); });",
+        "app.get('/size', (req, res) => { eval(req.query.x); });",
+        "",
+      ].join("\n"),
+    });
+    const code = (await scanRepo(dir)).findings.filter((f) => f.category === "code-pattern");
+    expect(code.filter((f) => f.pattern === "command-injection")).toHaveLength(1);
+    expect(code.filter((f) => f.pattern === "eval")).toHaveLength(1);
+    expect(code.find((f) => f.pattern === "eval").description).toContain("This file serves 4 routes: /a, /b, /run, /size.");
+  });
+
+  it("does not let a weaker sink finding lower a route's severity", async () => {
+    const dir = repo("weak-sink", {
+      "package.json": JSON.stringify({ name: "pinger", version: "1.0.0", main: "index.js", peerDependencies: { express: "^4" } }),
+      "index.js": "const { exec } = require('child_process');\nfunction run(cmd, cb) { exec(cmd, cb); }\napp.get('/ping', (req, res) => run('ping ' + req.query.host, () => res.end()));\nmodule.exports = { run };\n",
+    });
+    const severities = (await scanRepo(dir)).findings.filter((f) => f.pattern === "command-injection").map((f) => f.severity);
+    expect(severities).toContain("critical");
+  });
+
+  it("reports a pattern the sink scan does not cover once, with the routes", async () => {
+    const dir = repo("innerhtml", {
+      "routes/page.js": "app.get('/a', (q, r) => r.send(el.innerHTML));\napp.get('/b', (q, r) => r.send('b'));\n",
+    });
+    const code = (await scanRepo(dir)).findings.filter((f) => f.pattern === "innerHTML");
+    expect(code).toHaveLength(1);
+    expect(code[0].description).toContain("serves 2 routes: /a, /b");
+  });
+
+  it("reads a file of unclosed imports in linear time", () => {
+    const dir = repo("planted-imports", { "server.js": `const express = require('express');\n${"import { ".repeat(300_000)}` });
+    const start = Date.now();
+    discoverFrameworkRoutes(dir);
+    expect(Date.now() - start).toBeLessThan(3_000);
+  }, 60_000);
+
+  it("keeps the mount prefix on a router's routes", () => {
+    const dir = repo("mounted", {
+      "server.js": [
+        "import express from 'express';",
+        "import tools from './routes/tools.js';",
+        "import { admin as boss } from './routes/admin.js';",
+        "const users = require('./routes/users');",
+        "const app = express();",
+        "app.use('/api/tools', tools);",
+        "app.use('/api/', users);",
+        "app.use('/api/admin', boss);",
+        "app.use('/v2', require('./routes/nested/index.js'));",
+        "app.get('/health', (req, res) => res.send('ok'));",
+        "",
+      ].join("\n"),
+      "routes/tools.js": "import { Router } from 'express';\nconst router = Router();\nrouter.get('/calc', (q, r) => r.end());\nrouter.get('/', (q, r) => r.end());\nexport default router;\n",
+      "routes/admin.js": "import { Router } from 'express';\nexport const admin = Router();\nadmin.get('/all', (q, r) => r.end());\n",
+      "routes/users.js": "const router = require('express').Router();\nrouter.post('/users/:id', (q, r) => r.end());\nmodule.exports = router;\n",
+      "routes/nested/index.js": "const router = require('express').Router();\nrouter.use('/deep', require('./leaf.js'));\nmodule.exports = router;\n",
+      "routes/nested/leaf.js": "const router = require('express').Router();\nrouter.get('/x', (q, r) => r.end());\nmodule.exports = router;\n",
+    });
+    expect(discoverFrameworkRoutes(dir).map((r) => r.url).sort()).toEqual([
+      "/api/admin/all", "/api/tools", "/api/tools/calc", "/api/users/:id", "/health", "/v2/deep/x",
+    ]);
   });
 
   it("tells a shell exec from a regex exec", () => {

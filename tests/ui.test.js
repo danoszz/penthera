@@ -10,7 +10,7 @@ import { request as httpRequest } from "node:http";
 import { execFileSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, symlinkSync, rmSync, realpathSync, existsSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { startUiServer, loadStatic, STATIC_DIR } from "../src/ui/server.js";
 import { CSP, hostAllowed, originAllowed, createSession } from "../src/ui/security.js";
@@ -627,6 +627,26 @@ describe("ui runs: authorization and the approval flow", () => {
     expect(events.some((e) => e.type === "fix" && e.data.status === "verified")).toBe(true);
     expect(mgr.get(run.id).status).toBe("stopped");
     expect(saved).toHaveLength(1);
+  });
+
+  it("scans again after a loop that fixed something, and carries the verdict", async () => {
+    const loopRun = { stopReason: "no-fixable-findings", error: null, totals: { iterations: 1, verified: 2 }, findings: {}, branch: { fix: "penthera/fix-x" }, durationMs: 5, iterations: [] };
+    const reports = [];
+    const mgr = createRunManager({
+      runLoop: async () => loopRun, loopVerdict: () => ({ clean: false, headline: "2 fixed, 1 critical left." }),
+      executeScan: async () => ({ merged: { findings: [] } }), writeReport: (merged, name) => { reports.push(name); return name; },
+      saveLoopRun: () => "loop.json", settings: () => ({ offline: true }), projectRoots: roots,
+    });
+    const run = mgr.start({ kind: "loop", repo: join(root, "repo") });
+    await new Promise((done) => mgr.subscribe(run.id, 0, (ev) => { if (!ev) done(); }));
+    expect(reports).toHaveLength(1);
+    expect(mgr.get(run.id).summary.verdict.headline).toBe("2 fixed, 1 critical left.");
+  });
+
+  it("forgets a waiting diff when a run ends or the view leaves it, so a replay opens no approval", () => {
+    const center = readFileSync(resolve("src/ui/static/js/center.js"), "utf-8");
+    expect(center.match(/export function stopStream\(\) \{[^}]*\}/)[0]).toMatch(/pending = null;/);
+    expect(center.slice(center.indexOf('case "status": {'), center.indexOf("closeApproval();", center.indexOf('case "status": {')))).toMatch(/pending = null;/);
   });
 
   it("cleanLine strips terminal escapes and control characters", () => {

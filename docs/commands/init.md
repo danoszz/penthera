@@ -173,6 +173,10 @@ The pinned SHA is the last release tagged before this version
 (`ACTION_PIN` in `src/cli/onboarding.js`); Dependabot's `github-actions`
 updates keep it current in your repo.
 
+Known limit: `init` pins v2.1.2, the release before this one, and that version's
+`deps` can stall on big bundles under Node 22. If a workflow run hangs there, move
+the pin in your workflow to v2.2.0. `init` picks that up with the next release.
+
 Known issue: in every release from 1.5.0 to 2.0.0, the action's `mode: deps`
 exits before it scans, and the job still reports success, with no comment and
 no SARIF. 2.1.0-rc.1 has the fix, and `init` writes a pin to a release that has it. A workflow

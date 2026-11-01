@@ -28,11 +28,11 @@ import { safeEnv, SAFE_CONFIG } from "../../lib/git.js";
 
 export const ALLOWED_SUBCOMMANDS = Object.freeze([
   "rev-parse", "symbolic-ref", "status", "diff", "log", "show-ref", "checkout", "add", "commit", "config",
-  "check-ignore", "reset",
+  "check-ignore", "reset", "branch",
 ]);
 
 /** Subcommands that change the work tree, the index or refs. */
-export const WRITE_SUBCOMMANDS = Object.freeze(["checkout", "add", "commit", "reset"]);
+export const WRITE_SUBCOMMANDS = Object.freeze(["checkout", "add", "commit", "reset", "branch"]);
 
 /** GIT_CONFIG_COUNT/KEY_n/VALUE_n arrived in git 2.31: below it, filters cannot be emptied. */
 export const MIN_WRITE_VERSION = Object.freeze([2, 31]);
@@ -69,6 +69,10 @@ export function assertAllowed(args) {
     if (typeof a !== "string") throw new GitPolicyError("git: arguments must be strings");
     if (sub === "commit" && rest[i - 1] === "-m") continue; // a commit message is text, not an option
     if (FORBIDDEN_ARGS.some((re) => re.test(a))) throw new GitPolicyError(`git ${sub}: argument ${JSON.stringify(a)} is not allowed`);
+  }
+  // `branch` only removes a merged branch: the loop's own, when it stayed empty.
+  if (sub === "branch" && !(rest.length === 2 && rest[0] === "-d" && !rest[1].startsWith("-"))) {
+    throw new GitPolicyError("git branch: only `branch -d <name>` is allowed");
   }
   // `config` may only read one key; it never writes repo or global config.
   if (sub === "config" && !(rest.length === 2 && rest[0] === "--get" && /^[\w.-]+$/.test(rest[1]))) {
@@ -217,4 +221,32 @@ export function createGit(cwd, { exec = execFileSync, env = process.env } = {}) 
     }
   };
   return { run, tryRun };
+}
+
+/**
+ * Parse `git status --porcelain=v1 -z` into [{ xy, path }]. Paths are taken
+ * verbatim (no C-quoting in -z mode), made relative to `prefix` when the repo
+ * is a subdirectory of the work tree; a rename lists both of its paths.
+ */
+export function parseStatusZ(out, prefix = "") {
+  const parts = String(out || "").split("\0");
+  const entries = [];
+  const rel = (p) => (prefix && p.startsWith(prefix) ? p.slice(prefix.length) : p);
+  for (let i = 0; i < parts.length; i++) {
+    const e = parts[i];
+    if (e.length < 4) continue;
+    const xy = e.slice(0, 2);
+    entries.push({ xy, path: rel(e.slice(3)) });
+    if (/[RC]/.test(xy) && i + 1 < parts.length) entries.push({ xy, path: rel(parts[++i]) });
+  }
+  return entries;
+}
+
+/**
+ * Penthera's own untracked scan reports (reports/, where `penthera ui` and a
+ * scan write them) are not the user's work in progress: a fix commits only the
+ * files it changes, so they can stay.
+ */
+export function isOwnReport({ xy, path }) {
+  return xy === "??" && path.startsWith("reports/");
 }

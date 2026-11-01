@@ -106,8 +106,8 @@ export function createApi({ source, runs, version, settings, maxStreams = MAX_ST
       return r;
     }],
     ["GET", /^\/api\/env$/, (_m, q) => source.env(String(q.get("project") || ""))],
-    ["GET", /^\/api\/deps$/, () => source.deps()],
-    ["GET", /^\/api\/ai$/, () => source.ai()],
+    ["GET", /^\/api\/deps$/, (_m, q) => source.deps(q.get("project") || undefined)],
+    ["GET", /^\/api\/ai$/, (_m, q) => source.ai(q.get("project") || undefined)],
     ["GET", /^\/api\/memory$/, () => ({ projects: source.memory() })],
     ["GET", /^\/api\/evidence$/, () => ({ bundles: source.evidence() })],
     ["POST", /^\/api\/evidence\/verify$/, async (_m, _q, body) => {

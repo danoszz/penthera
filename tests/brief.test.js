@@ -63,6 +63,50 @@ describe("agent brief: buckets", () => {
     expect(sum(b.likely_noise)).toBe(c.noise);
   });
 
+  it("does not roll a file's findings under its worst severity", () => {
+    const finding = (severity, title) => ({ severity, title, file: "routes/auth.js", category: "code-pattern", confidence: "high" });
+    const b = buildBrief({ target: "/repo", mode: "repo", findings: [finding("critical", "SQL string"), finding("high", "Weak hash"), finding("high", "Open redirect")] });
+    const [only] = b.act_on;
+    expect(only.count).toBe(3);
+    expect(only.mix).toBe("critical 1, high 2");
+    expect(formatBrief(b)).toContain("[critical 1, high 2]");
+    const same = buildBrief({ target: "/repo", mode: "repo", findings: [finding("high", "Weak hash")] });
+    expect(formatBrief(same)).toContain("[high]");
+  });
+
+  it("never reads as clean when findings were suppressed", () => {
+    const suppressed = [{ severity: "critical", title: "Key", fid: "a", suppression: { source: "repo-file" } }, { severity: "low", title: "Low", fid: "b", suppression: {} }];
+    const b = buildBrief({ target: "/repo", mode: "repo", findings: [], suppressed });
+    expect(b.verdict).toBe("2 suppressed (1 critical or high)");
+    expect(b.counts.suppressed).toBe(2);
+    expect(formatBrief(b)).toContain("**Penthera: 2 suppressed (1 critical or high).**");
+    expect(b.not_checked.join(" ")).toMatch(/penthera memory show --repo \./);
+  });
+
+  it("says the site was not read when it was down or answered 5xx", () => {
+    for (const [httpStatus, says] of [[undefined, /Target unreachable/], [503, /Target answered HTTP 503/]]) {
+      const b = buildBrief([
+        { target: "https://shop.example", mode: "url", reachable: false, httpStatus, findings: [] },
+        { target: "/repo", mode: "repo", findings: [] },
+      ]);
+      expect(b.verdict).toBe(VERDICTS.unread);
+      expect(b.not_checked.join(" ")).toMatch(says);
+    }
+  });
+
+  it("keeps a suppressed critical on a refused scan, past the Not checked cap", () => {
+    const suppressed = [{ severity: "critical", title: "Key", fid: "a", suppression: {} }];
+    const coverage = { excludedDirs: [], families: Array.from({ length: 12 }, (_, i) => ({ id: `f${i}`, label: `Family ${i}`, ran: false, skipped: {} })) };
+    const b = buildBrief([{ target: "https://shop.example", mode: "url", challenge: { provider: "Vercel" }, findings: [] }, { target: "/repo", mode: "repo", findings: [], suppressed, coverage }]);
+    expect(b.verdict).toBe(VERDICTS.unread);
+    expect(formatBrief(b)).toContain("1 suppressed (1 critical or high): not counted here.");
+  });
+
+  it("names reports/ when the scan skipped it", () => {
+    const b = buildBrief({ target: "/repo", mode: "repo", findings: [], coverage: { excludedDirs: ["node_modules", "reports"], families: [] } });
+    expect(b.not_checked.join(" ")).toMatch(/Folders named reports were not read, at any depth/);
+  });
+
   it("groups one fix in one file, and one rule across many files", () => {
     const b = buildBrief(MONOREPO);
     const nvmrc = b.act_on.find((i) => i.where[0] === ".nvmrc");

@@ -16,11 +16,30 @@ here.
 
 | npm tag | Version | Install |
 |---|---|---|
-| `latest` | 2.1.2 (2026-10-31) | `npx penthera` |
+| `latest` | 2.2.0 (2026-11-01) | `npx penthera` |
 
-## Now: 2.1.2
+## Now: 2.2.0
 
-2.1.2 is on npm's `latest` tag since 2026-10-31. It's a patch release.
+2.2.0 is on npm's `latest` tag since 2026-11-01. It makes what Penthera already said true: it reports what it read, what it fixed and what is left, on every surface. No new benchmark claims.
+
+| In 2.2.0 | What it means for you |
+|---|---|
+| An honest fix loop | `agent --loop` exits 1 while a critical or high finding remains, and its ending says what was fixed, what is left and which branch you're on |
+| A site Penthera couldn't read reads that way | The verdict is `Site not read`, with no grade, in the CLI, dashboard, live check, reports and `scan_url` |
+| A CSP has to control scripts | A policy that names no script sources, or allows any host, gets its own finding. The live check's score moves to `scoreVersion` 2 |
+| Mail checks survive a firewall | A refused scan still reports SPF and DMARC. Shared platform domains are skipped with a note |
+| `deps` no longer stalls on big bundles | Long comments took minutes under Node 22. A file it can't read in full says so, and never reads as clean |
+| Safer fixes | Plans show changed lines only and mask secrets, recipes add a start-up check for a missing env var, and your own `reports/` folder no longer blocks a fix |
+| A shorter first visit to the dashboard | Setup is two screens, and a problem with no automatic fix offers a prompt for your coding agent |
+| Every scan says what it reached | Checks that didn't run are named, and `--repo --deep` says how many routes it reached |
+
+Nine exit codes change: see [Upgrading from 2.1](CHANGELOG.md#upgrading-from-21).
+
+Known limits: `penthera init` pins v2.1.2, which carries the `deps` stall under Node 22, until the next release, so move the pin in your workflow to v2.2.0 if you see it. The dashboard has no coverage line. A firewall's challenge on a 200 with no firewall header still gets a grade. Real Windows and Safari are untested.
+
+## Before: 2.1.2
+
+2.1.2 was on npm's `latest` tag from 2026-10-31. It was a patch release.
 
 | In 2.1.2 | What it means for you |
 |---|---|

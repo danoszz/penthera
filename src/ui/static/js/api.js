@@ -4,6 +4,8 @@
 // then carries it as `Authorization: Bearer`. No cookie: cookies are not bound
 // to a port, so every other server on 127.0.0.1 would receive one.
 
+import { ERR } from "./copy.js";
+
 const SESSION_KEY = "penthera-ui-session";
 let sid = null;
 
@@ -35,6 +37,9 @@ function headers(extra = {}) {
   return sid ? { ...extra, Authorization: `Bearer ${sid}` } : extra;
 }
 
+/** A fetch that never reached the server: this tab outlived penthera ui. */
+const stopped = () => { throw new ApiError(ERR.stopped, 0); };
+
 async function call(method, path, body, auth = true) {
   const base = body === undefined ? { Accept: "application/json" } : { Accept: "application/json", "Content-Type": "application/json" };
   const res = await fetch(path, {
@@ -43,7 +48,7 @@ async function call(method, path, body, auth = true) {
     cache: "no-store",
     headers: auth ? headers(base) : base,
     body: body === undefined ? undefined : JSON.stringify(body),
-  });
+  }).catch(stopped);
   let data = null;
   try { data = await res.json(); } catch { /* empty or not JSON */ }
   if (!res.ok) throw new ApiError(data?.error || `${res.status} ${res.statusText}`, res.status);
@@ -52,7 +57,7 @@ async function call(method, path, body, auth = true) {
 
 /** Fetch a file the API serves as an attachment and hand it to the browser as a download. */
 async function download(path) {
-  const res = await fetch(path, { credentials: "omit", cache: "no-store", headers: headers() });
+  const res = await fetch(path, { credentials: "omit", cache: "no-store", headers: headers() }).catch(stopped);
   if (!res.ok) {
     let data = null;
     try { data = await res.json(); } catch { /* not JSON */ }

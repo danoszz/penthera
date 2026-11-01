@@ -13,12 +13,16 @@
  * Weights for a site that passes everything (sum, so a clean site scores 100):
  *   transport 42 (https 22, hsts 12, tls 4, cert 4)
  *   headers   36 (csp 14, framing 8, nosniff 8, referrer 4, permissions 2) + csp-scripts 4, cors 4 when present
+ *             csp passes only on a policy that controls scripts, and csp-scripts reads only such a policy
  *   disclosure 6, cookies 8 when cookies are set
  *   page      secrets 14, libraries 8, mixed-content 6 (https only), sri 4 and
  *             source-maps 2 (only when there is something to judge)
  *   email     dmarc 4, spf 3, caa 2;  contact: security-txt 3
  */
-import { auditSecurityHeaders } from "../../lib/blackbox/headers.js";
+import { auditSecurityHeaders, CSP_NO_SCRIPTS, cspControlsScripts, cspLimitsFraming, cspScriptSources } from "../../lib/blackbox/headers.js";
+
+// 2: a CSP passes only when it controls scripts, so no wildcard. Scores from version 1 aren't comparable on `csp`.
+export const SCORE_VERSION = 2;
 
 /** The share of weight that passed, under the caps. */
 export function scoreOf(checks) {
@@ -95,7 +99,7 @@ export function grade(res, { now = Date.now(), extra = [], scope } = {}) {
     id: "https", weight: 22, category: "transport", passed: secure,
     severity: "high", title: secure ? "Served over HTTPS" : "No HTTPS: pages travel in cleartext",
     evidence: secure ? "" : `Final address: ${url}`,
-    fix: "Serve the site over HTTPS only and redirect http:// to https://. Most hosts (Vercel, Netlify, Cloudflare) do this with one setting.",
+    fix: "Serve the site over HTTPS only and redirect http:// to https://. Vercel does this for you. On Cloudflare, turn on Always Use HTTPS. On other hosts, set the redirect in your host or server.",
     verify: curl(url.replace(/^https?:/, "http:"), "location"),
   });
   if (secure) {
@@ -129,27 +133,30 @@ export function grade(res, { now = Date.now(), extra = [], scope } = {}) {
   }
 
   // ── Browser protections and disclosure, from the CLI's rules ───────────
-  const cli = auditSecurityHeaders(headers, url, {});
+  const cli = auditSecurityHeaders(headers, url, { liveResponse: true });
   for (const [title, c] of Object.entries(FROM_CLI)) {
-    const missing = cli.some((f) => f.title === title);
+    const noScripts = c.id === "csp" && cli.some((f) => f.title === CSP_NO_SCRIPTS);
+    const missing = noScripts || cli.some((f) => f.title === title);
     // A CSP frame-ancestors directive does the job of X-Frame-Options.
-    const framedByCsp = c.id === "framing" && /frame-ancestors/i.test(get(headers, "content-security-policy"));
+    const framedByCsp = c.id === "framing" && !get(headers, c.header) && cspLimitsFraming(get(headers, "content-security-policy"));
     const severity = { csp: "medium", framing: "low", nosniff: "low", referrer: "info", permissions: "info" }[c.id];
     add({
       id: c.id, weight: c.weight, category: c.category, passed: !missing || framedByCsp, severity,
-      title: !missing || framedByCsp ? title.replace("Missing ", "") + " set" : title,
-      evidence: !missing ? `${c.header}: ${get(headers, c.header).slice(0, 160)}` : framedByCsp ? "frame-ancestors in the CSP" : `No ${c.header} header`,
+      title: noScripts ? CSP_NO_SCRIPTS : !missing || framedByCsp ? title.replace("Missing ", "") + " set" : title,
+      evidence: framedByCsp ? "frame-ancestors in the CSP" : !missing || noScripts ? `${c.header}: ${get(headers, c.header).slice(0, 160)}` : `No ${c.header} header`,
       fix: c.fix, verify: curl(url, c.header),
     });
   }
   const csp = get(headers, "content-security-policy");
-  if (csp) {
-    const script = /script-src([^;]*)/i.exec(csp)?.[1] ?? /default-src([^;]*)/i.exec(csp)?.[1] ?? "";
-    const unsafe = /'unsafe-inline'|'unsafe-eval'/.test(script) && !/'nonce-|'sha(256|384|512)-|'strict-dynamic'/.test(script);
+  if (csp && cspControlsScripts(csp)) {
+    const lists = cspScriptSources(csp);
+    const allows = (sources) => sources.some((s) => s === "'unsafe-inline'" || s === "'unsafe-eval'") && !sources.some((s) => /^'(?:nonce-|sha(?:256|384|512)-|strict-dynamic')/.test(s));
+    const unsafe = lists.every(allows);
+    const script = lists[0].join(" ");
     add({
       id: "csp-scripts", weight: 4, category: "headers", passed: !unsafe, severity: "low",
       title: unsafe ? "CSP allows inline or eval'd scripts" : "CSP restricts scripts",
-      evidence: unsafe ? `script-src${script.trim() ? " " + script.trim().slice(0, 120) : ""}` : "",
+      evidence: unsafe ? `script-src ${script.slice(0, 120)}` : "",
       fix: "Drop 'unsafe-inline' and 'unsafe-eval' from script-src; use nonces or hashes for the inline scripts you need.",
       verify: curl(url, "content-security-policy"),
     });
@@ -194,6 +201,7 @@ export function grade(res, { now = Date.now(), extra = [], scope } = {}) {
   const score = scoreOf(checks);
   return {
     url,
+    scoreVersion: SCORE_VERSION,
     status: res.status,
     redirects: (res.hops || []).slice(0, -1).map((h) => h.url),
     score,

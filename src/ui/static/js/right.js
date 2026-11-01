@@ -4,7 +4,7 @@ import { h, clear, empty, sevBadge, diffBlock } from "./dom.js";
 import { api } from "./api.js";
 import { state, set, simple, countsInView, currentProject } from "./state.js";
 import { halftone, riskLevel } from "./charts.js";
-import { SEVERITIES, shortProject } from "./format.js";
+import { SEVERITIES, keyParts, shortProject, unticked } from "./format.js";
 import { EMPTY, KEYS, SEV_WORD, AI, VERIFY } from "./copy.js";
 
 let seq = 0;
@@ -39,14 +39,18 @@ function emptyView(el, ctx) {
   const counts = countsInView();
   const risk = riskLevel(counts);
   const said = counts ? SEVERITIES.filter((s) => counts[s]).map((s) => `${counts[s]} ${s}`).join(", ") : "";
+  // A site we couldn't read has no open findings, and that must not read as clear.
+  const key = currentProject();
+  const unread = (state.overview?.projects || []).some((p) => p.unread && (!key || p.key === key));
+  const nothing = key && !unread && (state.overview?.projects || []).some((p) => p.key === key && p.score == null && !p.suppressed);
   clear(el).append(
     head("Inspector", ctx, null, false),
     h("div", { class: "pane-body detail inspector-empty" },
-      h("p", { class: "prose" }, EMPTY.inspector),
+      h("p", { class: "prose" }, simple() ? EMPTY.inspectorSimple : EMPTY.inspector),
       simple() ? null : h("section", {}, h("p", { class: "label" }, "Keys"), h("dl", { class: "kv" }, KEYS.flatMap(([k, v]) => [h("dt", {}, h("kbd", {}, k)), h("dd", {}, v)]))),
       // The field: dark with dots when something serious is open, plain paper when nothing is.
-      halftone({ risk, seed: currentProject() || "all projects", label: risk ? `Open risk: ${said}` : "Nothing open" }),
-      h("p", { class: "muted field-note" }, risk ? "The darker this field, the more serious what is open." : "Nothing open: the field is clear."),
+      halftone({ risk, seed: currentProject() || "all projects", label: unread || nothing ? "Not read" : risk ? `Open risk: ${said}` : "Nothing open" }),
+      h("p", { class: "muted field-note" }, unread && !counts?.critical && !counts?.high ? "Not everything was read, so this field says nothing about the rest." : nothing ? "The check read nothing here, so this field says nothing about it." : risk ? "The darker this field, the more serious what is open." : counts && state.overview?.projects?.length ? "Nothing open: the field is clear." : "Nothing checked yet."),
     ),
   );
 }
@@ -64,7 +68,7 @@ async function findingView(el, ctx, my) {
   if (my !== seq) return;
   const x = d.explain || {};
   const section = (label, ...body) => h("section", {}, h("p", { class: "label" }, label), ...body);
-  const canFix = d.fix && f.project.startsWith("/");
+  const canFix = d.fix && keyParts(f.project).folder;
   if (simple()) {
     const isNote = d.severity === "info";
     // Plain words first, one action, the detail folded away.
@@ -77,7 +81,7 @@ async function findingView(el, ctx, my) {
         h("div", { class: "plain plate", "aria-label": "In plain words" },
           d.description ? h("p", {}, h("b", {}, isNote ? "What it found :: " : "What is wrong :: "), d.description) : null,
           isNote ? null : h("p", {}, h("b", {}, "How sure :: "), sure),
-          isNote ? null : d.remediation || x.fixText ? h("p", {}, h("b", {}, "What to do :: "), d.remediation || x.fixText) : null,
+          isNote ? null : d.remediation || x.fixText ? h("p", {}, h("b", {}, "What to do :: "), unticked(d.remediation || x.fixText)) : null,
           isNote ? null : h("p", {}, h("b", {}, "Check the fix :: "), VERIFY)),
         canFix
           ? h("div", { class: "actions start" }, h("button", { type: "button", class: "btn primary", onclick: () => ctx.newScan("loop", f.project) }, "Fix it for me…"),
@@ -121,7 +125,7 @@ async function findingView(el, ctx, my) {
       d.fix ? section("Fix recipe",
         h("p", {}, h("span", { class: "chip" }, d.fix.recipe), ` :: ${d.fix.title}`),
         diffBlock(d.fix.diff),
-        f.project.startsWith("/") ? h("div", { class: "actions" }, h("button", { type: "button", class: "btn primary", onclick: () => ctx.newScan("loop", f.project) }, "Fix it with the loop…")) : null)
+        keyParts(f.project).folder ? h("div", { class: "actions" }, h("button", { type: "button", class: "btn primary", onclick: () => ctx.newScan("loop", f.project) }, "Fix it with the loop…")) : null)
         : section("Fix recipe", h("p", { class: "muted" }, "No recipe matches. Fix it by hand, or run the loop with a local model (--fix-model) from the CLI.")),
     ),
   );

@@ -223,6 +223,8 @@ function secretRepo(file) {
   });
 }
 const testsFail = async () => ({ ok: false, exitCode: 1, durationMs: 1, output: "fail" });
+// Green before any fix, red after: the suite the fix broke.
+const failsAfterFirst = () => { let calls = 0; return async () => ({ ok: ++calls === 1, exitCode: calls === 1 ? 0 : 1, durationMs: 1, output: "fail" }); };
 const testsPass = async () => ({ ok: true, exitCode: 0, durationMs: 1, output: "" });
 const secretFix = (run) => run.iterations.flatMap((i) => i.fixes).find((f) => f.recipe === "secret-to-env");
 const loopOpts = (repo, extra) => ({ repo, memoryRoot: tempDir(), maxIterations: 1, runTests: true, ask: async () => "y", ...extra });
@@ -233,7 +235,7 @@ describe("agent loop: the user's uncommitted work survives", () => {
     const repo = secretRepo(file);
     appendFileSync(join(repo, file), USER_WORK);
     const before = readFileSync(join(repo, file), "utf-8");
-    const run = await runLoop(loopOpts(repo, { allowDirty: true, deps: { runTests: testsFail } }));
+    const run = await runLoop(loopOpts(repo, { allowDirty: true, deps: { runTests: failsAfterFirst() } }));
     expect(secretFix(run)).toMatchObject({ status: "not-applied", reason: expect.stringMatching(/uncommitted changes/) });
     expect(readFileSync(join(repo, file), "utf-8")).toBe(before);
   });
@@ -242,7 +244,7 @@ describe("agent loop: the user's uncommitted work survives", () => {
     const file = "src/config.js";
     const repo = secretRepo(file);
     const ask = async () => { appendFileSync(join(repo, file), USER_WORK); return "y"; };
-    const run = await runLoop(loopOpts(repo, { allowDirty: true, ask, deps: { runTests: testsFail } }));
+    const run = await runLoop(loopOpts(repo, { allowDirty: true, ask, deps: { runTests: failsAfterFirst() } }));
     expect(secretFix(run)).toMatchObject({ status: "not-applied", reason: expect.stringMatching(/uncommitted changes/) });
     expect(readFileSync(join(repo, file), "utf-8")).toContain(USER_WORK);
   });
@@ -250,7 +252,8 @@ describe("agent loop: the user's uncommitted work survives", () => {
   it("(C) file saved during verification: a failing fix is not reverted over it", async () => {
     const file = "src/config.js";
     const repo = secretRepo(file);
-    const runTests = async () => { appendFileSync(join(repo, file), USER_WORK); return testsFail(); };
+    let runs = 0;
+    const runTests = async () => { if (++runs === 1) return { ok: true, exitCode: 0, durationMs: 1, output: "" }; appendFileSync(join(repo, file), USER_WORK); return testsFail(); };
     const run = await runLoop(loopOpts(repo, { deps: { runTests } }));
     expect(secretFix(run)).toMatchObject({ status: "conflict", reason: expect.stringMatching(/changed after the fix was written: src\/config\.js/) });
     expect(readFileSync(join(repo, file), "utf-8")).toContain(USER_WORK);
@@ -260,7 +263,8 @@ describe("agent loop: the user's uncommitted work survives", () => {
   it("(C) file saved during verification: a passing fix is not committed with it", async () => {
     const file = "src/config.js";
     const repo = secretRepo(file);
-    const runTests = async () => { appendFileSync(join(repo, file), USER_WORK); return testsPass(); };
+    let runs = 0;
+    const runTests = async () => { if (++runs === 1) return { ok: true, exitCode: 0, durationMs: 1, output: "" }; appendFileSync(join(repo, file), USER_WORK); return testsPass(); };
     const run = await runLoop(loopOpts(repo, { deps: { runTests } }));
     expect(secretFix(run)).toMatchObject({ status: "conflict", commit: null });
     expect(run.totals.commits).toEqual([]);

@@ -190,6 +190,8 @@ describe("scan_url", () => {
     expectShape(r, "scan_url");
     expect(r.profile).toBe("quick");
     expect(r.limits[0]).toMatch(/No injection payloads/);
+    // The brief says so too: this scan sent no injection probes.
+    expect(r.brief.not_checked.join(" ")).toMatch(/No injection probes were sent/);
     expect(r.findings.some((f) => f.location?.url?.startsWith("http://127.0.0.1"))).toBe(true);
   }, 60_000);
 

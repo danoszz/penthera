@@ -47,6 +47,9 @@ this computer forwards port 11434 elsewhere. Each consent is logged to
 `~/.penthera/consent.jsonl` on this computer only, and never used to skip a
 question.
 
+The dashboard keeps one thing between restarts: the word Simple or Advanced, in
+`~/.penthera/ui.json`. It holds no paths and nothing about a project.
+
 ### Fully local: `--offline`
 
 ```bash
@@ -56,7 +59,7 @@ penthera http://localhost:3000 --offline
 With `--offline`, the HTTP client refuses every host except the scan target. A redirect may only move to a host on the target's registrable domain (`example.com` to `www.example.com`). In practice:
 
 - **Recon is skipped.** No queries go to crt.sh, the Wayback Machine or OTX.
-- **The Retire.js database comes from the snapshot vendored in the package** (`lib/data/retire-jsrepository.json.gz`), refreshed at each release by `scripts/refresh-retire-db.mjs`. The source URL, fetch date and SHA-256 sit next to it in `retire-jsrepository.meta.json`, so you can check it against upstream. Online scans fall back to the snapshot too when the live download fails.
+- **The Retire.js database comes from the snapshot vendored in the package** (`lib/data/retire-jsrepository.json.gz`), refreshed by `scripts/refresh-retire-db.mjs`. The source URL, fetch date and SHA-256 sit next to it in `retire-jsrepository.meta.json`, so you can check it against upstream. Online scans fall back to the snapshot too when the live download fails.
 - **Third-party scripts are not fetched.** A refused request is listed in the report as an inconclusive probe, not passed over silently.
 - **`--suppliers` is refused**, because it rates third-party domains.
 - **DNS:** reaching a remote target needs DNS. The SPF, DMARC and MX lookups of the email check are skipped with `--offline`. A `localhost` or IP target needs no DNS at all.

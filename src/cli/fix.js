@@ -13,7 +13,7 @@ import { parseArgs } from "node:util";
 import { resolve } from "node:path";
 import { readFileSync, existsSync, statSync } from "node:fs";
 import { scanRepo } from "../scan-repo.js";
-import { planFixes, probeRepo, redactPlan, applyDiff, findingKey, createModelFixer } from "../../lib/fix/index.js";
+import { planFixes, probeRepo, redactPlan, applyDiff, assertCleanTree, findingKey, createModelFixer } from "../../lib/fix/index.js";
 import { bold, dim, green, red, yellow, cyan } from "./ansi.js";
 
 const HELP = `
@@ -29,7 +29,7 @@ const HELP = `
                              instead of a fresh repo scan
         --fix-model <name>   Ask a local Ollama model (127.0.0.1:11434 only) when no recipe
                              matches. Off by default; output needs human review
-        --json               Print plans as JSON (secrets masked)
+        --json               Print plans as JSON (recognised secrets masked)
         --yes                Approve the diff without the y/N prompt (for --apply)
         --dry-run            Check that the diff applies, write nothing
         --allow-dirty        Apply even with uncommitted changes in the repo
@@ -163,7 +163,7 @@ export async function runFix(argv) {
     for (const r of refused) process.stdout.write(`\n  ${yellow("Refused")} the model's fix for ${visible(r.finding.title)}: ${visible(r.reason)}\n`);
     const manual = unmatched.filter((f) => f.severity !== "info");
     if (manual.length) {
-      process.stdout.write(`\n  ${dim(`${manual.length} finding${manual.length === 1 ? "" : "s"} without a recipe; fix by hand (see the report's action plan)${model ? "" : " or try --fix-model <name>"}:`)}\n`);
+      process.stdout.write(`\n  ${dim(`${manual.length} finding${manual.length === 1 ? "" : "s"} without a recipe; fix by hand (\`penthera --repo . -o report.json\` writes an action plan)${model ? "" : " or try --fix-model <name>"}:`)}\n`);
       for (const f of manual.slice(0, 20)) process.stdout.write(`    [${visible(f.severity)}] ${visible(f.title)}\n`);
     }
     if (plans.length) process.stdout.write(`\n  Apply one:  penthera fix --apply <id>${opts.repo ? ` --repo ${opts.repo}` : ""}${opts.input ? ` -o ${opts.input}` : ""}\n\n`);
@@ -176,6 +176,15 @@ export async function runFix(argv) {
     process.exit(2);
   }
   printPlan(redactPlan(plan));
+  // Ask only about a change that can happen.
+  if (!opts["allow-dirty"]) {
+    try {
+      assertCleanTree(repo);
+    } catch (e) {
+      process.stderr.write(`  ${red("Not applied")} ${e.message}\n`);
+      process.exit(2);
+    }
+  }
   if (!opts["dry-run"] && !(await approve(plan, opts))) process.exit(1);
 
   let result;

@@ -10,6 +10,9 @@
 import { findingId } from "../../../lib/memory/views.js";
 import { gradeFindings } from "../../../lib/agents/grade.js";
 import { buildReportModel, CONFIDENCE_LABELS } from "../../report/model.js";
+import { createHash } from "node:crypto";
+import { notRead, siteUnread } from "../../report/unread.js";
+import { keyParts } from "../static/js/format.js";
 
 export const SEVERITIES = ["critical", "high", "medium", "low", "info"];
 const SEV_RANK = Object.fromEntries(SEVERITIES.map((s, i) => [s, i]));
@@ -91,6 +94,80 @@ export function groupScans(scans) {
   return byProject;
 }
 
+/**
+ * One row per app, so one app counts once. A folder is an app. An address joins a folder only
+ * when that folder alone uses it: two folders on one address are two apps, and when it's unsure
+ * they stay apart. Only a later check that reached everything an earlier one did replaces it, so
+ * a narrower check never hides a wider one's problems. Of the rows left, the worst counts.
+ */
+function newestPerApp(tallied) {
+  const owners = new Map();
+  for (const t of tallied) {
+    const { url, folder } = keyParts(t.key);
+    if (url && folder) owners.set(url, new Set(owners.get(url)).add(folder));
+  }
+  const apps = new Map();
+  for (const t of tallied) {
+    const { url, folder } = keyParts(t.key);
+    const shared = owners.get(url);
+    const app = folder || (shared?.size === 1 ? [...shared][0] : t.key);
+    apps.set(app, [...(apps.get(app) || []), t]);
+  }
+  const rank = (t) => t.c.critical * 1e6 + t.c.high * 1e3 + actionable(t.c);
+  // Within an app the only wider row is one with both parts, and an unread site reached nothing there.
+  const widerThan = (a, b) => { const { url, folder } = keyParts(a.key); return Boolean(url && folder) && a.key !== b.key && !a.siteUnread && a.at > b.at; };
+  return [...apps.values()].map((rows) => rows
+    .filter((t) => !rows.some((o) => widerThan(o, t)))
+    .sort((a, b) => rank(b) - rank(a) || b.at - a.at)[0]);
+}
+
+/** What a landed fix left for its owner in one folder, once each, oldest first. It stays until they mark it done. */
+export function ownerDuties(loops, folder, realOf = (p) => p) {
+  const texts = new Set();
+  for (const r of loops) {
+    const l = r.data?.loopRun || r.data || {};
+    if (!folder || !l.target?.repo || realOf(l.target.repo) !== folder) continue;
+    for (const f of (l.iterations || []).flatMap((it) => it.fixes || [])) {
+      if (f.status === "verified") for (const a of f.ownerActions || []) texts.add(str(a, 400));
+    }
+  }
+  return [...texts].map((text) => ({ text, id: createHash("sha256").update(`${folder}\n${text}`).digest("hex").slice(0, 16) }));
+}
+
+/** A project made of audits alone: its code was never read, so it has no grade. */
+function onlyAudits(data) {
+  const what = { deps: "your dependencies", agents: "your AI tools", "deps+agents": "your dependencies and AI tools", "agents+deps": "your dependencies and AI tools" }[data.mode];
+  if (!what) return null;
+  return { noCode: true, title: `Only ${what} were checked.`, text: "Your code wasn't, so there's no grade yet." };
+}
+
+/**
+ * Scan reports with each folder's latest deps and AI audit added, so a project's verdict, list and
+ * findings cover what those audits found. They join every scan of the series, so they never read
+ * as new or fixed. A folder with only audits becomes a project of its own.
+ * @param {Function} folderOf  a report's data to its absolute folder, or "" for a URL
+ */
+export function withAudits(scans, audits, folderOf) {
+  const latest = new Map();
+  for (const r of audits) latest.set(folderOf(r.data), { ...latest.get(folderOf(r.data)), [r.data.mode]: r });
+  const auditFindings = (e) => [e.deps, e.agents].flatMap((r) => r?.data.findings || []);
+  const covered = new Set();
+  const merged = scans.map((r) => {
+    const folder = folderOf(r.data);
+    const e = latest.get(folder);
+    if (!e) return r;
+    covered.add(folder);
+    return { ...r, data: { ...r.data, findings: [...(r.data.findings || []), ...auditFindings(e)], ...(e.deps ? { deps: e.deps.data.deps } : {}), ...(e.agents ? { agents: e.agents.data.agents } : {}) } };
+  });
+  for (const [folder, e] of latest) {
+    if (covered.has(folder)) continue;
+    const parts = [e.deps, e.agents].filter(Boolean).sort((a, b) => (time(a.data.timestamp) ?? a.mtime) - (time(b.data.timestamp) ?? b.mtime));
+    const newest = parts[parts.length - 1];
+    merged.push({ ...newest, data: { target: folder, mode: parts.map((p) => p.data.mode).join("+"), timestamp: newest.data.timestamp, findings: auditFindings(e), ...(e.agents ? { agents: e.agents.data.agents } : {}), ...(e.deps ? { deps: e.deps.data.deps } : {}) } });
+  }
+  return merged;
+}
+
 /** Findings that disappeared between consecutive reports, with how long they lived. */
 export function fixedBetween(series) {
   const firstSeen = new Map();
@@ -118,23 +195,24 @@ export function postureGrade(c) {
  * time to fix, egress hosts, last scans.
  * @param {{ scans: object[], memory: object[] }} input  scans: [{ file, mtime, data }]
  */
-export function buildOverview({ scans = [], memory = [], runs = [] }) {
+export function buildOverview({ scans = [], memory = [], runs = [], duties = () => [], nothingToFix = () => false }) {
   const groups = groupScans(scans);
   const projects = [];
   const mix = { critical: 0, high: 0, medium: 0, low: 0, info: 0 };
   const ttf = [];
-  let open = 0;
-  let fixed = 0;
+  const tallied = [];
 
   for (const [key, series] of groups) {
     const latest = series[series.length - 1];
     const c = counts(latest.data.findings);
-    for (const s of SEVERITIES) mix[s] += c[s];
     const gone = fixedBetween(series);
     ttf.push(...gone);
-    open += actionable(c);
-    fixed += gone.length;
-    const mem = memory.find((m) => matchesProject(m.label, key));
+    // The run counts a fix when it lands, the scans once a later one misses it. Whichever is further.
+    const mem = memory.find((m) => matchesProject(m.label, key) || matchesProject(m.label, keyParts(key).folder));
+    const done = Math.max(gone.length, mem?.verifiedFixes || 0);
+    tallied.push({ key, c, gone: done, at: time(latest.data.timestamp) ?? latest.mtime, siteUnread: Boolean(siteUnread(latest.data)) });
+    const unread = notRead(latest.data) || onlyAudits(latest.data);
+    const hidden = Array.isArray(latest.data.suppressed) ? latest.data.suppressed : [];
     const trend = series.length > 1 || !mem?.trend?.length
       ? series.slice(-12).map((r) => ({ ts: r.data.timestamp, ...counts(r.data.findings) }))
       : mem.trend;
@@ -144,17 +222,36 @@ export function buildOverview({ scans = [], memory = [], runs = [] }) {
       lastScan: latest.data.timestamp || null,
       counts: c,
       open: actionable(c),
-      fixed: gone.length,
+      fixed: done,
       ...postureGrade(c),
-      // An agents audit that read nothing has no grade to show.
-      ...(latest.data.agents?.grade === null ? { grade: "–", score: null } : {}),
+      // What wasn't read has no grade to show, whatever else was.
+      // Reading the rest can only lower a grade, so a bad one stands on what was read.
+      ...(unread && !(unread.partly && (c.critical || c.high)) ? { grade: "–", score: null } : {}),
+      // A suppressed critical or high finding still exists, so an A would be false.
+      ...(hidden.some((x) => ["critical", "high"].includes(x.severity)) ? { grade: "–", score: null } : {}),
+      unread,
+      suppressed: hidden.length,
+      duties: duties(key),
+      nothingToFix: Boolean(nothingToFix(key, time(latest.data.timestamp) ?? latest.mtime)),
       trend: trend.map((t) => ({ ts: t.ts, total: actionable(t), critical: t.critical, high: t.high })),
       memory: mem ? { events: mem.events, chain: mem.chain, medianTimeToFixDays: mem.medianTimeToFixDays } : null,
     });
   }
   projects.sort((a, b) => b.counts.critical - a.counts.critical || b.counts.high - a.counts.high || a.key.localeCompare(b.key));
 
+  // One app has a row per way it was checked, and each row holds the same problems.
+  const counted = newestPerApp(tallied);
+  let open = 0;
+  let fixed = 0;
+  for (const t of counted) {
+    for (const s of SEVERITIES) mix[s] += t.c[s];
+    open += actionable(t.c);
+    fixed += t.gone;
+  }
+
   for (const m of memory) {
+    // A store can outlive its project, and its fixes aren't this dashboard's.
+    if (![...groups.keys()].some((k) => matchesProject(m.label, k) || matchesProject(m.label, keyParts(k).folder))) continue;
     if (m.medianTimeToFixMs != null) ttf.push(m.medianTimeToFixMs);
     fixed = Math.max(fixed, m.verifiedFixes || 0);
   }
@@ -196,6 +293,8 @@ export function buildOverview({ scans = [], memory = [], runs = [] }) {
     mix,
     open,
     fixed,
+    apps: counted.length,
+    counted: counted.map((t) => t.key),
     timeToFix: {
       medianDays: ttfDays.length ? Math.round(median(ttfDays) * 10) / 10 : null,
       buckets: bucketDays(ttfDays),

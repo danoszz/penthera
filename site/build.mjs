@@ -25,7 +25,7 @@ import { parseArgs } from "node:util";
 import { build } from "rolldown";
 import { bundledPackDirs, activePacks, loadSigners, NAMESPACE } from "../lib/rules/index.js";
 import { verifyWithSigners } from "../lib/rules/sshsig.js";
-import { COUNTS } from "../scripts/docs-numbers.mjs";
+import { COUNTS, totalRules } from "../scripts/docs-numbers.mjs";
 import { agentFiles, docPages, fill, REPO } from "./agents.mjs";
 import { jsonLd } from "./agent-ready.mjs";
 import { landingPages, landingHtml, landingMarkdown } from "./landing.mjs";
@@ -132,17 +132,16 @@ function ruleNumbers() {
  * site/example.json (written by site/tools/example.mjs), and the rule counts
  * behind it. Fix recipes are not counted as rules.
  */
-export function exampleValues(packRules) {
+export function exampleValues(packs) {
   const e = JSON.parse(readFileSync(join(SITE, "example.json"), "utf8"));
   const f = e.finding, u = new URL(f.url);
   const sum = ["critical", "high", "medium", "low"].filter((s) => e.counts[s]).map((s) => `<span class="nowrap">${e.counts[s]} ${s}</span>`);
-  const rules = COUNTS.urlTemplates + COUNTS.secretPatterns + COUNTS.capabilities + COUNTS.agentRules + packRules;
   return {
     EX_CMD: esc(e.command), EX_SUM: sum.join(" · "), EX_INFO: String(e.counts.info),
     EX_CHECKS: String(e.checks), EX_REQ: String(e.requests), EX_HOST: esc(u.hostname),
     EX_SEV: f.severity.toUpperCase(), EX_TITLE: esc(f.title), EX_DESC: esc(f.description), EX_CONF: esc(f.confidence),
     EX_EVIDENCE: esc(`GET ${decodeURIComponent(u.pathname + u.search)}`), EX_STATUS: String(f.status),
-    RULES_ALL: String(rules), REFS: String(COUNTS.references),
+    RULES_ALL: String(totalRules(packs)), REFS: String(COUNTS.references),
     PKGS: (COUNTS.popularNpm + COUNTS.popularPypi).toLocaleString("en-US"),
   };
 }
@@ -525,7 +524,7 @@ export async function buildSite({ out = join(SITE, "dist"), engine, blogDir = jo
     CHECK_KB: String(kb(checkBytes)),
     ...benchNumbers(),
     ...ruleNumbers(),
-    ...exampleValues(packs.reduce((n, p) => n + p.count, 0)),
+    ...exampleValues(packs),
     ...e10Values(),
     EX_CARD: exampleCardHtml(await exampleCheck()),
     STARS: await starCount(),

@@ -29,8 +29,9 @@ export const rowTag = (c) => (c.passed ? "OK" : TAG[c.severity] || c.severity);
 
 /** The headline next to a result, above the hand-off. */
 export function handoffTitle(report) {
+  if (report.refused) return report.verdict;
   const n = failedChecks(report).length;
-  if (!n) return "Nothing to fix from the outside.";
+  if (!n) return report.status === 403 ? "It answered 403, which may be a firewall's page. Check it does for you too." : "Nothing to fix from the outside.";
   return n === 1 ? "1 thing to fix. Your coding agent can help." : `${n} things to fix. Your coding agent can help.`;
 }
 
@@ -41,7 +42,7 @@ export function handoffTitle(report) {
 export function reportMarkdown(report, date = new Date().toISOString().slice(0, 10)) {
   const failed = failedChecks(report);
   const passed = report.checks.filter((c) => c.passed);
-  const lines = [`# Penthera quick check: ${report.url}`, "", `${report.score}/100. ${report.verdict}. Checked ${date}.`, "", report.scope, ""];
+  const lines = [`# Penthera quick check: ${report.url}`, "", `${report.refused ? `${report.verdict}. ${report.nextStep}` : `${report.score}/100. ${report.verdict}`}. Checked ${date}.`, "", report.scope, ""];
   if (failed.length) lines.push(`## ${failed.length} to fix, most severe first`, "");
   for (const c of failed) {
     lines.push(`### ${c.title} (${c.severity})`, "");

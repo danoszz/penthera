@@ -8,6 +8,20 @@ description: "Ask your agent to fix what Penthera finds."
 
 ## Scan and fix
 
+Plans show changed lines only, with `… N lines unchanged` in place of the rest, so
+a secret beside a change is never printed. Open the file for context. Changed lines
+mask what Penthera can recognise, in text and `--json`: key blocks, known token
+shapes, URL passwords, `?key=` values, and values next to a word like "password".
+A secret in another shape on a changed line can still show. `redacted: true` means
+a changed line was masked. The diff that gets applied is the real one. The dashboard's
+approval window also shows the unchanged lines around a fix, with the same masks, on
+your local screen only.
+
+A repo scan ends with `N may be fixable: penthera fix --plan --repo <path>`. The
+count is the scan's findings a recipe could take. `penthera fix` also checks cookie
+flags, CORS and rate limits in your code, which do not change a scan's findings or
+exit code.
+
 Ask your agent to fix what Penthera finds. It detects the issue, applies a framework-aware fix to your code (shown as a diff for you to approve), and re-scans to prove it is resolved.
 
 ```
@@ -42,7 +56,7 @@ How it stays safe:
 - **A fix never edits its own checker.** A diff from a recipe or a local model may not touch tests (`test/`, `tests/`, `__tests__/`, `*.test.*`, `*.spec.*`, `conftest.py`), test runner config or the test script (`vitest.*`, `jest.*`, `playwright.*`, `pytest.ini`, `pyproject.toml`, `setup.cfg`, `tox.ini`, `package.json`), Penthera's own files (`penthera.*` such as the policy, suppressions and lock, `audit/baseline.json`, `.penthera/`), `.github/workflows/`, git hooks (`.husky/`, `.githooks/`, lefthook, pre-commit), lockfiles or `.gitmodules`. Such a diff is refused with `PROTECTED` before anything is written, and `fix` prints it as refused. If the real fix needs one of those files changed, make that change by hand.
 - **Conservative edits.** No AST rewriting: each recipe edits at an anchor it recognizes exactly (`const app = express()`, the exported Next.js config object, a one-line `res.cookie(...)`). If the anchor isn't there, or the code already does something custom (an existing `headers()`, cookie options in a variable), the recipe returns no plan instead of a risky diff.
 - **Owner actions are listed, not done.** A recipe can move a secret out of the code but can never rotate it, so every secret fix says "rotate this secret". Other recipes flag what is still on you, such as tightening the starter CSP or setting `CORS_ALLOWED_ORIGINS`.
-- **Secrets stay masked.** The secret's value is masked in printed and `--json` plans.
+- **The flagged secret stays masked.** Its value is masked in printed and `--json` plans.
 - **Verified.** After `--apply`, Penthera re-scans the repo and says whether each finding is gone. Headers, cookies, CORS and rate limits are checked statically from source, so re-run your URL scan to confirm against the live app.
 
 No recipe for a finding? `--fix-model <name>` can ask a model running in [Ollama](https://ollama.com) on `127.0.0.1:11434`, and nowhere else. It is off by default and only used when no recipe matches. Its diffs are labeled `needs-human-review`.

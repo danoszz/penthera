@@ -172,7 +172,7 @@ export async function scanRepo(repoPath, opts = {}) {
       result.findings.push({
         severity: "medium",
         title: `Public endpoint without rate limiting: ${route.url}`,
-        description: `Calls ${route.externalCalls.join(", ")} \u2014 abuse/cost vector`,
+        description: `This route's file calls ${route.externalCalls.join(", ")}, so abuse can cost you money.`,
         url: route.url,
         category: "rate-limiting",
         source: "trust-boundary",
@@ -205,29 +205,52 @@ export async function scanRepo(repoPath, opts = {}) {
   progress("Detecting risky code patterns...");
   const risky = findRiskyRoutes(result.attackSurface);
 
+  // These patterns match a whole file, so a file with six routes gets one
+  // finding, not six: nothing says which route holds the sink.
+  const SEVERITIES = ["critical", "high", "medium", "low", "info"];
+  const sevMap = {
+    eval: "high",
+    innerHTML: "high",
+    "command-injection": "critical",
+    "error-leak": "low",
+    "cors-wildcard": "medium",
+    "json-parse-unguarded": "low",
+  };
+  const perFile = new Map();
+  // The sink scan reads these files too, and it can tell what reaches the sink.
+  const sinks = new Map(result.findings.filter((f) => f.category === "code-pattern").map((f) => [`${f.file}|${f.pattern}`, f]));
   for (const route of risky) {
-    const risks = route.securityPatterns.filter((p) => p.startsWith("RISK:"));
-    for (const risk of risks) {
+    for (const risk of route.securityPatterns.filter((p) => p.startsWith("RISK:"))) {
       const name = risk.replace("RISK:", "");
-      const sevMap = {
-        eval: "high",
-        innerHTML: "high",
-        "command-injection": "critical",
-        "error-leak": "low",
-        "cors-wildcard": "medium",
-        "json-parse-unguarded": "low",
-      };
-      result.findings.push({
-        severity: sevMap[name] || "medium",
+      const file = repoRelative(route.filePath);
+      const key = `${file}|${name}`;
+      if (perFile.has(key)) {
+        perFile.get(key).routes.add(route.url);
+        continue;
+      }
+      const severity = sevMap[name] || "medium";
+      // A sink finding stands in for the route's only if it says as much, or a real bug would lose its severity.
+      if (sinks.has(key) && SEVERITIES.indexOf(sinks.get(key).severity) <= SEVERITIES.indexOf(severity)) {
+        perFile.set(key, { sink: sinks.get(key), routes: new Set([route.url]) });
+        continue;
+      }
+      const finding = {
+        severity,
         title: `${name} in ${route.url}`,
-        description: `Detected in ${route.filePath}`,
         url: route.url,
-        file: repoRelative(route.filePath),
+        file,
         pattern: name,
         category: "code-pattern",
         source: "static-analysis",
-      });
+      };
+      perFile.set(key, { finding, routes: new Set([route.url]), filePath: route.filePath });
+      result.findings.push(finding);
     }
+  }
+  for (const { finding, sink, routes, filePath } of perFile.values()) {
+    const list = `${routes.size} route${routes.size === 1 ? "" : "s"}: ${[...routes].slice(0, 10).join(", ")}`;
+    if (sink) sink.description = `${sink.description} This file serves ${list}.`;
+    else finding.description = routes.size > 1 ? `Detected in ${filePath}, which serves ${list}. The pattern matches the file, not one route.` : `Detected in ${filePath}`;
   }
 
   // Check: more public than admin routes is a smell

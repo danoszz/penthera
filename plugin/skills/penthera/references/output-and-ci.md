@@ -26,6 +26,8 @@ Reports should go in `reports/` (gitignored). Do not write scan artifacts into `
 | `1` | Critical or high findings detected (other tools' too, with `--giants`) |
 | `2` | Scan failed (unreachable target, missing path, bad config, a tool the policy requires did not run) |
 
+A firewall's refusal isn't a failed scan: the verdict is `Site not read`, and the exit code follows what Penthera could still read, so it can be 0. In a GitHub Action, the gate step prints a warning for this. Don't treat a green job as a check of that site.
+
 Use exit codes in CI to fail builds on severe findings:
 
 ```yaml

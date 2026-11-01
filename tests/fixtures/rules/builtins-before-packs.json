@@ -148,6 +148,10 @@
       "flags": "i"
     },
     {
+      "source": "\\b(?:ignore|disregard|forget)\\b[^.\\n]{0,30}\\bthe user\\b",
+      "flags": "i"
+    },
+    {
       "source": "\\b(?:you|assistant|claude|agent|model|ai|llm)\\b[^.\\n]{0,30}\\b(?:must|should|shall|will|are to|need to|have to)\\b",
       "flags": "i"
     },
@@ -168,7 +172,7 @@
       "flags": "i"
     },
     {
-      "source": "\\b(?:send|upload|post|exfiltrat\\w*|transmit|forward|copy)\\b[^\\n]{0,60}(?:https?:\\/\\/|\\btokens?\\b|\\bsecrets?\\b|\\bapi keys?\\b|\\bcredentials?\\b|\\.env\\b|\\bssh\\b|\\bpasswords?\\b)",
+      "source": "\\b(?:send|upload|post|exfiltrat\\w*|transmit|forward|copy)\\b[^\\n]{0,60}(?:https?:\\/\\/|\\btokens?\\b|\\bsecrets?\\b|\\bapi keys?\\b|\\bcredentials?\\b|\\.env\\b|\\benv(?:ironment)?\\s+(?:files?|var(?:iable)?s?)\\b|\\bssh\\b|\\bpasswords?\\b)",
       "flags": "i"
     },
     {

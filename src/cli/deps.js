@@ -14,6 +14,13 @@ import { exitCodeOf } from "../report/exit.js";
 import { prepareReportOptions, customReport, writeEvidence } from "./report-outputs.js";
 import { compareWithBaseline } from "./baseline.js";
 
+const KNOWN_VULNS_LIMIT = "Known vulnerabilities: this checks what packages can do, not CVE databases. `penthera --repo . --giants` runs osv-scanner if you have it.";
+
+function notInstalledLimit(deps) {
+  const missing = deps?.notInstalled?.length || 0;
+  return missing ? [`${missing} of ${deps.total} packages are not installed, so their code was not read. Run your install command first.`] : [];
+}
+
 /**
  * Scan-command flags that mean nothing for a dependency scan. Rejected rather
  * than ignored: a flag that silently does nothing reads as a check that ran.
@@ -111,14 +118,17 @@ export async function runDeps(args, opts, { version }) {
       process.stderr.write(`\n  Baseline: ${comparison.stats.newCount} new, ${comparison.stats.resolvedCount} resolved, ${comparison.stats.unchangedCount} unchanged\n\n`);
     }
   }
-  merged.brief = buildBrief(merged, { reports: briefReports(opts) });
+  merged.brief = buildBrief(merged, {
+    reports: briefReports(opts), limits: [KNOWN_VULNS_LIMIT, ...notInstalledLimit(result.deps)],
+    moreNext: [{ command: "penthera --repo . --giants", why: "Runs osv-scanner for known vulnerabilities, if you have it installed" }],
+  });
   const custom = customReport(merged, opts, { version, template: reportCtx.template });
 
   if (opts.json) console.log(JSON.stringify(merged, null, 2));
   else if (custom && !opts.markdown) process.stdout.write(custom);
   else if (wantBrief(opts)) process.stdout.write(formatBrief(merged.brief));
   else if (opts.quiet) printFindings(merged.findings);
-  else printReport(merged, { verbose: opts.verbose });
+  else printReport(merged, { verbose: opts.verbose, limit: KNOWN_VULNS_LIMIT });
 
   const footer = !opts["no-footer"];
   const mdOpts = { version, baseline: baselineStats, footer };

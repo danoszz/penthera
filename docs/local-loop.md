@@ -88,6 +88,8 @@ Each of these has a test in `tests/agent.test.js`.
   `http://127.0.0.1:11434`.
 - **Clean start.** A dirty tree (untracked files included), a detached HEAD, a
   repo without commits, or a directory that is not a git repo is refused.
+  `.gitignore` and the wizard's workflow file don't count, because the wizard
+  leaves them for you to commit.
   `--allow-dirty` lets the loop start anyway, but it never patches a file that
   has uncommitted changes; this is checked again right before each write and
   each commit. Plans that touch untracked or git-ignored files are skipped.
@@ -139,7 +141,7 @@ Every step carries `startedAt` and `durationMs`.
             | "user-quit" | "interrupted" | "error",
   error,                                     // message when stopReason is "error"
   gaveUp: [{ fid, title, reason }],          // findings the loop could not fix; not retried this run
-  findings: { initial, final },              // non-info, unsuppressed
+  findings: { initial, final, left, suppressed },        // initial, final: non-info, unsuppressed; left: the last scan by severity, suppressed included
   totals: { iterations, planned, applied, verified, failed, declined, skipped, commits: [sha] },
   memory: { projectId, chain: "ok" | "broken", eventsAppended },
   iterations: [{
@@ -165,9 +167,21 @@ Every step carries `startedAt` and `durationMs`.
 The same object, without `testOutput` and with finding ids in place of finding
 objects, is appended to memory as a `loop_run` event.
 
-Exit codes: `0` nothing fixable left, `1` fixable findings remain (declined,
-failed, or out of iterations) or the loop stopped on an error, `2` the loop could not start (dirty tree,
-detached HEAD, bad options), `130` interrupted.
+Exit codes, the same bar as a plain scan, so suppressed findings count: `0`
+nothing fixable left and no critical or high finding left, `1` any critical or high finding remains, fixable findings
+remain (declined, failed, or out of iterations), or the loop stopped on an
+error, `2` the loop could not start (dirty tree, detached HEAD, bad options),
+`130` interrupted.
+
+With `--run-tests` the suite runs once before any fix. If it already fails, the
+loop says so and judges fixes by re-scan only, so a red suite blames no fix. A run
+you stop reverts the fix in flight and does not record it as failed. A run with no
+fixes goes back to your branch and removes its empty fix branch.
+
+The summary starts with how the run really ended, for example
+`Not done: 6 fixed, 2 critical, 1 high left.` When findings are suppressed, it
+says how many and how to review them, because they still fail the run. The dashboard shows the same line,
+then scans the project again so its project view shows the fixes.
 
 ## The learning store
 
@@ -224,6 +238,17 @@ keys sorted. The first line's `prev` is derived from the project id.
 From these, `penthera memory show` derives four views: recipe success rate per
 framework, active suppressions, probe ranking by yield per stack, and median
 time to fix (first seen in a scan to `fix_verified`).
+
+### Where a suppression applies
+
+| Suppressed in | Who it covers | Applied by |
+|---|---|---|
+| Local memory | You, on this machine | `--memory` scans, `agent --loop` |
+| `penthera.suppress.json` | Everyone with the repo | `--memory` scans, `agent --loop`, the pre-commit hook |
+
+A plain scan applies neither, so CI stays strict. It still says how many of its
+findings are suppressed. The loop lists suppressed findings as left, and they
+count toward its exit code. Every finding's id is in the report and `--json`.
 
 ### How a scan uses it
 

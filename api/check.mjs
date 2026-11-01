@@ -19,7 +19,7 @@
  *     checks: [{ id, category, passed, severity, title, evidence, fix, verify, weight }] }
  */
 import { parseTarget, CheckError } from "./_lib/guard.mjs";
-import { passiveReport } from "./_lib/tier1.mjs";
+import { passiveReport, ungraded } from "./_lib/tier1.mjs";
 
 const MINUTE = 60_000, HOUR = 60 * MINUTE, DAY = 24 * HOUR;
 export const LIMITS = [
@@ -107,7 +107,8 @@ export function createHandler(opts = {}) {
       ], opts.now);
       if (rule) res.setHeader?.("Retry-After", String(rule.retryAfter));
       if (rule) throw new CheckError("rate_limited", "Too many checks.", 429, `${rule.hint} Or run npx penthera <url> on your own machine.`);
-      return send(res, 200, await passiveReport(target, { ...opts, typed }));
+      const report = await passiveReport(target, { ...opts, typed });
+      return send(res, 200, report.refused ? ungraded(report) : report);
     } catch (e) {
       if (e instanceof CheckError) return fail(res, e);
       return fail(res, new CheckError("internal", "The check failed on our side.", 500, "Try again, or run npx penthera <url> on your own machine."));

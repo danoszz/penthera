@@ -11,7 +11,7 @@ assistant to pass on as it is. Penthera's rules fill it; no model is involved.
 
 | Section | What is in it |
 |---|---|
-| Verdict | `Fix now` when Act on holds a critical or high finding. `Review` when anything is in Act on or Check first, or the run exits 1 or 2. `Nothing to fix` otherwise. With the counts. `Nothing to assess` when `penthera agents` found no agent config. Never `Nothing to fix` when a finding or a required tool makes the scan exit 1 or 2: it says `Review` and gives the reason on the next line. A failure after the brief prints, such as an output file it can't write, exits 2 with an error of its own |
+| Verdict | `Fix now` when Act on holds a critical or high finding. `Review` when anything is in Act on or Check first, or the run exits 1 or 2. `Nothing to fix` otherwise. `Site not read` when a firewall answered instead of the site, unless a critical or high finding says `Fix now`; the exit code doesn't change. With the counts. `Nothing to assess` when `penthera agents` found no agent config. Never `Nothing to fix` when a finding or a required tool makes the scan exit 1 or 2: it says `Review` and gives the reason on the next line. A failure after the brief prints, such as an output file it can't write, exits 2 with an error of its own |
 | Act on | Findings that need a change: where, why, the fix, the rule id |
 | Check first | Heuristic and low findings, and what a dependency *can* do |
 | Likely noise | Hits in files git ignores, generated build output or test fixtures, one line per group |

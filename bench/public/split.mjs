@@ -1,8 +1,10 @@
 /**
  * E11b dev/test split (amendment E11b § 2). Seeded, stratified, 50/50.
- * The manifests in bench/public/split/ hold ids and hashes only, no data.
+ * The manifests hold ids and hashes only, no data. They are release files, not
+ * part of the repo: bench/public/split.sha256 pins each one, and every read
+ * checks that hash. Only this benchmark fetches them, and only when asked.
  *
- *   npm run bench:public -- --make-split     # write the manifests (once; refuses to overwrite)
+ *   npm run bench:public -- --fetch-split    # download and verify the manifests
  *   npm run bench:public -- --split dev      # run and score the dev half only
  *
  * The test half is sealed: it is scored once, at the end of the study.
@@ -10,10 +12,58 @@
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
-import { CACHE, ROOT, SEED, shuffled, ensureDir } from "./common.mjs";
+import { CACHE, ROOT, SEED, shuffled, ensureDir, fetchBuf } from "./common.mjs";
 
 export const SPLIT_DIR = join(ROOT, "bench", "public", "split");
+const HASH_FILE = join(ROOT, "bench", "public", "split.sha256");
+const FETCHED_DIR = join(CACHE, "split");
+/** The GitHub Release that carries the manifests as assets. */
+export const SPLIT_RELEASE = "v2.2.0";
+export const SPLIT_URL = `https://github.com/danoszz/penthera/releases/download/${SPLIT_RELEASE}`;
 const sha = (buf) => createHash("sha256").update(buf).digest("hex");
+
+/** Reads split.sha256 (the format of `shasum -a 256`): { benchmark: hash }. */
+export function parseHashes(text) {
+  return Object.fromEntries(text.trim().split("\n").map((l) => {
+    const [hash, file] = l.trim().split(/\s+/);
+    return [file.replace(/\.json$/, ""), hash];
+  }));
+}
+
+/** Throws unless `buf` is the manifest the repo pinned for `bench`. */
+export function verifyManifest(bench, buf, hashes) {
+  if (!hashes[bench]) throw new Error(`${bench}: not in bench/public/split.sha256`);
+  const got = sha(buf);
+  if (got !== hashes[bench]) throw new Error(`${bench}: SHA-256 is ${got}, expected ${hashes[bench]}. Refusing this manifest`);
+  return buf;
+}
+
+/** The verified manifest from the first folder that has it. */
+export function readManifest(bench, { dirs = [SPLIT_DIR, FETCHED_DIR], hashes = parseHashes(readFileSync(HASH_FILE, "utf-8")) } = {}) {
+  const file = dirs.map((d) => join(d, `${bench}.json`)).find(existsSync);
+  if (!file) throw new Error(`${bench}: no split manifest here. Run: npm run bench:public -- --fetch-split`);
+  return JSON.parse(verifyManifest(bench, readFileSync(file), hashes).toString("utf-8"));
+}
+
+/**
+ * Downloads each manifest not already here, and keeps it only if its hash
+ * matches. `fetcher` returns a Buffer, or null for a 404.
+ */
+export async function fetchSplit({ fetcher = fetchBuf, dirs = [SPLIT_DIR, FETCHED_DIR], url = SPLIT_URL, hashes = parseHashes(readFileSync(HASH_FILE, "utf-8")) } = {}) {
+  const to = dirs.at(-1);
+  const out = {};
+  for (const bench of Object.keys(hashes)) {
+    const here = dirs.map((d) => join(d, `${bench}.json`)).find(existsSync);
+    if (here) { verifyManifest(bench, readFileSync(here), hashes); out[bench] = "here"; continue; }
+    const buf = await fetcher(`${url}/${bench}.json`);
+    if (!buf) throw new Error(`${bench}: not on the ${SPLIT_RELEASE} release (${url}/${bench}.json)`);
+    verifyManifest(bench, buf, hashes);
+    ensureDir(to);
+    writeFileSync(join(to, `${bench}.json`), buf);
+    out[bench] = "fetched";
+  }
+  return out;
+}
 
 /** The split this process runs on: "all" (E11 as registered), "dev" or "test". */
 export function currentSplit() {
@@ -27,7 +77,7 @@ const cache = {};
 export function inSplit(bench) {
   const s = currentSplit();
   if (s === "all") return () => true;
-  cache[bench] ||= JSON.parse(readFileSync(join(SPLIT_DIR, `${bench}.json`), "utf-8"));
+  cache[bench] ||= readManifest(bench);
   const { dev, test } = cache[bench].ids;
   const side = new Map([...dev.map((id) => [id, "dev"]), ...test.map((id) => [id, "test"])]);
   // An id the manifest does not list (a CredData file with no labelled line)
@@ -134,6 +184,8 @@ function benignSplit() {
 }
 
 export async function makeSplit() {
+  // The manifests can leave this folder, so their absence must not reopen the draw.
+  if (existsSync(HASH_FILE)) throw new Error("bench/public/split.sha256 exists: the split is sealed, do not redraw it");
   ensureDir(SPLIT_DIR);
   const made = { creddata: await creddataSplit(), secbench: await secbenchSplit(), malware: malwareSplit(), benign: benignSplit() };
   const out = {};

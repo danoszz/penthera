@@ -63,6 +63,18 @@ penthera https://myapp.com -o reports/scan.json
 penthera https://myapp.com --auth-cookie "session=abc123; path=/"
 ```
 
+## Site not read
+
+**Symptoms:** Verdict `Site not read`, no grade, often exit 0
+
+**Expected:** A firewall answered, so nothing about the site was checked. Do not retry to get past it, and do not change the User-Agent to do so. Scan a local or staging copy, or ask the site's owner to allowlist the scanner.
+
+## A package "could not be scanned"
+
+**Symptoms:** `deps` reports a high finding and exits 1
+
+**Expected:** The package has a file Penthera can't read in full. Treat it as unreviewed, not clean. Check it by hand or replace it.
+
 ## Active scan refused
 
 **Symptoms:** Exit 2 with `Active modes (...)` or a hostname mismatch

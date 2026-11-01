@@ -3,6 +3,7 @@
  * call every tool on fixtures, and check stdout carries only protocol
  * messages. Also holds Penthera's own MCP client configs to Penthera's rules.
  */
+import { createServer } from "node:http";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { spawn, spawnSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, cpSync, realpathSync } from "node:fs";
@@ -91,6 +92,16 @@ describe("penthera mcp over stdio", () => {
     expect(r.structuredContent.tool).toBe(name);
     expect(r.content[0].type).toBe("text");
   }, 60_000);
+
+  it("scan_url says a firewall answered, never that there is nothing to fix", async () => {
+    const wall = createServer((req, res) => { res.writeHead(503, { "cf-mitigated": "challenge" }); res.end("just a moment"); });
+    await new Promise((r) => wall.listen(0, "127.0.0.1", r));
+    const r = await call("scan_url", { url: `http://127.0.0.1:${wall.address().port}`, profile: "quick" });
+    wall.close();
+    const text = JSON.stringify(r);
+    expect(text).toContain("Site not read");
+    expect(text).not.toContain("Nothing to fix");
+  });
 
   it("scan_url scans the loopback app", async () => {
     const r = await call("scan_url", { url: mock.url, profile: "quick" });

@@ -13,6 +13,7 @@
 
 ### Not checked
 
+- 2 suppressed (1 critical or high): not counted here. Review them with `penthera memory show --repo .` and penthera.suppress.json.
 - The scan reported nothing it skipped. No finding is still not proof of safety: Penthera reports what its rules match.
 
 ---

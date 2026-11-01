@@ -14,7 +14,7 @@
  *   Nothing is pushed, fetched or opened as a pull request.
  * - Everything runs in one egress context limited to the URL target, always
  *   offline. Loopback is added only with --fix-model, for Ollama.
- * - A dirty tree or a detached HEAD is refused unless allowDirty is set. A fix
+ * - A dirty tree or a detached HEAD is refused unless allowDirty is set, or the only changes are the wizard's files. A fix
  *   that touches a file with uncommitted changes (checked right before writing),
  *   an untracked file or a git-ignored path is never applied.
  * - A revert puts back the bytes each file had before the fix, and only while
@@ -48,14 +48,20 @@ import {
   openMemory, projectIdFor, buildViews, rankFindings, isSuppressed, withRepoSuppressions,
   findingId, loadRepoSuppressions,
 } from "../../lib/memory/index.js";
-import { createGit } from "./git.js";
+import { createGit, isOwnReport, parseStatusZ } from "./git.js";
 import { hasTestScript, runProjectTests } from "./tests.js";
+import { siteUnread, SITE_NOT_READ } from "../report/unread.js";
 
 export const LOOP_RUN_SCHEMA = "penthera.loopRun/1";
 export const AUTO_MIN_VERIFIED = 3;
 
 const SEV_ORDER = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
 const OLLAMA_HOST = "127.0.0.1";
+
+export { parseStatusZ };
+
+/** A file the setup wizard writes and doesn't commit. */
+export const isWizardFile = (path) => path === ".gitignore" || path === ".github/workflows/penthera.yml";
 
 export class LoopError extends Error {
   constructor(message, code) {
@@ -114,25 +120,6 @@ async function timed(list, step, fn) {
   }
 }
 
-/**
- * Parse `git status --porcelain=v1 -z` into [{ xy, path }]. Paths are taken
- * verbatim (no C-quoting in -z mode), made relative to `prefix` when the repo
- * is a subdirectory of the work tree; a rename lists both of its paths.
- */
-export function parseStatusZ(out, prefix = "") {
-  const parts = String(out || "").split("\0");
-  const entries = [];
-  const rel = (p) => (prefix && p.startsWith(prefix) ? p.slice(prefix.length) : p);
-  for (let i = 0; i < parts.length; i++) {
-    const e = parts[i];
-    if (e.length < 4) continue;
-    const xy = e.slice(0, 2);
-    entries.push({ xy, path: rel(e.slice(3)) });
-    if (/[RC]/.test(xy) && i + 1 < parts.length) entries.push({ xy, path: rel(parts[++i]) });
-  }
-  return entries;
-}
-
 function clean(obj) {
   return JSON.parse(JSON.stringify(obj)); // drops undefined so memory's canonical JSON accepts it
 }
@@ -166,14 +153,15 @@ export async function runLoop(opts = {}) {
   const deps = opts.deps || {};
   const scanRepoFn = deps.scanRepo || defaultScanRepo;
   const scanUrlFn = deps.scanUrl || defaultScanUrl;
-  const testsFn = deps.runTests || runProjectTests;
+  const log0 = opts.log || (() => {});
+  const testsFn = (dir) => (deps.runTests || runProjectTests)(dir, { onProgress: (ms) => log0(`    tests still running after ${Math.round(ms / 1000)} s`) });
   const stopped = () => Boolean(opts.signal?.aborted);
 
   // ── Preflight: a git work tree on a branch, clean unless --allow-dirty ──
   const gitExec = deps.gitExec ? { exec: deps.gitExec } : {};
   let git = createGit(repo, gitExec);
   if (git.tryRun("rev-parse", "--is-inside-work-tree")?.trim() !== "true") {
-    throw new LoopError(`${repo} is not a git work tree. The loop commits each fix, so it needs git.`, "NOT_GIT");
+    throw new LoopError(`${repo} is not a git work tree. The loop commits each fix, so run git init and commit once, then try again.`, "NOT_GIT");
   }
   const baseSha = git.tryRun("rev-parse", "--verify", "--quiet", "HEAD")?.trim();
   if (!baseSha) throw new LoopError(`${repo} has no commits yet. Commit once, then run the loop.`, "NO_HEAD");
@@ -183,11 +171,10 @@ export async function runLoop(opts = {}) {
   }
   const prefix = git.run("rev-parse", "--show-prefix").replace(/\n$/, "");
   const statusNow = () => parseStatusZ(git.run("status", "--porcelain=v1", "-z", "--untracked-files=all", "--", "."), prefix);
-  // Penthera's own untracked scan reports (reports/, where `penthera ui` and a
-  // scan write them) are not the user's work in progress: the loop commits only
-  // the files a fix changes, so they can stay.
-  const dirtyFiles = new Set(statusNow().filter((e) => !(e.xy === "??" && e.path.startsWith("reports/"))).map((e) => e.path));
-  if (dirtyFiles.size && !opts.allowDirty) {
+  const dirtyFiles = new Set(statusNow().filter((e) => !isOwnReport(e)).map((e) => e.path));
+  // The wizard writes these and leaves them for you to commit, so they can't stop the fix it offers.
+  const allowDirty = Boolean(opts.allowDirty) || (Boolean(base) && dirtyFiles.size > 0 && [...dirtyFiles].every(isWizardFile));
+  if (dirtyFiles.size && !allowDirty) {
     throw new LoopError(`${repo} has uncommitted changes (${[...dirtyFiles].slice(0, 5).join(", ")}${dirtyFiles.size > 5 ? ", ..." : ""}). Commit or stash them first, or pass --allow-dirty.`, "DIRTY");
   }
   if (!git.tryRun("config", "--get", "user.email")?.trim()) {
@@ -238,12 +225,12 @@ export async function runLoop(opts = {}) {
     branch: { base, baseSha, fix: null },
     options: {
       maxIterations, auto, runTests: Boolean(opts.runTests), fixModel: opts.fixModel || null,
-      offline: true, allowDirty: Boolean(opts.allowDirty),
+      offline: true, allowDirty,
     },
     stopReason: null,
     error: null,
     gaveUp: [],
-    findings: { initial: null, final: null },
+    findings: { initial: null, final: null, left: null, suppressed: 0 },
     totals: { iterations: 0, planned: 0, applied: 0, verified: 0, failed: 0, conflicts: 0, declined: 0, skipped: 0, commits: [] },
     memory: { projectId, chain: chainOk ? "ok" : "broken", eventsAppended: 0 },
     iterations: [],
@@ -251,14 +238,21 @@ export async function runLoop(opts = {}) {
   if (!chainOk) log("  memory chain is broken: ranking and --auto are off, nothing is recorded. Run `penthera memory verify`.");
   for (const w of repoSupp.warnings || []) log(`  ${w}`);
 
+  if (opts.runTests && !hasTestScript(repo)) log("  --run-tests: this project has no test script, so fixes are checked by re-scan only");
+
   // ── The fix branch, from the current HEAD ──
-  let branch = fixBranchName();
-  for (let i = 2; git.tryRun("show-ref", "--verify", "--quiet", `refs/heads/${branch}`) !== null; i++) {
-    branch = `${fixBranchName()}-${i}`;
+  const continuing = /^penthera\/fix-/.test(base || "");
+  let branch = continuing ? base : fixBranchName();
+  if (continuing) {
+    log(`  continuing on ${branch}: this is already a fix branch`);
+  } else {
+    for (let i = 2; git.tryRun("show-ref", "--verify", "--quiet", `refs/heads/${branch}`) !== null; i++) {
+      branch = `${fixBranchName()}-${i}`;
+    }
+    git.run("checkout", "-b", branch);
+    log(`  on ${branch} (from ${base || baseSha.slice(0, 12)})`);
   }
-  git.run("checkout", "-b", branch);
   loopRun.branch.fix = branch;
-  log(`  on ${branch} (from ${base || baseSha.slice(0, 12)})`);
 
   /**
    * Why a plan must not be applied right now, or null. Run immediately before
@@ -337,6 +331,7 @@ export async function runLoop(opts = {}) {
     if (url) {
       const r = await scanUrlFn(url, scanOpts);
       live = dedupe(r?.findings || []);
+      loopRun.siteUnread = siteUnread(r)?.text || null;
     }
     return { static: stat, live, all: dedupe([...stat, ...live]) };
   }
@@ -421,6 +416,13 @@ export async function runLoop(opts = {}) {
   let stopReason = null;
 
   const body = async () => {
+    if (opts.runTests && hasTestScript(repo) && !stopped()) {
+      log("  tests: running them once before any fix");
+      const r = await testsFn(repo);
+      loopRun.testsBefore = { ok: r.ok, exitCode: r.exitCode };
+      if (!r.ok && !stopped()) log("  tests already fail before any fix, so fixes are judged by re-scan only");
+    }
+
     for (let n = 1; n <= maxIterations && !stopReason; n++) {
       if (stopped()) { stopReason = "interrupted"; break; }
       const it = { n, startedAt: new Date().toISOString(), durationMs: 0, findings: null, steps: [], fixes: [] };
@@ -449,7 +451,7 @@ export async function runLoop(opts = {}) {
         let { plan: p, originals, stats } = candidates[i];
         const entry = {
           planId: p.id, recipe: p.recipe, title: p.title, framework: p.framework || null, source: p.source,
-          confidence: p.confidence, files: p.files, findings: originals.map(brief),
+          confidence: p.confidence, files: p.files, findings: originals.map(brief), ownerActions: p.ownerActions || [],
           memory: stats ? { verified: stats.verified, failed: stats.failed } : null,
           decision: null, status: "not-applied", reason: null, commit: null, verify: null, steps: [],
         };
@@ -467,7 +469,7 @@ export async function runLoop(opts = {}) {
           Object.assign(entry, { planId: p.id, files: p.files });
         }
 
-        const shown = redactPlan(p);
+        const { contextDiff, ...shown } = redactPlan(p, { context: Boolean(opts.approvalContext) });
         let answer;
         if (autoOk(p, stats)) {
           answer = "auto";
@@ -475,7 +477,7 @@ export async function runLoop(opts = {}) {
         } else {
           if (!opts.ask) throw new LoopError("No approval prompt: every diff needs a y/n answer unless --auto low applies", "NO_PROMPT");
           answer = await timed(entry.steps, "approve", () => opts.ask({
-            plan: shown, iteration: n, index: i + 1, total: candidates.length,
+            plan: shown, ...(contextDiff ? { contextDiff } : {}), iteration: n, index: i + 1, total: candidates.length,
             memory: entry.memory, signal: opts.signal,
           }));
         }
@@ -492,10 +494,15 @@ export async function runLoop(opts = {}) {
             const targets = [...new Set([...p.files, ...parsePatch(p.diff).map((f) => f.newPath).filter(Boolean)])];
             const refused = guardFiles(targets);
             if (refused) return { refused };
-            return applyDiff(repo, p.diff, { allowDirty: Boolean(opts.allowDirty) });
+            return applyDiff(repo, p.diff, { allowDirty });
           });
         } catch (e) {
           if (e?.name === "GitPolicyError") throw e;
+          // The tree is the problem, so every later fix would fail the same way: stop now, not after more approvals.
+          if (e?.code === "DIRTY" || e?.code === "NOT_GIT") {
+            entry.reason = e.message;
+            throw new LoopError(e.message, e.code);
+          }
           applied = { refused: `did not apply: ${e.message}` };
         }
         if (applied.refused) {
@@ -530,7 +537,7 @@ export async function runLoop(opts = {}) {
           // The judge must be the one the run began with, before and after the tests run.
           let judgeOk = judgeState() === judgeAtStart;
           let tests = null;
-          if (judgeOk && opts.runTests && hasTestScript(repo)) {
+          if (judgeOk && opts.runTests && hasTestScript(repo) && loopRun.testsBefore?.ok !== false) {
             const r = await testsFn(repo);
             tests = { ok: r.ok, exitCode: r.exitCode, durationMs: r.durationMs };
             if (!r.ok) entry.testOutput = r.output?.slice(-2_000);
@@ -573,6 +580,12 @@ export async function runLoop(opts = {}) {
           await timed(entry.steps, "learn", async () => remember("fix_verified", { ...learnData, commit: entry.commit }));
           const live = entry.verify.liveRemaining ? `; ${entry.verify.liveRemaining} still served by the running app until it restarts` : "";
           log(`    verified and committed ${entry.commit.slice(0, 10)}${live}`);
+        } else if (stopped()) {
+          // The run was stopped, so nothing was learned about this fix: not a failure, and not one to remember.
+          await timed(entry.steps, "revert", async () => revert(pending));
+          pending = null;
+          entry.status = "interrupted";
+          log("    stopped, fix reverted");
         } else {
           const r = await timed(entry.steps, "revert", async () => revert(pending));
           pending = null;
@@ -619,13 +632,63 @@ export async function runLoop(opts = {}) {
   }
 
   loopRun.stopReason = stopReason;
-  loopRun.findings.final = current ? actionable(triage(current).ranked).length : null;
+  // No commit, no reason to stay: an empty fix branch only hides where you were.
+  if (!loopRun.totals.commits.length && base && base !== branch && git.tryRun("checkout", "-q", base) !== null) {
+    loopRun.branch.left = true;
+    loopRun.branch.removed = git.tryRun("branch", "-d", branch) !== null;
+  }
+  if (current) {
+    const open = actionable(triage(current).ranked).length;
+    loopRun.findings.final = open;
+    loopRun.findings.suppressed = actionable(current.all).length - open;
+    // Suppressed findings stay in: a plain scan counts them, and the loop's exit code matches it.
+    loopRun.findings.left = countBySeverity(current.all);
+  }
   loopRun.totals.iterations = loopRun.iterations.length;
   loopRun.finishedAt = new Date().toISOString();
   loopRun.durationMs = Date.now() - t0;
   remember("loop_run", summarizeForMemory(loopRun));
   loopRun.memory.eventsAppended = eventsAppended;
   return loopRun;
+}
+
+function countBySeverity(findings) {
+  const left = { critical: 0, high: 0, medium: 0, low: 0 };
+  for (const f of findings) if (left[f.severity] != null) left[f.severity]++;
+  return left;
+}
+
+/**
+ * How a run really ended, in one line, for the CLI and the dashboard. A run is
+ * clean only if it finished and its last scan left no critical or high
+ * finding: the same bar as a scan's exit code.
+ * The headline is plain words, for the dashboard too; a command goes in next.
+ * @returns {{ clean: boolean, headline: string, next: string|null }}
+ */
+export function loopVerdict(run) {
+  const left = run.findings?.left;
+  const passed = (run.totals.declined || 0) + (run.totals.skipped || 0);
+  const fixed = `${run.totals.verified} fixed${passed ? `, ${passed} skipped` : ""}`;
+  if (!left) return { clean: false, headline: `${fixed}. The run ended before a final scan.` };
+  const serious = left.critical + left.high;
+  const lower = left.medium + left.low;
+  const open = serious
+    ? [left.critical && `${left.critical} critical`, left.high && `${left.high} high`].filter(Boolean).join(", ") + " left"
+    : `no critical or high left${lower ? `, ${lower} lower` : ""}`;
+  const finished = run.stopReason !== "error" && run.stopReason !== "interrupted" && run.stopReason !== "user-quit";
+  const hidden = run.findings.suppressed;
+  const review = hidden ? ` (${hidden} suppressed by you).` : ".";
+  const site = run.siteUnread ? ` ${SITE_NOT_READ} ${run.siteUnread}` : "";
+  const red = run.testsBefore?.ok === false ? " Your tests were already failing before any fix, so fixes were judged by re-scan only." : "";
+  return {
+    clean: run.stopReason === "no-fixable-findings" && serious === 0 && !site,
+    headline: `${finished ? "" : "Stopped early: "}${fixed}, ${open}${review}${site}${red}`,
+    next: [
+      hidden && "Review them with penthera memory show --repo . and penthera.suppress.json.",
+      run.totals.verified && "These counts include checks only penthera fix runs, so they differ from a scan's.",
+      run.totals.verified && !run.target?.url && "Findings from a live scan stay until you scan the URL again.",
+    ].filter(Boolean).join(" ") || null,
+  };
 }
 
 /** The loopRun as stored in memory: no test output, bounded size. */

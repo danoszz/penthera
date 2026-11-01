@@ -142,6 +142,7 @@ function summaryText(r) {
 }
 
 export const REPLY_CONTRACT =
+  "`Site not read`: a firewall answered, so this says nothing about the site. `Nothing to assess`: nothing was read. `N suppressed`: findings exist and were set aside. Never call these clean or safe. " +
   "Reply with this brief in its order and keep the verdict line, the reason line under it when there is one, and the section names. Do not move a finding between sections, change a severity or drop a group. If you checked something yourself, add it under a last section \"My read\" and say what you looked at. Ask before changing files.";
 
 /** A tool error the model can read and act on. */

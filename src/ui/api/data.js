@@ -13,13 +13,15 @@ import { createHash } from "node:crypto";
 import { openMemory, buildViews, buildHistory } from "../../../lib/memory/index.js";
 import { referencesFor } from "../../../lib/references.js";
 import { planFixes, redactPlan } from "../../../lib/fix/index.js";
+import { keyParts } from "../static/js/format.js";
 import { verifyEvidence, MANIFEST, SIGNATURE, SCHEMA as EVIDENCE_SCHEMA } from "../../report/evidence.js";
 import { writeEvidence } from "../../cli/report-outputs.js";
 import { createGit } from "../../agent/git.js";
 import { formatAudienceReport, AUDIENCES } from "../../report/audience.js";
 import {
-  classify, buildOverview, buildFindings, locateFinding, findingDetail, buildDeps, buildAi, memoryStats, loopSummary,
+  classify, buildOverview, buildFindings, locateFinding, findingDetail, buildDeps, buildAi, memoryStats, loopSummary, withAudits, projectKey,
   explainFinding, buildScanHistory, latestScan, slug, buildGiantsCoverage,
+  ownerDuties,
 } from "./summarize.js";
 
 const MAX_REPORT_BYTES = 25 * 1024 * 1024;
@@ -131,6 +133,9 @@ function realOrPlanned(p) {
   try { return join(realpathSync(dirname(abs)), basename(abs)); } catch { return abs; }
 }
 
+// `penthera init` writes each run's reports to reports/penthera-<date>/.
+const WIZARD_RUN = /^penthera-\d{4}-\d{2}-\d{2}/;
+
 export function createDataSource({ projects, reportsDir, home, memoryRoot, settings, version = "dev" }) {
   const projectRoots = realRoots(projects);
   const reportsReal = realOrPlanned(reportsDir);
@@ -146,7 +151,26 @@ export function createDataSource({ projects, reportsDir, home, memoryRoot, setti
     return readFileSync(real);
   }
 
-  /** Report files (top level of the reports dir) and evidence bundles (up to two levels down). */
+  /**
+   * A report's folder. A deps report's target is relative to where it ran, so a dashboard run
+   * stamps `folder`, and anything else is read from the project that holds the reports folder.
+   */
+  // The wizard points the dashboard at its own run folder, one level further down.
+  const projectHome = () => dirname(WIZARD_RUN.test(basename(reportsReal)) ? dirname(reportsReal) : reportsReal);
+  const folderOf = (data) => {
+    if (typeof data.folder === "string") return data.folder;
+    const path = keyParts(projectKey(data.target)).folder;
+    return path && realOrPlanned(isAbsolute(path) ? path : resolve(projectHome(), path));
+  };
+  const audited = (s) => withAudits(s.scans, [...s.deps, ...s.agents], folderOf);
+  const ofProject = (reports, project) => {
+    if (!project) return reports;
+    const { folder } = keyParts(project);
+    const real = folder && realOrPlanned(folder);
+    return reports.filter((r) => real && folderOf(r.data) === real);
+  };
+
+  /** Report files (top level of the reports dir, and each `penthera init` run's folder) and evidence bundles (up to two levels down). */
   function scan() {
     if (cache && Date.now() - cache.at < CACHE_MS) return cache;
     const out = { scans: [], deps: [], agents: [], installs: [], loops: [], bundles: [], at: Date.now() };
@@ -164,7 +188,7 @@ export function createDataSource({ projects, reportsDir, home, memoryRoot, setti
         if (e.isSymbolicLink()) continue;
         const p = join(dir, e.name);
         if (e.isDirectory() && depth < 2 && !e.name.startsWith(".") && e.name !== "node_modules") walk(p, depth + 1);
-        else if (e.isFile() && depth === 0 && e.name.endsWith(".json")) {
+        else if (e.isFile() && e.name.endsWith(".json") && (depth === 0 || WIZARD_RUN.test(relative(reportsReal, dir)))) {
           seen++;
           const buf = safeRead(p);
           if (!buf) continue;
@@ -172,7 +196,7 @@ export function createDataSource({ projects, reportsDir, home, memoryRoot, setti
           try { data = JSON.parse(buf.toString("utf-8")); } catch { continue; }
           const kind = classify(data);
           if (!kind) continue;
-          const rec = { name: e.name, mtime: statSync(p).mtimeMs, data };
+          const rec = { name: relative(reportsReal, p), mtime: statSync(p).mtimeMs, data };
           ({ scan: out.scans, deps: out.deps, agents: out.agents, install: out.installs, loop: out.loops })[kind].push(rec);
         }
       }
@@ -215,11 +239,20 @@ export function createDataSource({ projects, reportsDir, home, memoryRoot, setti
 
     overview() {
       const s = scan();
-      return buildOverview({ scans: s.scans, memory: memory(), runs: [...s.loops].reverse() });
+      const folderOfKey = (key) => { const { folder } = keyParts(key); return folder && realOrPlanned(folder); };
+      const loops = [...s.loops].reverse();
+      return buildOverview({
+        scans: audited(s), memory: memory(), runs: loops,
+        duties: (key) => ownerDuties(s.loops, folderOfKey(key), realOrPlanned),
+        nothingToFix: (key, scanned) => {
+          const l = loops.map((r) => r.data.loopRun || r.data).find((x) => x.target?.repo && realOrPlanned(x.target.repo) === folderOfKey(key));
+          return l?.stopReason === "no-fixable-findings" && Date.parse(l.startedAt) + (l.durationMs || 0) >= scanned;
+        },
+      });
     },
 
     findings() {
-      return buildFindings(scan().scans);
+      return buildFindings(audited(scan()));
     },
 
     giants() {
@@ -227,14 +260,14 @@ export function createDataSource({ projects, reportsDir, home, memoryRoot, setti
     },
 
     async finding(id, project) {
-      const hit = locateFinding(scan().scans, id, project);
+      const hit = locateFinding(audited(scan()), id, project);
       if (!hit) return null;
       const detail = findingDetail(hit.finding);
       const sources = referencesFor(hit.finding).map((r) => ({ cite: r.cite, url: r.url }));
       let fix = null;
       // A fix preview needs the repo the finding came from, and only inside a chosen project dir.
       const target = typeof hit.report.data.target === "string" ? hit.report.data.target : null;
-      const repo = hit.report.data.repo || (target && !/^https?:/i.test(target) ? target : null);
+      const repo = hit.report.data.repo || keyParts(target).folder;
       if (repo) {
         try {
           const dir = confineDir(repo, projectRoots);
@@ -256,8 +289,9 @@ export function createDataSource({ projects, reportsDir, home, memoryRoot, setti
      */
     env(project) {
       let folder = null;
-      if (typeof project === "string" && project.startsWith("/")) {
-        try { folder = confineDir(project, projectRoots); } catch { folder = null; }
+      const path = keyParts(project).folder;
+      if (path.startsWith("/")) {
+        try { folder = confineDir(path, projectRoots); } catch { folder = null; }
       }
       const out = { folder, branch: null, head: null, fixBranches: [], hosts: [], blocked: [] };
       if (folder) {
@@ -278,7 +312,7 @@ export function createDataSource({ projects, reportsDir, home, memoryRoot, setti
     },
 
     history(project, a, b) {
-      return buildScanHistory(scan().scans, project, a, b);
+      return buildScanHistory(audited(scan()), project, a, b);
     },
 
     /** "Export evidence for an auditor": a bundle from the latest report of a project, into <reports>/evidence/. */
@@ -306,13 +340,13 @@ export function createDataSource({ projects, reportsDir, home, memoryRoot, setti
       return latest ? formatAudienceReport(latest.data, audience, { version }) : null;
     },
 
-    deps() {
+    deps(project) {
       const s = scan();
-      return buildDeps({ deps: s.deps, installs: s.installs });
+      return buildDeps({ deps: ofProject(s.deps, project), installs: s.installs });
     },
 
-    ai() {
-      return buildAi(scan().agents);
+    ai(project) {
+      return buildAi(ofProject(scan().agents, project));
     },
 
     memory,
