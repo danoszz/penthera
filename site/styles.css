@@ -1846,7 +1846,7 @@ h1, h2, h3 { text-wrap: balance; }
  * every other control is white (the ink colour, so black in the light
  * theme), so the eye lands on blue. */
 /* --fix-top: where the header ends, measured by ui.js (the logotype scales with the viewport). */
-.hero[data-mode="fix"] :is(.poster, .hero-text, .loop), .hero[data-mode="fix"] + .slab { display: none; }
+.hero[data-mode="fix"] :is(.poster, .hero-text, .loop), .hero[data-mode="fix"] + .slab, .hero[data-mode="fix"] + .slab + .get { display: none; }
 .report-back {
   display: inline-flex; align-items: center; gap: 10px; min-height: var(--target); padding: 0 14px 0 10px;
   font-family: var(--px); font-size: var(--t-small); line-height: 1; color: var(--text-1); background: none; border: 1px solid var(--hair); cursor: pointer;
@@ -2444,3 +2444,81 @@ h1.ask-sub + .ask-sub { margin-top: var(--sp-12); }
   .consent[open], .prompt-dialog[open] { animation: none; }
   .btn:active, .glass:active, .cmd:active, .brand:active, .gopro-btn:active, .rail-links a:active, .rail-download:active { transform: none; }
 }
+
+/* ── Home ─────────────────────────────────────────────────────────────── */
+
+main > .slab + .band { margin-top: 0; }
+:is(.get, .ba, .trust, .faq, .about) > h2 { max-width: 24ch; }
+.trust .pb { margin-top: var(--sp-80); }
+.get .start-here { margin-top: var(--sp-16); color: var(--text-1); }
+.get .ways { margin-top: var(--sp-40); }
+.get .hero-actions { margin: var(--sp-24) 0 var(--sp-16); }
+.more-ways > summary { margin-top: var(--sp-16); }
+main > .faq + .about { margin-top: var(--section); }
+.more-ways .prompts-title { font-size: var(--t-text); }
+.more-ways .agent .prompts-title { margin-top: var(--sp-16); }
+.compare { margin-top: var(--sp-40); max-width: 900px; }
+.compare .prompts-title { margin-top: 0; }
+
+/* The chat: the film's second scene, live. Blue ground, the dither field, a
+ * glass question and a white answer. The values are the share card's. */
+.chat {
+  position: relative; overflow: hidden; isolation: isolate;
+  margin-top: var(--sp-48);
+  background: #0000ed; color: #fff;
+}
+.chat::before {
+  content: ""; position: absolute; inset: 0; z-index: -1;
+  background: url(/media/field.png) center / 1800px auto; image-rendering: pixelated;
+  filter: blur(1px); opacity: 0.55; mix-blend-mode: screen;
+}
+.chat-stage { display: flex; flex-direction: column; justify-content: center; gap: var(--sp-32); height: clamp(430px, 42vw, 540px); padding: var(--sp-32) clamp(var(--sp-20), 5vw, var(--sp-64)); }
+.chat-q, .chat-a {
+  max-width: 100%; padding: 0.22em 0.44em 0.3em;
+  font-family: var(--display); font-weight: var(--w-head); line-height: var(--lh-display); letter-spacing: var(--tr-display);
+  transform-origin: 0 100%;
+}
+.chat-q {
+  align-self: flex-start; font-size: var(--t-h2);
+  border-radius: 0.36em 0.36em 0.36em 0;
+  background: rgba(0, 0, 160, 0.55); border: 1px solid rgba(255, 255, 255, 0.5);
+  -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px);
+}
+.chat-a {
+  align-self: flex-end; font-size: var(--t-h1); max-width: 15ch;
+  border-radius: 0.36em 0.36em 0 0.36em; transform-origin: 100% 100%;
+  background: rgba(255, 255, 255, 0.92); color: #0000ed;
+}
+/* An answer from the rules: the count, what it looks at, the command. */
+.chat-a.is-area { max-width: 32rem; padding: var(--sp-20) var(--sp-24) var(--sp-24); font-size: var(--t-read); letter-spacing: var(--tr-text); line-height: var(--lh-read); }
+.chat-a .map-k { color: inherit; }
+.chat-a .map-k .swatch { display: none; }
+.chat-a .map-n { margin-top: var(--sp-8); font-size: var(--t-h2); color: inherit; }
+.chat-a .map-n span, .chat-a .map-one, .chat-a .map-one strong { color: inherit; }
+.chat-a .map-one { margin-top: var(--sp-12); font-size: var(--t-text); line-height: var(--lh-ui); }
+.chat-a .map-cmd { margin-top: var(--sp-12); }
+.chat-a .map-cmd code { color: inherit; border-color: currentColor; }
+
+.chat[data-live] .chat-q, .chat[data-live] .chat-a { visibility: hidden; }
+.chat[data-live] .chat-q.is-in, .chat[data-live] .chat-a.is-in { visibility: visible; animation: bubble-in 300ms linear(0, 0.4 22%, 0.86 44%, 1.05 62%, 1.02 80%, 1) both; }
+/* Chat bubble, from motion.md: it grows from its tail, from 30%. */
+@keyframes bubble-in { from { transform: scale(0.3); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .chat[data-live] .chat-q.is-in, .chat[data-live] .chat-a.is-in { animation: none; } }
+
+/* Quick replies, on the same glass as the question. */
+.chips { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-8); padding: 0 clamp(var(--sp-20), 5vw, var(--sp-64)) clamp(var(--sp-20), 3vw, var(--sp-40)); }
+.chip {
+  min-height: var(--target); padding: 0 var(--sp-16); border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.5); background: rgba(0, 0, 160, 0.55); color: #fff;
+  -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px);
+  font-family: var(--display); font-size: var(--t-text); font-weight: var(--w-head); letter-spacing: var(--tr-head); cursor: pointer;
+  transition: background 120ms ease-out, color 120ms ease-out, transform 120ms ease-out;
+}
+.chip:hover { background: rgba(0, 0, 200, 0.7); }
+.chip:active { transform: scale(0.97); }
+.chip:focus-visible { outline-color: #fff; }
+.chip[aria-pressed="true"] { background: #fff; color: #0000ed; border-color: #fff; }
+/* With JavaScript the chat answers, so the grid steps back to one line. */
+html.js .map { margin-top: 0; border: 0; box-shadow: none; }
+html.js .map .map-bar, html.js .map .map-grid { display: none; }
+html.js .map figcaption { border-top: 0; padding-inline: 0; }
