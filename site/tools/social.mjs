@@ -2,7 +2,6 @@
 /**
  * Render the site's social images with a local headless Chrome:
  *
- *   og.png       1200 × 630   the share card (Open Graph, X, LinkedIn, Facebook)
  *   og-plain.png 1200 × 630   the plain card for research pages
  *   square.png   1080 × 1080  Instagram and other square feeds
  *   story.png    1080 × 1920  TikTok, Reels and Stories (9:16)
@@ -167,7 +166,6 @@ export function shoot(html, w, h, file, { transparent = false } = {}) {
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   mkdirSync(OUT, { recursive: true });
   shoot(plainCard(), 1200, 630, join(OUT, "og-plain.png"));
-  shoot(bubbleCard(), 1200, 630, join(OUT, "og.png"));
   for (const s of FEEDS) {
     shoot(bubbleFeed(s.w, s.h, s.layout), s.w, s.h, join(OUT, s.file));
     console.log(`site/media/social/${s.file} ${s.w}×${s.h}`);
