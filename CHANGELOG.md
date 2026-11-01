@@ -48,6 +48,10 @@ Other things that can move after you upgrade:
 
 ### Changed
 
+docs: none, the count on All projects explains itself
+
+- **A narrower check can't hide a wider one.** On All projects, only a later check that reached everything an
+  earlier one did replaces it, so a code check no longer clears what a code and site check found.
 - **`agent --loop` exits 1 when any critical or high finding remains**, the same
   bar as a scan. It used to exit 0 once nothing fixable was left, even with
   critical findings open. In the loop suppressed findings count, as in a scan without `--memory`. A CI step that runs the loop can turn red. The summary,
