@@ -5,9 +5,9 @@ name: Install matrix
 # Node 22 and 24. Also an upgrade from the previous minor release on npm with existing
 # ~/.penthera state, and every documented command against the installed package.
 #
-# Network: npm fetches the tarball's one runtime dependency (yaml) from the
-# registry during install, as any user install does, and the upgrade job
-# installs that release (FROM_VERSION, from scripts/ci/upgrade-from.mjs) from npm. Penthera itself runs offline: every
+# Network: the package has no runtime dependencies, so installing the tarball
+# fetches nothing else. The upgrade job installs the previous minor release
+# (FROM_VERSION, from scripts/ci/upgrade-from.mjs) from npm. Penthera itself runs offline: every
 # Penthera process here is started under scripts/ci/net-guard.cjs, which fails
 # any connection or DNS query past loopback.
 

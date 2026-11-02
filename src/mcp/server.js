@@ -1,7 +1,7 @@
 /**
  * `penthera mcp`: a Model Context Protocol server over stdio, written against
- * the spec by hand (JSON-RPC 2.0, newline-delimited) so Penthera keeps one
- * runtime dependency. See docs/research/spec-mcp.md.
+ * the spec by hand (JSON-RPC 2.0, newline-delimited) so Penthera keeps no
+ * runtime dependencies. See docs/research/spec-mcp.md.
  *
  * Dual-era, as the 2026-07-28 spec allows:
  *   modern  every request names its protocol version in _meta; served
