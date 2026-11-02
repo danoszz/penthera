@@ -272,12 +272,12 @@ h3 > .lock, .eu-list .lock { width: 24px; height: 28px; vertical-align: -4px; ma
  * backdrop blur, so it adds no blur work over the hero's field. */
 :root {
   --pad: clamp(12px, 1.6vw, 24px);       /* the hero's side margin: tight, to the edge */
-  --rail-plate: #1c1e23; --rail-lit: 0.13; --rail-shade: 0.45; --rail-rim: 0.22;
+  --rail-plate: #1c1e23; --rail-lit: 0.13; --rail-shade: 0.45; --rail-rim: 0.22; --rail-ink: 255, 255, 255;
   --glass-tint: rgba(0, 0, 0, 0.58); --glass-edge: rgba(255, 255, 255, 0.24); --glass-rim: rgba(255, 255, 255, 0.2);
   --rail-gap: 16px;
 }
-:root[data-theme="light"] {
-  --rail-plate: #e4e6ea; --rail-lit: 0.9; --rail-shade: 0.1; --rail-rim: 1;
+:root[data-theme="light"], :root[data-paper] {
+  --rail-plate: #e4e6ea; --rail-lit: 0.9; --rail-shade: 0.1; --rail-rim: 1; --rail-ink: 18, 21, 26;
   --glass-tint: rgba(253, 253, 250, 0.62); --glass-edge: rgba(0, 0, 0, 0.2); --glass-rim: rgba(255, 255, 255, 0.9);
 }
 .rail {
@@ -286,6 +286,9 @@ h3 > .lock, .eu-list .lock { width: 24px; height: 28px; vertical-align: -4px; ma
   display: flex; align-items: center; gap: 2px;
   width: max-content; max-width: calc(100vw - 24px); height: 50px; padding: 0 6px;
   font-family: var(--px); font-size: var(--t-note); letter-spacing: var(--tr-mono);
+  /* The dock's ink follows its own plate, never the page: a paper page's dark
+   * ink on a dark plate was black on black (Safari, 2 Nov 2026). */
+  --ink-rgb: var(--rail-ink); --text-1: rgb(var(--rail-ink)); color: var(--text-1);
   background: var(--plate);
   border: 1px solid rgba(var(--ink-rgb), 0.28);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, var(--rail-rim)), 0 14px 34px -14px rgba(0, 0, 237, 0.55);
