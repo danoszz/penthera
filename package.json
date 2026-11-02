@@ -108,6 +108,6 @@
     "vitest": "^5.0.5"
   },
   "dependencies": {
-    "yaml": "^2.9.1"
+    "yaml": "2.9.1"
   }
 }
