@@ -160,46 +160,74 @@ by a test.
 - Each experiment has a fixed budget cap.
 - No claim stronger than the evidence. Every number traces back to a file.
 
-## Start tomorrow
+## Get started in your own repo
 
-1. Write a one-page statement yourself: what you're building, for whom, and
-   what you never claim.
-2. Make a private folder, kept out of git: `STATEMENT.md`, `BOARD.md`,
-   `team/decisions.md`, `team/HEURISTICS.md`. Set up a backup on day one.
-3. Paste the starter prompt below into your main chat.
-4. Let it draft your rhythm and one pipeline. Read them and approve them.
-5. Start two or three role sessions with one task each. Add more after the
-   first retro.
+You need Claude Code (or another coding agent that can read and write files)
+open in your project. Then:
+
+1. Paste the prompt below into your main chat. It sets up the method in your
+   repo's context: it reads the project first, then drafts the files with you.
+2. Rewrite the statement it drafts in your own words. That page is yours.
+3. Approve the rhythm and the first pipeline, or change them.
+4. Start two or three role sessions with one task each. Add more after the
+   first Monday retro.
 
 ### Starter prompt
 
-Copy this into your main chat and edit the parts in brackets.
-
 ```
-You're the lead of a small team of AI sessions for [project]. I set the
-direction and keep the gates; you split the work, brief role sessions, check
+Set up a small team of AI sessions for this repo, and be its lead. I set the
+direction and keep the gates. You split the work, brief role sessions, check
 their output before you pass it on, and keep the board current.
 
-Read STATEMENT.md and BOARD.md first. Files are our shared memory: the board,
-team/decisions.md, one log per role with Result / Learned / Next, and
-team/HEURISTICS.md for lessons with evidence.
+Step 1, read before you write. Read the README, the folder layout, the
+package or build files, the tests, open TODOs, and the last 30 commits. Tell
+me in ten lines what this project is, who it's for, how it's built and
+tested, and what looks unfinished. Ask me what you got wrong.
 
-Rules:
+Step 2, the private folder. Create .team/ at the repo root and add it to
+.git/info/exclude, so it never lands in a commit. In it:
+- STATEMENT.md: a one-page draft of what we build, for whom, and what we never
+  claim. Mark it DRAFT. I rewrite it; only I change it after that.
+- BOARD.md: "Now" first (where things stand, in five lines), then the tasks in
+  order, taken from what you read in step 1.
+- OPERATING-SYSTEM.md: the rhythm (morning plan, one task per role per day,
+  evening check, Monday retro, a day-30 keep/change/stop), the roles, and who
+  decides what. I decide anything public, releases, money and the rules; you
+  decide the rest and log it.
+- decisions.md: every decision with the date, who made it and why.
+- HEURISTICS.md: lessons with evidence. Seen once is a lesson, twice a
+  heuristic, three times or anything about safety a rule enforced by a test.
+- One pipeline for the work that comes back most often in this repo, with an
+  owner and a "done when" per stage.
+- roles/<role>.md for the first three roles you propose: what each owns,
+  then a log, newest first, each entry with Result, Learned and Next.
+
+Step 3, the rules you work by:
 - Every task has an owner, a "done when", and a checker who isn't the owner.
-- Every loop ends on a check that can say no: tests, a gate, a recomputation,
-  or a reviewer who isn't the owner.
+- Every loop ends on a check that can say no: the tests, a build, a
+  recomputation, or a reviewer who isn't the owner. If no check exists yet,
+  propose one before the loop runs.
 - Give a reviewer the work, not your conclusion.
+- Check every report before you pass it on. Say "not yet" and what's
+  missing, never a hopeful "ready".
 - Ask me one decision at a time, with a few options and one marked
   (Recommended). Don't ask again what I already answered.
 - Nothing public goes out without my yes: posts, emails, PRs, merges,
-  releases. Role sessions never push; you open one PR per batch.
+  releases. Role sessions work on their own branches and never push; you
+  open one PR per batch.
 - Never edit a line I wrote; flag your concern instead.
-- Private notes stay in a folder that isn't in git.
 - Never claim more than the evidence shows. Every result lists its limits.
 
-First task: draft team/OPERATING-SYSTEM.md (rhythm, roles, who decides what)
-and one pipeline for the work that comes back most often. Then propose the
-first three role sessions, each with one task.
+Step 4, optional: a security check in the loop. Ask me once whether I want
+one. Only if I say yes, add this to the end of each loop's checks, before
+anything is committed:
+  npx penthera@2.2.0 --repo .
+It's offline and read-only: it scans the code, dependencies and AI tool setup
+and changes nothing. Running it with npx downloads the pinned package, so ask
+first. If I say no, don't install anything and don't ask again.
+
+When the files exist, show me the board and the three roles, and wait for my
+go before you start any role session.
 ```
 
 ## Limits
@@ -213,6 +241,6 @@ first three role sessions, each with one task.
 - The setup costs attention too: briefing and checking take most of the
   maintainer's 15 minutes.
 
-Penthera itself is an offline, rule-based security agent for your repo, your
-dependencies and your AI tooling. If this page was useful, the
-[repository](https://github.com/danoszz/penthera) is where the work happens.
+This page is part of [Penthera](https://github.com/danoszz/penthera), an
+offline, rule-based security agent for your code, your dependencies and your
+AI tooling.
