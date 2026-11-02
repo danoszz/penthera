@@ -289,10 +289,13 @@ export function datasetLd(v, pub, origin) {
     isAccessibleForFree: true,
     datePublished: pub.date,
     keywords: v.c.keywords,
-    isBasedOn: { "@type": "Dataset", name: v.c.dataset.name, url: v.c.dataset.url },
+    // The source data is a CreativeWork, not a nested Dataset: Google reads a
+    // nested Dataset as one more rich-result item, and flags it for the
+    // description, creator and license we can't state for someone else's data.
+    isBasedOn: { "@type": "CreativeWork", name: v.c.dataset.name, url: v.c.dataset.url },
     measurementTechnique: v.b.measure,
     variableMeasured: v.c.variables,
-    isPartOf: { "@id": `${origin}/benchmarks#dataset` },
+    isPartOf: `${origin}/benchmarks`,
     distribution: { "@type": "DataDownload", encodingFormat: "application/json", contentUrl: RAW },
   };
 }
@@ -311,8 +314,12 @@ export function hubDatasetLd(pub, origin, views) {
     datePublished: pub.date,
     keywords: ["security tool benchmark", "secret scanner benchmark", "malware detection benchmark", "static analysis benchmark", "preregistered"],
     citation: PROTOCOL,
-    hasPart: views.map((v) => ({ "@id": `${origin}/benchmarks/${v.c.slug}#dataset` })),
-    isBasedOn: [...new Map(views.map((v) => [v.c.dataset.url, { "@type": "Dataset", name: v.c.dataset.name, url: v.c.dataset.url }])).values()],
+    // Each part in full: Google rejects a bare {"@id"} here as the wrong type.
+    hasPart: views.map((v) => {
+      const { isPartOf, ...part } = datasetLd(v, pub, origin);
+      return part;
+    }),
+    isBasedOn: [...new Map(views.map((v) => [v.c.dataset.url, { "@type": "CreativeWork", name: v.c.dataset.name, url: v.c.dataset.url }])).values()],
     distribution: { "@type": "DataDownload", encodingFormat: "application/json", contentUrl: RAW },
   };
 }

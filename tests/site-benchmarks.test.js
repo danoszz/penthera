@@ -145,9 +145,10 @@ describe("benchmark pages", () => {
       expect(ds.datePublished).toBe(pub.date);
       expect(ds.url).toBe(`${ORIGIN}/benchmarks/${v.c.slug}`);
       expect(ds.measurementTechnique).toBe(v.b.measure);
+      expect(ds.isBasedOn["@type"]).toBe("CreativeWork");
       expect(ds.isBasedOn.url).toMatch(/^https:\/\/github\.com\//);
       expect(ds.distribution.encodingFormat).toBe("application/json");
-      expect(ds.isPartOf["@id"]).toBe(`${ORIGIN}/benchmarks#dataset`);
+      expect(ds.isPartOf).toBe(`${ORIGIN}/benchmarks`);
       const crumbs = doc["@graph"].find((x) => x["@type"] === "BreadcrumbList");
       expect(crumbs.itemListElement.map((i) => i.item)).toEqual([`${ORIGIN}/`, `${ORIGIN}/benchmarks`, `${ORIGIN}/benchmarks/${v.c.slug}`]);
     }
@@ -155,6 +156,16 @@ describe("benchmark pages", () => {
     const ds = hub["@graph"].find((x) => x["@type"] === "Dataset");
     expect(ds["@id"]).toBe(`${ORIGIN}/benchmarks#dataset`);
     expect(ds.hasPart.map((p) => p["@id"])).toEqual(views.map((v) => `${ORIGIN}/benchmarks/${v.c.slug}#dataset`));
+    // Google's Dataset report: every Dataset, nested ones too, needs a description,
+    // creator and license, and hasPart takes full Datasets, not bare references.
+    const all = [ds, ...ds.hasPart];
+    for (const d of all) {
+      expect(d["@type"], d["@id"]).toBe("Dataset");
+      expect(d.description.length, d["@id"]).toBeGreaterThanOrEqual(50);
+      expect(d.creator, d["@id"]).toBeTruthy();
+      expect(d.license, d["@id"]).toBeTruthy();
+    }
+    expect(JSON.stringify(hub).match(/"@type":"Dataset"/g)).toHaveLength(1 + views.length);
     // The homepage's SoftwareApplication points at it.
     const app = ld(read("index.html")).flatMap((x) => x["@graph"] || [x]).find((x) => x["@type"] === "SoftwareApplication");
     expect(app.subjectOf["@id"]).toBe(`${ORIGIN}/benchmarks#dataset`);
