@@ -62,7 +62,7 @@ export function formatMarkdownReport(result, opts = {}) {
   lines.push(`| **Target** | \`${result.target || "unknown"}\` |`);
   lines.push(`| **Scan time** | ${result.timestamp?.replace("T", " ").slice(0, 19) || "-"} UTC |`);
   // TODO(good-first-issue): a missing duration prints ", "; print "-" like the other empty cells and add a test.
-  lines.push(`| **Duration** | ${result.duration ? `${(result.duration / 1000).toFixed(1)}s` : ", "} |`);
+  lines.push(`| **Duration** | ${result.duration ? `${(result.duration / 1000).toFixed(1)}s` : "-"} |`);
   lines.push(`| **Mode** | ${result.modes?.join(", ") || result.mode || "-"} |`);
   // Only a URL scan reaches anything; a repo, deps or agents scan has nothing to report here.
   const modes = result.modes || [result.mode];
