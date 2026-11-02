@@ -10,6 +10,7 @@ import { referencesFor } from "../lib/references.js";
 import { formatDepsTerminal, uncheckedDeps } from "../lib/deps/report.js";
 import { describeCoverage } from "../lib/coverage.js";
 import { nothingClaim, notRead, siteUnread, SITE_NOT_READ } from "./report/unread.js";
+import { firstScreen } from "./report/first-screen.js";
 import { hintCommand } from "./utils/invocation.js";
 import { giantsTerminalLines, foundByText } from "./report/giants.js";
 import { exitCodeOf, exitNote, exitReason } from "./report/exit.js";
@@ -62,6 +63,13 @@ function line(char = "\u2500", len = 58) { return char.repeat(len); }
 export function printReport(result, opts = {}) {
   const out = process.stdout;
   const w = (s) => out.write(s + "\n");
+
+  // A repo scan opens with its verdict: what was checked, what to act on, what wasn't, one next step.
+  const repoScan = (result.modes || [result.mode]).some((m) => String(m).split("+").includes("repo"));
+  if (repoScan) {
+    for (const l of firstScreen(result)) w(/^ {2}(Fix now|Review|Nothing to fix)/.test(l) ? c.bold(l) : l);
+    if (result.brief) w(`  ${c.dim("Details")}`);
+  }
 
   w("");
   w(`  ${c.bold("penthera")} ${c.dim("security scanner")}`);
@@ -542,7 +550,7 @@ function printSummaryLine(result, w, opts = {}) {
   } else if (parts.length === 0 && result.suppressed?.length) {
     w(`  ${c.yellow(`${result.suppressed.length} suppressed, not counted. Nothing else found`)}`);
   } else if (parts.length === 0) {
-    w(`  ${c.green("\u2713")} Clean scan, no issues found`);
+    w("  Nothing found in what Penthera checked.");
   } else {
     w(`  ${[...parts, ...(result.suppressed?.length ? [c.yellow(`${result.suppressed.length} suppressed`)] : [])].join(c.dim(" \u00b7 "))}`);
   }
@@ -556,7 +564,10 @@ function printSummaryLine(result, w, opts = {}) {
     w("");
     w(`  ${c.bold("Fix first:")} ${printable(first.title)}`);
     if (first.remediation) w(`  ${printable(first.remediation)}`);
-    w(`  ${c.dim("Next:")} npx penthera ui --open, then Check my app ${c.dim("to go through every problem")}`);
+    // The same next step as the first screen and the brief.
+    const next = result.brief?.next?.[0];
+    if (next) w(`  ${c.dim("Next:")} ${printable(next.command)}`);
+    else w(`  ${c.dim("Next:")} npx penthera ui --open, then Check my app ${c.dim("to go through every problem")}`);
   }
   if (opts.fixes) {
     const { count, command } = opts.fixes;
