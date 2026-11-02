@@ -23,8 +23,8 @@ official MCP Registry. Keep the version pinned everywhere it appears.
 
 ## Description
 
-Penthera is an open-source security agent that runs on your own machine. As an
-MCP server it gives your coding agent six read-only tools:
+Penthera is a free, open-source security scanner that runs on your own machine.
+As an MCP server it gives your coding agent six read-only tools:
 
 - `scan_repo`: hardcoded secrets, code-execution sinks, API routes and runtime
   version pins, with evidence at file:line;
