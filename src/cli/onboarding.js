@@ -263,11 +263,12 @@ export async function runScanWizard() {
 // ── `penthera init`: the setup wizard ─────────────────────────────────────
 
 /**
- * The release the generated workflow pins, by commit SHA: the newest stable
- * release before this version. Update after each release is tagged:
- * git rev-parse vX.Y.Z^{commit}. tests/init.test.js fails when it falls behind.
+ * The Action pin, by commit SHA: the newest tagged release (the one before, while a
+ * release is prepared). Update after tagging: git rev-parse vX.Y.Z^{commit}.
  */
-export const ACTION_PIN = Object.freeze({ tag: "v2.1.2", sha: "695d035e16fe4129a9e0731f4fc9037b4375a895" });
+export const ACTION_PIN = Object.freeze({ tag: "v2.2.0", sha: "a9bbcab41d7c016d6cd333c7e50b2cf76f0b7a09" });
+/** The agents workflow runs this version with npx. */
+const RUNNING_VERSION = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf-8")).version;
 
 export const WORKFLOW_PATH = ".github/workflows/penthera.yml";
 export const AGENTS_WORKFLOW_PATH = ".github/workflows/penthera-agents.yml";
@@ -429,11 +430,11 @@ export function workflowYaml(pin = ACTION_PIN) {
   ].join("\n");
 }
 
-/** The generated agent config workflow: the agents example, pinned to ACTION_PIN's npm version. */
-export function agentsWorkflowYaml(pin = ACTION_PIN) {
+/** The generated agent config workflow: the agents example, pinned to the running version on npm, or to `pin`'s. */
+export function agentsWorkflowYaml(pin = null) {
   const example = readFileSync(AGENTS_WORKFLOW_EXAMPLE, "utf-8");
   const body = example.slice(example.indexOf("\nname:") + 1);
-  const version = pin.tag.replace(/^v/, "");
+  const version = pin ? pin.tag.replace(/^v/, "") : RUNNING_VERSION;
   const pinned = body.replace(/npx --yes penthera@\d+\.\d+\.\d+ agents/, `npx --yes penthera@${version} agents`);
   if (pinned === body && !body.includes(`npx --yes penthera@${version} agents`)) {
     throw new Error("docs/examples/github-actions-agents.yml no longer runs `npx --yes penthera@<version> agents`");

@@ -12,6 +12,7 @@ import { parseToggles } from "../src/cli/prompt.js";
 import { detectProjectFramework } from "../lib/whitebox/frameworks.js";
 import { detectProject, portsFromEnv, DEV_PORTS } from "../src/cli/detect.js";
 import { ACTION_PIN, WORKFLOW_PATH, AGENTS_WORKFLOW_PATH, workflowYaml, agentsWorkflowYaml, checkItems, fixFirst, writeNewFile } from "../src/cli/onboarding.js";
+const PKG_VERSION = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf-8")).version;
 import { HOOK_MARKER } from "../lib/hook/index.js";
 
 const BIN = join(import.meta.dirname, "..", "bin", "penthera.js");
@@ -120,7 +121,7 @@ describe("penthera init (scripted stdin)", () => {
     expect(wf).toContain(`danoszz/penthera@${ACTION_PIN.sha} # ${ACTION_PIN.tag}`);
     expect(r.stdout).toContain(`+++ b/${WORKFLOW_PATH}`); // shown as a diff first
     const awf = readFileSync(join(dir, AGENTS_WORKFLOW_PATH), "utf-8");
-    expect(awf).toContain(`npx --yes penthera@${ACTION_PIN.tag.slice(1)} agents`);
+    expect(awf).toContain(`npx --yes penthera@${PKG_VERSION} agents`);
     expect(r.stdout).toContain(`+++ b/${AGENTS_WORKFLOW_PATH}`);
     expect(readFileSync(join(dir, ".gitignore"), "utf-8")).toMatch(/^reports\/$/m);
     expect(git("check-ignore", "reports/x.json")).toBe("reports/x.json");
@@ -332,24 +333,28 @@ describe("init building blocks", () => {
     for (const u of yaml.match(/uses: \S+/g)) expect(u).toMatch(/@[0-9a-f]{40}$/);
   });
 
-  it("agentsWorkflowYaml pins npx to ACTION_PIN's version and keeps the example's SHA-pinned steps", () => {
+  it("agentsWorkflowYaml pins npx to the running version and keeps the example's SHA-pinned steps", () => {
     const yaml = agentsWorkflowYaml({ tag: "v9.8.7", sha: "a".repeat(40) });
     expect(yaml).toContain('npx --yes penthera@9.8.7 agents "$GITHUB_WORKSPACE" --sarif');
     expect(yaml).not.toMatch(/penthera@(?!9\.8\.7)\d+\.\d+\.\d+/);
     expect(yaml).toContain("persist-credentials: false");
     for (const u of yaml.match(/uses: \S+/g)) expect(u).toMatch(/@[0-9a-f]{40}$/);
-    expect(agentsWorkflowYaml()).toContain(`penthera@${ACTION_PIN.tag.slice(1)} agents`);
+    expect(agentsWorkflowYaml()).toContain(`penthera@${PKG_VERSION} agents`);
   });
 
-  it("ACTION_PIN is the newest stable release before this version, so it never falls behind", () => {
+  it("ACTION_PIN is this release, or the one before it while this one has no tag yet", () => {
     const root = join(import.meta.dirname, "..");
     const { version } = JSON.parse(readFileSync(join(root, "package.json"), "utf-8"));
     const num = (v) => v.replace(/-.*/, "").split(".").map(Number);
     const older = (a, b) => { const [x, y] = [num(a), num(b)]; const i = x.findIndex((n, k) => n !== y[k]); return i >= 0 && x[i] < y[i]; };
     // Stable releases only (no -rc), newest first as CHANGELOG.md lists them.
     const released = [...readFileSync(join(root, "CHANGELOG.md"), "utf-8").matchAll(/^## \[(\d+\.\d+\.\d+)\]/gm)].map((m) => m[1]);
-    const expected = released.find((v) => older(v, version));
-    expect(ACTION_PIN.tag, `update ACTION_PIN in src/cli/onboarding.js to v${expected}`).toBe(`v${expected}`);
+    const before = released.find((v) => older(v, version));
+    // A release can't pin its own tag before that tag exists, so while a version is being
+    // prepared the one before it stands. Once released, the pin must be that release.
+    const allowed = released.includes(version) && version !== before ? [version, before] : [before];
+    expect(allowed.map((v) => `v${v}`), `update ACTION_PIN in src/cli/onboarding.js to v${allowed[0]}`).toContain(ACTION_PIN.tag);
+    expect(ACTION_PIN.tag, "the 2.2.0 release is tagged, so init must not pin 2.1.2").not.toBe("v2.1.2");
     // With the tag fetched (CI checks out full history), the SHA must be that tag's commit.
     let sha = null;
     try { sha = execFileSync("git", ["rev-parse", "--verify", "-q", `${ACTION_PIN.tag}^{commit}`], { cwd: root, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"], env: gitEnv() }).trim(); } catch { /* tag not fetched */ }

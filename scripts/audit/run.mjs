@@ -67,7 +67,10 @@ const BENCH_MAX_DROP = 0.02;
 // ~2,565 KB unpacked; was 2_550_000. The trim pass that followed dropped
 // CHANGELOG.md from the tarball (not read at run time): ~2,445 KB unpacked,
 // ~896 KB packed, 256 files.
-const PACK_BUDGET = { packedBytes: 950_000, unpackedBytes: 2_600_000, files: 280 };
+// Raised for the 2.2.1 fixes (the readable fix window and the init pin: ~1.5 KB
+// unpacked), 2 Nov 2026: main had about 260 bytes of headroom, so the fixes put it
+// at ~2,601 KB unpacked; was 2_600_000. Needs the maintainer's OK, as every raise before it.
+const PACK_BUDGET = { packedBytes: 950_000, unpackedBytes: 2_610_000, files: 280 };
 
 /** Paths the npm package may contain. Anything else fails the packaging gate. */
 const PACK_ALLOW = [
