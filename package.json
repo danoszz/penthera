@@ -104,7 +104,7 @@
     "eslint": "10.13.0",
     "fast-check": "^4.10.2",
     "globals": "17.13.0",
-    "rolldown": "1.2.14",
+    "rolldown": "1.2.15",
     "vitest": "^5.0.5"
   },
   "dependencies": {
