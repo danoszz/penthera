@@ -56,6 +56,20 @@ A staged file larger than 16 MB is not read, and it blocks the commit with a
 warning that names it, since it could hold a secret nobody checked. Add it to
 `ignore`, or set `"largeFiles": "warn"` in the `hook` section to only warn.
 
+The repo being committed can shape the hook's environment, through direnv or a
+project `.npmrc`. The hook `penthera hook install` writes drops `NODE_OPTIONS`
+and `NODE_PATH` before anything runs, since they would load the repo's code into
+Node. A global `penthera` runs only when its real path is outside the repo. The
+`npx` fallback runs from `/`, without any `npm_config_*` setting, with npm's own
+registry and your account's own cache, and is told the repo with `--repo`. The
+lockfile check reads your account's npm cache (`~/.npm`) as well as any
+`npm_config_cache`, and a cached package counts only when it matches the
+lockfile's integrity.
+
+The environment's `PATH` is still the one the shell gives git, so a `PATH` that
+direnv changes can put another `git` or `npx` in front. Allow direnv only in
+repos you trust.
+
 If husky or lefthook manage your hooks (`core.hooksPath` is set),
 `penthera hook install` says so instead of overwriting them. Add one line to
 that tool instead:
@@ -72,6 +86,10 @@ pre-commit:
     penthera:
       run: npx --no-install penthera hook run
 ```
+
+These managers run `penthera hook run` with their own environment, so the
+`NODE_OPTIONS` and `NODE_PATH` step above doesn't apply. Clear them in the
+hook line if the repo can set them: `NODE_OPTIONS= NODE_PATH= npx --no-install penthera hook run`.
 
 ```yaml
 # .pre-commit-config.yaml (pre-commit.com)

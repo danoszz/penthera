@@ -108,6 +108,7 @@
         "pages": [
           "trust",
           "claims",
+          "team-playbook",
           "funding/sponsor-tiers",
           "live-check-terms",
           "voice"
