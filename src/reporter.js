@@ -573,7 +573,7 @@ function printSummaryLine(result, w, opts = {}) {
     const { count, command } = opts.fixes;
     w("");
     w(`  ${c.bold(count ? `${count} may be fixable:` : "Fixes:")} ${printable(hintCommand(command))}`);
-    w(`  ${c.dim("It also checks cookie flags, CORS and rate limits in your code, which this scan does not list.")}`);
+    w(`  ${c.dim("The fix plan also checks cookie flags, CORS and rate limits in your code, which this scan does not list.")}`);
   }
   const other = result.giants?.findings || [];
   if (other.length) {

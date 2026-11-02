@@ -149,7 +149,11 @@ Every `--repo` scan adds a **Coverage** section to the terminal, Markdown and
 JSON (`coverage`) reports. For each check (the secret scan, route and
 code-pattern analysis, runtime versions) it says how many files were read and
 why the others were not: file type not read, over the size limit, a language
-route analysis does not support, or no API routes found. Source files no code
+route analysis does not support, or no server routes found (a client-only app
+has none). Route analysis reads Next.js route handlers anywhere under `app/` or
+`src/app/` and a Worker's `export default { fetch }` entry, besides Express,
+Hono and Fastify routes. How many routes it found is part of Coverage, not a
+finding. Source files no code
 analysis read are listed as blind spots, up to 200. A file that was not read
 is unchecked, not clean. Dependency behaviour and agent config have their own
 commands (`penthera deps`, `penthera agents`) and are listed as not part of a
