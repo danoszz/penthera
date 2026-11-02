@@ -16,6 +16,7 @@ import { buildActionPlan, FALLBACK } from "../../lib/remediation/index.js";
 import { CATEGORY_REFERENCES, SOURCES } from "../../lib/references.js";
 import { RULE_OWASP, OWASP_NAMES } from "../../lib/agents/owasp.js";
 import { BUILT_IN_TEMPLATES } from "../../lib/templates.js";
+import { OPENAPI_EXPOSED_RULE } from "../../lib/blackbox/openapi.js";
 import { runtimeAdvisoriesForRepo, runtimeAdvisoriesForResponse } from "../../lib/advisories/index.js";
 import { stampProvenance } from "../../lib/provenance.js";
 import { reachLines, unreachableText } from "../report/reach.js";
@@ -254,13 +255,17 @@ function coverageOf(c) {
 
 // ── explain_finding ───────────────────────────────────────────────────────
 
+// Rule ids that scan checks set on a finding (`templateId`) without a template file,
+// with the category their references come from.
+const FINDING_RULES = { [OPENAPI_EXPOSED_RULE]: "exposure" };
+
 function explain(id) {
   if (/^pf-[0-9a-f]+$/.test(id)) {
     throw new ToolInputError("That is a finding id. This server keeps no scan state between calls, so pass the finding's `rule` field instead (for example agents/mcp-unpinned).");
   }
   const agentsRule = id.startsWith("agents/") ? id.slice("agents/".length) : null;
   const template = BUILT_IN_TEMPLATES.find((t) => t.id === id);
-  const category = agentsRule !== null ? "agent-config" : CATEGORY_REFERENCES[id] ? id : template ? (template.info?.tags?.[0] || "exposure") : null;
+  const category = agentsRule !== null ? "agent-config" : CATEGORY_REFERENCES[id] ? id : template ? (template.info?.tags?.[0] || "exposure") : Object.hasOwn(FINDING_RULES, id) ? FINDING_RULES[id] : null;
   const known = (agentsRule !== null && Object.hasOwn(RULE_OWASP, agentsRule)) || !!template || category !== null;
 
   const probe = { severity: "high", category: category || id, templateId: id, title: template?.info?.name || "" };

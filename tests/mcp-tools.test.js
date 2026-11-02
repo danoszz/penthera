@@ -174,6 +174,15 @@ describe("explain_finding", () => {
     expect(r.check.requests).toEqual(["GET /.git/config"]);
   });
 
+  it("explains the exposed OpenAPI specification by its rule id", async () => {
+    const r = structured(await call("explain_finding", { id: "openapi-exposed" }));
+    expect(r.known).toBe(true);
+    expect(r.category).toBe("exposure");
+    expect(r.limits).toEqual([]);
+    expect(r.fix).toMatch(/openapi_url=None/);
+    expect(r.references.length).toBeGreaterThan(0);
+  });
+
   it("says when a rule is unknown, and when it was given a finding id", async () => {
     expect(structured(await call("explain_finding", { id: "no-such-rule" })).known).toBe(false);
     const res = await call("explain_finding", { id: "pf-0123456789ab" });
@@ -193,6 +202,13 @@ describe("scan_url", () => {
     // The brief says so too: this scan sent no injection probes.
     expect(r.brief.not_checked.join(" ")).toMatch(/No injection probes were sent/);
     expect(r.findings.some((f) => f.location?.url?.startsWith("http://127.0.0.1"))).toBe(true);
+  }, 60_000);
+
+  it("gives the exposed OpenAPI specification a rule explain_finding knows", async () => {
+    const r = structured(await call("scan_url", { url: mock.url, profile: "quick" }));
+    const spec = r.findings.find((f) => f.title === "OpenAPI specification exposed");
+    expect(spec?.rule).toBe("openapi-exposed");
+    expect(structured(await call("explain_finding", { id: spec.rule })).known).toBe(true);
   }, 60_000);
 
   it("refuses hosts the user did not allow, metadata endpoints and non-http schemes", async () => {
