@@ -79,10 +79,14 @@ function expectedFindings(verdicts, eol) {
 }
 
 function shownFindings(findings) {
-  return findings.map((f) => {
+  return findings.flatMap((f) => {
     // A distribution build's end-of-life finding needs human review; an upstream
     // one is likely, or potential from a banner with no distribution token (#114).
-    if (f.rule?.endsWith("-eol")) return f.confidence === "needs-human-review" ? "end-of-life-distro" : "end-of-life";
+    // An upstream one also lists the advisories its line will never get a fix for.
+    if (f.rule?.endsWith("-eol")) {
+      if (f.confidence === "needs-human-review") return "end-of-life-distro";
+      return ["end-of-life", ...(f.advisories || []).map((id) => `end-of-life-no-fix:${id}`)];
+    }
     if (f.severity === "info") return "has-fix";
     if (f.confidence === "needs-human-review") return `check-on-server:${f.rule.split(",").sort().join(",")}`;
     return `${/end-of-life line/.test(f.title) ? "end-of-life-no-fix" : "affected"}:${f.rule}`;

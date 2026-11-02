@@ -254,7 +254,7 @@ Each product and version gets one of four answers:
 | Verdict | Evidence | Severity, confidence |
 |---|---|---|
 | Affected | An exact upstream version below the first fixed version on its line | The vendor's severity; `likely` from a pinned image or version file, `potential` from a banner that names no distribution |
-| End of life, no fix | A version on a line the vendor no longer supports | The advisory's severity, `potential`; plus an end-of-life finding |
+| End of life, no fix | A version on a line the vendor no longer supports | Listed in that line's one end-of-life finding (high), with the advisory's own severity and its CVEs |
 | Check on server | The product is in use, but the version is hidden, floating, or a distribution build, or the advisory lists no fix for that line | Medium, `needs-human-review` |
 | Has the fix (as advertised) | The visible version is at or above every fix | Info |
 

@@ -114,10 +114,8 @@ describe("black-box verdicts", () => {
     expect(f[0].description).toMatch(/Check on server: your distribution may have patched this under the same version number/);
     expect(f[0].description).toContain("`php -v`");
     const old = scanHeaders({ server: "nginx/1.20.1", "x-powered-by": "PHP/7.4.33" });
-    expect(verdicts(old)).toEqual([
-      "critical/potential: PHP 7.4.33 is on an end-of-life line with no fix for Test RCE in PHP",
-      "high/potential: PHP 7.4.33 is end of life: no more security fixes",
-    ]);
+    expect(verdicts(old)).toEqual(["high/potential: PHP 7.4.33 is end of life: no more security fixes"]);
+    expect(old[0].description).toMatch(/won't get a fix for this advisory, which may apply to it:\n- critical: .*Test RCE in PHP/);
     for (const x of old) expect(x.description).toMatch(/may have patched this under the same version number/);
     const nginxEol = eolRule({ product: "nginx", source: "https://nginx.org/", branches: [{ branch: "1.22", eol: "2023-04-11" }] });
     const deb = runtimeAdvisoriesForResponse({ headers: { server: "nginx/1.22.1" } }, { advisories: [], eol: [nginxEol] });
@@ -135,7 +133,7 @@ describe("black-box verdicts", () => {
       const f = runtimeAdvisoriesForRepo(dir, rules);
       expect(verdicts(f).sort()).toEqual([
         "critical/likely: PHP 8.3.12 is affected by Test RCE in PHP",
-        "critical/potential: PHP 7.4.33 is on an end-of-life line with no fix for Test RCE in PHP",
+        // The end-of-life line's unfixed advisory is listed in its row, with its own severity.
         "high/likely: PHP 7.4.33 is end of life: no more security fixes",
       ]);
       expect(f.every((x) => !/may have patched this/.test(x.description))).toBe(true);
@@ -184,13 +182,12 @@ describe("black-box verdicts", () => {
     expect(scanHeaders({})).toEqual([]);
   });
 
-  it("end-of-life line: unsupported for the advisory, plus an end-of-life finding", () => {
+  it("end-of-life line: one end-of-life finding that lists the advisory it will never get a fix for", () => {
     const f = scanHeaders({ "x-powered-by": "PHP/7.4.33" });
-    expect(verdicts(f)).toEqual([
-      "critical/potential: PHP 7.4.33 is on an end-of-life line with no fix for Test RCE in PHP",
-      "high/potential: PHP 7.4.33 is end of life: no more security fixes",
-    ]);
-    expect(f[1].description).toMatch(/2022-11-28/);
+    expect(verdicts(f)).toEqual(["high/potential: PHP 7.4.33 is end of life: no more security fixes"]);
+    expect(f[0].advisories).toHaveLength(1);
+    expect(f[0].description).toMatch(/2022-11-28/);
+    expect(f[0].description).toMatch(/Test RCE in PHP/);
   });
 
   it("end of life is judged by the pack's date, not the scan's clock", () => {
@@ -258,7 +255,10 @@ describe("black-box verdicts", () => {
     }
     // Without `introduced`, an unlisted end-of-life line is still treated as affected.
     const noIntro = adv({ id: "x", product: "apache-httpd", title: "Other flaw", fixed: [{ branch: "2.4", version: "2.4.51" }] });
-    expect(verdicts(runtimeAdvisoriesForResponse({ headers: { server: "Apache/2.2.34" } }, { advisories: [noIntro], eol: [httpdEol] }))[0]).toMatch(/end-of-life line with no fix for Other flaw/);
+    const unlisted = runtimeAdvisoriesForResponse({ headers: { server: "Apache/2.2.34" } }, { advisories: [noIntro], eol: [httpdEol] });
+    expect(unlisted).toHaveLength(1);
+    expect(unlisted[0].advisories).toEqual(["x"]);
+    expect(unlisted[0].description).toMatch(/Other flaw/);
   });
 
   it("reads nginx, OpenSSL and Python from Server banners, and not Tomcat as Apache", () => {
@@ -383,8 +383,7 @@ describe("bundled pack", () => {
     }
     for (const v of ["8.2.35", "8.3.36", "8.4.27", "8.5.12"]) expect(rules(v), v).toEqual([]);
     const old = runtimeAdvisoriesForResponse({ headers: { "x-powered-by": "PHP/8.1.34" } });
-    expect(old.some((f) => f.rule === "php-cve-2026-109618" && /end-of-life line/.test(f.title))).toBe(true);
-    expect(old.some((f) => f.rule === "php-eol")).toBe(true);
+    expect(old.some((f) => f.rule === "php-eol" && f.advisories?.includes("php-cve-2026-109618"))).toBe(true);
     // A distro build stays "check on server".
     const deb = runtimeAdvisoriesForResponse({ headers: { "x-powered-by": "PHP/8.3.6-1ubuntu1.4" } });
     expect(deb.every((f) => f.severity !== "critical")).toBe(true);
@@ -399,8 +398,9 @@ describe("bundled pack", () => {
       "7.0": 33, "7.1": 33, "7.2": 34, "7.3": 33, "7.4": 33,
       "8.0": 30, "8.1": 34, "8.2": 34, "8.3": 35, "8.4": 26, "8.5": 11,
     };
+    // An end-of-life line's unfixed advisories are listed in its one finding.
     const cves = (v) => runtimeAdvisoriesForResponse({ headers: { "x-powered-by": `PHP/${v}` } })
-      .filter((f) => /^php-cve-2026-10961[89]$/.test(f.rule || "")).map((f) => f.rule).sort();
+      .flatMap((f) => [f.rule, ...(f.advisories || [])]).filter((r) => /^php-cve-2026-10961[89]$/.test(r || "")).sort();
     for (const [branch, last] of Object.entries(VULNERABLE_THROUGH)) {
       // Their "vulnerable" is our "affected", or "on an end-of-life line with no fix".
       expect(cves(`${branch}.${last}`), `${branch}.${last}`).toEqual(["php-cve-2026-109618", "php-cve-2026-109619"]);
@@ -429,8 +429,11 @@ describe("bundled pack", () => {
       }
       for (const v of ["22.23.4", "24.22.1", "26.12.1", "26.13.0"]) expect(scan(v), v).toEqual([]);
       for (const v of ["20.20.2", "25.9.0"]) {
-        expect(scan(v).map((f) => f.rule).sort(), v).toEqual(NODE_2026_10);
-        expect(scan(v).every((f) => /end-of-life line/.test(f.title)), v).toBe(true);
+        // One end-of-life finding that lists both advisories, not one row each.
+        writeFileSync(join(dir, ".nvmrc"), `${v}\n`);
+        const all = runtimeAdvisoriesForRepo(dir);
+        expect(all.filter((f) => f.rule === "nodejs-eol").map((f) => [...f.advisories].sort()), v).toEqual([NODE_2026_10]);
+        expect(scan(v), v).toEqual([]);
       }
       // Only the release line pinned: check, not affected.
       writeFileSync(join(dir, ".nvmrc"), "24\n");

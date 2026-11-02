@@ -133,7 +133,7 @@ routes, for example `--deep reached 3 of 13 routes in your code.`
 
 | Format | Flag | Use |
 |--------|------|-----|
-| Terminal | *(default)* | Colored summary, findings and coverage |
+| Terminal | *(default)* | A `--repo` scan opens with one screen: what was checked, the top three to act on with a fix each, what wasn't checked and one next step. Findings and coverage follow |
 | **Agent brief** | `--brief`, or the default when stdout is not a terminal and not CI | Verdict, act on, check first, likely noise, not checked, next: short, for an AI assistant ([brief.md](brief.md)) |
 | **Markdown** | `--markdown file.md` or `-o file.json` | Human-readable report (exec summary, findings tables, fixes). Written next to `-o` automatically |
 | JSON | `--json` or `-o file.json` | CI pipelines, baseline diffs, custom tooling |
@@ -149,7 +149,11 @@ Every `--repo` scan adds a **Coverage** section to the terminal, Markdown and
 JSON (`coverage`) reports. For each check (the secret scan, route and
 code-pattern analysis, runtime versions) it says how many files were read and
 why the others were not: file type not read, over the size limit, a language
-route analysis does not support, or no API routes found. Source files no code
+route analysis does not support, or no server routes found (a client-only app
+has none). Route analysis reads Next.js route handlers anywhere under `app/` or
+`src/app/` and a Worker's `export default { fetch }` entry, besides Express,
+Hono and Fastify routes. How many routes it found is part of Coverage, not a
+finding. Source files no code
 analysis read are listed as blind spots, up to 200. A file that was not read
 is unchecked, not clean. Dependency behaviour and agent config have their own
 commands (`penthera deps`, `penthera agents`) and are listed as not part of a

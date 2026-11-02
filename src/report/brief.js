@@ -235,7 +235,7 @@ export function buildBrief(results, { reports = [], fixes = null, limits = [], m
   const next = [];
   if (fixes) {
     const lead = fixes.count ? `${fixes.count} may be fixable. ` : "";
-    next.push({ command: text(fixes.command, 200), why: `${lead}It also checks cookie flags, CORS and rate limits in your code` });
+    next.push({ command: text(fixes.command, 200), why: `${lead}The fix plan also checks cookie flags, CORS and rate limits in your code` });
   }
   for (const f of by.info) {
     const cmd = commandIn(f);

@@ -118,12 +118,7 @@ runs:
             args=(deps "$INPUT_PATH" ${args[@]+"${args[@]}"} --pr-comment "$out/comment.md")
             ;;
           agents)
-            # agents parses YAML frontmatter, the one runtime dependency. Install it
-            # from the action's own lockfile (integrity-checked, no install scripts)
-            # only if it is not already there. deps and scan need no install.
-            if ! (cd "$PENTHERA_DIR" && node -e 'import("yaml")' 2>/dev/null); then
-              npm ci --prefix "$PENTHERA_DIR" --omit=dev --ignore-scripts --no-audit --no-fund
-            fi
+            # Penthera has no runtime dependencies, so no mode installs anything.
             args=(agents "$INPUT_PATH")
             ;;
           scan)
