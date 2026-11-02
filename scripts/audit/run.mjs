@@ -21,7 +21,7 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, 
 import { tmpdir } from "node:os";
 import { delimiter, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { parse as parseYaml } from "yaml";
+import { parse as parseYaml } from "../../lib/vendor/yaml/index.js";
 import { startMockServer } from "../../tests/fixtures/mock-server.js";
 import { mdCell } from "../../src/report/md-escape.js";
 import { ACTION_PIN } from "../../src/cli/onboarding.js";
@@ -67,7 +67,14 @@ const BENCH_MAX_DROP = 0.02;
 // ~2,565 KB unpacked; was 2_550_000. The trim pass that followed dropped
 // CHANGELOG.md from the tarball (not read at run time): ~2,445 KB unpacked,
 // ~896 KB packed, 256 files.
-const PACK_BUDGET = { packedBytes: 950_000, unpackedBytes: 2_600_000, files: 280 };
+// Raised for the 2.2.1 fixes (the readable fix window and the init pin: ~1.5 KB
+// unpacked), 2 Nov 2026: main had about 260 bytes of headroom; was 2_600_000.
+// Raised for the vendored yaml parser (lib/vendor/yaml/: ~456 KB unpacked, ~74 KB packed,
+// 76 files), so Penthera has no runtime dependency. A user's install still shrinks: it no
+// longer fetches yaml's own tarball (112 KB packed, 686 KB unpacked, 233 files). The package
+// was ~1,022 KB packed / ~2,879 KB unpacked / 337 files; was 950_000 / 2_600_000 / 280.
+// Both raises approved by the maintainer, 2 Nov 2026.
+const PACK_BUDGET = { packedBytes: 1_050_000, unpackedBytes: 2_950_000, files: 360 };
 
 /** Paths the npm package may contain. Anything else fails the packaging gate. */
 const PACK_ALLOW = [
@@ -421,9 +428,11 @@ async function gateSmoke() {
     await check("penthera agents <clean fixture>", "penthera", ["agents", "tests/fixtures/agents/clean", "--json"],
       { codes: [0], test: (r) => json(r).agents.grade === "A" || `grade ${json(r).agents.grade}, expected A` });
 
-    // deps: our own runtime tree
+    // deps: our own runtime tree is empty (no runtime dependencies), and the dev tree is read
     await check("penthera deps . --prod", "penthera", ["deps", ".", "--prod", "--json"],
-      { codes: [0], test: (r) => json(r).deps.scanned > 0 || "no packages scanned" });
+      { codes: [0], test: (r) => json(r).deps.total === 0 || `${json(r).deps.total} runtime packages, expected none` });
+    await check("penthera deps .", "penthera", ["deps", ".", "--json"],
+      { codes: [0, 1], test: (r) => json(r).deps.scanned > 0 || "no packages scanned" });
 
     // install: dry run of this project's own manifest, npm cache only
     const proj = join(dir, "install");

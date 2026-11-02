@@ -13,10 +13,12 @@
  *
  * Only paths decide. It can't tell whether a doc is right: that's for
  * scripts/docs-commands.mjs and tests/docs-coverage.test.js. Exits 1 and names
- * what's missing, 2 on a usage error.
+ * what's missing, 2 on a usage error. Dependabot's verified pin bumps pass
+ * (scripts/ci/dependabot.mjs): they change no behaviour a doc describes.
  */
 import { execFileSync } from "node:child_process";
 import { parseFragment } from "../changelog.mjs";
+import { dependabotPr } from "./dependabot.mjs";
 
 const USER_DOCS = /^(README\.md|docs\/(?!research\/|funding\/|decisions\/).+\.md|skills\/penthera\/.+)$/;
 
@@ -67,6 +69,11 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   if (!base) {
     console.error("usage: docs-gate.mjs <base-ref> [head-ref]");
     process.exit(2);
+  }
+  const bot = await dependabotPr(base, head);
+  if (bot.ok) {
+    console.log(`Docs gate: ${bot.reason}.`);
+    process.exit(0);
   }
   const git = (...args) => execFileSync("git", args, { encoding: "utf-8" });
   const files = git("diff", "--name-only", `${base}...${head}`).split("\n").filter(Boolean);

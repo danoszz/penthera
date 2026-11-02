@@ -63,10 +63,18 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      # PR_AUTHOR and the token let both checks pass Dependabot's verified pin bumps
+      # (scripts/ci/dependabot.mjs). The token is read-only, as the workflow's permissions say.
       - name: AI disclosure trailers (CONTRIBUTING.md#use-of-generative-ai)
+        env:
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/ci/provenance.mjs "origin/${{ github.base_ref }}" HEAD
 
       - name: Docs follow the public surface (changelog.d/README.md)
+        env:
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/ci/docs-gate.mjs "origin/${{ github.base_ref }}" HEAD
 
   scan:
