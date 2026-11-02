@@ -6,10 +6,12 @@
  * anyway (api/_lib/tier1.mjs). There is no deeper scan online; that runs with
  * npx penthera on the user's own machine.
  *
- * Abuse guards, all in memory and per instance (Vercel's firewall adds a
- * global limit): a consent affirmation in every request, 6 checks a minute
- * and 40 a day per visitor, 30 an hour per target site, and the target's
- * own opt-out (robots.txt, in tier1.mjs). Nothing is stored or logged; the
+ * Abuse guards, all in memory and per instance, so each instance counts on its
+ * own. Nothing here is global: that takes a rate-limit rule in the Vercel
+ * firewall, set in its dashboard. A consent affirmation in every request, 6
+ * checks a minute and 40 a day per visitor (an IPv6 visitor is their /64), 30
+ * an hour per target site (its registrable domain, so subdomains share it),
+ * and the target's own opt-out (robots.txt, in tier1.mjs). Nothing is stored or logged; the
  * URL travels in the body, so it never appears in request logs. Every
  * request to the target goes through the guard in api/_lib/guard.mjs.
  *
@@ -20,6 +22,8 @@
  */
 import { parseTarget, CheckError } from "./_lib/guard.mjs";
 import { passiveReport, ungraded } from "./_lib/tier1.mjs";
+import { ipv6Groups } from "../lib/net/ip.js";
+import { registrableDomain } from "../src/utils/url.js";
 
 const MINUTE = 60_000, HOUR = 60 * MINUTE, DAY = 24 * HOUR;
 export const LIMITS = [
@@ -33,6 +37,24 @@ export const LIMITS = [
  */
 export const RATE_LIMIT_POLICY = LIMITS.map((l) => `"${l.key}-${l.window / 1000}s";q=${l.max};w=${l.window / 1000}`).join(", ");
 const hits = new Map();
+/** Keys kept per instance. Past this, the oldest go first, so a full store never lifts every limit at once. */
+export const MAX_KEYS = 20_000;
+
+// Hosts where each subdomain is someone else's app. Our registrableDomain() has no
+// public-suffix list, so without this every app on one of them would share a limit.
+const SHARED_HOSTING = /(?:^|\.)([^.]+\.(?:vercel\.app|netlify\.app|github\.io|pages\.dev|workers\.dev|web\.app|firebaseapp\.com|herokuapp\.com|onrender\.com|fly\.dev|railway\.app|replit\.app|repl\.co|glitch\.me|surge\.sh|azurewebsites\.net|cloudfront\.net|amplifyapp\.com|ngrok\.app|ngrok-free\.app|lovable\.app|bolt\.new|webflow\.io|framer\.website|wixsite\.com|myshopify\.com))$/i;
+
+/** The site a per-site limit counts: the registrable domain, or the app on a shared host. */
+export function siteKey(hostname) {
+  const host = String(hostname).toLowerCase().replace(/\.$/, "");
+  return SHARED_HOSTING.exec(host)?.[1] ?? registrableDomain(host);
+}
+
+/** Who is asking: the address, or an IPv6 address's /64, which one person usually holds whole. */
+export function visitorKey(address) {
+  const g = ipv6Groups(address);
+  return g ? `${g.slice(0, 4).map((x) => x.toString(16)).join(":")}::/64` : address;
+}
 
 /**
  * The rule one more hit would pass, with the seconds until every rule lets it
@@ -50,9 +72,13 @@ export function limited(entries, now = Date.now()) {
   for (const [key, rule] of entries) {
     const list = (hits.get(key) || []).filter((t) => now - t < rule.window);
     list.push(now);
+    hits.delete(key);  // re-inserted last, so the map stays in order of use
     hits.set(key, list);
   }
-  if (hits.size > 20_000) hits.clear();
+  for (const key of hits.keys()) {
+    if (hits.size <= MAX_KEYS) break;
+    hits.delete(key);
+  }
   return null;
 }
 
@@ -100,8 +126,8 @@ export function createHandler(opts = {}) {
     try {
       const typed = String(body?.url ?? "");
       const target = parseTarget(typed);
-      const ip = String(req.headers["x-forwarded-for"] || req.socket?.remoteAddress || "").split(",")[0].trim();
-      const host = target.hostname.replace(/^www\./, "");
+      const ip = visitorKey(String(req.headers["x-forwarded-for"] || req.socket?.remoteAddress || "").split(",")[0].trim());
+      const host = siteKey(target.hostname);
       const rule = limited([
         [`ip:m:${ip}`, LIMITS[0]], [`ip:d:${ip}`, LIMITS[1]], [`host:${host}`, LIMITS[2]],
       ], opts.now);

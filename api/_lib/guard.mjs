@@ -10,6 +10,9 @@ import { lookup as dnsLookup } from "node:dns/promises";
 import { isIP } from "node:net";
 import http from "node:http";
 import https from "node:https";
+import { isPublicIp } from "../../lib/net/ip.js";
+
+export { isPublicIp };
 
 export class CheckError extends Error {
   /** @param {string} code  @param {string} message  @param {number} status  @param {string} hint */
@@ -49,33 +52,6 @@ export function parseTarget(input, { anyPort = false } = {}) {
 
 function notPublic() {
   return new CheckError("not_public", "Only public websites can be checked here.", 400, "For localhost or an internal address, run npx penthera on your own machine.");
-}
-
-const V4_BLOCKED = [
-  ["0.0.0.0", 8], ["10.0.0.0", 8], ["100.64.0.0", 10], ["127.0.0.0", 8], ["169.254.0.0", 16],
-  ["172.16.0.0", 12], ["192.0.0.0", 24], ["192.0.2.0", 24], ["192.88.99.0", 24], ["192.168.0.0", 16],
-  ["198.18.0.0", 15], ["198.51.100.0", 24], ["203.0.113.0", 24], ["224.0.0.0", 4], ["240.0.0.0", 4],
-];
-
-const v4num = (ip) => ip.split(".").reduce((n, p) => n * 256 + Number(p), 0);
-
-/** True only for addresses on the public internet. */
-export function isPublicIp(ip) {
-  if (isIP(ip) === 4) {
-    const n = v4num(ip);
-    return !V4_BLOCKED.some(([base, bits]) => Math.floor(n / 2 ** (32 - bits)) === Math.floor(v4num(base) / 2 ** (32 - bits)));
-  }
-  if (isIP(ip) !== 6) return false;
-  const a = ip.toLowerCase();
-  const mapped = /^(?:0*:)*:?ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(a) || /^64:ff9b::(\d+\.\d+\.\d+\.\d+)$/.exec(a);
-  if (mapped) return isPublicIp(mapped[1]);
-  if (a === "::" || a === "::1") return false;
-  const first = parseInt(a.split(":")[0] || "0", 16);
-  if ((first & 0xfe00) === 0xfc00) return false;  // fc00::/7, unique local
-  if ((first & 0xffc0) === 0xfe80) return false;  // fe80::/10, link local
-  if ((first & 0xff00) === 0xff00) return false;  // ff00::/8, multicast
-  if (a.startsWith("2001:db8:") || a.startsWith("2001:0db8:")) return false;
-  return true;
 }
 
 /** One public address for a host name, or a CheckError. */

@@ -1,3 +1,6 @@
+import { isIP } from "node:net";
+import { isPublicIp } from "../../lib/net/ip.js";
+
 const PRIVATE_HOSTS = new Set(["localhost", "127.0.0.1", "0.0.0.0", "[::1]"]);
 
 /** Strip trailing slash so path joins do not produce double slashes. */
@@ -48,8 +51,8 @@ export function isPrivateHost(url) {
   try {
     const { hostname } = new URL(url);
     if (PRIVATE_HOSTS.has(hostname)) return true;
-    if (/^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/.test(hostname)) return true;
-    return false;
+    const literal = hostname.replace(/^\[|\]$/g, "");
+    return isIP(literal) ? !isPublicIp(literal) : false;
   } catch {
     return false;
   }

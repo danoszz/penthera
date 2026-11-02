@@ -58,5 +58,5 @@
       "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
     }
   ],
-  "functions": {"api/check.mjs": {"includeFiles": "{lib/rules/**,lib/data/**}", "maxDuration": 60}}
+  "functions": {"api/check.mjs": {"includeFiles": "{lib/rules/**,lib/data/**}", "maxDuration": 15}}
 }
