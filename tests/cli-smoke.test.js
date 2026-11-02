@@ -76,6 +76,25 @@ describe("CLI smoke (offline commands)", () => {
     expect(scan({ CI: "true" })).toMatch(/penthera\s+security scanner/);
   });
 
+  it("the terminal report has no color codes in a pipe; FORCE_COLOR=1 brings them back, NO_COLOR still wins (#231)", () => {
+    const repo = resolve("tests/fixtures/repo-scan/express-routes");
+    const report = (extra) => {
+      const env = { ...process.env, PENTHERA_NO_ONBOARDING: "1", PENTHERA_BRIEF: "0" };
+      for (const k of ["NO_COLOR", "FORCE_COLOR", "CI"]) delete env[k];
+      Object.assign(env, extra);
+      try {
+        return execFileSync(process.execPath, [BIN, "--repo", repo], { cwd: dir, encoding: "utf-8", stdio: ["ignore", "pipe", "pipe"], env });
+      } catch (e) {
+        return e.stdout; // exit 1: the fixture has a critical finding
+      }
+    };
+    const plain = report({});
+    expect(plain).toMatch(/penthera\s+security scanner/);
+    expect(plain).not.toContain("\x1b[");
+    expect(report({ FORCE_COLOR: "1" })).toContain("\x1b[");
+    expect(report({ FORCE_COLOR: "1", NO_COLOR: "1" })).not.toContain("\x1b[");
+  });
+
   it("an unknown word is a usage error, not a TypeError stack trace (e2e 2026-10-22)", () => {
     let err;
     try {

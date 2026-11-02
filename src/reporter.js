@@ -14,6 +14,7 @@ import { hintCommand } from "./utils/invocation.js";
 import { giantsTerminalLines, foundByText } from "./report/giants.js";
 import { exitCodeOf, exitNote, exitReason } from "./report/exit.js";
 import { toolById } from "../lib/giants/tools.js";
+import { colorOff } from "./cli/ansi.js";
 
 const PKG_VERSION = JSON.parse(
   readFileSync(new URL("../package.json", import.meta.url), "utf-8"),
@@ -21,10 +22,8 @@ const PKG_VERSION = JSON.parse(
 
 // ── ANSI helpers ─────────────────────────────────────────────────────────
 
-// TODO(good-first-issue): also drop colors when stdout is not a TTY (piped output gets escape codes); let FORCE_COLOR=1 override.
-const NO_COLOR = !!process.env.NO_COLOR;
-
-const ansi = (code) => (s) => NO_COLOR ? s : `\x1b[${code}m${s}\x1b[0m`;
+// The same rule as src/cli/ansi.js: no colors in a pipe or with NO_COLOR; FORCE_COLOR=1 brings them back to a pipe.
+const ansi = (code) => (s) => colorOff ? s : `\x1b[${code}m${s}\x1b[0m`;
 
 const c = {
   bold:    ansi("1"),
@@ -34,8 +33,8 @@ const c = {
   yellow:  ansi("33"),
   cyan:    ansi("36"),
   magenta: ansi("35"),
-  bgRed:   (s) => NO_COLOR ? s : `\x1b[41;37;1m${s}\x1b[0m`,
-  bgYellow:(s) => NO_COLOR ? s : `\x1b[43;30;1m${s}\x1b[0m`,
+  bgRed:   (s) => colorOff ? s : `\x1b[41;37;1m${s}\x1b[0m`,
+  bgYellow:(s) => colorOff ? s : `\x1b[43;30;1m${s}\x1b[0m`,
 };
 
 const SEV_COLOR = {
