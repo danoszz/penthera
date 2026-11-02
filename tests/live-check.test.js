@@ -50,6 +50,45 @@ describe("live check guard", () => {
   });
 });
 
+describe("live check guard, IPv6 forms of internal addresses", () => {
+  // new URL() writes the embedded IPv4 in hex: [::ffff:127.0.0.1] becomes [::ffff:7f00:1].
+  const internal = [
+    "[::ffff:127.0.0.1]", "[::ffff:169.254.169.254]", "[::ffff:10.0.0.1]", "[64:ff9b::7f00:1]", "[::127.0.0.1]",
+    "[2002:7f00:1::]", "[::ffff:0:127.0.0.1]", "[64:ff9b:1::a00:1]", "[100::1]", "[2001:0:4136:e378:8000:63bf:80ff:fffe]",
+    "[::ffff:192.168.1.1]", "[64:ff9b::a9fe:a9fe]", "[2002:a9fe:a9fe::1]", "[fec0::1]", "[::2]",
+  ];
+  it("refuses each one as a typed address", () => {
+    for (const host of internal) expect(codeOf(() => parseTarget(`http://${host}/`)), host).toBe("not_public");
+  });
+  it("refuses each one as a DNS answer", async () => {
+    for (const host of internal) {
+      const address = new URL(`http://${host}/`).hostname.slice(1, -1);
+      expect(await codeOfAsync(resolvePublic("site.example-dns.org", { lookup: async () => [{ address, family: 6 }] })), address).toBe("not_public");
+    }
+  });
+  it("still allows public addresses written the same ways", () => {
+    for (const ip of ["::ffff:808:808", "64:ff9b::808:808", "2002:808:808::1", "2606:4700:4700::1111", "2a00:1450:4001:80b::200e"]) {
+      expect(isPublicIp(ip), ip).toBe(true);
+    }
+  });
+});
+
+describe("the CLI's guards, for the same forms", () => {
+  it("refuses them where only loopback or a named host may go", async () => {
+    const { checkTarget } = await import("../src/mcp/workspace.js");
+    const { checkLiveTarget } = await import("../lib/giants/index.js");
+    for (const host of ["[::ffff:169.254.169.254]", "[64:ff9b::7f00:1]", "[2002:a00:1::]"]) {
+      expect(() => checkTarget(`http://${host}/`, []), host).toThrow();
+      expect(checkLiveTarget(`http://${host}/`, { typedUrl: "http://127.0.0.1:3000/" }).ok, host).toBe(false);
+    }
+  });
+  it("counts them as local, as their IPv4 forms are", async () => {
+    const { isPrivateHost } = await import("../src/utils/url.js");
+    for (const host of ["[::ffff:10.0.0.1]", "[::ffff:127.0.0.1]", "[fd00::1]", "[::1]"]) expect(isPrivateHost(`http://${host}/`), host).toBe(true);
+    expect(isPrivateHost("http://[2606:4700:4700::1111]/")).toBe(false);
+  });
+});
+
 describe("live check fetch", () => {
   let server, port;
   beforeAll(async () => {
@@ -190,6 +229,46 @@ describe("live check endpoint", () => {
     expect(rule.hint).toBe("Come back tomorrow.");
     // Once the minute has passed, the day still holds.
     expect(limited(rules, 61_000).retryAfter).toBe(86_339);
+  });
+
+  it("refuses an IPv6 form of loopback before any byte leaves", async () => {
+    const res = await post({ url: "http://[::ffff:127.0.0.1]/", consent: true }, "203.0.113.77");
+    expect((await res.json()).error.code).toBe("not_public");
+  });
+  it("counts every name under one registrable domain as one site", async () => {
+    const codes = [];
+    for (let i = 0; i < 31; i++) {
+      const res = await post({ url: `${i % 2 ? "shop" : "blog"}.limited-site.org`, consent: true }, `198.51.100.${i + 1}`);
+      codes.push((await res.json()).error.code);
+    }
+    expect(codes[30]).toBe("rate_limited");
+  });
+
+  it("keys a site by registrable domain, but each app on a shared host apart", async () => {
+    const { siteKey } = await import("../api/check.mjs");
+    expect(siteKey("www.shop.example-site.co.uk")).toBe("example-site.co.uk");
+    expect(siteKey("api.example-site.org")).toBe(siteKey("example-site.org"));
+    expect(siteKey("one.vercel.app")).not.toBe(siteKey("two.vercel.app"));
+    expect(siteKey("preview.one.vercel.app")).toBe("one.vercel.app");
+    expect(siteKey("me.github.io")).toBe("me.github.io");
+  });
+
+  it("counts an IPv6 visitor by their /64, as one visitor", async () => {
+    const codes = [];
+    for (let i = 0; i < 7; i++) {
+      const res = await post({ url: `v6-${i}.example-visitor.org`, consent: true }, `2001:db8:77:1::${(i + 1).toString(16)}`);
+      codes.push((await res.json()).error.code);
+    }
+    expect(codes[6]).toBe("rate_limited");
+  });
+
+  it("drops the oldest entries when full, not every limit at once", async () => {
+    const { limited, MAX_KEYS } = await import("../api/check.mjs");
+    const rule = { window: 60_000, max: 1, hint: "Wait a minute." };
+    for (let i = 0; i < MAX_KEYS; i++) limited([[`fill:${i}`, rule]], 0);
+    expect(limited([["fill:last", rule]], 0)).toBeNull();
+    // The store went over its size: the newest limit must still hold.
+    expect(limited([["fill:last", rule]], 1)).not.toBeNull();
   });
 
   it("CheckError carries an HTTP status", () => {

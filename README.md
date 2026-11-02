@@ -23,6 +23,7 @@ Daily notes from Penthera: **[x.com/penthera_org](https://x.com/penthera_org)**
 ![license](https://img.shields.io/badge/license-MIT-0000ed)
 [![CI](https://github.com/danoszz/penthera/actions/workflows/ci.yml/badge.svg)](https://github.com/danoszz/penthera/actions/workflows/ci.yml)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/danoszz/penthera/badge)](https://scorecard.dev/viewer/?uri=github.com/danoszz/penthera)
+[![Socket](https://socket.dev/api/badge/npm/package/penthera)](https://socket.dev/npm/package/penthera)
 
 <br/>
 
