@@ -4,7 +4,7 @@
  */
 import { describe, it, expect } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
-import YAML from "yaml";
+import YAML from "../lib/vendor/yaml/index.js";
 import {
   changelogSection, highlights, intro, linkedinPost, shortPost, shareBlock, plain,
   MARKER as SHARE_MARKER, SHORT_MAX, LINKEDIN_TARGET, NPM_URL,

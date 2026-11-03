@@ -27,7 +27,7 @@ Each page is Markdown, built from the repo with every link made absolute.
 
 ## Trust
 
-- [Trust]({{ORIGIN}}/docs/trust.md): how Penthera itself is built and released: npm provenance, one runtime dependency, public checks, who runs penthera.org
+- [Trust]({{ORIGIN}}/docs/trust.md): how Penthera itself is built and released: npm provenance, no runtime dependencies, public checks, who runs penthera.org
 - [Methodology]({{ORIGIN}}/docs/METHODOLOGY.md): how findings are decided, confidence labels, known limitations
 - [Privacy and network use]({{ORIGIN}}/docs/privacy.md)
 - [Public benchmarks]({{ORIGIN}}/benchmarks.md): the rankings above, every tool with its interval, and the limits
