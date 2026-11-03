@@ -42,12 +42,9 @@ describe("audience reports", () => {
 
   it("prints a dash when duration is missing", () => {
     const result = reportResult();
-
     delete result.duration;
 
-    const md = formatMarkdownReport(result, {
-        version: REPORT_VERSION
-    });
+    const md = formatMarkdownReport(result, { version: REPORT_VERSION });
 
     expect(md).toContain("| **Duration** | - |");
   });
