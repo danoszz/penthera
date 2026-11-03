@@ -2,12 +2,12 @@ name: Install matrix
 
 # Tests Penthera the way users install it: the packed tarball, installed into
 # an empty project and run with `npx penthera`, on Linux, macOS and Windows with
-# Node 22 and 24. Also an upgrade from the last release on npm with existing
+# Node 22 and 24. Also an upgrade from the previous minor release on npm with existing
 # ~/.penthera state, and every documented command against the installed package.
 #
-# Network: npm fetches the tarball's one runtime dependency (yaml) from the
-# registry during install, as any user install does, and the upgrade job
-# installs the last release (FROM_VERSION) from npm. Penthera itself runs offline: every
+# Network: the package has no runtime dependencies, so installing the tarball
+# fetches nothing else. The upgrade job installs the previous minor release
+# (FROM_VERSION, from scripts/ci/upgrade-from.mjs) from npm. Penthera itself runs offline: every
 # Penthera process here is started under scripts/ci/net-guard.cjs, which fails
 # any connection or DNS query past loopback.
 
@@ -60,6 +60,8 @@ jobs:
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
+    outputs:
+      from: ${{ steps.from.outputs.version }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -68,6 +70,11 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
+
+      # The upgrade job starts from the previous minor release, never the candidate itself.
+      - id: from
+        name: Release to upgrade from
+        run: echo "version=$(node scripts/ci/upgrade-from.mjs)" >> "$GITHUB_OUTPUT"
 
       # --ignore-scripts: packing must never run package scripts.
       - name: Pack
@@ -164,7 +171,7 @@ jobs:
           fi
 
   upgrade:
-    name: upgrade from 1.9.0 · ${{ matrix.os }}
+    name: upgrade from ${{ needs.pack.outputs.from }} · ${{ matrix.os }}
     needs: pack
     runs-on: ${{ matrix.os }}
     strategy:
@@ -175,7 +182,7 @@ jobs:
       run:
         shell: bash
     env:
-      FROM_VERSION: 2.2.0
+      FROM_VERSION: ${{ needs.pack.outputs.from }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -190,7 +197,7 @@ jobs:
           name: penthera-tarball
           path: ${{ runner.temp }}/pkg
 
-      # The one deliberate download in this workflow: the last release, from npm.
+      # The one deliberate download in this workflow: the previous minor release, from npm.
       - name: Install penthera@${{ env.FROM_VERSION }} from npm
         working-directory: ${{ runner.temp }}
         run: |

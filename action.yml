@@ -118,12 +118,7 @@ runs:
             args=(deps "$INPUT_PATH" ${args[@]+"${args[@]}"} --pr-comment "$out/comment.md")
             ;;
           agents)
-            # agents parses YAML frontmatter, the one runtime dependency. Install it
-            # from the action's own lockfile (integrity-checked, no install scripts)
-            # only if it is not already there. deps and scan need no install.
-            if ! (cd "$PENTHERA_DIR" && node -e 'import("yaml")' 2>/dev/null); then
-              npm ci --prefix "$PENTHERA_DIR" --omit=dev --ignore-scripts --no-audit --no-fund
-            fi
+            # Penthera has no runtime dependencies, so no mode installs anything.
             args=(agents "$INPUT_PATH")
             ;;
           scan)
@@ -174,7 +169,7 @@ runs:
 
     - name: Upload SARIF
       if: inputs.sarif == 'true' && steps.run.outputs.sarif-file != ''
-      uses: github/codeql-action/upload-sarif@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
+      uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
       continue-on-error: true # code scanning may be off, or the token read-only on forks
       with:
         sarif_file: ${{ steps.run.outputs.sarif-file }}

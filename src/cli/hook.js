@@ -18,6 +18,7 @@ const HELP = `
 
   ${dim("Options")}
         --policy <file>    Policy file (default: ./penthera.policy.json)
+        --repo <dir>       run: the repo to check (default: the current folder)
         --force            install: write into core.hooksPath even when another tool manages it
         --json             run: print the result as JSON
     -v, --verbose          run: also list findings below the blocking severity
@@ -84,6 +85,7 @@ export async function runHookCommand(argv) {
       allowPositionals: true,
       options: {
         policy: { type: "string" },
+        repo: { type: "string" },
         force: { type: "boolean", default: false },
         json: { type: "boolean", default: false },
         verbose: { type: "boolean", short: "v", default: false },
@@ -100,7 +102,7 @@ export async function runHookCommand(argv) {
     console.log(HELP);
     return sub || opts.help ? 0 : 2;
   }
-  const cwd = process.cwd();
+  const cwd = opts.repo ? resolve(opts.repo) : process.cwd();
   const rel = (p) => relative(cwd, p) || p;
   try {
     if (sub === "install") {

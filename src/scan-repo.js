@@ -7,9 +7,9 @@
  *   3. Classify trust boundaries
  *   4. Detect risky code patterns
  */
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join, relative, resolve, sep } from "node:path";
-import { discoverAttackSurface, groupByTrustBoundary, findRiskyRoutes } from "../lib/attack-surface.js";
+import { discoverAttackSurface, groupByTrustBoundary, findRiskyRoutes, findRouteFiles, routeRecord } from "../lib/attack-surface.js";
 import { scanSecrets } from "../lib/whitebox/secrets.js";
 import { gitIgnored } from "../lib/git.js";
 import { scanCodeSinks } from "../lib/whitebox/code-sinks.js";
@@ -17,6 +17,39 @@ import { detectLibrary } from "../lib/whitebox/library.js";
 import { discoverFrameworkRoutes } from "../lib/whitebox/frameworks.js";
 import { runtimeAdvisoriesForRepo } from "../lib/advisories/index.js";
 import { buildCoverage } from "../lib/coverage.js";
+
+/**
+ * A Next.js app folder with a route handler outside app/api, such as
+ * app/auth/confirm/route.ts: then the whole app folder is the API root.
+ */
+function nextAppRoot(repoPath) {
+  for (const app of ["app", "src/app"]) {
+    const dir = join(repoPath, app);
+    const api = join(dir, "api") + sep;
+    if (findRouteFiles(dir).some((f) => !f.startsWith(api))) return dir;
+  }
+  return null;
+}
+
+/**
+ * A Worker's or Bun's `export default { fetch }` entry: one route that answers every path.
+ * The entry is wrangler's `main`, or a usual entry file.
+ */
+function workerRoutes(repoPath) {
+  const entries = ["src/index.ts", "src/index.js", "src/worker.ts", "src/worker.js", "index.ts", "index.js"];
+  for (const name of ["wrangler.jsonc", "wrangler.json", "wrangler.toml"]) {
+    try {
+      const main = /["']?main["']?\s*[:=]\s*["']([^"']+)["']/.exec(readFileSync(join(repoPath, name), "utf8"))?.[1];
+      if (main) entries.unshift(main.replace(/^\.\//, ""));
+    } catch { /* no wrangler config */ }
+  }
+  for (const entry of entries) {
+    let source;
+    try { source = readFileSync(join(repoPath, entry), "utf8"); } catch { continue; }
+    if (/export\s+default\s*\{[\s\S]*?\bfetch\s*(?:\(|:|=)/.test(source)) return [{ ...routeRecord("/*", entry, source, ["ALL"]), framework: "fetch" }];
+  }
+  return [];
+}
 
 /** Auto-detect API routes directory (Next.js, Express-style, etc.). */
 function findApiRoot(repoPath) {
@@ -104,7 +137,8 @@ export async function scanRepo(repoPath, opts = {}) {
 
   // ── Phase 2: Locate API root ───────────────────────────────────────────
   progress("Locating API routes directory...");
-  const apiRoot = opts.apiRoot || findApiRoot(repoPath);
+  const appRoot = opts.apiRoot ? null : nextAppRoot(repoPath);
+  const apiRoot = opts.apiRoot || appRoot || findApiRoot(repoPath);
 
   if (opts.apiRoot && !existsSync(apiRoot)) {
     result.findings.push({
@@ -121,32 +155,22 @@ export async function scanRepo(repoPath, opts = {}) {
     // ── Phase 2: Discover attack surface ───────────────────────────────────
     progress("Discovering attack surface from filesystem...");
     result.apiRoot = apiRoot;
-    result.attackSurface = discoverAttackSurface(apiRoot);
+    // A Next.js app folder: URLs come from its folders, and file paths are the repo's.
+    if (appRoot) result.routeFilesFrom = repoPath;
+    result.attackSurface = appRoot ? discoverAttackSurface(apiRoot, { appDir: appRoot, repoRoot: repoPath }) : discoverAttackSurface(apiRoot);
   }
 
   // An auto-detected routes/ or api/ folder without route.js/ts is an Express-style
   // app, not a Next.js one: fall back to the framework scan. --api-root is taken as given.
   if (result.attackSurface.length === 0 && !opts.apiRoot) {
     progress("Scanning for Express/Hono/Fastify routes...");
+    // How many routes it found, or that it found none, is coverage (lib/coverage.js), not a finding.
     const fwRoutes = discoverFrameworkRoutes(repoPath);
-    if (fwRoutes.length > 0) {
+    const found = fwRoutes.length ? fwRoutes : workerRoutes(repoPath);
+    if (found.length > 0) {
       result.apiRoot = null;
-      result.attackSurface = fwRoutes;
-      result.findings.push({
-        severity: "info",
-        title: `Found ${fwRoutes.length} API routes (Express/Hono/Fastify)`,
-        description: "Discovered via route pattern matching, not Next.js app/api.",
-        category: "config",
-        source: "framework-scan",
-      });
+      result.attackSurface = found;
     } else if (!apiRoot) {
-      result.findings.push({
-        severity: "info",
-        title: "No API routes directory found",
-        description: `Searched Next.js, Express, Hono, and Fastify patterns in ${repoPath}. Use --api-root to specify.`,
-        category: "config",
-        source: "repo-scan",
-      });
       return finish();
     }
   }

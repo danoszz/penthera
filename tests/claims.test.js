@@ -110,9 +110,9 @@ describe("claims the map holds itself", () => {
     for (const [name, run] of Object.entries(RUNS)) expect(run.auth, name).toBe(false);
   });
 
-  it("package.json has one runtime dependency", () => {
-    const { dependencies } = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
-    expect(Object.keys(dependencies)).toHaveLength(1);
+  it("package.json has no runtime dependencies", () => {
+    const { dependencies, optionalDependencies, peerDependencies } = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
+    expect({ ...dependencies, ...optionalDependencies, ...peerDependencies }).toEqual({});
   });
 
   it("--fuzz sends the DROP TABLE string the docs name", () => {

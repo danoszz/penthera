@@ -14,8 +14,8 @@
 # reviewed, and the actions below to commit SHAs. The scan step runs from the
 # runner's temp folder, so a pull request's own `.npmrc` or `node_modules`
 # cannot change what `npx` runs. For a route that does not fetch Penthera from
-# npm, use the action with `mode: agents` (docs/commands/action.md); it still
-# runs `npm ci` for its one dependency, `yaml`.
+# npm, use the action with `mode: agents` (docs/commands/action.md); it installs
+# nothing, because Penthera has no runtime dependencies.
 #
 # Fork PRs get a read-only token, so the SARIF upload is skipped for them; the
 # findings are still in the job log. Do not switch this to `pull_request_target`:

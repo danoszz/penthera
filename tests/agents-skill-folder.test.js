@@ -320,13 +320,13 @@ describe("penthera agents <path>", () => {
     expect(res.stdout).not.toMatch(/Clean scan|No findings/);
   });
 
-  it("still prints a clean scan in the terminal report for a clean skill", () => {
+  it("says it found nothing in the terminal report for a clean skill, without calling it clean", () => {
     const work = tmp();
     cpSync(CLEAN, join(work, "some-skill"), { recursive: true });
     const pinned = cli(["agents", "./some-skill", "--pin", "--quiet"], work);
     expect(pinned.code).toBe(0);
     const res = cli(["agents", "./some-skill"], work, { PENTHERA_BRIEF: "0" });
-    expect(res.stdout).toContain("Clean scan, no issues found");
+    expect(res.stdout).toContain("Nothing found in what Penthera checked.");
     expect(res.stdout).not.toContain("Nothing to assess");
   });
 });

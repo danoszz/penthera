@@ -222,7 +222,8 @@ describe("the other reports on a failing run", () => {
 
   it("the terminal report stays clean on a clean run", () => {
     const out = terminal(clean);
-    expect(out).toContain("Clean scan, no issues found");
+    expect(out).toContain("Nothing found in what Penthera checked.");
+    expect(out).not.toMatch(/clean scan|no issues found/i);
     expect(out).toContain("No findings");
     expect(out).not.toContain("The CLI exits");
   });
