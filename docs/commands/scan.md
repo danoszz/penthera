@@ -133,7 +133,7 @@ routes, for example `--deep reached 3 of 13 routes in your code.`
 
 | Format | Flag | Use |
 |--------|------|-----|
-| Terminal | *(default)* | A `--repo` scan opens with one screen: what was checked, the top three to act on with a fix each, what wasn't checked and one next step. Findings and coverage follow. No colors when stdout is not a terminal or `NO_COLOR` is set; `FORCE_COLOR=1` keeps them in a pipe |
+| Terminal | *(default)* | A `--repo` scan opens with one screen: what was checked, the top three to act on with a fix each, what wasn't checked and one next step. Findings and coverage follow. No colors when stdout is not a terminal or `NO_COLOR` is set; `FORCE_COLOR=1` keeps them in a pipe, `FORCE_COLOR=0` turns them off in a terminal |
 | **Agent brief** | `--brief`, or the default when stdout is not a terminal and not CI | Verdict, act on, check first, likely noise, not checked, next: short, for an AI assistant ([brief.md](brief.md)) |
 | **Markdown** | `--markdown file.md` or `-o file.json` | Human-readable report (exec summary, findings tables, fixes). Written next to `-o` automatically |
 | JSON | `--json` or `-o file.json` | CI pipelines, baseline diffs, custom tooling |

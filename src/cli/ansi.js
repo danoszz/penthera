@@ -2,8 +2,9 @@
  * ANSI helpers + brand styling, respects NO_COLOR, a pipe and terminal width.
  */
 const force = process.env.FORCE_COLOR;
-/** No colors: NO_COLOR wins; otherwise colors only on a terminal, unless FORCE_COLOR asks for them. */
-export const colorOff = !!process.env.NO_COLOR || (!process.stdout.isTTY && (force === undefined || /^(0|false)$/i.test(force)));
+/** No colors: NO_COLOR or FORCE_COLOR=0/false turn them off; otherwise colors only on a terminal, unless FORCE_COLOR asks for them. */
+const forceOff = force !== undefined && /^(0|false)$/i.test(force);
+export const colorOff = !!process.env.NO_COLOR || forceOff || (!process.stdout.isTTY && force === undefined);
 const off = colorOff;
 
 export const bold = (s) => off ? s : `\x1b[1m${s}\x1b[0m`;

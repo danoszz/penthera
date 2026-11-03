@@ -95,6 +95,24 @@ describe("CLI smoke (offline commands)", () => {
     expect(report({ FORCE_COLOR: "1", NO_COLOR: "1" })).not.toContain("\x1b[");
   });
 
+  it("FORCE_COLOR=0 or false turns colors off in a terminal too", () => {
+    const colorOffOnTty = (extra) => {
+      const env = { ...process.env };
+      for (const k of ["NO_COLOR", "FORCE_COLOR"]) delete env[k];
+      Object.assign(env, extra);
+      const code = 'Object.defineProperty(process.stdout, "isTTY", { value: true });'
+        + "const { colorOff } = await import(process.argv[1]);"
+        + "process.stdout.write(String(colorOff));";
+      const ansiUrl = new URL("../src/cli/ansi.js", import.meta.url).href;
+      return execFileSync(process.execPath, ["--input-type=module", "-e", code, ansiUrl], { encoding: "utf-8", env });
+    };
+    expect(colorOffOnTty({})).toBe("false");
+    expect(colorOffOnTty({ FORCE_COLOR: "1" })).toBe("false");
+    expect(colorOffOnTty({ FORCE_COLOR: "0" })).toBe("true");
+    expect(colorOffOnTty({ FORCE_COLOR: "false" })).toBe("true");
+    expect(colorOffOnTty({ NO_COLOR: "1" })).toBe("true");
+  });
+
   it("an unknown word is a usage error, not a TypeError stack trace (e2e 2026-10-22)", () => {
     let err;
     try {
