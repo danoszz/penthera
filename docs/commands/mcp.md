@@ -98,7 +98,8 @@ Each scan tool's result has the findings as structured JSON, and as text the
 is likely noise, what was not checked, and what to run next. The text asks the
 assistant to pass the brief on as it is and to put its own view under "My
 read". Every
-finding has a `rule`, a severity, a confidence label (`confirmed`, `likely`,
+finding has a `rule` (such as `openapi-exposed` or `agents/mcp-unpinned`, or
+its category when no narrower rule applies), a severity, a confidence label (`confirmed`, `likely`,
 `potential`, `needs-human-review`), and evidence at `file:line` or a URL. Each
 result also lists what the tool did not check. By default a tool returns the 50
 most severe findings; ask for up to 200 with `max_findings`.
