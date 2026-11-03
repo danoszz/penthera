@@ -55,6 +55,15 @@ describe("audience reports", () => {
     expect(md).not.toContain("Security evidence report");
   });
 
+  it("prints a dash when duration is missing", () => {
+    const result = reportResult();
+    delete result.duration;
+
+    const md = formatMarkdownReport(result, { version: REPORT_VERSION });
+
+    expect(md).toContain("| **Duration** | - |");
+  });
+
   it("developer report has file:line, recipe ids and sources", () => {
     const md = formatAudienceReport(reportResult(), "developer", { version: REPORT_VERSION });
     expect(md).toContain("`src/lib/payments.js:14`");
