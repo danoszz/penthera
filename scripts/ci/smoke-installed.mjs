@@ -220,7 +220,7 @@ async function fresh() {
   check("deps", ["deps"], { has: [/Mode\s+deps/, /Packages\s+1 in package-lock\.json/] });
   check("deps --base HEAD (spawns git)", ["deps", "--base", "HEAD"], { exit: [0, 1], has: [/Mode\s+deps/], lacks: ["fatal:", "Error"] });
   check("agents", ["agents"], { has: [/Mode\s+agents/, /Grade\s+\S/, 'MCP server "filesystem" runs an unpinned package via npx'] });
-  check("--repo .", ["--repo", "."], { has: [/Mode\s+repo/, "Findings"] });
+  check("--repo .", ["--repo", "."], { has: [/Mode\s+repo/, /Checked\s+secrets/, "Not checked"] });
 
   // Pre-commit hook: written into .git/hooks, then run by git itself. On
   // Windows this is Git for Windows' sh running node.exe by absolute path.

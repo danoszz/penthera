@@ -277,6 +277,9 @@ Signed-off-by: Your Name <you@example.com>
 
 CI checks every commit in a pull request (`scripts/ci/provenance.mjs`): a
 commit that names an AI co-author must also have the `AI-Assisted` line.
+Dependabot's own pin bumps pass this check and the docs gate, but only when
+GitHub verifies every commit as Dependabot's and the change touches nothing but
+dependency pins (`scripts/ci/dependabot.mjs`).
 
 - **Summarise the prompt** in the `AI-Assisted` line: what you asked for, not
   the full transcript. For grant-funded work, the full prompts and outputs also

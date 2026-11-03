@@ -4,7 +4,7 @@ import js from "@eslint/js";
 import globals from "globals";
 
 export default [
-  { ignores: ["node_modules/", "audit/logs/", "reports/", "coverage/", "bench/out/", "**/fixtures/**", "site/dist/"] },
+  { ignores: ["node_modules/", "audit/logs/", "reports/", "coverage/", "bench/out/", "**/fixtures/**", "site/dist/", "lib/vendor/"] },
   js.configs.recommended,
   {
     languageOptions: { ecmaVersion: "latest", sourceType: "module", globals: { ...globals.node } },

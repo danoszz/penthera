@@ -12,7 +12,11 @@ The security review you never had time for. Offline, rule-based, and you can ver
 
 Daily notes from Penthera: **[x.com/penthera_org](https://x.com/penthera_org)**
 
-**132** readable rules · **6** read-only MCP tools · **1** runtime dependency · **0** requests past loopback in the benchmark · **MIT**, no telemetry
+**Who builds it:** [Daan van der Zwaag](docs/trust.md#who-builds-it), part-time and in the open.
+
+**How it compares:** [next to Snyk, Socket, Semgrep, ZAP and GitHub](#how-it-fits-with-other-tools).
+
+**132** readable rules · **6** read-only MCP tools · **0** runtime dependencies · **0** requests past loopback in the benchmark · **MIT**, no telemetry
 
 <br/>
 
@@ -472,7 +476,7 @@ repository for releases or join the
 
 Penthera is developed with substantial help from generative AI: 91% of the
 commits up to v1.7.0 were written with Claude (Anthropic) through Claude Code,
-directed and reviewed by the maintainer, and marked with a co-author trailer.
+directed and reviewed by the maintainer, and marked with an `AI-Assisted:` trailer.
 Generated code passes the same gates as any change: tests, CodeQL, an
 independent review, the internal audit, and a 2FA-approved release. Inside the
 product, models only ever propose; deterministic checks decide. The full

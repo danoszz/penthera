@@ -122,8 +122,8 @@ function ruleNumbers() {
   return {
     N_URL: String(COUNTS.urlTemplates), N_SECRETS: String(COUNTS.secretPatterns), N_CAPS: String(COUNTS.capabilities),
     N_AGENTS: String(COUNTS.agentRules), N_RECIPES: String(COUNTS.recipes),
-    DEPS_N: deps.length === 1 ? "one runtime dependency" : `${deps.length} runtime dependencies`,
-    DEPS_LIST: deps.join(", "),
+    DEPS_N: deps.length === 0 ? "no runtime dependencies" : deps.length === 1 ? "one runtime dependency" : `${deps.length} runtime dependencies`,
+    DEPS_LIST: deps.length ? ` (${deps.join(", ")})` : "",
   };
 }
 

@@ -23,7 +23,12 @@ export function reachLines(results) {
   const url = results.find((r) => r.mode === "url" || r.endpoints);
   const repo = results.find((r) => r.mode === "repo");
   const lines = [];
-  const notRun = (repo?.coverage?.families || []).filter((f) => !f.ran).map((f) => f.label);
+  const families = repo?.coverage?.families || [];
+  // No server routes isn't a failure: a client-only app has none.
+  if (families.some((f) => f.id === "routes" && !f.ran)) {
+    lines.push("Route and code-pattern analysis: no server routes found, so there was nothing to read. A client-only app has none; if yours has some Penthera didn't see, pass --api-root <folder>.");
+  }
+  const notRun = families.filter((f) => !f.ran && f.id !== "routes").map((f) => f.label);
   if (notRun.length) lines.push(`Repo scan: not run: ${notRun.join(", ")}.`);
   if (!url) return lines;
 

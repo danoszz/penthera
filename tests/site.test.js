@@ -221,7 +221,7 @@ describe("site FAQ", () => {
     const [tp, fp, fn] = total.slice(1).map(Number);
     expect(faq).toContain(`precision ${(tp / (tp + fp)).toFixed(2)} (95% CI`);
     expect(faq).toContain(`from ${tp} true positives, ${fp} false positives and ${fn} misses`);
-    expect(faq).toMatch(/one runtime dependency \(yaml\)|\d+ runtime dependencies/);
+    expect(faq).toMatch(/no runtime dependencies|one runtime dependency \(yaml\)|\d+ runtime dependencies/);
     expect(faq).not.toMatch(/\{\{\w+\}\}/);
   });
 
@@ -782,7 +782,7 @@ describe("site files for agents", () => {
       expect(served(out, f), m[1]).toBe(true);
     }
     expect(llms).toContain(`${ORIGIN}/llms-full.txt`);
-    expect(llms).toContain("one runtime dependency");
+    expect(llms).toContain("no runtime dependencies");
   });
 
   it("llms-full.txt is README.md and every docs page, in reading order", () => {

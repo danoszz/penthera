@@ -34,6 +34,12 @@ describe("everything shipped is documented", () => {
     expect(subs.filter((s) => !index.includes(`penthera ${s}`))).toEqual([]);
   }, 60_000);
 
+  it("the MCP listing calls Penthera a security scanner, not an agent", () => {
+    const listing = read("docs/mcp-listing.md");
+    expect(listing).toContain("Penthera is a free, open-source security scanner that runs on your own machine.");
+    expect(listing).not.toMatch(/security agent/i);
+  });
+
   it("every MCP tool is on the MCP page and the listing", () => {
     expect(TOOLS.length).toBeGreaterThan(0);
     for (const doc of ["docs/commands/mcp.md", "docs/mcp-listing.md"]) {

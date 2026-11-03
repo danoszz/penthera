@@ -20,7 +20,7 @@ This is a short list of headline claims, not every sentence in the docs.
 |---|---|---|---|
 | **132** readable rules | `README.md` | `tests/claims.test.js`: `README and site quote the same rule total` | Counts rules, not what they catch |
 | **6** read-only MCP tools | `README.md` | `tests/mcp-e2e.test.js`: `lists six read-only tools` | None |
-| **1** runtime dependency | `README.md` | `tests/claims.test.js`: `package.json has one runtime dependency` | Direct dependencies only |
+| **0** runtime dependencies | `README.md` | `tests/claims.test.js`: `package.json has no runtime dependencies` | The yaml parser ships inside the package, in `lib/vendor/yaml`, held to upstream by `tests/vendor-yaml.test.js` |
 | **0** requests past loopback in the benchmark | `README.md` | `tests/bench.test.js`: `stays above the CI floor and makes no non-loopback requests` | The bundled benchmark only |
 | no telemetry | `README.md` | `tests/egress.test.js`: `lists recon sources and Retire.js mirrors, falls back to the snapshot` | Covers one online URL scan, not every command |
 | it contacts only the target you named | `site/index.html` | `tests/egress.test.js`: `profile ${name}: only the target host is contacted` | URL scans with `--offline` |

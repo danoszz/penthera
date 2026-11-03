@@ -8,8 +8,10 @@
  * but a commit that has one must also carry `AI-Assisted:` (it would otherwise
  * claim AI help without saying what it was). Commits with neither are
  * human-written and pass. Exits 1 and lists the offending commits otherwise.
+ * Dependabot's verified pin bumps pass too (scripts/ci/dependabot.mjs).
  */
 import { execFileSync } from "node:child_process";
+import { dependabotPr } from "./dependabot.mjs";
 
 const AI_COAUTHOR = /^Co-Authored-By:.*\b(?:Claude|GPT|ChatGPT|Codex|Gemini|Copilot|Cursor|Llama|Mistral|Qwen|DeepSeek)\b/im;
 const AI_ASSISTED = /^AI-Assisted:\s*\S.*;\s*\S/im;
@@ -18,6 +20,12 @@ const [base, head = "HEAD"] = process.argv.slice(2);
 if (!base) {
   console.error("usage: provenance.mjs <base-ref> [head-ref]");
   process.exit(2);
+}
+
+const bot = await dependabotPr(base, head);
+if (bot.ok) {
+  console.log(`Provenance: ${bot.reason}.`);
+  process.exit(0);
 }
 
 const git = (...args) => execFileSync("git", args, { encoding: "utf-8" });

@@ -20,6 +20,8 @@ pentest.config.js
 
 # Build output
 dist/
+# The vendored yaml parser ships its upstream build, unchanged (lib/vendor/yaml/README.md).
+!lib/vendor/yaml/dist/
 coverage/
 
 # Environment & secrets

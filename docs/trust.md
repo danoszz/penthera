@@ -20,8 +20,11 @@ ISO 27001. This page shows evidence instead.
   [npm page](https://www.npmjs.com/package/penthera).
 - **A person approves every release.** CI only stages a version; it goes live
   after the maintainer approves it on npm with two-factor authentication.
-- **One runtime dependency.** The package depends on `yaml` and nothing else
-  ([package.json](https://github.com/danoszz/penthera/blob/main/package.json)).
+- **No runtime dependencies.** Installing Penthera installs nothing else
+  ([package.json](https://github.com/danoszz/penthera/blob/main/package.json)). The one
+  parser it needs, `yaml` 2.9.1, ships inside the package, unchanged, with its license and
+  source hash ([lib/vendor/yaml](https://github.com/danoszz/penthera/blob/main/lib/vendor/yaml/README.md)).
+  A test fails if a byte of it changes.
   Make your own SBOM with `npx penthera --repo . --sbom sbom.cdx.json`.
 
 ## Checked in public

@@ -35,8 +35,7 @@ fix is in 2.1.0-rc.1 and later ([known issue](init.md)).
 On every pull request it posts one comment with the capability diff against
 the PR base and edits that same comment on each push. It also uploads SARIF to
 code scanning. Penthera runs from the action's own checkout: no npx and no
-install of Penthera from npm. One exception: `mode: agents` runs `npm ci` for
-its one dependency, `yaml`, when the checkout does not have it. On fork PRs the
+install from npm. Penthera has no runtime dependencies, so no mode runs `npm ci`. On fork PRs the
 token is read-only, so the diff goes to the job summary instead. Inputs: `mode`, `path`, `base-ref`, `url`,
 `fail-on`, `comment`, `footer`, `sarif`, `penthera-version`, `github-token`. Copy the full workflow, with
 permissions and a lockfile paths filter, from

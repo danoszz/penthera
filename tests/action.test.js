@@ -7,7 +7,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { readFileSync, writeFileSync, mkdtempSync, mkdirSync, rmSync, existsSync, cpSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
-import YAML from "yaml";
+import YAML from "../lib/vendor/yaml/index.js";
 import { spawnSync } from "node:child_process";
 import {
   MARKER, MAX_BODY, buildCommentBody, upsertComment, isForkPullRequest, gate, ghClient, runComment, runGate,

@@ -471,7 +471,7 @@
           <div class="faq-a">
             <p>On the public benchmark: precision {{BENCH_P}} (95% CI {{BENCH_P_CI}}) and recall {{BENCH_R}} (95% CI {{BENCH_R_CI}}), from {{BENCH_TP}} true positives, {{BENCH_FP}} false positives and {{BENCH_FN}} misses in labs we built ourselves. During the benchmark it made {{BENCH_EGRESS}} requests to anything other than loopback.</p>
             <p>The sample is small and the labs are ours, so these numbers catch regressions; they do not measure real-world accuracy. Measuring that on other people's code is experiment E1, <a href="https://github.com/danoszz/penthera/blob/main/docs/research/prereg/E1-real-world-accuracy.md">pre-registered</a> before any data is collected.</p>
-            <p>Every rule is readable: {{N_URL}} URL scan templates, {{N_SECRETS}} secret and AI-key patterns, {{N_CAPS}} dependency capabilities, {{N_AGENTS}} AI setup rules and {{N_RECIPES}} fix recipes, on {{DEPS_N}} ({{DEPS_LIST}}). <a href="https://github.com/danoszz/penthera/blob/main/bench/RESULTS.md">Benchmark results</a></p>
+            <p>Every rule is readable: {{N_URL}} URL scan templates, {{N_SECRETS}} secret and AI-key patterns, {{N_CAPS}} dependency capabilities, {{N_AGENTS}} AI setup rules and {{N_RECIPES}} fix recipes, on {{DEPS_N}}{{DEPS_LIST}}. <a href="https://github.com/danoszz/penthera/blob/main/bench/RESULTS.md">Benchmark results</a></p>
           </div>
         </details>
         <details>
