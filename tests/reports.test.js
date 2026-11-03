@@ -9,6 +9,7 @@ import { buildTimeline, formatDuration } from "../src/report/timeline.js";
 import { renderTemplate } from "../src/report/template.js";
 import { buildHistory } from "../lib/memory/history.js";
 import { formatMarkdownReport } from "../src/report/markdown.js";
+import { findingId } from "../lib/memory/views.js";
 import { reportResult, REPORT_VERSION } from "./fixtures/report-result.js";
 
 describe("audience reports", () => {
@@ -34,10 +35,33 @@ describe("audience reports", () => {
     expect(() => formatAudienceReport(reportResult(), "ceo")).toThrow(/Unknown --audience/);
   });
 
+  it("Markdown findings tables show each finding's id, the one `memory suppress` takes", () => {
+    const md = formatMarkdownReport({
+      target: "https://shop.example",
+      findings: [
+        { fid: "0123456789abcdef", severity: "high", title: "Missing Content-Security-Policy header", url: "https://shop.example/", confidence: "confirmed", source: "headers" },
+        { severity: "low", title: "Server banner discloses its version", url: "https://shop.example/", confidence: "likely", source: "headers" },
+      ],
+    }, { version: REPORT_VERSION });
+    expect(md).toContain("| Finding | URL | Confidence | Source | Id |");
+    expect(md).toContain("| `0123456789abcdef` |");
+    // a finding without a stored fid gets the id `memory suppress` would compute for it
+    expect(md).toContain(`| \`${findingId({ severity: "low", title: "Server banner discloses its version", url: "https://shop.example/", confidence: "likely", source: "headers" })}\` |`);
+  });
+
   it("leaves the default Markdown report unchanged", () => {
     const md = formatMarkdownReport(reportResult(), { version: REPORT_VERSION });
     expect(md).toContain("# Penthera Security Report");
     expect(md).not.toContain("Security evidence report");
+  });
+
+  it("prints a dash when duration is missing", () => {
+    const result = reportResult();
+    delete result.duration;
+
+    const md = formatMarkdownReport(result, { version: REPORT_VERSION });
+
+    expect(md).toContain("| **Duration** | - |");
   });
 
   it("developer report has file:line, recipe ids and sources", () => {

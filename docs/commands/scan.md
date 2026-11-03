@@ -120,7 +120,8 @@ not control scripts" ([how to fix it](https://penthera.org/csp-that-controls-scr
 A pattern that matches a whole file, such as `exec`, is one finding that lists the routes,
 not one per route.
 
-Every finding has an id, `fid` in `-o` JSON and beside the title in the terminal report.
+Every finding has an id, `fid` in `-o` JSON, beside the title in the terminal report and
+in the Id column of the Markdown report's findings tables.
 The brief doesn't print it. Use it with `penthera memory suppress <fid> --reason "..."`.
 
 ---

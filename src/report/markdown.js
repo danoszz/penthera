@@ -14,6 +14,7 @@ import { exitNote } from "./exit.js";
 import { mdInline } from "./md-escape.js";
 import { footerLines } from "./footer.js";
 import { giantsMarkdown, foundByText } from "./giants.js";
+import { findingId } from "../../lib/memory/views.js";
 
 const SEV_ORDER = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
 const SEV_TAG = {
@@ -61,8 +62,7 @@ export function formatMarkdownReport(result, opts = {}) {
   lines.push(`|---|---|`);
   lines.push(`| **Target** | \`${result.target || "unknown"}\` |`);
   lines.push(`| **Scan time** | ${result.timestamp?.replace("T", " ").slice(0, 19) || "-"} UTC |`);
-  // TODO(good-first-issue): a missing duration prints ", "; print "-" like the other empty cells and add a test.
-  lines.push(`| **Duration** | ${result.duration ? `${(result.duration / 1000).toFixed(1)}s` : ", "} |`);
+  lines.push(`| **Duration** | ${result.duration ? `${(result.duration / 1000).toFixed(1)}s` : "-"} |`);
   lines.push(`| **Mode** | ${result.modes?.join(", ") || result.mode || "-"} |`);
   // Only a URL scan reaches anything; a repo, deps or agents scan has nothing to report here.
   const modes = result.modes || [result.mode];
@@ -162,11 +162,11 @@ export function formatMarkdownReport(result, opts = {}) {
 
       lines.push(`### ${SEV_TAG[sev]} ${sev.charAt(0).toUpperCase() + sev.slice(1)} (${group.length})`);
       lines.push("");
-      lines.push("| Finding | URL | Confidence | Source |");
-      lines.push("|---------|-----|-----------|--------|");
+      lines.push("| Finding | URL | Confidence | Source | Id |");
+      lines.push("|---------|-----|-----------|--------|----|");
 
       for (const f of group) {
-        lines.push(`| **${mdEscape(f.title)}**${f.alsoProposedBy?.length ? " (also proposed by AI)" : ""} | ${f.url ? `[link](${f.url})` : "-"} | ${f.confidence || "-"} | ${mdEscape(f.source || "-")}${foundByText(f) ? ` (${mdEscape(foundByText(f))})` : ""} |`);
+        lines.push(`| **${mdEscape(f.title)}**${f.alsoProposedBy?.length ? " (also proposed by AI)" : ""} | ${f.url ? `[link](${f.url})` : "-"} | ${f.confidence || "-"} | ${mdEscape(f.source || "-")}${foundByText(f) ? ` (${mdEscape(foundByText(f))})` : ""} | \`${f.fid || findingId(f)}\` |`);
       }
       lines.push("");
 
