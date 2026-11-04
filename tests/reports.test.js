@@ -2,6 +2,7 @@
  * Audience reports (--audience), the report model, the loop timeline and user
  * templates (--report-template) rendered against a real model.
  */
+import { readFileSync } from "node:fs";
 import { describe, it, expect } from "vitest";
 import { formatAudienceReport, AUDIENCES } from "../src/report/audience.js";
 import { buildReportModel } from "../src/report/model.js";
@@ -53,6 +54,13 @@ describe("audience reports", () => {
     const md = formatMarkdownReport(reportResult(), { version: REPORT_VERSION });
     expect(md).toContain("# Penthera Security Report");
     expect(md).not.toContain("Security evidence report");
+  });
+
+  it("names the package.json version in the header when no version is passed", () => {
+    const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf-8"));
+    const md = formatMarkdownReport({ findings: [] });
+    expect(md).toContain(`v${pkg.version}`);
+    expect(md).not.toContain("v0.2.0");
   });
 
   it("prints a dash when duration is missing", () => {
