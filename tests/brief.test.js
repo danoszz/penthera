@@ -44,6 +44,15 @@ describe("agent brief: buckets", () => {
     expect(bucketOf(f({ url: "dist/app.js" }))).toEqual({ bucket: "noise", reason: "generated" });
     expect(bucketOf(f({ url: "apps/web/.next-dev/x.js" }))).toEqual({ bucket: "noise", reason: "generated" });
     expect(bucketOf(f({ url: "test/fixtures/key.txt" }))).toEqual({ bucket: "noise", reason: "fixture" });
+    expect(bucketOf(f({ url: "tests/detection-hardening.test.js" }))).toEqual({ bucket: "noise", reason: "test-file" });
+    expect(bucketOf(f({ url: "tests/a.test.js" }))).toEqual({ bucket: "noise", reason: "test-file" });
+    expect(bucketOf(f({ url: "src/app.spec.ts" }))).toEqual({ bucket: "noise", reason: "test-file" });
+    expect(bucketOf(f({ url: "src/__tests__/util.js" }))).toEqual({ bucket: "noise", reason: "test-file" });
+    // A fixtures folder inside tests/ keeps the fixture reason.
+    expect(bucketOf(f({ url: "tests/fixtures/key.txt" }))).toEqual({ bucket: "noise", reason: "fixture" });
+    // Names that only look like tests stay real code.
+    expect(bucketOf(f({ url: "src/latest.js" })).bucket).toBe("act");
+    expect(bucketOf(f({ url: "src/contest/app.js" })).bucket).toBe("act");
     expect(bucketOf(f({ severity: "info" })).bucket).toBe("info");
     expect(bucketOf(f({ confidence: "potential" })).bucket).toBe("check");
     expect(bucketOf(f({ severity: "low" })).bucket).toBe("check");
@@ -51,6 +60,19 @@ describe("agent brief: buckets", () => {
     expect(bucketOf(f({})).bucket).toBe("act");
     // A URL is never read as a path.
     expect(bucketOf(f({ url: "https://example.test/build/x" })).bucket).toBe("act");
+    expect(bucketOf(f({ url: "https://example.test/tests/x" })).bucket).toBe("act");
+  });
+
+  it("moves a key in a test file to Likely noise, and still counts it", () => {
+    const key = (url) => f({ url, line: 12, title: "API key in source" });
+    const report = { target: "/repo", mode: "repo", findings: [key("tests/a.test.js"), key("src/app.spec.ts")] };
+    const b = buildBrief(report);
+    expect(b.counts).toMatchObject({ act: 0, noise: 2, total: 2 });
+    expect(b.likely_noise[0]).toMatchObject({ reason: "test-file", text: "in test files", count: 2 });
+    expect(formatBrief(b)).toContain("in test files");
+    // The exit code is the one the same finding gives outside a test file.
+    const plain = buildBrief({ ...report, findings: [key("src/app.js")] });
+    expect(b.exit_code).toBe(plain.exit_code);
   });
 
   it("accounts for every finding exactly once", () => {

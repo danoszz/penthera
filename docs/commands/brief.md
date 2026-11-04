@@ -14,7 +14,7 @@ assistant to pass on as it is. Penthera's rules fill it; no model is involved.
 | Verdict | `Fix now` when Act on holds a critical or high finding. `Review` when anything is in Act on or Check first, or the run exits 1 or 2. `Nothing to fix` otherwise. `Site not read` when a firewall answered instead of the site, unless a critical or high finding says `Fix now`; the exit code doesn't change. With the counts. `Nothing to assess` when `penthera agents` found no agent config. Never `Nothing to fix` when a finding or a required tool makes the scan exit 1 or 2: it says `Review` and gives the reason on the next line. A failure after the brief prints, such as an output file it can't write, exits 2 with an error of its own |
 | Act on | Findings that need a change: where, why, the fix, the rule id |
 | Check first | Heuristic and low findings, and what a dependency *can* do |
-| Likely noise | Hits in files git ignores, generated build output or test fixtures, one line per group |
+| Likely noise | Hits in files git ignores, generated build output, test fixtures or test files, one line per group |
 | Not checked | What the scan did not read. Always shown, so a short brief is not read as "safe" |
 | Next | Up to three commands, and the path of the full report |
 
@@ -59,8 +59,12 @@ The first matching rule wins:
 
 1. **Likely noise:** the file is local only (git ignores it), in generated
    output (`.next*`, `dist`, `build`, `out`, `.turbo`, `.svelte-kit`, `.nuxt`,
-   `.output`, `__pycache__`, `coverage`), or a test fixture (`fixtures`,
-   `__fixtures__`, `testdata`, `__mocks__`). In a skill folder you name, `dist` and `build` are the skill's
+   `.output`, `__pycache__`, `coverage`), a test fixture (`fixtures`,
+   `__fixtures__`, `testdata`, `__mocks__`), or a test file (anything under
+   `tests` or `__tests__`, or named `*.test.*` or `*.spec.*`), with the reason
+   "in test files". The finding is still listed, still counted, and the exit
+   code doesn't change. A fixtures folder inside `tests` keeps the fixture
+   reason. In a skill folder you name, `dist` and `build` are the skill's
    own code, so they are not noise there.
 2. An **info** finding goes to **Next** if it names a command, or to **Not
    checked** if it says something was not found or not run.
