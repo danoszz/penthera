@@ -35,9 +35,9 @@ attack and start challenging you, so they only run with `--deep`.
 
 How many requests `quick` sends: 182 against the test server in
 `tests/fixtures/mock-server.js`. Most of them are a fixed list of probe paths,
-178 against a server that answers 404 to everything. Each API path in the
-site's OpenAPI spec and each script on its home page adds more: a site with 60
-of each took 275. A `standard` scan sent 197 to the same test server.
+178 against a server that answers 404 to everything. Each path in the site's
+OpenAPI spec adds more: a spec with 60 paths took 275. Scripts and links on the
+home page add none. A `standard` scan sent 197 to the same test server.
 
 Individual flags: `--recon`, `--deep`, `--fuzz`, `--adaptive`, `--nuclei <path>`, `--templates <dirs>`, `--all`
 
