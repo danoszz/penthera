@@ -156,7 +156,7 @@ A `--repo` scan reads the workflows GitHub runs, in `.github/workflows/`. It par
 
 | Rule | Severity | What it means |
 |------|----------|---------------|
-| `gha-pwn-request` | high | A `pull_request_target`, `workflow_run`, `issue_comment` or `issues` workflow checks out the pull request's code (its head, merge commit or fork), or fetches it in a script (`gh pr checkout`, `refs/pull/`). That code then runs with your repository's token and secrets. |
+| `gha-pwn-request` | high | A `pull_request_target`, `workflow_run`, `issue_comment` or `issues` workflow checks out the pull request's code (its head, merge commit or fork), or fetches it in a script (`gh pr checkout`, `refs/pull/`). That code then runs with your repository's token and secrets. Medium when an `if:` that every path must pass limits it to pull requests from your own repository. |
 | `gha-script-injection` | high | Text an outsider writes (a PR title, an issue body, a branch name) goes into a `run:` script or an `actions/github-script` `script:` through `${{ }}`, where it becomes code. Pass it through `env:` instead. |
 | `gha-unpinned-action` | medium (low for `actions/*`, `github/*`) | An action or reusable workflow is used by a tag or branch its owner can move. Pin the full commit SHA. |
 | `gha-workflow-unchecked` | high | A workflow is over 256 KB, or isn't valid YAML (duplicate keys included). Penthera reports it instead of passing it unread. |

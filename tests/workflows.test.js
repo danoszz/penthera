@@ -208,6 +208,52 @@ describe("safe patterns don't fail the scan", () => {
   });
 });
 
+// An exception that lowers a finding must be proven by the expression's syntax,
+// never by text in it. These kept their finding until a shortcut dropped it.
+const GUARDED = (cond) => `on: pull_request_target\njobs:\n  a:\n    if: ${cond}\n    steps:\n      - uses: actions/checkout@v4\n        with:\n          ref: \${{ github.event.pull_request.head.sha }}\n`;
+const SAME = "github.event.pull_request.head.repo.full_name == github.repository";
+
+describe("exceptions hold only when the expression proves them", () => {
+  it("a comparison sign inside a format() string is text, not a comparison", () => {
+    for (const tpl of ["a > {0}", "{0} == x", "x != {0}", "{0} <b>"]) {
+      expect(ids(I + `      - run: echo "\${{ format('${tpl}', github.event.issue.title) }}"\n`)).toEqual(["gha-script-injection:high"]);
+    }
+  });
+
+  it("a boolean joined by || can still return the text itself", () => {
+    expect(ids(I + "      - run: echo ${{ contains(github.event.issue.title, 'b') || github.event.issue.title }}\n")).toEqual(["gha-script-injection:high"]);
+  });
+
+  it("a same-repository check lowers the checkout only when every path requires it", () => {
+    expect(ids(GUARDED(`${SAME} && github.actor != 'x'`))).toEqual(["gha-pwn-request:medium"]);
+    expect(ids(GUARDED(`\${{ (${SAME}) }}`))).toEqual(["gha-pwn-request:medium"]);
+    for (const cond of [`${SAME} || true`, `(${SAME} || true) && true`, `!(${SAME})`, `contains('${SAME}', 'x')`, `github.repository != github.event.pull_request.head.repo.full_name`]) {
+      expect(ids(GUARDED(cond)), cond).toEqual(["gha-pwn-request:high"]);
+    }
+  });
+
+  it("an if: with any text outside its ${{ }} is always true, so it guards nothing", () => {
+    for (const cond of [`"\${{ ${SAME} }} "`, `|\n      \${{ ${SAME} }}`, `>\n      \${{ ${SAME} }}`, `\${{ ${SAME} }} && \${{ true }}`]) {
+      expect(ids(GUARDED(cond)), cond).toEqual(["gha-pwn-request:high"]);
+    }
+  });
+
+  it("a }} inside a string doesn't end the expression", () => {
+    expect(ids(I + `      - run: echo "\${{ format('}}{0}', github.event.issue.title) }}"\n`)).toEqual(["gha-script-injection:high"]);
+    expect(ids(I + "      - run: echo ${{ format('a}}', 'b') != 'c' && github.event.issue.title }}\n")).toEqual(["gha-script-injection:high"]);
+  });
+
+  it("the merged guard needs the same proof", () => {
+    const yml = (cond) => `on:\n  pull_request_target:\n    types: [closed]\njobs:\n  a:\n    if: ${cond}\n    steps:\n      - uses: actions/checkout@v4\n        with:\n          ref: \${{ github.event.pull_request.merge_commit_sha }}\n`;
+    expect(ids(yml("github.event.pull_request.merged == true"))).toEqual([]);
+    expect(ids(yml("github.event.pull_request.merged == true || true"))).toEqual(["gha-pwn-request:high"]);
+    expect(ids(yml("github.event.pull_request.merged == false"))).toEqual(["gha-pwn-request:high"]);
+    expect(ids(yml('"${{ github.event.pull_request.merged }} "'))).toEqual(["gha-pwn-request:high"]);
+    const fork = yml("github.event.pull_request.merged").replace("merge_commit_sha }}", "merge_commit_sha && github.event.pull_request.head.ref }}");
+    expect(ids(fork)).toEqual(["gha-pwn-request:high"]);
+  });
+});
+
 describe("a workflow it can't read fails the scan instead of passing", () => {
   it("reports Unicode line breaks, which parsers read differently", () => {
     for (const br of ["\u2028", "\u2029", "\x85"]) expect(ids(`# c${br}on: issues${br}jobs:\n`)).toEqual(["gha-workflow-unchecked:high"]);
@@ -243,6 +289,13 @@ describe("crafted workflows can't make the check slow", () => {
     const text = P + "      - uses: actions/checkout@v4\n        with: {ref: main}\n".repeat(4000);
     expect(text.length).toBeLessThan(256 * 1024);
     expect(timed(text)).toBeLessThan(1000);
+  });
+
+  it("peels deeply nested brackets in one pass, also with many steps", () => {
+    const deep = (n) => "(".repeat(n) + "true" + ")".repeat(n);
+    const steps = "      - uses: actions/checkout@v4\n        with:\n          ref: main\n".repeat(200);
+    expect(timed(`on: pull_request_target\njobs:\n  a:\n    if: ${deep(10000)}\n    steps:\n${steps}`)).toBeLessThan(1000);
+    expect(timed(I + `      - run: echo \${{ ${"(".repeat(60000)}github.event.issue.title${")".repeat(60000)} }}\n`)).toBeLessThan(1000);
   });
 
   it("checks one very long line in well under a second", () => {
