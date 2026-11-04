@@ -13,6 +13,7 @@ import { discoverAttackSurface, groupByTrustBoundary, findRiskyRoutes, findRoute
 import { scanSecrets } from "../lib/whitebox/secrets.js";
 import { gitIgnored } from "../lib/git.js";
 import { scanCodeSinks } from "../lib/whitebox/code-sinks.js";
+import { scanWorkflows } from "../lib/whitebox/workflows.js";
 import { detectLibrary } from "../lib/whitebox/library.js";
 import { discoverFrameworkRoutes } from "../lib/whitebox/frameworks.js";
 import { runtimeAdvisoriesForRepo } from "../lib/advisories/index.js";
@@ -124,6 +125,11 @@ export async function scanRepo(repoPath, opts = {}) {
   result.library = { enabled: library.enabled, reason: library.reason };
   result.findings.push(...scanCodeSinks(repoPath, { library, ignored }));
   result.executedProbes.push("code-sinks");
+
+  // ── Phase 1d: GitHub Actions workflows (.github/workflows) ────────────
+  progress("Checking GitHub Actions workflows...");
+  result.findings.push(...scanWorkflows(repoPath));
+  result.executedProbes.push("ci-workflows");
   if (library.enabled) {
     result.executedProbes.push("library-mode");
     result.findings.push({

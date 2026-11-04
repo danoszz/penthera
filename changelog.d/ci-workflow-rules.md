@@ -1,0 +1,3 @@
+section: Detection
+
+- **A repo scan checks your GitHub Actions workflows.** Three rules from GitHub's guidance on securing workflows: `gha-pwn-request` (a `pull_request_target` or `workflow_run` workflow checks out the pull request's code), `gha-script-injection` (text an outsider writes reaches a `run:` script through `${{ }}`), and `gha-unpinned-action` (an action used by a movable tag instead of a commit SHA). It reads `.github/workflows/` as text, runs nothing, and points to the line. Penthera's own workflows pass all three.

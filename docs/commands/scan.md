@@ -13,7 +13,7 @@ Black-box scans of a running app (localhost, preview, or staging) and white-box 
 | Mode | Command | Coverage |
 |------|---------|----------|
 | **URL scan** | `penthera https://example.com` | TLS, fingerprinting, endpoint discovery, templates, CORS, cookies, JS CVEs, param discovery, OpenAPI/FastAPI probes, security headers, auth hardening |
-| **Repo scan** | `penthera --repo ./my-app` | API route discovery (Next.js, Express, Hono, Fastify), trust-boundary mapping, hardcoded-secret scanning (including Anthropic, OpenAI, Gemini, Groq, Hugging Face and other AI provider keys) |
+| **Repo scan** | `penthera --repo ./my-app` | API route discovery (Next.js, Express, Hono, Fastify), trust-boundary mapping, hardcoded-secret scanning (including Anthropic, OpenAI, Gemini, Groq, Hugging Face and other AI provider keys), and your GitHub Actions workflows ([below](#github-actions-workflows)) |
 | **Combined** | `penthera https://staging.app --repo .` | Black-box and white-box in one run |
 | **Interactive** | `penthera` *(no args)* | Setup wizard: detects the project, runs the offline checks, offers the hook and workflow ([init.md](init.md)) |
 | **Machine audit** | `penthera --machine` | macOS checks (keyloggers, persistence, rootkits) |
@@ -145,6 +145,18 @@ routes, for example `--deep reached 3 of 13 routes in your code.`
 | **Evidence bundle** | `--evidence <dir> [--sign-key <ssh-key>]` | All reports plus `manifest.json` with SHA-256s, optionally SSH-signed. Auditors check it with `penthera evidence verify <dir> --allowed-signers <file>` ([docs/evidence.md](../evidence.md)) |
 
 ### Coverage: what a repo scan read
+
+### GitHub Actions workflows
+
+A `--repo` scan reads the workflows GitHub runs, in `.github/workflows/`. It reads the text and runs nothing. It has three rules, from GitHub's own guidance on securing workflows:
+
+| Rule | Severity | What it means |
+|------|----------|---------------|
+| `gha-pwn-request` | high | A `pull_request_target` or `workflow_run` workflow checks out the pull request's code. That code then runs with your repository's token and secrets. |
+| `gha-script-injection` | high | Text an outsider writes (a PR title, an issue body, a branch name) goes into a `run:` script through `${{ }}`, where it becomes shell code. Pass it through `env:` instead. |
+| `gha-unpinned-action` | medium (low for `actions/*`, `github/*`) | An action is used by a tag or branch its owner can move. Pin the full commit SHA. |
+
+Each finding points to the file and line. `explain_finding` knows all three ids. A clean result means none of these three patterns was found. It doesn't prove the workflow is safe.
 
 Every `--repo` scan adds a **Coverage** section to the terminal, Markdown and
 JSON (`coverage`) reports. For each check (the secret scan, route and

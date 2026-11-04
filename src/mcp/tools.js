@@ -17,6 +17,7 @@ import { CATEGORY_REFERENCES, SOURCES } from "../../lib/references.js";
 import { RULE_OWASP, OWASP_NAMES } from "../../lib/agents/owasp.js";
 import { BUILT_IN_TEMPLATES } from "../../lib/templates.js";
 import { OPENAPI_EXPOSED_RULE } from "../../lib/blackbox/openapi.js";
+import { WORKFLOW_RULES } from "../../lib/whitebox/workflows.js";
 import { runtimeAdvisoriesForRepo, runtimeAdvisoriesForResponse } from "../../lib/advisories/index.js";
 import { stampProvenance } from "../../lib/provenance.js";
 import { reachLines, unreachableText } from "../report/reach.js";
@@ -257,7 +258,7 @@ function coverageOf(c) {
 
 // Rule ids that scan checks set on a finding (`templateId`) without a template file,
 // with the category their references come from.
-const FINDING_RULES = { [OPENAPI_EXPOSED_RULE]: "exposure" };
+const FINDING_RULES = { [OPENAPI_EXPOSED_RULE]: "exposure", ...WORKFLOW_RULES };
 
 function explain(id) {
   if (/^pf-[0-9a-f]+$/.test(id)) {
