@@ -1,0 +1,17 @@
+{
+  "lockfileVersion": 2,
+  "generator": "penthera agents --pin",
+  "note": "SHA-256 pins for agent skills, MCP servers, hooks and plugins. Review changes before re-pinning. Version 2 pins every file in a skill except node_modules and .git; re-pin a version 1 file after upgrading.",
+  "entries": {
+    "mcp:.mcp.json#penthera": {
+      "kind": "mcp",
+      "scope": "repo",
+      "sha256": "74bf364b22fd1bb7eb23a830515940be57b202c940fc76281b29a3f5e9691ff8"
+    },
+    "skill:skills/penthera": {
+      "kind": "skill",
+      "scope": "repo",
+      "sha256": "fa15d8f27015cd01e9483c04e01092a9b95cc8806e290cfa64dcebcad0ae6632"
+    }
+  }
+}

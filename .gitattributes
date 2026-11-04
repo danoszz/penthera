@@ -1,3 +1,9 @@
 # Agent-config fixtures are hashed by penthera.lock and hold deliberate
 # whitespace payloads; keep their bytes exactly as committed.
 tests/fixtures/agents/** -text
+
+# Rule packs are checked against the SHA-256 sums and signature in pack.json.
+# A CRLF checkout (core.autocrlf=true, the Git for Windows default) breaks both
+# and every command stops with "Bundled rule pack core failed verification".
+lib/rules/** -text
+tests/fixtures/rules/** -text

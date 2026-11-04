@@ -9,7 +9,7 @@
  */
 import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
 import { mkdtempSync, rmSync, readFileSync, writeFileSync, mkdirSync, cpSync, symlinkSync, unlinkSync, existsSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { join, relative, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { createHash } from "node:crypto";
 import { spawnSync, execFileSync } from "node:child_process";
@@ -382,6 +382,15 @@ describe("bundled packs", () => {
     expect(bundledPackDirs().map((d) => d.split("/").pop())).toEqual(["core", "advisories", "ioc-2025-2026", "ioc-pypi-2026"]);
     for (const d of bundledPackDirs()) expect(verifyPack(d).errors, d).toEqual([]);
     expect(activePacks().map((p) => [p.name, p.origin])).toEqual([["core", "bundled"], ["advisories", "bundled"], ["ioc-2025-2026", "bundled"], ["ioc-pypi-2026", "bundled"]]);
+  });
+
+  it("pack files are checked out byte for byte, also with core.autocrlf=true", () => {
+    // Only meaningful in a git checkout; the installed package has no .git.
+    if (!existsSync(join(ROOT, ".git"))) return;
+    const packFiles = (d) => JSON.parse(readFileSync(join(d, "pack.json"), "utf-8")).rules.map((r) => join(d, r.file));
+    const files = [...bundledPackDirs(), SIGNED].flatMap((d) => [join(d, "pack.json"), ...packFiles(d)]);
+    const out = execFileSync("git", ["check-attr", "text", "--", ...files.map((f) => relative(ROOT, f))], { cwd: ROOT, encoding: "utf-8" });
+    for (const line of out.trim().split("\n")) expect(line).toMatch(/: text: unset$/);
   });
 
   it("every rule cites a source and only references keys in docs/references.bib", () => {
