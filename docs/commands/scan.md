@@ -152,18 +152,18 @@ routes, for example `--deep reached 3 of 13 routes in your code.`
 
 ### GitHub Actions workflows
 
-A `--repo` scan reads the workflows GitHub runs, in `.github/workflows/`. It reads the text and runs nothing. Three rules come from GitHub's own guidance on securing workflows, and a fourth reports a workflow too large to read:
+A `--repo` scan reads the workflows GitHub runs, in `.github/workflows/`. It parses each one as YAML and runs nothing. Three rules come from GitHub's own guidance on securing workflows, and a fourth reports a workflow it can't read:
 
 | Rule | Severity | What it means |
 |------|----------|---------------|
-| `gha-pwn-request` | high | A `pull_request_target` or `workflow_run` workflow checks out the pull request's code. That code then runs with your repository's token and secrets. |
-| `gha-script-injection` | high | Text an outsider writes (a PR title, an issue body, a branch name) goes into a `run:` script through `${{ }}`, where it becomes shell code. Pass it through `env:` instead. |
-| `gha-unpinned-action` | medium (low for `actions/*`, `github/*`) | An action is used by a tag or branch its owner can move. Pin the full commit SHA. |
-| `gha-workflow-unchecked` | high | A workflow is over 256 KB, too large to check. GitHub still runs it, so Penthera reports it instead of passing it unread. |
+| `gha-pwn-request` | high | A `pull_request_target`, `workflow_run`, `issue_comment` or `issues` workflow checks out the pull request's code (its head, merge commit or fork), or fetches it in a script (`gh pr checkout`, `refs/pull/`). That code then runs with your repository's token and secrets. |
+| `gha-script-injection` | high | Text an outsider writes (a PR title, an issue body, a branch name) goes into a `run:` script or an `actions/github-script` `script:` through `${{ }}`, where it becomes code. Pass it through `env:` instead. |
+| `gha-unpinned-action` | medium (low for `actions/*`, `github/*`) | An action or reusable workflow is used by a tag or branch its owner can move. Pin the full commit SHA. |
+| `gha-workflow-unchecked` | high | A workflow is over 256 KB, or isn't valid YAML (duplicate keys included). Penthera reports it instead of passing it unread. |
 
-Each finding points to the file and line. `explain_finding` knows all four ids. Quoted keys (`"run":`) are read like bare ones.
+Each finding points to the file and line. `explain_finding` knows all four ids. Every spelling YAML allows means the same thing here: quoted keys, escapes, block scalars, flow style, anchors. Expressions are compared without case, with `['x']` read as `.x`.
 
-**Limits.** It reads block-style YAML line by line. It doesn't follow flow style (`steps: [{ run: ... }]`), anchors and aliases (`*name`), or reusable workflows and composite actions in other files. A clean result means none of these patterns was found in what it read. It doesn't prove the workflow is safe.
+**Limits.** It doesn't follow reusable workflows or composite actions into their own files, and it doesn't trace a value through `env:` or a step output into a script. A clean result means none of these patterns was found in what it read. It doesn't prove the workflow is safe.
 
 ### Coverage: what a repo scan read
 
