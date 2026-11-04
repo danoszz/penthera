@@ -152,6 +152,19 @@ describe("crafted workflows can't make the parser slow", () => {
     expect(rules(`on:\n  pull_request_target:${pad}\n` + yml.split("\n").slice(1).join("\n"))).toContain("gha-pwn-request:8");
   });
 
+  it("still finds the PR checkout past an env var named uses and a list inside a scalar", () => {
+    const yml = "on: pull_request_target\njobs:\n  t:\n    steps:\n      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1\n        env:\n          uses: x\n        with:\n          args: |\n            - not a step\n          ref: ${{ github.event.pull_request.head.sha }}\n";
+    expect(rules(yml)).toEqual(["gha-pwn-request:11"]);
+  });
+
+  it("reads quoted keys like bare ones, escapes included", () => {
+    const inject = (key) => `jobs:\n  t:\n    steps:\n      - ${key}: echo \${{ github.event.pull_request.title }}\n`;
+    for (const key of ['"run"', "'run'", '"r\\x75n"', '"r\\u0075n"']) expect(rules(inject(key))).toEqual(["gha-script-injection:4"]);
+    expect(rules('jobs:\n  t:\n    steps:\n      - "run": |\n          echo ${{ github.event.issue.body }}\n')).toEqual(["gha-script-injection:5"]);
+    const pwn = "\"on\":\n  'pull_request_target':\njobs:\n  t:\n    steps:\n      - \"uses\": actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1\n        with:\n          \"ref\": ${{ github.head_ref }}\n";
+    expect(rules(pwn)).toEqual(["gha-pwn-request:8"]);
+  });
+
   it("scans many checkout steps in linear time", () => {
     const text = "on: pull_request_target\n" + "    uses: actions/checkout@v4\n    with: x\n".repeat(20000);
     expect(timed(text)).toBeLessThan(500);

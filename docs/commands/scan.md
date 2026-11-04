@@ -150,11 +150,9 @@ routes, for example `--deep reached 3 of 13 routes in your code.`
 | Your template | `--report-template file.md` | Your own Markdown with `{{summary.critical}}`, `{{#each findings}}`, `{{#if x}}`; no code runs |
 | **Evidence bundle** | `--evidence <dir> [--sign-key <ssh-key>]` | All reports plus `manifest.json` with SHA-256s, optionally SSH-signed. Auditors check it with `penthera evidence verify <dir> --allowed-signers <file>` ([docs/evidence.md](../evidence.md)) |
 
-### Coverage: what a repo scan read
-
 ### GitHub Actions workflows
 
-A `--repo` scan reads the workflows GitHub runs, in `.github/workflows/`. It reads the text and runs nothing. It has three rules, from GitHub's own guidance on securing workflows:
+A `--repo` scan reads the workflows GitHub runs, in `.github/workflows/`. It reads the text and runs nothing. Three rules come from GitHub's own guidance on securing workflows, and a fourth reports a workflow too large to read:
 
 | Rule | Severity | What it means |
 |------|----------|---------------|
@@ -163,7 +161,11 @@ A `--repo` scan reads the workflows GitHub runs, in `.github/workflows/`. It rea
 | `gha-unpinned-action` | medium (low for `actions/*`, `github/*`) | An action is used by a tag or branch its owner can move. Pin the full commit SHA. |
 | `gha-workflow-unchecked` | high | A workflow is over 256 KB, too large to check. GitHub still runs it, so Penthera reports it instead of passing it unread. |
 
-Each finding points to the file and line. `explain_finding` knows all three ids. A clean result means none of these three patterns was found. It doesn't prove the workflow is safe.
+Each finding points to the file and line. `explain_finding` knows all four ids. Quoted keys (`"run":`) are read like bare ones.
+
+**Limits.** It reads block-style YAML line by line. It doesn't follow flow style (`steps: [{ run: ... }]`), anchors and aliases (`*name`), or reusable workflows and composite actions in other files. A clean result means none of these patterns was found in what it read. It doesn't prove the workflow is safe.
+
+### Coverage: what a repo scan read
 
 Every `--repo` scan adds a **Coverage** section to the terminal, Markdown and
 JSON (`coverage`) reports. For each check (the secret scan, route and
