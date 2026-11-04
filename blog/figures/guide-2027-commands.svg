@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 594" width="640" height="594" role="img" aria-labelledby="t d" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif">
+<title id="t">Which command covers which step, and where Penthera stops</title>
+<desc id="d">For each of the ten steps, the Penthera command if there is one, and its limit. 01 Know what you expose: &lt;url> · MCP scan_url; Doesn't log in. 02 Keep secrets out of git: hook install · --repo .; Your repo, not your laptop. 03 Audit what your agents load: agents · agents --pin; No editor extensions yet. 04 Look before you install: install &lt;pkg>; No release-age check. 05 Know what your packages can do: deps; No CVE lookup. 06 Put the checks in CI: init · the GitHub Action; No lockfile-install check yet. 07 Harden your workflows: In review for the next release; Check by hand. 08 Retire long-lived keys: Finds hardcoded keys; Can't rotate them. 09 Lock down accounts and devices: Not Penthera; Identity provider, MDM, EDR. 10 Log it and plan the bad day: Not Penthera; Your platform's logs.</desc>
+<rect x="0.5" y="0.5" width="639" height="593" fill="#fdfdfa" stroke="#12151a"/>
+<text x="16" y="34" font-size="21" font-weight="500" letter-spacing="-0.4" fill="#12151a">Which command covers which step, and where it stops</text>
+<text x="16" y="58" font-size="13.5" font-family="ui-monospace, 'SF Mono', Menlo, monospace" fill="#6b6e73">Each command runs as npx penthera@2.2.0 …</text>
+<rect x="16" y="74" width="608" height="48" fill="#ebebe6" opacity="0.6"/>
+<text x="26" y="103" font-size="14" font-family="ui-monospace, 'SF Mono', Menlo, monospace" fill="#6b6e73">01</text>
+<text x="60" y="103" font-size="16" fill="#12151a">Know what you expose</text>
+<text x="340" y="94" font-size="13.5" font-family="ui-monospace, 'SF Mono', Menlo, monospace" fill="#0000ED">&lt;url> · MCP scan_url</text>
+<text x="340" y="112" font-size="13.5" fill="#6b6e73">Doesn't log in</text>
+<text x="26" y="151" font-size="14" font-family="ui-monospace, 'SF Mono', Menlo, monospace" fill="#6b6e73">02</text>
+<text x="60" y="151" font-size="16" fill="#12151a">Keep secrets out of git</text>
+<text x="340" y="142" font-size="13.5" font-family="ui-monospace, 'SF Mono', Menlo, monospace" fill="#0000ED">hook install · --repo .</text>
+<text x="340" y="160" font-size="13.5" fill="#6b6e73">Your repo, not your laptop</text>
+<rect x="16" y="170" width="608" height="48" fill="#ebebe6" opacity="0.6"/>
+<text x="26" y="199" font-size="14" font-family="ui-monospace, 'SF Mono', Menlo, monospace" fill="#6b6e73">03</text>
+<text x="60" y="199" font-size="16" fill="#12151a">Audit what your agents load</text>
+<text x="340" y="190" font-size="13.5" font-family="ui-monospace, 'SF Mono', Menlo, monospace" fill="#0000ED">agents · agents --pin</text>
+<text x="340" y="208" font-size="13.5" fill="#6b6e73">No editor extensions yet</text>
+<text x="26" y="247" font-size="14" font-family="ui-monospace, 'SF Mono', Menlo, monospace" fill="#6b6e73">04</text>
+<text x="60" y="247" font-size="16" fill="#12151a">Look before you install</text>
+<text x="340" y="238" font-size="13.5" font-family="ui-monospace, 'SF Mono', Menlo, monospace" fill="#0000ED">install &lt;pkg></text>
+<text x="340" y="256" font-size="13.5" fill="#6b6e73">No release-age check</text>
+<rect x="16" y="266" width="608" height="48" fill="#ebebe6" opacity="0.6"/>
+<text x="26" y="295" font-size="14" font-family="ui-monospace, 'SF Mono', Menlo, monospace" fill="#6b6e73">05</text>
+<text x="60" y="295" font-size="16" fill="#12151a">Know what your packages can do</text>
+<text x="340" y="286" font-size="13.5" font-family="ui-monospace, 'SF Mono', Menlo, monospace" fill="#0000ED">deps</text>
+<text x="340" y="304" font-size="13.5" fill="#6b6e73">No CVE lookup</text>
+<text x="26" y="343" font-size="14" font-family="ui-monospace, 'SF Mono', Menlo, monospace" fill="#6b6e73">06</text>
+<text x="60" y="343" font-size="16" fill="#12151a">Put the checks in CI</text>
+<text x="340" y="334" font-size="13.5" font-family="ui-monospace, 'SF Mono', Menlo, monospace" fill="#0000ED">init · the GitHub Action</text>
+<text x="340" y="352" font-size="13.5" fill="#6b6e73">No lockfile-install check yet</text>
+<rect x="16" y="362" width="608" height="48" fill="#ebebe6" opacity="0.6"/>
+<text x="26" y="391" font-size="14" font-family="ui-monospace, 'SF Mono', Menlo, monospace" fill="#6b6e73">07</text>
+<text x="60" y="391" font-size="16" fill="#12151a">Harden your workflows</text>
+<text x="340" y="382" font-size="13.5" fill="#3a3d42">In review for the next release</text>
+<text x="340" y="400" font-size="13.5" fill="#6b6e73">Check by hand</text>
+<text x="26" y="439" font-size="14" font-family="ui-monospace, 'SF Mono', Menlo, monospace" fill="#6b6e73">08</text>
+<text x="60" y="439" font-size="16" fill="#12151a">Retire long-lived keys</text>
+<text x="340" y="430" font-size="13.5" fill="#3a3d42">Finds hardcoded keys</text>
+<text x="340" y="448" font-size="13.5" fill="#6b6e73">Can't rotate them</text>
+<rect x="16" y="458" width="608" height="48" fill="#ebebe6" opacity="0.6"/>
+<text x="26" y="487" font-size="14" font-family="ui-monospace, 'SF Mono', Menlo, monospace" fill="#6b6e73">09</text>
+<text x="60" y="487" font-size="16" fill="#6b6e73">Lock down accounts and devices</text>
+<text x="340" y="478" font-size="13.5" fill="#3a3d42">Not Penthera</text>
+<text x="340" y="496" font-size="13.5" fill="#6b6e73">Identity provider, MDM, EDR</text>
+<text x="26" y="535" font-size="14" font-family="ui-monospace, 'SF Mono', Menlo, monospace" fill="#6b6e73">10</text>
+<text x="60" y="535" font-size="16" fill="#6b6e73">Log it and plan the bad day</text>
+<text x="340" y="526" font-size="13.5" fill="#3a3d42">Not Penthera</text>
+<text x="340" y="544" font-size="13.5" fill="#6b6e73">Your platform's logs</text>
+<text x="16" y="580" font-size="13.5" fill="#6b6e73">Blue: the command. Grey: where it stops.</text>
+</svg>

@@ -97,6 +97,12 @@ Developer Mode, then clone with `git clone -c core.symlinks=true …`. Without
 it, Cursor just doesn't see the skill in this repo. The npm package does not
 include `.cursor/`, so users are not affected.
 
+**`penthera.lock`.** The repo pins its own skill and MCP server, so
+`penthera agents .` (and the self-scan in `npm run audit:internal`) reports
+any change to them. When a change touches `skills/penthera/` or the root
+`.mcp.json`, review it, run `node bin/penthera.js agents --pin`, and commit the
+new `penthera.lock` with the change.
+
 ### Writing tests that stay reliable
 
 The suite runs fully parallel, often on a laptop that is busy with dev servers,
@@ -351,6 +357,8 @@ live once a maintainer approves it with 2FA. **Do not run `npm publish` locally.
      `docs/mcp-clients/`; a test keeps them equal
    - `.mcp.json` and `gemini-extension.json` at the root (`version` and the
      `penthera@<version>` pins); the internal audit checks them
+   - `penthera.lock`: the skill and `.mcp.json` changed, so re-pin with
+     `node bin/penthera.js agents --pin`
 2. Fold the fragments in `changelog.d/` and the `[Unreleased]` notes into the
    new version, which also deletes the fragment files:
 
