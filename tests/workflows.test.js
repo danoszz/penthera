@@ -126,6 +126,31 @@ describe("reading an untrusted repo's workflows", () => {
   });
 });
 
+describe("crafted workflows can't make the parser slow", () => {
+  const timed = (text) => {
+    const t = performance.now();
+    checkWorkflow(text, "x.yml");
+    return performance.now() - t;
+  };
+
+  it("parses a near-cap file of whitespace-prefixed lines in well under a second", () => {
+    const pad = " ".repeat(1999);
+    const text = [`${pad}#`, `${pad}runx`, `${pad}- usesx`, `${pad}\${{ ${" ".repeat(1900)}x }}`].join("\n").repeat(25);
+    expect(text.length).toBeLessThan(256 * 1024);
+    expect(timed(text)).toBeLessThan(500);
+  });
+
+  it("parses one very long line, past the per-line cap, in well under a second", () => {
+    expect(timed(" ".repeat(250 * 1024) + "run")).toBeLessThan(500);
+    expect(timed("run: " + "${{ github.event." + "a.".repeat(100 * 1024) + " }}")).toBeLessThan(500);
+  });
+
+  it("still finds an injection inside a list item and a block", () => {
+    const yml = "jobs:\n  t:\n    steps:\n      -   run: |\n          echo ${{ github.event.issue.title }}\n";
+    expect(rules(yml)).toEqual(["gha-script-injection:5"]);
+  });
+});
+
 describe("our own workflows", () => {
   it("have no pwn request or script injection", () => {
     const serious = scanWorkflows(".").filter((f) => f.templateId !== "gha-unpinned-action");
