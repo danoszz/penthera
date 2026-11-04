@@ -1,0 +1,108 @@
+# Penthera checks every pull request from a fork before anyone approves CI.
+#
+# Runs on pull_request_target, so it uses this repository's own workflow and
+# code, never the PR's. The scan job reads the PR's changed files through the
+# API as data, runs our Penthera on them and has a read-only token. The report
+# job only labels and comments; it never touches the PR's files.
+name: PR triage
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: Pull request number
+        required: true
+
+permissions: {}
+
+concurrency:
+  group: pr-triage-${{ github.event.pull_request.number || inputs.pr }}
+  cancel-in-progress: true
+
+jobs:
+  scan:
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      # The base branch: our own scripts and Penthera, not the PR's.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - name: Read the changed files as data and run Penthera
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number || inputs.pr }}
+        run: node scripts/ci/pr-triage.mjs "$GITHUB_REPOSITORY" "$PR" "$RUNNER_TEMP/triage"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: triage
+          path: |
+            ${{ runner.temp }}/triage/triage.json
+            ${{ runner.temp }}/triage/comment.md
+          retention-days: 3
+
+  report:
+    needs: scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      pull-requests: write
+      issues: write
+      checks: write
+    env:
+      APP_ID: ${{ secrets.PENTHERA_APP_ID }}
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: triage
+      # Post as the Penthera GitHub App when its secrets are set (logo on the
+      # comment and check); otherwise as github-actions. The key never reaches
+      # the scan job, and this job never touches the PR's files.
+      - id: app
+        if: env.APP_ID != ''
+        continue-on-error: true
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          app-id: ${{ secrets.PENTHERA_APP_ID }}
+          private-key: ${{ secrets.PENTHERA_APP_KEY }}
+          permission-checks: write
+          permission-issues: write
+          permission-pull-requests: write
+      - name: Label and comment
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token || github.token }}
+          AS_APP: ${{ steps.app.outputs.token != '' }}
+          GH_REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number || inputs.pr }}
+        run: |
+          label=$(jq -r .label triage.json)
+          head=$(jq -r .head triage.json)
+          case "$label" in standard-paths|needs-maintainer-review) ;; *) exit 1 ;; esac
+          case "$head" in *[!0-9a-f]*|"") exit 1 ;; esac
+          gh label create standard-paths --color 0e8a16 --description "Penthera triage: no CI, install or agent files changed; still review the diff" 2>/dev/null || true
+          gh label create needs-maintainer-review --color d93f0b --description "Penthera triage: changes CI, install or agent files" 2>/dev/null || true
+          other=standard-paths; [ "$label" = standard-paths ] && other=needs-maintainer-review
+          gh pr edit "$PR" --remove-label "$other" >/dev/null 2>&1 || true
+          gh pr edit "$PR" --add-label "$label"
+          id=$(gh api "repos/$GH_REPO/issues/$PR/comments" --paginate --jq '.[] | select(.user.type == "Bot" and (.body | startswith("<!-- penthera-triage -->"))) | .id' | tail -n1)
+          if [ -n "$id" ]; then
+            gh api -X PATCH "repos/$GH_REPO/issues/comments/$id" -F body=@comment.md >/dev/null 2>&1 || gh pr comment "$PR" --body-file comment.md
+          else
+            gh pr comment "$PR" --body-file comment.md
+          fi
+          if [ "$AS_APP" = true ]; then
+            conclusion=success; title="Standard paths"
+            [ "$label" = needs-maintainer-review ] && conclusion=neutral && title="Needs maintainer review"
+            jq -n --arg sha "$head" --arg c "$conclusion" --arg t "$title" --rawfile s comment.md \
+              '{name: "Penthera triage", head_sha: $sha, status: "completed", conclusion: $c, output: {title: $t, summary: ($s | .[0:60000])}}' \
+              | gh api -X POST "repos/$GH_REPO/check-runs" --input - >/dev/null
+          fi
