@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 348" width="640" height="348" role="img" aria-labelledby="t d" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif">
+<title id="t">This week and the next 30 days</title>
+<desc id="d">The ten steps in two columns. This week: Know what you expose, Keep secrets out of git, Audit what your agents load, Look before you install, Know what your packages can do. The next 30 days: Put the checks in CI, Harden your workflows, Retire long-lived keys, Lock down accounts and devices, Log it and plan the bad day.</desc>
+<rect x="0.5" y="0.5" width="639" height="347" fill="#fdfdfa" stroke="#12151a"/>
+<text x="16" y="34" font-size="21" font-weight="500" letter-spacing="-0.4" fill="#12151a">This week, and the next 30 days</text>
+<rect x="16" y="56" width="300" height="256" fill="none" stroke="#0000ED"/>
+<rect x="28" y="70" width="86" height="20" fill="#0000ED"/><text x="35" y="84.5" font-size="13" font-family="ui-monospace, 'SF Mono', Menlo, monospace" fill="#fff">This week</text>
+<text x="28" y="128" font-size="14" font-family="ui-monospace, 'SF Mono', Menlo, monospace" fill="#0000ED">01</text><text x="60" y="128" font-size="16" fill="#12151a">Know what you expose</text>
+<text x="28" y="168" font-size="14" font-family="ui-monospace, 'SF Mono', Menlo, monospace" fill="#0000ED">02</text><text x="60" y="168" font-size="16" fill="#12151a">Keep secrets out of git</text>
+<text x="28" y="208" font-size="14" font-family="ui-monospace, 'SF Mono', Menlo, monospace" fill="#0000ED">03</text><text x="60" y="208" font-size="16" fill="#12151a">Audit what your agents load</text>
+<text x="28" y="248" font-size="14" font-family="ui-monospace, 'SF Mono', Menlo, monospace" fill="#0000ED">04</text><text x="60" y="248" font-size="16" fill="#12151a">Look before you install</text>
+<text x="28" y="288" font-size="14" font-family="ui-monospace, 'SF Mono', Menlo, monospace" fill="#0000ED">05</text><text x="60" y="288" font-size="16" fill="#12151a">Know what your packages can do</text>
+<rect x="324" y="56" width="300" height="256" fill="none" stroke="#bfbfbf"/>
+<rect x="336" y="70" width="110" height="20" fill="#ebebe6"/><text x="343" y="84.5" font-size="13" font-family="ui-monospace, 'SF Mono', Menlo, monospace" fill="#3a3d42">Next 30 days</text>
+<text x="336" y="128" font-size="14" font-family="ui-monospace, 'SF Mono', Menlo, monospace" fill="#6b6e73">06</text><text x="368" y="128" font-size="16" fill="#12151a">Put the checks in CI</text>
+<text x="336" y="168" font-size="14" font-family="ui-monospace, 'SF Mono', Menlo, monospace" fill="#6b6e73">07</text><text x="368" y="168" font-size="16" fill="#12151a">Harden your workflows</text>
+<text x="336" y="208" font-size="14" font-family="ui-monospace, 'SF Mono', Menlo, monospace" fill="#6b6e73">08</text><text x="368" y="208" font-size="16" fill="#12151a">Retire long-lived keys</text>
+<text x="336" y="248" font-size="14" font-family="ui-monospace, 'SF Mono', Menlo, monospace" fill="#6b6e73">09</text><text x="368" y="248" font-size="16" fill="#12151a">Lock down accounts and devices</text>
+<text x="336" y="288" font-size="14" font-family="ui-monospace, 'SF Mono', Menlo, monospace" fill="#6b6e73">10</text><text x="368" y="288" font-size="16" fill="#12151a">Log it and plan the bad day</text>
+<text x="16" y="334" font-size="13.5" fill="#6b6e73">Five steps for this week, five for the month after.</text>
+</svg>

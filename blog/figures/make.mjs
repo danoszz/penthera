@@ -167,7 +167,106 @@ function mark(x, y, k) {
   return `<circle cx="${x.toFixed(1)}" cy="${y}" r="4" fill="${C.blue}"/>`;
 }
 
-const figures = { "blog/figures/secrets-precision-recall.svg": precisionRecall(), "blog/figures/dev-to-test.svg": devToTest() };
+// ── Figures 3 to 5: A Practical Guide to Security for 2027 ──────────────────
+// No data here: the text follows docs/security-guide-2027.md, step by step.
+
+const MONO = `font-family="ui-monospace, 'SF Mono', Menlo, monospace"`;
+const svgOpen = (W, H, title, desc) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-labelledby="t d" ${FONT}>\n<title id="t">${esc(title)}</title>\n<desc id="d">${esc(desc)}</desc>\n${plate(W, H)}`;
+const tagBox = (x, y, t, fill, ink) => `<rect x="${x}" y="${y}" width="${t.length * 8 + 14}" height="20" fill="${fill}"/><text x="${x + 7}" y="${y + 14.5}" font-size="13" ${MONO} fill="${ink}">${esc(t)}</text>`;
+
+function attackMap() {
+  const cells = [
+    [0, 0, "Step 1", "Public domains", ["previews and staging too"]],
+    [1, 0, "Step 2", "Keys in git", ["committed and pushed"]],
+    [2, 0, "Step 3", "Agent config", ["skills, MCP servers,", "extensions"]],
+    [0, 1, "Step 8", "Long-lived keys", ["keys that never expire"]],
+    [2, 1, "Steps 4 and 5", "New packages", ["what an agent installs"]],
+    [0, 2, "Step 9", "Accounts, laptops", ["logins, sessions, devices"]],
+    [2, 2, "Steps 6 and 7", "CI and workflows", ["what runs on every push"]],
+  ];
+  const W = 640, L = 16, T = 56, gap = 8, cw = (W - 2 * L - 2 * gap) / 3, ch = 104, H = T + 3 * ch + 2 * gap + 40;
+  const out = [svgOpen(W, H, "Where attacks come in for a small team", `Your team of 2 to 10 people in the middle, with the seven ways in around it and the guide step for each: ${cells.map((c) => `${c[3]} (${c[2]})`).join(", ")}.`)];
+  out.push(`<text x="${L}" y="34" ${TITLE} fill="${C.ink}">Where attacks come in for a small team</text>`);
+  for (const [cx, cy, tag, title, sub] of cells) {
+    const x = L + cx * (cw + gap), y = T + cy * (ch + gap);
+    out.push(`<rect x="${x}" y="${y}" width="${cw}" height="${ch}" fill="none" stroke="${C.frame}"/>`);
+    out.push(tagBox(x + 12, y + 12, tag, C.grid, C.ink2));
+    out.push(`<text x="${x + 12}" y="${y + 56}" font-size="17" font-weight="500" fill="${C.ink}">${esc(title)}</text>`);
+    sub.forEach((s, i) => out.push(`<text x="${x + 12}" y="${y + 78 + i * 17}" font-size="14" fill="${C.edge}">${esc(s)}</text>`));
+  }
+  const x = L + cw + gap, y = T + ch + gap;
+  out.push(`<rect x="${x}" y="${y}" width="${cw}" height="${ch}" fill="${C.blue}"/>`);
+  out.push(`<text x="${x + 12}" y="${y + 40}" font-size="21" font-weight="500" letter-spacing="-0.4" fill="#fff">Your team</text>`);
+  ["2 to 10 people, building", "with coding agents"].forEach((s, i) => out.push(`<text x="${x + 12}" y="${y + 66 + i * 18}" font-size="14.5" fill="#fff">${s}</text>`));
+  out.push(`<text x="${L}" y="${H - 14}" font-size="13.5" fill="${C.edge}">Each box names the step in the guide that covers it.</text>`);
+  out.push(`</svg>`);
+  return `${out.join("\n")}\n`;
+}
+
+const STEPS = ["Know what you expose", "Keep secrets out of git", "Audit what your agents load", "Look before you install", "Know what your packages can do", "Put the checks in CI", "Harden your workflows", "Retire long-lived keys", "Lock down accounts and devices", "Log it and plan the bad day"];
+const nn = (i) => String(i + 1).padStart(2, "0");
+
+function weekVs30() {
+  const W = 640, L = 16, T = 56, gap = 8, cw = (W - 2 * L - gap) / 2, rowH = 40, H = T + 48 + 5 * rowH + 44;
+  const out = [svgOpen(W, H, "This week and the next 30 days", `The ten steps in two columns. This week: ${STEPS.slice(0, 5).join(", ")}. The next 30 days: ${STEPS.slice(5).join(", ")}.`)];
+  out.push(`<text x="${L}" y="34" ${TITLE} fill="${C.ink}">This week, and the next 30 days</text>`);
+  [["This week", 0, C.blue, "#fff"], ["Next 30 days", 5, C.grid, C.ink2]].forEach(([label, from, fill, ink], col) => {
+    const x = L + col * (cw + gap);
+    out.push(`<rect x="${x}" y="${T}" width="${cw}" height="${48 + 5 * rowH + 8}" fill="none" stroke="${col ? C.frame : C.blue}"/>`);
+    out.push(tagBox(x + 12, T + 14, label, fill, ink));
+    STEPS.slice(from, from + 5).forEach((s, i) => {
+      const y = T + 48 + i * rowH + 24;
+      out.push(`<text x="${x + 12}" y="${y}" font-size="14" ${MONO} fill="${col ? C.edge : C.blue}">${nn(from + i)}</text><text x="${x + 44}" y="${y}" font-size="16" fill="${C.ink}">${esc(s)}</text>`);
+    });
+  });
+  out.push(`<text x="${L}" y="${H - 14}" font-size="13.5" fill="${C.edge}">Five steps for this week, five for the month after.</text>`);
+  out.push(`</svg>`);
+  return `${out.join("\n")}\n`;
+}
+
+function commands() {
+  const rows = [
+    ["<url> · MCP scan_url", "Doesn't log in"],
+    ["hook install · --repo .", "Your repo, not your laptop"],
+    ["agents · agents --pin", "No editor extensions yet"],
+    ["install <pkg>", "No release-age check"],
+    ["deps", "No CVE lookup"],
+    ["init · the GitHub Action", "No lockfile-install check yet"],
+    [null, ["In review for the next release", "Check by hand"]],
+    [null, ["Finds hardcoded keys", "Can't rotate them"]],
+    [null, ["Not Penthera", "Identity provider, MDM, EDR"]],
+    [null, ["Not Penthera", "Your platform's logs"]],
+  ];
+  const W = 640, L = 16, T = 74, rowH = 48, H = T + rowH * rows.length + 40;
+  const out = [svgOpen(W, H, "Which command covers which step, and where Penthera stops", `For each of the ten steps, the Penthera command if there is one, and its limit. ${rows.map((r, i) => `${nn(i)} ${STEPS[i]}: ${r[0] ? `${r[0]}; ` : ""}${[].concat(r[1]).join("; ")}`).join(". ")}.`)];
+  out.push(`<text x="${L}" y="34" ${TITLE} fill="${C.ink}">Which command covers which step, and where it stops</text>`);
+  out.push(`<text x="${L}" y="58" font-size="13.5" ${MONO} fill="${C.edge}">Each command runs as npx penthera@2.2.0 …</text>`);
+  rows.forEach(([cmd, limit], i) => {
+    const y = T + i * rowH;
+    if (i % 2 === 0) out.push(`<rect x="${L}" y="${y}" width="${W - 2 * L}" height="${rowH}" fill="${C.grid}" opacity="0.6"/>`);
+    out.push(`<text x="${L + 10}" y="${y + 29}" font-size="14" ${MONO} fill="${C.edge}">${nn(i)}</text>`);
+    out.push(`<text x="${L + 44}" y="${y + 29}" font-size="16" fill="${cmd || i < 8 ? C.ink : C.edge}">${esc(STEPS[i])}</text>`);
+    if (cmd) {
+      out.push(`<text x="${L + 324}" y="${y + 20}" font-size="13.5" ${MONO} fill="${C.blue}">${esc(cmd)}</text>`);
+      out.push(`<text x="${L + 324}" y="${y + 38}" font-size="13.5" fill="${C.edge}">${esc(limit)}</text>`);
+    } else {
+      const [a, b] = limit;
+      out.push(`<text x="${L + 324}" y="${y + 20}" font-size="13.5" fill="${C.ink2}">${esc(a)}</text>`);
+      out.push(`<text x="${L + 324}" y="${y + 38}" font-size="13.5" fill="${C.edge}">${esc(b)}</text>`);
+    }
+  });
+  out.push(`<text x="${L}" y="${H - 14}" font-size="13.5" fill="${C.edge}">Blue: the command. Grey: where it stops.</text>`);
+  out.push(`</svg>`);
+  return `${out.join("\n")}\n`;
+}
+
+const figures = {
+  "blog/figures/secrets-precision-recall.svg": precisionRecall(),
+  "blog/figures/dev-to-test.svg": devToTest(),
+  "blog/figures/guide-2027-attack-map.svg": attackMap(),
+  "blog/figures/guide-2027-week-vs-30.svg": weekVs30(),
+  "blog/figures/guide-2027-commands.svg": commands(),
+};
 let stale = false;
 for (const [path, svg] of Object.entries(figures)) {
   const url = new URL(path, ROOT);

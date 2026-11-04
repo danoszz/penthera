@@ -426,6 +426,7 @@ the combination finds more: experiment E14 measured that
 | You want to know | Read |
 |---|---|
 | Is my app secure? | [I'm new](docs/index.md#1-im-new), then [scan](docs/commands/scan.md) |
+| What should my small team do about security now? | [A Practical Guide to Security for 2027](docs/security-guide-2027.md): 10 steps, each with the command and its limit |
 | Is this package or MCP server safe? | [deps](docs/commands/deps.md), [install](docs/commands/install.md), [agents](docs/commands/agents.md) |
 | How do I use it from my coding agent? | [MCP server](docs/commands/mcp.md), [skill](docs/commands/skill.md), [agents safely](docs/agents-safely.md) |
 | How do I put it in CI? | [The GitHub Action](docs/commands/action.md), [scan in CI](docs/commands/scan.md#ci-integration) |
