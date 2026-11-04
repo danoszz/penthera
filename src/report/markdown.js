@@ -1,7 +1,7 @@
 /**
  * Human-readable Markdown security report.
  */
-import { writeFileSync, mkdirSync } from "node:fs";
+import { writeFileSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { buildWstgCoverage, formatWstgMarkdown } from "../../lib/owasp-wstg.js";
 import { formatComplianceMarkdown } from "../../lib/compliance/index.js";
@@ -41,14 +41,17 @@ function countBySeverity(findings) {
 
 const mdEscape = mdInline;
 
+const PKG_VERSION = JSON.parse(
+  readFileSync(new URL("../../package.json", import.meta.url), "utf-8"),
+).version;
+
 /**
  * Generate Markdown report content from scan result.
  */
 export function formatMarkdownReport(result, opts = {}) {
   const findings = sortFindings(result.findings);
   const counts = countBySeverity(findings);
-  // TODO(good-first-issue): the "0.2.0" fallback is stale; read the version from package.json instead.
-  const version = opts.version || "0.2.0";
+  const version = opts.version || PKG_VERSION;
   const lines = [];
 
   lines.push(`# Penthera Security Report`);

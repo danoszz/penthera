@@ -1,0 +1,13 @@
+# The maintainer reviews every pull request before it merges.
+*                @danoszz
+
+# Changes to what runs in CI, on install or in an agent session (the paths the
+# PR triage labels needs-maintainer-review) get the closest read.
+/.github/        @danoszz
+/package.json    @danoszz
+/package-lock.json @danoszz
+/scripts/        @danoszz
+/bin/            @danoszz
+/skills/         @danoszz
+/action.yml      @danoszz
+/Dockerfile      @danoszz
