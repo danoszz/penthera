@@ -1,0 +1,3 @@
+section: Fixed
+
+- **A key in a test file no longer lands in Act on as a confirmed high.** The brief now moves findings in `tests/`, `__tests__/` and files named `*.test.*` or `*.spec.*` to Likely noise, with the reason "in test files". The finding is still listed and counted, and the exit code does not change. A fixtures folder keeps its own reason. The new paths are named in the Likely noise section of `docs/commands/brief.md`.
