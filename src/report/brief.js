@@ -36,6 +36,8 @@ const MAX_NEXT = 3;
 // Generated or build output: nobody edits these files, so a hit in them is noise.
 const GENERATED = /(?:^|\/)(?:\.next[^/]*|dist|build|out|\.turbo|\.svelte-kit|\.nuxt|\.output|__pycache__|coverage)\//;
 const FIXTURE = /(?:^|\/)(?:fixtures?|__fixtures__|testdata|__mocks__)\//;
+// Test code: a key here is a test's own sample. A fixtures folder keeps its own reason, so FIXTURE is checked first.
+const TEST_FILE = /(?:^|\/)(?:tests|__tests__)\/|(?:^|\/)[^/]*\.(?:test|spec)\.[^/]+$/;
 // An info finding that says something was not found or not run belongs under Not checked.
 const GAP = /^no\b|not (?:found|run|read|checked|supported)|did not|skipped|unreachable/i;
 const URL_RE = /^[a-z][a-z0-9+.-]*:\/\//i;
@@ -44,6 +46,7 @@ const NOISE_REASONS = {
   "local-only": "in files git ignores, never committed",
   generated: "in generated build output",
   fixture: "in test fixtures",
+  "test-file": "in test files",
 };
 
 const SKIP_LABELS = {
@@ -74,6 +77,7 @@ export function bucketOf(f, { skillTarget = false } = {}) {
   // A skill ships its dist/ and build/, so in a named skill those are real code.
   if (!skillTarget && GENERATED.test(p)) return { bucket: "noise", reason: "generated" };
   if (FIXTURE.test(p)) return { bucket: "noise", reason: "fixture" };
+  if (TEST_FILE.test(p)) return { bucket: "noise", reason: "test-file" };
   if (f.severity === "info") return { bucket: "info" };
   if (["potential", "needs-human-review"].includes(f.confidence)) return { bucket: "check" };
   if (f.severity === "low") return { bucket: "check" };
