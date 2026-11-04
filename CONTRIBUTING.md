@@ -48,7 +48,7 @@ CodeQL and OpenSSF Scorecard run on their own workflows.
 
 A pull request from a fork gets checked by Penthera first (`.github/workflows/pr-triage.yml`). It reads
 the changed files as data, without installing or running anything from the PR, and comments
-what it found. It labels the PR `standard-paths`, or `needs-maintainer-review` when the PR changes
+what it found, as the Penthera GitHub App with a "Penthera triage" check when the app is set up. It labels the PR `standard-paths`, or `needs-maintainer-review` when the PR changes
 CI, install or agent files (`.github/`, `package.json`, the lockfile, `scripts/`, `bin/`,
 agent config). A maintainer reads that, then approves the full CI run. Keep new tests offline:
 no test may reach the public internet, so CI stays deterministic.
