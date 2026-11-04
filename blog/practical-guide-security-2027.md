@@ -14,7 +14,13 @@ Jack Cable's [A Practical Guide to Security in November 2026](https://x.com/jack
 
 This is our version, for a different reader: a team of 2 to 10 people who ship with coding agents. There's no security team, and an agent can install a package, edit a workflow or touch a key faster than anyone reviews it.
 
+![Diagram of a small team in the middle with seven ways in around it, each with its step in this guide: public domains, keys in git, agent config, long-lived keys, new packages, accounts and laptops, and CI and workflows.](figures/guide-2027-attack-map.svg)
+Where attacks come in for a team of 2 to 10 people, and the step that covers each.
+
 Ten steps: five for this week, five for the next 30 days. Each one says what to do, the command if Penthera can help, and where it can't. Penthera is free, MIT and offline. A clean run means "nothing found in what it checked", not "safe".
+
+![The ten steps in two columns: steps 1 to 5 for this week, steps 6 to 10 for the next 30 days.](figures/guide-2027-week-vs-30.svg)
+The ten steps, split by when to do them.
 
 ## This week
 
@@ -119,6 +125,9 @@ This step isn't Penthera's, and it matters most:
 Keep logs you can read when something happens: who deployed, which token was used, from where. Write down who rotates which key, and how, before you need it.
 
 **Penthera:** nothing here either. Your platform and cloud have the logs.
+
+![Table of the ten steps, each with the Penthera command that covers it, if any, and where it stops. Steps 9 and 10 are not Penthera's.](figures/guide-2027-commands.svg)
+All ten steps on one page: the command, and where it stops.
 
 ## What this guide doesn't cover
 
