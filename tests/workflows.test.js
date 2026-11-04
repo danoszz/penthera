@@ -119,10 +119,10 @@ describe("reading an untrusted repo's workflows", () => {
     expect(scanWorkflows(root)).toEqual([]);
   });
 
-  it("skips a file far larger than a workflow", () => {
+  it("reports a file too large to check instead of passing it", () => {
     const root = repo();
     writeFileSync(join(root, ".github/workflows/huge.yml"), bad + "#".repeat(300 * 1024));
-    expect(scanWorkflows(root)).toEqual([]);
+    expect(scanWorkflows(root).map((f) => `${f.templateId}:${f.severity}`)).toEqual(["gha-workflow-unchecked:high"]);
   });
 });
 
@@ -143,6 +143,18 @@ describe("crafted workflows can't make the parser slow", () => {
   it("parses one very long line, past the per-line cap, in well under a second", () => {
     expect(timed(" ".repeat(250 * 1024) + "run")).toBeLessThan(500);
     expect(timed("run: " + "${{ github.event." + "a.".repeat(100 * 1024) + " }}")).toBeLessThan(500);
+  });
+
+  it("still finds a trigger and a checkout padded far past any real line", () => {
+    const pad = " #" + "x".repeat(5000);
+    const yml = `on: pull_request_target${pad}\njobs:\n  t:\n    steps:\n      - uses: actions/checkout@v4${pad}\n        with:\n          ref: \${{ github.event.pull_request.head.sha }}${pad}\n`;
+    expect(rules(yml)).toContain("gha-pwn-request:7");
+    expect(rules(`on:\n  pull_request_target:${pad}\n` + yml.split("\n").slice(1).join("\n"))).toContain("gha-pwn-request:8");
+  });
+
+  it("scans many checkout steps in linear time", () => {
+    const text = "on: pull_request_target\n" + "    uses: actions/checkout@v4\n    with: x\n".repeat(20000);
+    expect(timed(text)).toBeLessThan(500);
   });
 
   it("still finds an injection inside a list item and a block", () => {

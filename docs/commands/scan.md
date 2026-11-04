@@ -161,6 +161,7 @@ A `--repo` scan reads the workflows GitHub runs, in `.github/workflows/`. It rea
 | `gha-pwn-request` | high | A `pull_request_target` or `workflow_run` workflow checks out the pull request's code. That code then runs with your repository's token and secrets. |
 | `gha-script-injection` | high | Text an outsider writes (a PR title, an issue body, a branch name) goes into a `run:` script through `${{ }}`, where it becomes shell code. Pass it through `env:` instead. |
 | `gha-unpinned-action` | medium (low for `actions/*`, `github/*`) | An action is used by a tag or branch its owner can move. Pin the full commit SHA. |
+| `gha-workflow-unchecked` | high | A workflow is over 256 KB, too large to check. GitHub still runs it, so Penthera reports it instead of passing it unread. |
 
 Each finding points to the file and line. `explain_finding` knows all three ids. A clean result means none of these three patterns was found. It doesn't prove the workflow is safe.
 
