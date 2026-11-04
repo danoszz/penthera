@@ -23,7 +23,7 @@ Pick a profile, or add individual flags for more depth:
 
 | Profile | Command | What runs |
 |---------|---------|-----------|
-| **quick** | `--profile quick` | Headers, OpenAPI, auth checks; no login POSTs (about 10s) |
+| **quick** | `--profile quick` | Headers, OpenAPI, auth checks; no login POSTs (about 10s, about 180 requests) |
 | **standard** | *(default)* | Full non-destructive scan: no attack payloads, and one `POST /api/login` with invalid credentials |
 | **deep** | `--profile deep` | recon, injection probes, API fuzzing, and on `/api/login` an 8-attempt rate-limit burst and an SQL error check |
 
@@ -32,6 +32,12 @@ login with obviously invalid credentials, to catch a login that accepts
 anything; `--deep` also 8 rapid attempts (rate limiting) and an
 `' OR '1'='1` string (SQL errors). A CDN firewall can read the last two as an
 attack and start challenging you, so they only run with `--deep`.
+
+How many requests `quick` sends: 182 against the test server in
+`tests/fixtures/mock-server.js`. Most of them are a fixed list of probe paths,
+178 against a server that answers 404 to everything. Each API path in the
+site's OpenAPI spec and each script on its home page adds more: a site with 60
+of each took 275. A `standard` scan sent 197 to the same test server.
 
 Individual flags: `--recon`, `--deep`, `--fuzz`, `--adaptive`, `--nuclei <path>`, `--templates <dirs>`, `--all`
 
