@@ -8,10 +8,10 @@
  * <out-dir>/files, runs this checkout's Penthera (repo and agents scans) on
  * them, and writes <out-dir>/triage.json and <out-dir>/comment.md. A PR that
  * touches CI, install or agent config gets `needs-maintainer-review`; any
- * other gets `safe-paths`. Needs `gh` with GH_TOKEN (read-only is enough).
+ * other gets `standard-paths`. Needs `gh` with GH_TOKEN (read-only is enough).
  */
 import { execFileSync } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -19,27 +19,51 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const MAX_FILES = 100;
 const MAX_BYTES = 512 * 1024;
 
+/** Agent config: skills, MCP servers, hooks and instruction files. */
+const AGENT = /(^|\/)(\.claude|\.cursor|\.codex|skills)\/|(^|\/)\.mcp\.json$|(^|\/)(CLAUDE|AGENTS)\.md$/;
+
 /** Paths that can change what runs in CI, on install or in an agent session. */
 const SENSITIVE = [
   /^\.github\//,
-  /^package(-lock)?\.json$/,
-  /^npm-shrinkwrap\.json$/,
-  /^\.npmrc$/,
-  /^scripts\//,
+  /(^|\/)package(-lock)?\.json$/,
+  /(^|\/)npm-shrinkwrap\.json$/,
+  /(^|\/)\.npmrc$/,
+  /(^|\/)scripts\//,
   /^bin\//,
   /(^|\/)Dockerfile$/,
   /^\.husky\//,
   /^action\.ya?ml$/,
-  /^(vitest|eslint|rolldown)\.config\./,
-  /(^|\/)\.claude\//,
-  /(^|\/)\.mcp\.json$/,
-  /(^|\/)(CLAUDE|AGENTS)\.md$/,
+  /(^|\/)(vitest|eslint|rolldown)\.config\./,
   /^\.vscode\//,
+  AGENT,
 ];
 
+/**
+ * Files our workflows run directly (`bash x.sh`, `node scripts/x.mjs`),
+ * read from the base branch, so a new one is covered without editing SENSITIVE.
+ */
+export function workflowRunPaths(yamlTexts) {
+  const out = new Set();
+  for (const text of yamlTexts) {
+    for (const m of text.matchAll(/\b(?:bash|sh|node|python3?)\s+(?:-\S+\s+)*([\w./-]+\.(?:sh|m?js|cjs|py))\b/g)) {
+      out.add(m[1].replace(/^\.\//, ""));
+    }
+  }
+  return out;
+}
+
 /** Which of the changed paths are sensitive. */
-export function sensitivePaths(paths) {
-  return paths.filter((p) => SENSITIVE.some((re) => re.test(p)));
+export function sensitivePaths(paths, runPaths = new Set()) {
+  return paths.filter((p) => runPaths.has(p) || SENSITIVE.some((re) => re.test(p)));
+}
+
+function baseWorkflows() {
+  const dir = join(ROOT, ".github", "workflows");
+  try {
+    return readdirSync(dir).filter((f) => /\.ya?ml$/.test(f)).map((f) => readFileSync(join(dir, f), "utf-8"));
+  } catch {
+    return [];
+  }
 }
 
 /** A changed path is written only if it stays inside the output folder. */
@@ -75,7 +99,7 @@ async function main() {
   const head = info.head.sha;
   const files = JSON.parse(gh("api", "--paginate", "--slurp", `repos/${repo}/pulls/${pr}/files?per_page=100`)).flat();
   const changed = files.filter((f) => f.status !== "removed").map((f) => f.filename);
-  const sensitive = sensitivePaths(files.map((f) => f.filename));
+  const sensitive = sensitivePaths(files.map((f) => f.filename), workflowRunPaths(baseWorkflows()));
 
   const dir = join(out, "files");
   mkdirSync(dir, { recursive: true });
@@ -98,15 +122,15 @@ async function main() {
   // The brief's "Next" section suggests commands for a local repo; it doesn't apply here.
   const brief = (args) => penthera(args).split(/\n### Next\b/)[0].replaceAll(dir, "<changed files>");
   const repoBrief = brief(["--repo", dir, "--no-library"]);
-  const agentFiles = changed.some((p) => /(^|\/)(\.claude|\.cursor|\.codex|skills)\/|\.mcp\.json$|(CLAUDE|AGENTS)\.md$/.test(p));
+  const agentFiles = changed.some((p) => AGENT.test(p));
   const agentsBrief = agentFiles ? brief(["agents", dir]) : "";
-  const label = sensitive.length ? "needs-maintainer-review" : "safe-paths";
+  const label = sensitive.length ? "needs-maintainer-review" : "standard-paths";
 
   const comment = [
     "<!-- penthera-triage -->",
     "## Checked by Penthera before CI",
     "",
-    `**${label === "safe-paths" ? "Safe paths" : "Needs maintainer review"}.** ${written} changed file${written === 1 ? "" : "s"} read as data at \`${head.slice(0, 7)}\`. Nothing from this PR was installed or run.`,
+    `**${label === "standard-paths" ? "Standard paths" : "Needs maintainer review"}.** ${written} changed file${written === 1 ? "" : "s"} read as data at \`${head.slice(0, 7)}\`. Nothing from this PR was installed or run.${label === "standard-paths" ? " No CI, install or agent files changed; source and tests still run in CI once approved, so read the diff." : ""}`,
     sensitive.length ? `\nThis PR touches files that change what CI, an install or an agent runs:\n${sensitive.slice(0, 20).map((p) => `- \`${tidy(p)}\``).join("\n")}` : "",
     skipped.length ? `\nNot read: ${skipped.slice(0, 10).map((p) => `\`${tidy(p)}\``).join(", ")}.` : "",
     "",

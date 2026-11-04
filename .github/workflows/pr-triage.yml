@@ -68,11 +68,12 @@ jobs:
           PR: ${{ github.event.pull_request.number || inputs.pr }}
         run: |
           label=$(jq -r .label triage.json)
-          case "$label" in safe-paths|needs-maintainer-review) ;; *) exit 1 ;; esac
-          gh label create safe-paths --color 0e8a16 --description "Penthera triage: no CI, install or agent files changed" 2>/dev/null || true
+          case "$label" in standard-paths|needs-maintainer-review) ;; *) exit 1 ;; esac
+          gh label create standard-paths --color 0e8a16 --description "Penthera triage: no CI, install or agent files changed; still review the diff" 2>/dev/null || true
           gh label create needs-maintainer-review --color d93f0b --description "Penthera triage: changes CI, install or agent files" 2>/dev/null || true
-          other=safe-paths; [ "$label" = safe-paths ] && other=needs-maintainer-review
-          gh pr edit "$PR" --add-label "$label" --remove-label "$other"
+          other=standard-paths; [ "$label" = standard-paths ] && other=needs-maintainer-review
+          gh pr edit "$PR" --remove-label "$other" >/dev/null 2>&1 || true
+          gh pr edit "$PR" --add-label "$label"
           id=$(gh api "repos/$GH_REPO/issues/$PR/comments" --paginate --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("<!-- penthera-triage -->"))) | .id' | head -n1)
           if [ -n "$id" ]; then
             gh api -X PATCH "repos/$GH_REPO/issues/comments/$id" -F body=@comment.md >/dev/null
