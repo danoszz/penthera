@@ -505,6 +505,14 @@ describe("penthera.lock", () => {
     expect(r.findings.some((f) => /corrupt/.test(f.title) && f.severity === "medium")).toBe(true);
   });
 
+  it("writes the same keys on every OS (#257)", () => {
+    const root = tmp();
+    put(root, ".claude/skills/demo/SKILL.md", "---\nname: demo\ndescription: demo skill\n---\nSay hi.\n");
+    put(root, ".cursor/mcp.json", json({ mcpServers: { demo: { command: "node", args: ["server.js"] } } }));
+    const keys = Object.keys(computeLockEntries(discoverAgentConfig(root))).sort();
+    expect(keys).toEqual(["mcp:.cursor/mcp.json#demo", "skill:.claude/skills/demo"]);
+  });
+
   it("hashes every discovered kind", () => {
     const inv = { skills: [], mcpServers: [{ name: "a", def: { command: "x" }, file: ".mcp.json" }], hooks: [], plugins: [{ id: "p@m", version: "1", gitCommitSha: "a" }] };
     expect(Object.keys(computeLockEntries(inv)).sort()).toEqual(["mcp:.mcp.json#a", "plugin:p@m"]);

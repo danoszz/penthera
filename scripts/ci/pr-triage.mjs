@@ -86,6 +86,26 @@ function penthera(args) {
   }
 }
 
+/**
+ * The brief's first line, shown above the fold. Only counts and fixed words
+ * may pass, never quoted file text, so a PR can't put markdown in our comment.
+ */
+export function verdict(brief) {
+  const line = brief.split("\n", 1)[0].trim();
+  return line.length < 200 && /^\*\*Penthera: [A-Za-z ,.]+\*\* [0-9A-Za-z ,.:]+$/.test(line) ? line : "";
+}
+
+/**
+ * The brief as plain text for the code block: no markdown marks or entities,
+ * and without the notes about routes and logins, which a PR's few changed
+ * files never have.
+ */
+export function plain(brief) {
+  const lines = brief.split("\n").filter((l) => !/^- (This run does not prove|Route and code-pattern analysis)/.test(l));
+  const text = lines.join("\n").replace(/### Not checked\n+(?=###|$)/, "").replace(/^### /gm, "").replaceAll("**", "");
+  return text.replaceAll("&lt;", "<").replaceAll("&gt;", ">").replaceAll("&amp;", "&").replace(/\n{3,}/g, "\n\n").trim();
+}
+
 /** Keep quoted file text from pinging people or closing our code block. */
 const tidy = (s) => s.replace(/@(?=\w)/g, "@​").replace(/```/g, "'''").slice(0, 6000);
 
@@ -134,12 +154,15 @@ async function main() {
     sensitive.length ? `\nThis PR touches files that change what CI, an install or an agent runs:\n${sensitive.slice(0, 20).map((p) => `- \`${tidy(p)}\``).join("\n")}` : "",
     skipped.length ? `\nNot read: ${skipped.slice(0, 10).map((p) => `\`${tidy(p)}\``).join(", ")}.` : "",
     "",
-    "<details><summary>Penthera on the changed files</summary>",
+    verdict(repoBrief.trim()),
+    agentsBrief ? verdict(agentsBrief.trim()).replace("**Penthera:", "**Penthera agents:") : "",
+    "",
+    "<details><summary>The full Penthera brief</summary>",
     "",
     "```",
-    tidy(repoBrief.trim()),
+    tidy(plain(repoBrief)),
     "```",
-    ...(agentsBrief ? ["", "```", tidy(agentsBrief.trim()), "```"] : []),
+    ...(agentsBrief ? ["", "```", tidy(plain(agentsBrief)), "```"] : []),
     "</details>",
     "",
     "<sub>Static checks on the changed files only, with this repository's own Penthera. A maintainer approves CI after reading this.</sub>",

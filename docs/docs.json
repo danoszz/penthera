@@ -36,6 +36,7 @@
         "group": "I'm new",
         "pages": [
           "index",
+          "security-guide-2027",
           "commands/init",
           "integrations",
           "before-you-publish",

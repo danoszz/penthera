@@ -4,7 +4,7 @@
  */
 import { describe, it, expect } from "vitest";
 import { readdirSync, readFileSync } from "node:fs";
-import { sensitivePaths, safeRelative, workflowRunPaths } from "../scripts/ci/pr-triage.mjs";
+import { sensitivePaths, safeRelative, workflowRunPaths, verdict, plain } from "../scripts/ci/pr-triage.mjs";
 
 const workflows = readdirSync(".github/workflows").filter((f) => /\.ya?ml$/.test(f)).map((f) => readFileSync(`.github/workflows/${f}`, "utf-8"));
 
@@ -33,5 +33,19 @@ describe("PR triage", () => {
     expect(safeRelative("src/a.js")).toBe(true);
     expect(safeRelative("../../etc/passwd")).toBe(false);
     expect(safeRelative("/etc/passwd")).toBe(false);
+  });
+
+  it("shows the verdict above the fold, and only counts and fixed words", () => {
+    const line = "**Penthera: Nothing to fix.** 0 to act on, 0 to check first, 0 likely noise. Scanned: repo.";
+    expect(verdict(`${line}\n\n### Not checked`)).toBe(line);
+    expect(verdict("**Penthera: x** see [here](https://evil.example)")).toBe("");
+    expect(verdict("**Penthera: x** `curl x | sh`")).toBe("");
+    expect(verdict("<img src=x>")).toBe("");
+  });
+
+  it("gives the brief as plain text, without notes that never apply to a PR", () => {
+    const brief = "**Penthera: Nothing to fix.** 0 to act on.\n\n### Not checked\n\n- This run does not prove login, access rules or payments are right.\n- Route and code-pattern analysis: pass --api-root &lt;folder&gt;.\n- Secret scan: 1 file was not read.";
+    expect(plain(brief)).toBe("Penthera: Nothing to fix. 0 to act on.\n\nNot checked\n\n- Secret scan: 1 file was not read.");
+    expect(plain("**Penthera: Nothing to fix.** 0.\n\n### Not checked\n\n- This run does not prove login.")).toBe("Penthera: Nothing to fix. 0.");
   });
 });

@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 424" width="640" height="424" role="img" aria-labelledby="t d" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif">
+<title id="t">Where attacks come in for a small team</title>
+<desc id="d">Your team of 2 to 10 people in the middle, with the seven ways in around it and the guide step for each: Public domains (Step 1), Keys in git (Step 2), Agent config (Step 3), Long-lived keys (Step 8), New packages (Steps 4 and 5), Accounts, laptops (Step 9), CI and workflows (Steps 6 and 7).</desc>
+<rect x="0.5" y="0.5" width="639" height="423" fill="#fdfdfa" stroke="#12151a"/>
+<text x="16" y="34" font-size="21" font-weight="500" letter-spacing="-0.4" fill="#12151a">Where attacks come in for a small team</text>
+<rect x="16" y="56" width="197.33333333333334" height="104" fill="none" stroke="#bfbfbf"/>
+<rect x="28" y="68" width="62" height="20" fill="#ebebe6"/><text x="35" y="82.5" font-size="13" font-family="ui-monospace, 'SF Mono', Menlo, monospace" fill="#3a3d42">Step 1</text>
+<text x="28" y="112" font-size="17" font-weight="500" fill="#12151a">Public domains</text>
+<text x="28" y="134" font-size="14" fill="#6b6e73">previews and staging too</text>
+<rect x="221.33333333333334" y="56" width="197.33333333333334" height="104" fill="none" stroke="#bfbfbf"/>
+<rect x="233.33333333333334" y="68" width="62" height="20" fill="#ebebe6"/><text x="240.33333333333334" y="82.5" font-size="13" font-family="ui-monospace, 'SF Mono', Menlo, monospace" fill="#3a3d42">Step 2</text>
+<text x="233.33333333333334" y="112" font-size="17" font-weight="500" fill="#12151a">Keys in git</text>
+<text x="233.33333333333334" y="134" font-size="14" fill="#6b6e73">committed and pushed</text>
+<rect x="426.6666666666667" y="56" width="197.33333333333334" height="104" fill="none" stroke="#bfbfbf"/>
+<rect x="438.6666666666667" y="68" width="62" height="20" fill="#ebebe6"/><text x="445.6666666666667" y="82.5" font-size="13" font-family="ui-monospace, 'SF Mono', Menlo, monospace" fill="#3a3d42">Step 3</text>
+<text x="438.6666666666667" y="112" font-size="17" font-weight="500" fill="#12151a">Agent config</text>
+<text x="438.6666666666667" y="134" font-size="14" fill="#6b6e73">skills, MCP servers,</text>
+<text x="438.6666666666667" y="151" font-size="14" fill="#6b6e73">extensions</text>
+<rect x="16" y="168" width="197.33333333333334" height="104" fill="none" stroke="#bfbfbf"/>
+<rect x="28" y="180" width="62" height="20" fill="#ebebe6"/><text x="35" y="194.5" font-size="13" font-family="ui-monospace, 'SF Mono', Menlo, monospace" fill="#3a3d42">Step 8</text>
+<text x="28" y="224" font-size="17" font-weight="500" fill="#12151a">Long-lived keys</text>
+<text x="28" y="246" font-size="14" fill="#6b6e73">keys that never expire</text>
+<rect x="426.6666666666667" y="168" width="197.33333333333334" height="104" fill="none" stroke="#bfbfbf"/>
+<rect x="438.6666666666667" y="180" width="118" height="20" fill="#ebebe6"/><text x="445.6666666666667" y="194.5" font-size="13" font-family="ui-monospace, 'SF Mono', Menlo, monospace" fill="#3a3d42">Steps 4 and 5</text>
+<text x="438.6666666666667" y="224" font-size="17" font-weight="500" fill="#12151a">New packages</text>
+<text x="438.6666666666667" y="246" font-size="14" fill="#6b6e73">what an agent installs</text>
+<rect x="16" y="280" width="197.33333333333334" height="104" fill="none" stroke="#bfbfbf"/>
+<rect x="28" y="292" width="62" height="20" fill="#ebebe6"/><text x="35" y="306.5" font-size="13" font-family="ui-monospace, 'SF Mono', Menlo, monospace" fill="#3a3d42">Step 9</text>
+<text x="28" y="336" font-size="17" font-weight="500" fill="#12151a">Accounts, laptops</text>
+<text x="28" y="358" font-size="14" fill="#6b6e73">logins, sessions, devices</text>
+<rect x="426.6666666666667" y="280" width="197.33333333333334" height="104" fill="none" stroke="#bfbfbf"/>
+<rect x="438.6666666666667" y="292" width="118" height="20" fill="#ebebe6"/><text x="445.6666666666667" y="306.5" font-size="13" font-family="ui-monospace, 'SF Mono', Menlo, monospace" fill="#3a3d42">Steps 6 and 7</text>
+<text x="438.6666666666667" y="336" font-size="17" font-weight="500" fill="#12151a">CI and workflows</text>
+<text x="438.6666666666667" y="358" font-size="14" fill="#6b6e73">what runs on every push</text>
+<rect x="221.33333333333334" y="168" width="197.33333333333334" height="104" fill="#0000ED"/>
+<text x="233.33333333333334" y="208" font-size="21" font-weight="500" letter-spacing="-0.4" fill="#fff">Your team</text>
+<text x="233.33333333333334" y="234" font-size="14.5" fill="#fff">2 to 10 people, building</text>
+<text x="233.33333333333334" y="252" font-size="14.5" fill="#fff">with coding agents</text>
+<text x="16" y="410" font-size="13.5" fill="#6b6e73">Each box names the step in the guide that covers it.</text>
+</svg>
