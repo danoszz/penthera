@@ -1,0 +1,47 @@
+# Two branded checks per commit: "Penthera: security" and "Penthera: safe build".
+#
+# Runs after each of our workflows finishes, from this repository's main
+# branch. It reads job results through the API and posts them as the Penthera
+# GitHub App. It never checks out or runs the commit's code.
+name: Penthera checks
+
+on:
+  workflow_run:
+    workflows: [CI, Install matrix, CodeQL, Dependency review, PR triage]
+    types: [completed]
+
+permissions: {}
+
+concurrency:
+  group: penthera-checks-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: false
+
+jobs:
+  summary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      actions: read
+      checks: read
+    env:
+      APP_ID: ${{ secrets.PENTHERA_APP_ID }}
+    steps:
+      - id: app
+        if: env.APP_ID != ''
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          app-id: ${{ secrets.PENTHERA_APP_ID }}
+          private-key: ${{ secrets.PENTHERA_APP_KEY }}
+          permission-checks: write
+          permission-actions: read
+      # The default branch: our own script, not the commit's.
+      - if: steps.app.outputs.token != ''
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: scripts/ci
+      - if: steps.app.outputs.token != ''
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: node scripts/ci/penthera-checks.mjs "$GITHUB_REPOSITORY" "$SHA"
