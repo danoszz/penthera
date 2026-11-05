@@ -2,7 +2,7 @@
 
 > **Starter.** For "what do I paste into my agent's MCP config?"
 
-Ready-to-copy configs, each pinned to an exact version: 2.3.1. The test suite checks
+Ready-to-copy configs, each pinned to an exact version: 2.3.2. The test suite checks
 every one with Penthera's own MCP rules (`mcp-unpinned`, `mcp-exec`,
 `mcp-inline-secret`, `mcp-plain-http`).
 
