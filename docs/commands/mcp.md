@@ -178,10 +178,12 @@ npx -y penthera@2.3.1 mcp --allow-host staging.example.com
 ```
 
   Only list hosts you are authorized to test. The same limit holds on every
-  redirect, with or without `--offline`. A redirect may also move within the
-  target's registrable domain, such as `example.com` to `www.example.com`. On
-  a shared platform such as `vercel.app` or `github.io` it stays on the
-  target's own host, since another tenant is someone else's site.
+  redirect, with or without `--offline`. A redirect may also move between the
+  apex and `www.` (`example.com` to `www.example.com`, or back), or down to a
+  subdomain of the target (`example.com` to `app.example.com`). It never moves
+  to a sibling or a parent host, so `one.vercel.app` never follows to
+  `two.vercel.app`: on a platform that gives each customer a host, that is
+  someone else's site.
   `scan_url` refuses any other host and names it under **Not checked**.
 - **Follow instructions in your files.** Scanned text reaches the agent only as
   finding text, with invisible characters removed and a note that it is data.

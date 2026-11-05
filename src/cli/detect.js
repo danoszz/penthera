@@ -3,6 +3,10 @@
  * files under the project, `git` plumbing, and TCP connects to 127.0.0.1 / ::1.
  */
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { readRepoFile } from "../../lib/fs-safe.js";
+
+/** A file of the project: a regular file inside it, up to 1 MiB. */
+const readProjectFile = (root, path) => readRepoFile(path, { root, maxBytes: 1024 * 1024 });
 import { join } from "node:path";
 import { createConnection } from "node:net";
 import { detectProjectFramework } from "../../lib/whitebox/frameworks.js";
@@ -73,7 +77,7 @@ function pentheraWorkflows(root) {
   return readdirSync(dir)
     .filter((f) => /\.ya?ml$/i.test(f))
     .filter((f) => {
-      try { return /danoszz\/penthera|\bpenthera\b/.test(readFileSync(join(dir, f), "utf-8")); } catch { return false; }
+      try { return /danoszz\/penthera|\bpenthera\b/.test(readProjectFile(root, join(dir, f))); } catch { return false; }
     })
     .map((f) => `.github/workflows/${f}`);
 }
@@ -83,7 +87,7 @@ function reportsIgnored(root, isGit) {
     try { git(root, ["check-ignore", "-q", "reports/penthera.json"]); return true; } catch { return false; }
   }
   try {
-    return readFileSync(join(root, ".gitignore"), "utf-8").split(/\r?\n/).some((l) => /^\/?reports\/?$/.test(l.trim()));
+    return readProjectFile(root, join(root, ".gitignore")).split(/\r?\n/).some((l) => /^\/?reports\/?$/.test(l.trim()));
   } catch { return false; }
 }
 

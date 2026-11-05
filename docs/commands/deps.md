@@ -83,6 +83,11 @@ installed `.venv` / `venv` (or `--venv <path>`) through
 `site-packages/*.dist-info` `RECORD` files, without running pip or Python. A
 repo with both a `package-lock.json` and Python inputs gets one combined report.
 
+A lockfile or requirements file that is not a regular file inside the project
+(a FIFO, a device, a link out of the project, or over the size cap), or that
+pulls one in with `-r`, is not read. The report lists it as an info finding,
+`File not read: <file>`, and the rest of the scan goes on.
+
 ```bash
 penthera deps                          # uv.lock + .venv
 penthera deps --venv ~/.venvs/app      # a virtualenv somewhere else (no lockfile needed)
@@ -128,7 +133,10 @@ penthera deps --license-policy legal/policy.json # a file with a "licenses" sect
 ```
 
 Without the flag, `penthera deps` applies the `licenses` section of
-`penthera.policy.json` when there is one:
+`penthera.policy.json` when there is one. A policy file that is not a regular
+file inside the project, or is over 1 MiB, is not read: `deps`, `install` and
+`--giants` print a warning and use the default policy, and AI mode does not
+run.
 
 ```json
 {

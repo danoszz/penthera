@@ -70,5 +70,5 @@ Pin the version. `latest` on npm is 2.3.1, with the GitHub Actions workflow chec
 
 The MCP tools are read-only, read only inside your project, never apply fixes
 and run no shell. `scan_url` is passive and reaches only loopback or hosts the
-user listed with `--allow-host`. A redirect may also move within the target's
-registrable domain.
+user listed with `--allow-host`. A redirect may also move between the apex and
+`www.`, or to a subdomain of the target, never to a sibling or a parent host.

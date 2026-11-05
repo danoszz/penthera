@@ -41,7 +41,7 @@ All six tools are read-only:
 - They never write a file, apply a fix or run a shell.
 - `scan_url` is passive (no injection probes, no fuzzing) and reaches only
   loopback (`localhost`, `*.localhost`, `127.x.x.x`, `[::1]`) or a host listed with `--allow-host`. A redirect may
-  also move within the target's registrable domain.
+  also move between the apex and `www.`, or to a subdomain of the target, never to a sibling or a parent host.
 - Text from scanned files reaches you as finding text, marked as data.
 
 ## Check that it works

@@ -52,7 +52,7 @@ const REPO_LIMITS = [
 const URL_LIMITS = [
   "Passive checks only (quick or standard profile): TLS, headers, cookies, CORS, discovery, templates, OpenAPI and auth smoke tests. No injection payloads, no fuzzing, no recon sources: active modes are not available over MCP; run `penthera <url> --deep` yourself for those.",
   "Only what the target serves to an unauthenticated client is seen.",
-  "Stays on the target and hosts listed with --allow-host. A redirect may also move within the target's registrable domain. Anything else is refused and named under Not checked. Retire.js uses the vendored snapshot, never a download.",
+  "Stays on the target and hosts listed with --allow-host. A redirect may also move between the apex and www., or to a subdomain of the target, never to a sibling or a parent host. Anything else is refused and named under Not checked. Retire.js uses the vendored snapshot, never a download.",
 ];
 const DEPS_LIMITS = [
   "Reads the lockfile and the installed package tree; never runs install scripts and never contacts the registry (no --online).",

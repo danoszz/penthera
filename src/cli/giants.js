@@ -152,7 +152,8 @@ export function pentheraRead(merged, url) {
  */
 export async function runGiantsForScan(merged, g, { opts, url, repo, deep, rateLimit, onPhase, write = (s) => process.stderr.write(s) }) {
   const policyRoot = repo ? resolve(repo) : process.cwd();
-  const { policy, path: policyPath } = loadPolicy(policyRoot);
+  const { policy, path: policyPath, warning } = loadPolicy(policyRoot);
+  if (warning) write(`\n  ${yellow("warning")} ${warning}\n`);
   const gp = policy.giants;
   const rel = (p) => (p ? resolve(policyPath ? dirname(policyPath) : policyRoot, p) : null);
   if (g.with?.includes("codeql") && !gp.deny.includes("codeql")) write(`\n  ${yellow("CodeQL")} ${CODEQL_NOTICE}\n\n`);

@@ -126,6 +126,29 @@ export function registrableDomain(hostname) {
   return parts.slice(-2).join(".");
 }
 
+/**
+ * May a redirect from the scan target `targetHost` move to `host`? Only to the
+ * same host, between the apex and its `www.` (example.com and
+ * www.example.com, either way), or down to a subdomain of the target host
+ * (example.com to app.example.com). Never sideways to a sibling
+ * (app.example.com to api.example.com) or up to a parent (app.example.com to
+ * example.com): on a platform that gives each customer a host, a sibling or
+ * the parent is someone else's site, and no list of platforms is complete.
+ * A shared platform's own apex (vercel.app) never moves down into a tenant.
+ */
+export function redirectStaysOnTarget(targetHost, host) {
+  const t = String(targetHost ?? "").toLowerCase().replace(/\.$/, "");
+  const h = String(host ?? "").toLowerCase().replace(/\.$/, "");
+  if (!t || !h) return false;
+  if (t === h) return true;
+  const ipLike = (x) => /^\d{1,3}(\.\d{1,3}){3}$/.test(x) || x.includes(":") || x.startsWith("[");
+  if (ipLike(t) || ipLike(h)) return false;
+  const apex = (x) => x.replace(/^www\./, "");
+  const isPlatformApex = (x) => SHARED_HOST_DOMAINS.includes(x);
+  if ((h === `www.${t}` || t === `www.${h}`) && !isPlatformApex(apex(t))) return true;
+  return h.endsWith(`.${t}`) && t.includes(".") && !isPlatformApex(t);
+}
+
 /** Convert a URL into a safe filename fragment. */
 export function urlToFilename(url) {
   return url
