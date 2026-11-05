@@ -37,6 +37,13 @@ describe("maskMatch", () => {
     expect(maskMatch("abc==")).toBe("***");
   });
 
+  it("masks a value that starts with =, however long the name (Vercel, 5 Nov)", () => {
+    for (const m of ["password_confirmation==ab1c", "DATABASE_PASSWORD_PRIMARY===xY9z", "password: =qwer"]) {
+      expect(maskMatch(m), m).not.toMatch(/ab1c|xY9z|qwer/);
+      expect(maskMatch(m), m).toMatch(/\*\*\*$/);
+    }
+  });
+
   it("masks a bare value from another tool with no prefix kept, through the evidence text", () => {
     const raw = "QUJDREVGR0hJSktMTU5PUFFSU1RVVg==";
     const out = maskSecretsIn(`trufflehog found ${raw} in config`, [raw]);
