@@ -66,13 +66,19 @@ export function createApp({ env = process.env, store, fetch: fetchImpl = globalT
       fetch: fetchImpl,
     });
 
-  /** The install session from the cookie, with its record, or null. */
+  /**
+   * The install session from the cookie, with its record, or null. The cookie is bound to the
+   * record's owner and install generation (createdAt) when it was issued. A transfer changes the
+   * owner and a reinstall changes the generation, so either ends every older session: the new
+   * owner needs a fresh install to get one.
+   */
   async function session(request, c) {
     const raw = readCookie(request, SESSION);
     const data = raw && unsignValue(raw, cookieKey(c.keys), now());
-    if (!data || !CONFIG_ID.test(data.c)) return null;
+    if (!data || !CONFIG_ID.test(data.c) || typeof data.o !== "string" || typeof data.g !== "string") return null;
     const record = await store.get(data.c);
-    return record ? { raw, configurationId: data.c, next: data.n ?? null, record } : null;
+    if (!record || !safeEqual(record.ownerId, data.o) || !safeEqual(record.createdAt, data.g)) return null;
+    return { raw, configurationId: data.c, next: data.n ?? null, record };
   }
 
   // Each /install makes one outbound exchange, so a visitor gets a few a minute. Per instance only.
@@ -155,13 +161,9 @@ export function createApp({ env = process.env, store, fetch: fetchImpl = globalT
       return message(409, "Install mismatch", "This installation belongs to another account. Install again from Vercel.", { cookies });
     }
     // createdAt is the latest install, so a replayed older uninstall event cannot delete it.
-    await store.put({
-      configurationId,
-      ownerId,
-      ...sealToken(token.accessToken, configurationId, c.keys),
-      createdAt: new Date(now()).toISOString(),
-    });
-    const value = signValue({ c: configurationId, n: next, e: now() + SESSION_MS }, cookieKey(c.keys));
+    const createdAt = new Date(now()).toISOString();
+    await store.put({ configurationId, ownerId, ...sealToken(token.accessToken, configurationId, c.keys), createdAt });
+    const value = signValue({ c: configurationId, o: ownerId, g: createdAt, n: next, e: now() + SESSION_MS }, cookieKey(c.keys));
     cookies.push(setCookie(SESSION, value, SESSION_MS / 1000));
     return redirect("/setup", { cookies });
   }

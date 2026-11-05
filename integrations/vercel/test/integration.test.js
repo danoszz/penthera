@@ -576,10 +576,10 @@ describe("review fixes", () => {
   });
 
   it("a transfer to a personal account re-keys the owner, and later calls carry no teamId", async () => {
-    const { app, store, vercel, cookie } = await installed();
+    const { app, store, vercel, env: e } = await installed();
     await app.webhook(signed({ type: "integration-configuration.transferred", payload: { configuration: { id: CFG }, previousTeamId: TEAM, newTeamId: null, newAccountId: "user_New1" } }));
     expect(store.dump()[0].ownerId).toBe("user_New1");
-    await app.setup(get("/setup", { cookie }));
+    await app.sweep(get("/sweep", { authorization: `Bearer ${e.CRON_SECRET}` }));
     const list = vercel.calls.filter((c) => c.url.pathname === "/v10/projects").at(-1);
     expect(list.url.searchParams.has("teamId")).toBe(false);
   });
@@ -590,5 +590,44 @@ describe("review fixes", () => {
     for (const n of [4, 8, 12]) {
       expect(() => openToken({ ...sealed, tag: Buffer.from(sealed.tag, "base64").subarray(0, n).toString("base64") }, CFG, keys)).toThrow();
     }
+  });
+});
+
+describe("sessions end when the record changes", () => {
+  const signed = (event) => {
+    const raw = JSON.stringify(event);
+    return new Request(`${BASE}/webhook`, { method: "POST", body: raw, headers: { "x-vercel-signature": createHmac("sha1", CLIENT_SECRET).update(raw).digest("hex") } });
+  };
+
+  it("a transfer ends the former owner's setup session on GET and on the remove path", async () => {
+    const { app, cookie, vercel } = await installed();
+    const csrf = await csrfOf(await app.setup(get("/setup", { cookie })));
+    await app.setup(post("/setup", `csrf=${csrf}&action=enable&p=prj_one`, { cookie, origin: BASE }));
+    expect(vercel.checks.prj_one).toHaveLength(1);
+
+    await app.webhook(signed({ type: "integration-configuration.transferred", payload: { configuration: { id: CFG }, previousTeamId: TEAM, newTeamId: "team_New1" } }));
+
+    expect((await app.setup(get("/setup", { cookie }))).status).toBe(401);
+    expect((await app.setup(post("/setup", `csrf=${csrf}&remove=prj_one`, { cookie, origin: BASE }))).status).toBe(401);
+    expect((await app.setup(post("/setup", `csrf=${csrf}&action=enable&p=prj_one`, { cookie, origin: BASE }))).status).toBe(401);
+    expect((await app.configure(get(`/configure?configurationId=${CFG}`, { cookie }))).status).toBe(200);
+    expect(vercel.checks.prj_one).toHaveLength(1);
+  });
+
+  it("a reinstall ends sessions from the earlier install, and the new one works", async () => {
+    let t = 1_000_000;
+    const ctx = setup({ now: () => t });
+    const first = cookieJar(await ctx.app.install(get(installUrl())));
+    t += 60_000;
+    const second = cookieJar(await ctx.app.install(get(installUrl())));
+    expect((await ctx.app.setup(get("/setup", { cookie: first }))).status).toBe(401);
+    expect((await ctx.app.setup(get("/setup", { cookie: second }))).status).toBe(200);
+  });
+
+  it("a validly signed cookie without the owner binding is refused", async () => {
+    const { app, env: e } = await installed();
+    const { cookieKey } = await import("../lib/crypto.mjs");
+    const old = signValue({ c: CFG, n: null, e: Date.now() + 60_000 }, cookieKey(parseKeys(e.PENTHERA_TOKEN_KEYS)));
+    expect((await app.setup(get("/setup", { cookie: `__Host-pv_session=${old}` }))).status).toBe(401);
   });
 });

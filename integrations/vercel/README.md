@@ -124,6 +124,12 @@ does not wait for a workflow that is not committed yet.
   the session is set only after the exchange proves the configuration and its
   owner. Form posts need the session cookie (SameSite=Lax), a form token bound
   to it, and a same-origin `Origin` header when the browser sends one.
+- **Session binding:** the 30-minute setup cookie carries the configuration id,
+  the owner and the install time it was issued for, signed. Every request
+  checks them against the stored record. A transfer changes the owner and a
+  reinstall changes the install time, so either one ends every older session,
+  and the new owner gets a session only by installing. Uninstall deletes the
+  record, which ends sessions too.
 - **Risk left (login CSRF):** an attacker can send someone a link with the
   attacker's own fresh install code and `source=marketplace`. The victim's
   browser then opens the attacker's setup page, for the attacker's own
