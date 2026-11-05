@@ -50,11 +50,11 @@ Get the code onto your machine first. Most builders sync to GitHub; see
 for each one.
 
 ```bash
-npx penthera@2.2.0 --repo .
+npx penthera@2.3.0 --repo .
 ```
 
 ```bash
-npx penthera@2.2.0 agents .
+npx penthera@2.3.0 agents .
 ```
 
 `npm audit` lists known vulnerabilities in your npm packages. A default

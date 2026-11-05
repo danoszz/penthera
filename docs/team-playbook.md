@@ -221,7 +221,7 @@ Step 3, the rules you work by:
 Step 4, optional: a security check in the loop. Ask me once whether I want
 one. Only if I say yes, add this to the end of each loop's checks, before
 anything is committed:
-  npx penthera@2.2.0 --repo .
+  npx penthera@2.3.0 --repo .
 It's offline and read-only: it scans the code, dependencies and AI tool setup
 and changes nothing. Running it with npx downloads the pinned package, so ask
 first. If I say no, don't install anything and don't ask again.
