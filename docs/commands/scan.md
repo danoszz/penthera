@@ -115,9 +115,12 @@ identity (source, category, file or URL, and title). Since 2.3.2 it is also new 
 - it is a secret, and it now holds more lines than in the baseline, or holds a
   value the baseline didn't (a second key of one rule in one file, or one key
   swapped for another). A `--repo` report keeps a short salted hash of each
-  secret value (`valueTags`, with the salt in `secretTagSalt`), never the
-  value, and `--baseline` reuses the baseline's salt to compare them. A
-  baseline without tags compares the first masked value, as before;
+  fixed-format secret value, such as a provider key or a private key
+  (`valueTags`, with the salt in `secretTagSalt`), never the value, and
+  `--baseline` reuses the baseline's salt to compare them. Passwords and other
+  `name = value` secrets get no hash, because a person may have chosen the
+  value and the salt is in the report. Those, and a baseline without tags,
+  compare the count and the first masked value, as before;
 - it is an eval or exec sink, and it lists a call the baseline didn't. Line
   numbers are left out, so an edit above the call changes nothing.
 
@@ -132,7 +135,7 @@ baseline after the upgrade.
 |------|---------|
 | `0` | No critical or high rule fired. This run does not prove login, access rules or payments are right |
 | `1` | Critical or high findings detected (other tools' too, with `--giants`) |
-| `2` | Scan failed (unreachable target, missing path, bad config, a tool the policy requires did not run) |
+| `2` | Scan failed or is incomplete (unreachable target, missing path, bad config, a tool the policy requires did not run, a dependency input `penthera deps` refused to read) |
 
 A firewall that refuses the scan isn't a failed scan. The verdict is `Site not read`,
 with no grade, and the exit code follows the findings Penthera could still make, such

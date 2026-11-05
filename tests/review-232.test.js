@@ -260,9 +260,13 @@ describe("secret tags never cover a short value", () => {
       const r = await scanSecrets(dir);
       return (r.findings ?? r).filter((f) => f.source === "secret-scan");
     };
-    const long = await scan(`const password = "${"xk_demo_" + "Q7fLm2Rt9Vw4Zp8Ka3Jd"}";\n`);
+    // A long fixed-format key is tagged; a long password is not (Vercel Security Review B).
+    const long = await scan(`const k = "${["sk", "live", "Q7fLm2Rt9Vw4Zp8Ka3Jd"].join("_")}";\n`);
     expect(long.length).toBeGreaterThan(0);
     expect(long.every((f) => Array.isArray(f.valueTags) && f.valueTags.length > 0)).toBe(true);
+    const longPassword = await scan(`const password = "${"xk_demo_" + "Q7fLm2Rt9Vw4Zp8Ka3Jd"}";\n`);
+    expect(longPassword.length).toBeGreaterThan(0);
+    expect(longPassword.some((f) => "valueTags" in f)).toBe(false);
     const short = await scan(`const password = "${"xk" + "Q7fLm2"}";\n`);
     expect(short.length).toBeGreaterThan(0);
     expect(short.some((f) => "valueTags" in f)).toBe(false);
