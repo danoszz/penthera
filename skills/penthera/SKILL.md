@@ -16,7 +16,7 @@ description: >
   NOT use for targets without explicit authorization.
 license: MIT
 compatibility: Node.js 22+, the Penthera CLI (npx -y penthera@2.3.1, npm install -g, or node bin/penthera.js from a checkout), network access to the target for URL scans. macOS only for --machine.
-allowed-tools: "Bash(penthera:*) Bash(npx -y penthera@2.3.1:*) Bash(npx --no-install penthera:*) Read"
+allowed-tools: "Read"
 metadata:
   author: danoszz
   version: 2.3.1
