@@ -51,4 +51,35 @@ describe("B: no tag for a human-chosen password", () => {
     writeFileSync(join(d, "app.js"), `const k = "${["sk", "live", "9xQ2mZ7vB4nK8pL3wR6tY1aa"].join("_")}";\n`);
     expect(compareWithBaseline(scanSecrets(d), base).stats.newCount).toBe(1);
   });
+
+  it("a password that holds sk- and 20 letters gets no tag, and the report no salt (Fact-checker, 2.3.2)", () => {
+    const pw = ["whi", "sk-MyFavouritePassword2024abc"].join("");
+    const { findings } = scan("config.py", `password = "${pw}"\n`);
+    expect(findings.length).toBeGreaterThan(0);
+    expect(findings.some((f) => "valueTags" in f)).toBe(false);
+    const json = JSON.stringify(findings);
+    expect(json).not.toContain(secretTag(pw, tagSalt()));
+  });
+
+  it("a fixed-format match touching a letter or digit gets no tag, on every edge", () => {
+    // Each case is still found; only the tag is withheld.
+    for (const text of [`const a = "x${STRIPE}";`, `const a = "${["AKIA", "Q7FLM2RT9VW4ZP8K", "X"].join("")}";`, `const a = "9${["sk", "4eC39HqLyjWDarjtT1zdp7dc"].join("-")}";`]) {
+      const { findings } = scan("a.js", `${text}\n`);
+      expect(findings.length).toBeGreaterThan(0);
+      expect(findings.some((f) => "valueTags" in f)).toBe(false);
+    }
+  });
+
+  it("a key-shaped value under a password key gets no tag", () => {
+    const { findings } = scan(".env", `DB_PASSWORD=${STRIPE}\n`);
+    expect(findings.length).toBeGreaterThan(0);
+    expect(findings.some((f) => "valueTags" in f)).toBe(false);
+  });
+
+  it("the same key under its own name, or quoted alone, keeps its tag", () => {
+    for (const text of [`STRIPE_SECRET_KEY=${STRIPE}`, `const k = '${STRIPE}';`, `NEXT_PUBLIC_X=${["sk", "4eC39HqLyjWDarjtT1zdp7dc"].join("-")}`]) {
+      const { findings } = scan("a.env", `${text}\n`);
+      expect(findings.some((f) => Array.isArray(f.valueTags))).toBe(true);
+    }
+  });
 });
