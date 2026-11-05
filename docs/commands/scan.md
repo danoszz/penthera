@@ -119,7 +119,9 @@ identity (source, category, file or URL, and title). Since 2.3.2 it is also new 
   (`valueTags`, with the salt in `secretTagSalt`), never the value, and
   `--baseline` reuses the baseline's salt to compare them. Passwords and other
   `name = value` secrets get no hash, because a person may have chosen the
-  value and the salt is in the report. Those, and a baseline without tags,
+  value and the salt is in the report. Neither does a key-shaped value inside a
+  longer word, a `name = value` match or a URL's `user:password@`, nor the
+  legacy `sk-` OpenAI shape. Those, and a baseline without tags,
   compare the count and the first masked value, as before;
 - it is an eval or exec sink, and it lists a call the baseline didn't. Line
   numbers are left out, so an edit above the call changes nothing.
