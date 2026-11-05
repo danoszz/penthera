@@ -15,11 +15,11 @@ description: >
   of their own app, staging URL, localhost, repo, dependencies, or agent setup. Do
   NOT use for targets without explicit authorization.
 license: MIT
-compatibility: Node.js 22+, the Penthera CLI (npx -y penthera@2.3.1, npm install -g, or node bin/penthera.js from a checkout), network access to the target for URL scans. macOS only for --machine.
+compatibility: Node.js 22+, the Penthera CLI (npx -y penthera@2.3.2, npm install -g, or node bin/penthera.js from a checkout), network access to the target for URL scans. macOS only for --machine.
 allowed-tools: "Read"
 metadata:
   author: danoszz
-  version: 2.3.1
+  version: 2.3.2
   category: security
 ---
 
@@ -56,12 +56,12 @@ Run it from the user's project folder: it creates `reports/` there. The skill's 
 Use whichever is available:
 
 ```bash
-penthera --version          # installed (npm install -g penthera@2.3.1, or npm link)
-npx -y penthera@2.3.1 --version   # nothing installed: npx fetches it
+penthera --version          # installed (npm install -g penthera@2.3.2, or npm link)
+npx -y penthera@2.3.2 --version   # nothing installed: npx fetches it
 node bin/penthera.js --version   # from a Penthera checkout
 ```
 
-All examples below use `penthera`; substitute `npx -y penthera@2.3.1` or `node bin/penthera.js` when needed.
+All examples below use `penthera`; substitute `npx -y penthera@2.3.2` or `node bin/penthera.js` when needed.
 
 To try a release candidate in someone's project, run it with `npx penthera@next ...` rather than `npm install penthera@next`. An install pins the exact rc in the lockfile, so it never moves to the final release, and it adds a dependency the project did not ask for. If the user does want it installed, use `-D` and point out the pin.
 

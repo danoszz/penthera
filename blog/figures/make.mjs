@@ -240,7 +240,7 @@ function commands() {
   const W = 640, L = 16, T = 74, rowH = 48, H = T + rowH * rows.length + 40;
   const out = [svgOpen(W, H, "Which command covers which step, and where Penthera stops", `For each of the ten steps, the Penthera command if there is one, and its limit. ${rows.map((r, i) => `${nn(i)} ${STEPS[i]}: ${r[0] ? `${r[0]}; ` : ""}${[].concat(r[1]).join("; ")}`).join(". ")}.`)];
   out.push(`<text x="${L}" y="34" ${TITLE} fill="${C.ink}">Which command covers which step, and where it stops</text>`);
-  out.push(`<text x="${L}" y="58" font-size="13.5" ${MONO} fill="${C.edge}">Each command runs as npx penthera@2.3.1 …</text>`);
+  out.push(`<text x="${L}" y="58" font-size="13.5" ${MONO} fill="${C.edge}">Each command runs as npx penthera@2.3.2 …</text>`);
   rows.forEach(([cmd, limit], i) => {
     const y = T + i * rowH;
     if (i % 2 === 0) out.push(`<rect x="${L}" y="${y}" width="${W - 2 * L}" height="${rowH}" fill="${C.grid}" opacity="0.6"/>`);

@@ -32,7 +32,7 @@ software. The metadata are in [CITATION.cff](https://github.com/danoszz/penthera
 renders as "Cite this repository".
 
 ```text
-van der Zwaag, D. (2026). Penthera: An offline security scanner for web apps and AI-built code (Version 2.3.1) [Computer software]. https://github.com/danoszz/penthera
+van der Zwaag, D. (2026). Penthera: An offline security scanner for web apps and AI-built code (Version 2.3.2) [Computer software]. https://github.com/danoszz/penthera
 ```
 
 ```bibtex
@@ -40,7 +40,7 @@ van der Zwaag, D. (2026). Penthera: An offline security scanner for web apps and
   author  = {van der Zwaag, Daan},
   title   = {Penthera: An Offline Security Scanner for Web Apps and {AI}-Built Code},
   year    = {2026},
-  version = {2.3.1},
+  version = {2.3.2},
   license = {MIT},
   url     = {https://github.com/danoszz/penthera}
 }
@@ -627,8 +627,15 @@ are welcome (see [MANIFESTO.md](MANIFESTO.md)).
 - **Logic and authorization.** No business logic testing. IDOR/BOLA findings are
   heuristics that need a human to confirm them.
 - **Secrets.** Detection is pattern-based. In Markdown and other documentation
-  files, and in translation files, only the fixed-shape rules run, so unprefixed
-  secrets and secrets in notes are missed.
+  files, in translation files (`.json`, `.yml`, `.yaml`, `.properties` and
+  `.po` in a folder such as `locales/` or `i18n/`), and in `build/`, `dist/`,
+  `coverage/`, `reports/` and `vendor/` at the repo root, only the fixed-shape
+  rules run, so unprefixed secrets and secrets in notes are missed there.
+  `.env`, `*.env` and `*.env.*` files and shell scripts (`.sh`, `.bash`,
+  `.zsh`) get every rule wherever they are. A root folder of that kind is
+  skipped when git ignores it. Below the root those
+  names get every rule. Dependencies (`node_modules`, virtualenvs) are never
+  read.
 - **Dependencies (`deps`, `install`).**
   - Analysis is static. Behavior that is only decided at run time (code
     fetched or decrypted on execution, heavily obfuscated or minified bundles,

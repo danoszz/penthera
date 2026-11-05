@@ -32,7 +32,7 @@ describe("suppressions and a plain scan", () => {
   it("counts it, says so, and names --memory", () => {
     const { dir, env } = setup();
     const id = fid(cli(["--repo", dir, "--offline", "--json"], env));
-    writeFileSync(join(dir, "penthera.suppress.json"), JSON.stringify({ version: 1, suppress: [{ id, reason: "a test fixture" }] }));
+    writeFileSync(join(dir, "penthera.suppress.json"), JSON.stringify({ version: 1, suppress: [{ id, reason: "a test fixture", severity: "critical" }] }));
     const r = cli(["--repo", dir, "--offline", "--brief"], env);
     expect(r.status).toBe(1);
     expect(r.out).toMatch(/1 finding here is suppressed.*--memory/);
@@ -41,10 +41,20 @@ describe("suppressions and a plain scan", () => {
   it("says where a local suppression applies", () => {
     const { dir, env } = setup();
     const id = fid(cli(["--repo", dir, "--offline", "--json"], env));
-    const r = cli(["memory", "suppress", id, "--reason", "a test fixture", "--repo", dir], env);
+    const r = cli(["memory", "suppress", id, "--reason", "a test fixture", "--severity", "critical", "--repo", dir], env);
     expect(r.out).toMatch(/--memory scans and the fix loop on this machine/);
     expect(r.out).toMatch(/penthera\.suppress\.json/);
     const scan = cli(["--repo", dir, "--offline", "--brief"], env);
     expect(scan.out).toMatch(/1 finding here is suppressed/);
+  });
+
+  it("an entry without a severity no longer hides a critical (2.3.2, B04)", () => {
+    const { dir, env } = setup();
+    const id = fid(cli(["--repo", dir, "--offline", "--json"], env));
+    writeFileSync(join(dir, "penthera.suppress.json"), JSON.stringify({ version: 1, suppress: [{ id, reason: "written before 2.3.2" }] }));
+    const r = cli(["--repo", dir, "--offline", "--memory", "--json"], env);
+    expect(r.status).toBe(1);
+    expect(JSON.parse(r.out).findings.some((f) => f.fid === id)).toBe(true);
+    expect(cli(["memory", "suppress", id, "--reason", "x", "--severity", "urgent", "--repo", dir], env).status).toBe(2);
   });
 });

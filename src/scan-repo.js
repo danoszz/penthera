@@ -7,7 +7,7 @@
  *   3. Classify trust boundaries
  *   4. Detect risky code patterns
  */
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join, relative, resolve, sep } from "node:path";
 import { discoverAttackSurface, groupByTrustBoundary, findRiskyRoutes, findRouteFiles, routeRecord } from "../lib/attack-surface.js";
 import { scanSecrets } from "../lib/whitebox/secrets.js";
@@ -18,6 +18,24 @@ import { detectLibrary } from "../lib/whitebox/library.js";
 import { discoverFrameworkRoutes } from "../lib/whitebox/frameworks.js";
 import { runtimeAdvisoriesForRepo } from "../lib/advisories/index.js";
 import { buildCoverage } from "../lib/coverage.js";
+import { readRepoFile, isRefused } from "../lib/fs-safe.js";
+
+/** Source and config files the route scan reads are capped at 5 MiB. */
+const SOURCE_MAX_BYTES = 5 * 1024 * 1024;
+
+/** A file the route scan would have read but refused: a link out, a device, a FIFO, too large. */
+function refusedFileFinding(e, repoPath) {
+  const name = relative(resolve(repoPath), resolve(repoPath, e.path)).split(sep).join("/") || e.path;
+  return {
+    severity: "info",
+    title: `File not read: ${name}`,
+    description: `\`${name}\` was not read because ${e.reason}, so what it holds was not checked. Make it a regular file inside the project.`,
+    url: name,
+    file: name,
+    category: "config",
+    source: "repo-scan",
+  };
+}
 
 /**
  * A Next.js app folder with a route handler outside app/api, such as
@@ -36,17 +54,24 @@ function nextAppRoot(repoPath) {
  * A Worker's or Bun's `export default { fetch }` entry: one route that answers every path.
  * The entry is wrangler's `main`, or a usual entry file.
  */
-function workerRoutes(repoPath) {
+function workerRoutes(repoPath, refused = []) {
   const entries = ["src/index.ts", "src/index.js", "src/worker.ts", "src/worker.js", "index.ts", "index.js"];
-  for (const name of ["wrangler.jsonc", "wrangler.json", "wrangler.toml"]) {
+  const read = (rel) => {
     try {
-      const main = /["']?main["']?\s*[:=]\s*["']([^"']+)["']/.exec(readFileSync(join(repoPath, name), "utf8"))?.[1];
-      if (main) entries.unshift(main.replace(/^\.\//, ""));
-    } catch { /* no wrangler config */ }
+      return readRepoFile(join(repoPath, rel), { root: repoPath, label: rel, maxBytes: SOURCE_MAX_BYTES });
+    } catch (e) {
+      if (isRefused(e)) refused.push(e);
+      return null; // absent
+    }
+  };
+  for (const name of ["wrangler.jsonc", "wrangler.json", "wrangler.toml"]) {
+    const text = read(name);
+    const main = text == null ? null : /["']?main["']?\s*[:=]\s*["']([^"']+)["']/.exec(text)?.[1];
+    if (main) entries.unshift(main.replace(/^\.\//, ""));
   }
   for (const entry of entries) {
-    let source;
-    try { source = readFileSync(join(repoPath, entry), "utf8"); } catch { continue; }
+    const source = read(entry);
+    if (source == null) continue;
     if (/export\s+default\s*\{[\s\S]*?\bfetch\s*(?:\(|:|=)/.test(source)) return [{ ...routeRecord("/*", entry, source, ["ALL"]), framework: "fetch" }];
   }
   return [];
@@ -123,6 +148,7 @@ export async function scanRepo(repoPath, opts = {}) {
   // Library mode: a publishable package's exported parameters are sources too.
   const library = detectLibrary(repoPath, opts.library);
   result.library = { enabled: library.enabled, reason: library.reason };
+  if (library.refused) result.findings.push(refusedFileFinding(library.refused, repoPath));
   result.findings.push(...scanCodeSinks(repoPath, { library, ignored }));
   result.executedProbes.push("code-sinks");
 
@@ -157,13 +183,27 @@ export async function scanRepo(repoPath, opts = {}) {
     return finish();
   }
 
+  // Files the route scan would have read but refused (a link out, a device, a
+  // FIFO, too large) become info findings, one per file: never a silent pass.
+  const refused = [];
+  const named = new Set();
+  const reportRefused = () => {
+    for (const e of refused.splice(0)) {
+      const f = refusedFileFinding(e, repoPath);
+      if (!named.has(f.file)) { named.add(f.file); result.findings.push(f); }
+    }
+  };
+
   if (apiRoot) {
     // ── Phase 2: Discover attack surface ───────────────────────────────────
     progress("Discovering attack surface from filesystem...");
     result.apiRoot = apiRoot;
     // A Next.js app folder: URLs come from its folders, and file paths are the repo's.
     if (appRoot) result.routeFilesFrom = repoPath;
-    result.attackSurface = appRoot ? discoverAttackSurface(apiRoot, { appDir: appRoot, repoRoot: repoPath }) : discoverAttackSurface(apiRoot);
+    result.attackSurface = appRoot
+      ? discoverAttackSurface(apiRoot, { appDir: appRoot, repoRoot: repoPath, refused })
+      : discoverAttackSurface(apiRoot, { refused });
+    reportRefused();
   }
 
   // An auto-detected routes/ or api/ folder without route.js/ts is an Express-style
@@ -171,8 +211,9 @@ export async function scanRepo(repoPath, opts = {}) {
   if (result.attackSurface.length === 0 && !opts.apiRoot) {
     progress("Scanning for Express/Hono/Fastify routes...");
     // How many routes it found, or that it found none, is coverage (lib/coverage.js), not a finding.
-    const fwRoutes = discoverFrameworkRoutes(repoPath);
-    const found = fwRoutes.length ? fwRoutes : workerRoutes(repoPath);
+    const fwRoutes = discoverFrameworkRoutes(repoPath, { refused });
+    const found = fwRoutes.length ? fwRoutes : workerRoutes(repoPath, refused);
+    reportRefused();
     if (found.length > 0) {
       result.apiRoot = null;
       result.attackSurface = found;

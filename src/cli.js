@@ -13,7 +13,8 @@ import { machineScanResult } from "./cli/machine-result.js";
 import { mergeResults } from "./cli/merge-results.js";
 import { reachLines, unreachableText } from "./report/reach.js";
 import { resolveScanOptions } from "./cli/profiles.js";
-import { compareWithBaseline } from "./cli/baseline.js";
+import { compareWithBaseline, useBaselineSalt } from "./cli/baseline.js";
+import { tagSalt } from "../lib/secret-tags.js";
 import { targetFromArg } from "./utils/url.js";
 import { printReport, printFindings, writeJsonReport, writeSarifReport, createProgress, printError } from "./reporter.js";
 import { writeMarkdownReport, markdownPathFromJson } from "./report/markdown.js";
@@ -676,6 +677,8 @@ export async function run() {
   };
 
   const results = [];
+  // Secret tags in this run use the baseline's salt, so they compare (src/cli/baseline.js).
+  if (opts.baseline) useBaselineSalt(resolve(opts.baseline));
 
   try {
     if (url) {
@@ -725,6 +728,8 @@ export async function run() {
   }
 
   const merged = mergeResults(results);
+  // The salt of the secret tags (`valueTags`), so this report can be a baseline. Not a secret.
+  if (merged.findings.some((f) => Array.isArray(f.valueTags))) merged.secretTagSalt = tagSalt();
   let plainSuppressed = 0;
 
   if (aiPlan?.run) {

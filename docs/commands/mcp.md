@@ -12,7 +12,7 @@ description: "penthera mcp runs Penthera as an MCP server."
 server. Your agent (Claude Code, Codex, GitHub Copilot, Cursor, Windsurf, Gemini CLI) starts it
 and calls its tools. It needs Node.js 22 or later.
 
-The commands below pin 2.3.1, so an update never reaches you unless you change the pin.
+The commands below pin 2.3.2, so an update never reaches you unless you change the pin.
 
 Always pin the version. An unpinned `npx penthera` runs whatever version is
 newest on npm each time your agent starts, which is the risk that
@@ -21,7 +21,7 @@ newest on npm each time your agent starts, which is the risk that
 ### Claude Code
 
 ```bash
-claude mcp add penthera -- npx -y penthera@2.3.1 mcp
+claude mcp add penthera -- npx -y penthera@2.3.2 mcp
 ```
 
 Add `--scope project` to write it to `.mcp.json` for the whole team. To get the
@@ -40,7 +40,7 @@ Inside a session, the same is `/plugin marketplace add danoszz/penthera` and
 ### Codex
 
 ```bash
-codex mcp add penthera -- npx -y penthera@2.3.1 mcp
+codex mcp add penthera -- npx -y penthera@2.3.2 mcp
 ```
 
 Or add it to `~/.codex/config.toml`:
@@ -48,7 +48,7 @@ Or add it to `~/.codex/config.toml`:
 ```toml
 [mcp_servers.penthera]
 command = "npx"
-args = ["-y", "penthera@2.3.1", "mcp"]
+args = ["-y", "penthera@2.3.2", "mcp"]
 ```
 
 Checked against [Codex's MCP docs](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
@@ -66,7 +66,7 @@ copilot plugin install penthera@penthera
 In VS Code, add the server to your user profile:
 
 ```bash
-code --add-mcp '{"name":"penthera","type":"stdio","command":"npx","args":["-y","penthera@2.3.1","mcp"]}'
+code --add-mcp '{"name":"penthera","type":"stdio","command":"npx","args":["-y","penthera@2.3.2","mcp"]}'
 ```
 
 Or put the JSON under **VS Code** below in `.vscode/mcp.json`. Checked against
@@ -82,7 +82,7 @@ Cursor reads `.cursor/mcp.json`, and Windsurf `~/.codeium/windsurf/mcp_config.js
   "mcpServers": {
     "penthera": {
       "command": "npx",
-      "args": ["-y", "penthera@2.3.1", "mcp"]
+      "args": ["-y", "penthera@2.3.2", "mcp"]
     }
   }
 }
@@ -98,7 +98,7 @@ Checked against [Cursor's MCP docs](https://cursor.com/docs/context/mcp).
     "penthera": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "penthera@2.3.1", "mcp"]
+      "args": ["-y", "penthera@2.3.2", "mcp"]
     }
   }
 }
@@ -155,6 +155,13 @@ its category when no narrower rule applies), a severity, a confidence label (`co
 result also lists what the tool did not check. By default a tool returns the 50
 most severe findings; ask for up to 200 with `max_findings`.
 
+The brief's `exit_code` is the code the CLI would exit with. A
+`check_dependencies` result is incomplete when a lockfile or requirements file
+could not be read (a FIFO, a device, a link out of the project, over the 64 MiB
+cap, or an `-r` include like that). Its brief then has `exit_code` 2, a verdict
+of Review, and an `exit_reason` that names the file, and the findings list it
+as `File not read: <file>`. Never read that as clean.
+
 Arguments: `path` and `max_findings` on the file tools, `prod` on
 `check_dependencies`, `url` and `profile` (`quick` or `standard`) on `scan_url`,
 `path` or `headers` on `runtime_advisories`, `id` on `explain_finding`. A result
@@ -174,12 +181,16 @@ true.
   you write, not the model:
 
 ```bash
-npx -y penthera@2.3.1 mcp --allow-host staging.example.com
+npx -y penthera@2.3.2 mcp --allow-host staging.example.com
 ```
 
   Only list hosts you are authorized to test. The same limit holds on every
-  redirect, with or without `--offline`. A redirect may also move within the
-  target's registrable domain, such as `example.com` to `www.example.com`.
+  redirect, with or without `--offline`. A redirect may also move between the
+  apex and `www.` (`example.com` to `www.example.com`, or back), or down to a
+  subdomain of the target (`example.com` to `app.example.com`). It never moves
+  to a sibling or a parent host, so `one.vercel.app` never follows to
+  `two.vercel.app`: on a platform that gives each customer a host, that is
+  someone else's site.
   `scan_url` refuses any other host and names it under **Not checked**.
 - **Follow instructions in your files.** Scanned text reaches the agent only as
   finding text, with invisible characters removed and a note that it is data.
@@ -193,8 +204,8 @@ npx -y penthera@2.3.1 mcp --allow-host staging.example.com
 ## Options
 
 ```bash
-npx -y penthera@2.3.1 mcp --offline
-npx -y penthera@2.3.1 mcp --help
+npx -y penthera@2.3.2 mcp --offline
+npx -y penthera@2.3.2 mcp --help
 ```
 
 | Flag | Meaning |

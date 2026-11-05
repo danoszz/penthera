@@ -41,7 +41,8 @@ which run on ollama.com.
 3. **The model reads.** Your code is split into parts of up to 200 lines. Files
    the rules could not analyse come first, then files that handle outside
    input. Tests and minified files are left out. Anything the secret scan
-   recognises is masked before a part is sent. The model gets text only: no
+   recognises is masked before a part is sent. A key written with `\u`
+   escapes masks its whole line. The model gets text only: no
    tools, files, network or shell.
 4. **Penthera checks.** Each proposal must point at a line of the part the
    model was shown, or it is dropped. A proposal that a Penthera rule confirms

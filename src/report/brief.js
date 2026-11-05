@@ -175,7 +175,7 @@ function noiseGroup(group, reason) {
   };
 }
 
-const REPORTS_SKIPPED = "Folders named reports were not read, at any depth (src/reports too): Penthera treats them as its own output. Move anything else out of them to have it scanned.";
+const rootOutputRead = (dirs) => `The secret scan ran only its fixed-shape rules (key prefixes, private keys) in ${dirs.map((d) => `${d}/`).join(", ")} at the repo root (env files and shell scripts there got every rule), and none in such a folder git ignores. Below the root, folders with these names get every rule.`;
 
 const filesText = (n) => `${n} file${n === 1 ? "" : "s"}`;
 
@@ -192,7 +192,7 @@ function coverageLines(coverage) {
       if (n > 0) out.push(`${fam.label}: ${filesText(n)} ${SKIP_LABELS[k] || k.replace(/-/g, " ")} ${n === 1 ? "was" : "were"} not read.`);
     }
   }
-  if (coverage.excludedDirs?.includes("reports")) out.push(REPORTS_SKIPPED);
+  if (coverage.rootOutputDirs?.length) out.push(rootOutputRead(coverage.rootOutputDirs));
   if (coverage.truncated) out.push(`The file count stopped at ${coverage.files}; files past that were not counted.`);
   return out;
 }

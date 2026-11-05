@@ -9,13 +9,17 @@ import { resolve } from "node:path";
 import {
   openMemory, projectIdFor, memoryRoot, forgetAll, buildViews,
 } from "../../lib/memory/index.js";
+import { suppressSeverity, LEGACY_SUPPRESS_CAP } from "../../lib/memory/views.js";
 
 const USAGE = `
   Usage
     $ penthera memory show     [--repo <path> | --url <url>] [--json]
     $ penthera memory verify   [--repo <path> | --url <url>]
     $ penthera memory forget   [--repo <path> | --url <url>] [--all]
-    $ penthera memory suppress <finding-id> --reason <text> [--expires <date>]
+    $ penthera memory suppress <finding-id> --reason <text> [--severity <level>] [--expires <date>]
+
+  --severity is the most severe the finding may be and stay suppressed
+  (default medium). If it escalates past that, it shows again.
 
   Memory lives in ${memoryRoot()} (override with PENTHERA_HOME).
   It is never read from the scanned repo, and nothing in it is ever executed.
@@ -38,6 +42,7 @@ export async function runMemoryCommand(argv, { out = (s) => process.stdout.write
         json:    { type: "boolean", default: false },
         reason:  { type: "string" },
         expires: { type: "string" },
+        severity: { type: "string" },
         help:    { type: "boolean", short: "h", default: false },
       },
     });
@@ -97,7 +102,7 @@ export async function runMemoryCommand(argv, { out = (s) => process.stdout.write
       out("  Suppressions");
       if (!v.suppressions.length) out("    none");
       for (const s of v.suppressions) {
-        out(`    ${clean(s.id)}  ${clean(s.reason)}  (by ${clean(s.actor)}${s.expires ? `, until ${clean(s.expires)}` : ""})`);
+        out(`    ${clean(s.id)}  ${clean(s.reason)}  (by ${clean(s.actor)}, up to ${s.severity || LEGACY_SUPPRESS_CAP}${s.expires ? `, until ${clean(s.expires)}` : ""})`);
       }
       out("");
       out("  Recipe success rate");
@@ -131,10 +136,11 @@ export async function runMemoryCommand(argv, { out = (s) => process.stdout.write
       const reason = (opts.reason || "").trim();
       if (!reason) { err("  suppress needs --reason <text>"); return 2; }
       if (opts.expires && Number.isNaN(Date.parse(opts.expires))) { err("  --expires is not a date"); return 2; }
+      if (opts.severity != null && !suppressSeverity(opts.severity)) { err("  --severity must be critical, high, medium, low or info"); return 2; }
       const r = mem.verify();
       if (!r.ok) { err(`  Memory chain is broken at line ${r.brokenAt}; not appending. Run \`penthera memory verify\`.`); return 1; }
-      mem.append({ type: "fp_suppressed", data: { id, reason, actor: "user", ...(opts.expires ? { expires: opts.expires } : {}) } });
-      out(`  Suppressed ${id} for ${clean(project.label)}`);
+      mem.append({ type: "fp_suppressed", data: { id, reason, actor: "user", ...(opts.severity ? { severity: opts.severity } : {}), ...(opts.expires ? { expires: opts.expires } : {}) } });
+      out(`  Suppressed ${id} for ${clean(project.label)}, up to ${opts.severity || LEGACY_SUPPRESS_CAP}`);
       out("  This applies to --memory scans and the fix loop on this machine. For the pre-commit hook and your team, add it to penthera.suppress.json.");
       return 0;
     }

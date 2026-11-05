@@ -136,12 +136,23 @@ runs:
 
         if [ "$INPUT_FOOTER" = "false" ]; then args+=(--no-footer); fi
 
+        # A report left from an earlier step must not stand in for this run's.
+        rm -f "$out/penthera.json" "$out/penthera.sarif" "$out/comment.md"
         set +e
         node "$PENTHERA_DIR/bin/penthera.js" "${args[@]}" --sarif "$out/penthera.sarif" -o "$out/penthera.json"
         code=$?
         set -e
         # 0 = clean, 1 = findings (fail-on decides), anything else = the scan broke.
-        if [ "$code" -gt 1 ]; then exit "$code"; fi
+        # One exception: exit 2 with a report whose `incomplete` lists an input
+        # Penthera refused to read. The comment and SARIF still go out, and the
+        # "Fail on an incomplete scan" step fails the job, whatever fail-on says.
+        if [ "$code" -gt 1 ]; then
+          if [ "$code" -eq 2 ] && [ -f "$out/penthera.json" ] && node -e 'const r = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf-8")); process.exit(Array.isArray(r.incomplete) && r.incomplete.length ? 0 : 1)' "$out/penthera.json" 2>/dev/null; then
+            echo "incomplete=true" >> "$GITHUB_OUTPUT"
+          else
+            exit "$code"
+          fi
+        fi
         # A crash also exits 1. Without a report nothing was checked, so fail loudly.
         if [ ! -f "$out/penthera.json" ]; then
           echo "::error::Penthera exited $code without writing a report, so nothing was checked."
@@ -174,6 +185,13 @@ runs:
       with:
         sarif_file: ${{ steps.run.outputs.sarif-file }}
         category: penthera-${{ inputs.mode }}
+
+    - name: Fail on an incomplete scan
+      if: steps.run.outputs.incomplete == 'true'
+      shell: bash
+      run: |
+        echo "::error::Penthera could not read a dependency input, so the scan is incomplete (exit 2). The report and the PR comment name the file."
+        exit 2
 
     - name: Apply fail-on
       if: inputs.fail-on != 'none'

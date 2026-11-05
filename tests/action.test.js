@@ -97,9 +97,31 @@ describe("action.yml", () => {
       const findings = step(`const fs = require("node:fs"); const a = process.argv; fs.writeFileSync(a[a.indexOf("-o") + 1], "{}"); process.exit(1);\n`);
       expect(findings.status).toBe(0);
       expect(findings.output).toMatch(/report-file=/);
+      // An incomplete scan (a refused input): exit 2 with a report. The outputs are
+      // written, so the comment and SARIF steps run; a later step fails the job.
+      const report = (body, exit) => step(`const fs = require("node:fs"); const a = process.argv; fs.writeFileSync(a[a.indexOf("-o") + 1], ${JSON.stringify(body)}); fs.writeFileSync(a[a.indexOf("--pr-comment") + 1], "x"); process.exit(${exit});\n`);
+      const incomplete = report(JSON.stringify({ incomplete: [{ file: "package-lock.json", reason: "too large" }], findings: [] }), 2);
+      expect(incomplete.status).toBe(0);
+      expect(incomplete.output).toMatch(/incomplete=true/);
+      expect(incomplete.output).toMatch(/report-file=/);
+      expect(incomplete.output).toMatch(/comment-file=/);
+      // Any other exit 2 still stops the job at once, report or not.
+      const broke = report(JSON.stringify({ findings: [] }), 2);
+      expect(broke.status).toBe(2);
+      expect(broke.output).not.toMatch(/incomplete=true|report-file=/);
+      expect(report("not json", 2).status).toBe(2);
     } finally {
       rmSync(tmp, { recursive: true, force: true });
     }
+  });
+
+  it("fails the job on an incomplete scan after the comment and SARIF steps, whatever fail-on says", () => {
+    const names = action.runs.steps.map((st) => st.name);
+    const fail = action.runs.steps.find((st) => st.name === "Fail on an incomplete scan");
+    expect(fail.if).toBe("steps.run.outputs.incomplete == 'true'");
+    expect(fail.run).toMatch(/exit 2/);
+    expect(names.indexOf("Fail on an incomplete scan")).toBeGreaterThan(names.indexOf("Upload SARIF"));
+    expect(names.indexOf("Fail on an incomplete scan")).toBeGreaterThan(names.indexOf("Comment on the pull request"));
   });
 
   it("deps and scan modes run from a checkout without node_modules, as the action does", () => {

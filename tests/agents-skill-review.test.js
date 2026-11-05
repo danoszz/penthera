@@ -198,18 +198,19 @@ describe("B3: a folder read in part never grades A", () => {
     expect(walk(d)).toMatchObject({ truncated: false, capped: false });
   });
 
-  it("keeps a project scan as it was on a skill nested too deep", async () => {
+  // 2.3.2: a project skill read in part was graded as if read in full (C05).
+  it("reports a project skill nested too deep, as for the target", async () => {
     const d = tmp();
     put(d, "skills/a/SKILL.md", "# a\n");
     put(d, `skills/a/${Array.from({ length: 14 }, (_, i) => `d${i}`).join("/")}/x.txt`, "x\n");
-    expect(byRule(await scanAgents(d), "file-too-large")).toEqual([]);
+    expect(byRule(await scanAgents(d), "file-too-large")).toEqual([expect.objectContaining({ severity: "high", title: "Skill folder not read in full" })]);
   });
 
-  it("keeps the project's finding for the file cap", async () => {
+  it("reports a project skill over the file cap as not read in full", async () => {
     const d = tmp();
     put(d, "skills/a/SKILL.md", "# a\n");
     for (let i = 0; i <= 5000; i++) writeFileSync(join(d, "skills/a", `z${i}.txt`), "x\n");
-    expect(byRule(await scanAgents(d), "file-too-large")[0]).toMatchObject({ severity: "medium", title: "Skill folder too large to scan fully" });
+    expect(byRule(await scanAgents(d), "file-too-large")[0]).toMatchObject({ severity: "high", title: "Skill folder not read in full" });
   });
 });
 

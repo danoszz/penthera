@@ -105,13 +105,39 @@ penthera https://myapp.com --auth-cookie "session=abc123"
 Writing to `-o reports/scan.json` also drops a human-readable `reports/scan.md`
 next to it. `penthera init` can add `reports/` to your `.gitignore`.
 
+### What `--baseline` counts as new
+
+A finding is new when the baseline report has no finding with the same
+identity (source, category, file or URL, and title). Since 2.3.2 it is also new when:
+
+- its severity is above the baseline's for that identity, so a low that became
+  critical fails `--baseline -q`;
+- it is a secret, and it now holds more lines than in the baseline, or holds a
+  value the baseline didn't (a second key of one rule in one file, or one key
+  swapped for another). A `--repo` report keeps a short salted hash of each
+  fixed-format secret value, such as a provider key or a private key
+  (`valueTags`, with the salt in `secretTagSalt`), never the value, and
+  `--baseline` reuses the baseline's salt to compare them. Passwords and other
+  `name = value` secrets get no hash, because a person may have chosen the
+  value and the salt is in the report. Neither does a key-shaped value inside a
+  longer word, a `name = value` match or a URL's `user:password@`, nor the
+  legacy `sk-` OpenAI shape. Those, and a baseline without tags,
+  compare the count and the first masked value, as before;
+- it is an eval or exec sink, and it lists a call the baseline didn't. Line
+  numbers are left out, so an edit above the call changes nothing.
+
+A sink finding lists at most 5 calls, so a sixth call in the same file is not
+seen as new. 2.3.2 also changed how short values are masked, so a baseline
+written by an earlier version can show its secrets as new once. Write a fresh
+baseline after the upgrade.
+
 ### Exit codes
 
 | Code | Meaning |
 |------|---------|
 | `0` | No critical or high rule fired. This run does not prove login, access rules or payments are right |
 | `1` | Critical or high findings detected (other tools' too, with `--giants`) |
-| `2` | Scan failed (unreachable target, missing path, bad config, a tool the policy requires did not run) |
+| `2` | Scan failed or is incomplete (unreachable target, missing path, bad config, a tool the policy requires did not run, a dependency input `penthera deps` refused to read) |
 
 A firewall that refuses the scan isn't a failed scan. The verdict is `Site not read`,
 with no grade, and the exit code follows the findings Penthera could still make, such
@@ -128,7 +154,9 @@ not one per route.
 
 Every finding has an id, `fid` in `-o` JSON, beside the title in the terminal report and
 in the Id column of the Markdown report's findings tables.
-The brief doesn't print it. Use it with `penthera memory suppress <fid> --reason "..."`.
+The brief doesn't print it. Use it with `penthera memory suppress <fid> --reason "..." --severity <level>`.
+A suppression covers the finding up to that severity, and medium when you give
+none. If the finding escalates past it, it shows again.
 
 ---
 
@@ -229,7 +257,7 @@ means.
 
 ```yaml
 # Scan a staging URL on a schedule and upload results to GitHub Security.
-- run: npx penthera@2.3.1 "$PENTEST_URL" --profile standard --sarif reports/scan.sarif
+- run: npx penthera@2.3.2 "$PENTEST_URL" --profile standard --sarif reports/scan.sarif
 - uses: github/codeql-action/upload-sarif@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
   with:
     sarif_file: reports/scan.sarif
