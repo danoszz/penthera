@@ -76,10 +76,35 @@ describe("B: no tag for a human-chosen password", () => {
     expect(findings.some((f) => "valueTags" in f)).toBe(false);
   });
 
-  it("the same key under its own name, or quoted alone, keeps its tag", () => {
-    for (const text of [`STRIPE_SECRET_KEY=${STRIPE}`, `const k = '${STRIPE}';`, `NEXT_PUBLIC_X=${["sk", "4eC39HqLyjWDarjtT1zdp7dc"].join("-")}`]) {
-      const { findings } = scan("a.env", `${text}\n`);
-      expect(findings.some((f) => Array.isArray(f.valueTags))).toBe(true);
+  it("the six Fact-checker strings get no tag and no salt; whole-token fixed-format keys keep theirs", () => {
+    const P = "Q7fLm2Rt9Vw4Zp8Ka3Jd5Xc";                 // 20+ letters and digits
+    const SK = ["s", "k-"].join("");
+    const six = [
+      `API_SECRET=team-${SK}${P}`,
+      `JWT_SECRET=our-${SK}${P}`,
+      `AUTH_TOKEN=x.${SK}${P}`,
+      `my_${SK}${P}`,
+      `https://deploy:${SK}${P}@host`,
+      `DATABASE_URL=postgres://admin:${SK}${P}@db/app`,
+    ];
+    for (const text of six) {
+      const d = tmp();
+      writeFileSync(join(d, "app.env"), `${text}\n`);
+      const all = scanSecrets(d);
+      expect(all.some((f) => "valueTags" in f), text).toBe(false);
+      // The CLI writes secretTagSalt only when some finding has valueTags (src/cli.js).
+      expect(all.some((f) => Array.isArray(f.valueTags)), text).toBe(false);
     }
+    const AWS = ["AKIA", "Q7FLM2RT9VW4ZP8K"].join("");
+    for (const text of [`const k = '${STRIPE}';`, `STRIPE_KEY=${STRIPE}`, `aws_access_key_id = ${AWS}`]) {
+      const { findings } = scan("a.env", `${text}\n`);
+      expect(findings.some((f) => Array.isArray(f.valueTags) && f.valueTags.length === 1), text).toBe(true);
+    }
+  });
+
+  it("the legacy sk- shape is never tagged, even as a whole quoted token", () => {
+    const { findings } = scan("a.js", `const k = "${["s", "k-"].join("")}Q7fLm2Rt9Vw4Zp8Ka3Jd5Xc";\n`);
+    expect(findings.length).toBeGreaterThan(0);
+    expect(findings.some((f) => "valueTags" in f)).toBe(false);
   });
 });
