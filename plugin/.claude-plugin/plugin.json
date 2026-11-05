@@ -8,6 +8,9 @@
   },
   "homepage": "https://penthera.org",
   "repository": "https://github.com/danoszz/penthera",
+  "documentationUrl": "https://docs.penthera.org",
+  "supportUrl": "https://github.com/danoszz/penthera/issues",
+  "privacyPolicyUrl": "https://docs.penthera.org/privacy",
   "license": "MIT",
   "keywords": [
     "security",
