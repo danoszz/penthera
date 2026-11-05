@@ -68,16 +68,17 @@ export function createApp({ env = process.env, store, fetch: fetchImpl = globalT
 
   /**
    * The install session from the cookie, with its record, or null. The cookie is bound to the
-   * record's owner and install generation (createdAt) when it was issued. A transfer changes the
-   * owner and a reinstall changes the generation, so either ends every older session: the new
-   * owner needs a fresh install to get one.
+   * record's session generation when it was issued: a counter that only goes up, on every install
+   * and every verified transfer, whether or not the owner changed. So a transfer (also A to B to A,
+   * or one that names no new owner) or a reinstall ends every older session: the new owner needs a
+   * fresh install to get one. The owner is checked too, as a second guard.
    */
   async function session(request, c) {
     const raw = readCookie(request, SESSION);
     const data = raw && unsignValue(raw, cookieKey(c.keys), now());
-    if (!data || !CONFIG_ID.test(data.c) || typeof data.o !== "string" || typeof data.g !== "string") return null;
+    if (!data || !CONFIG_ID.test(data.c) || typeof data.o !== "string" || !Number.isSafeInteger(data.s)) return null;
     const record = await store.get(data.c);
-    if (!record || !safeEqual(record.ownerId, data.o) || !safeEqual(record.createdAt, data.g)) return null;
+    if (!record || !safeEqual(record.ownerId, data.o) || record.sessionGen !== data.s) return null;
     return { raw, configurationId: data.c, next: data.n ?? null, record };
   }
 
@@ -162,8 +163,9 @@ export function createApp({ env = process.env, store, fetch: fetchImpl = globalT
     }
     // createdAt is the latest install, so a replayed older uninstall event cannot delete it.
     const createdAt = new Date(now()).toISOString();
-    await store.put({ configurationId, ownerId, ...sealToken(token.accessToken, configurationId, c.keys), createdAt });
-    const value = signValue({ c: configurationId, o: ownerId, g: createdAt, n: next, e: now() + SESSION_MS }, cookieKey(c.keys));
+    const sessionGen = (previous?.sessionGen ?? 0) + 1;
+    await store.put({ configurationId, ownerId, ...sealToken(token.accessToken, configurationId, c.keys), createdAt, sessionGen });
+    const value = signValue({ c: configurationId, o: ownerId, s: sessionGen, n: next, e: now() + SESSION_MS }, cookieKey(c.keys));
     cookies.push(setCookie(SESSION, value, SESSION_MS / 1000));
     return redirect("/setup", { cookies });
   }
@@ -334,8 +336,15 @@ ${FOOTER}`);
     if (eventTime(event) !== null && eventTime(event) <= Date.parse(record.createdAt)) return json(200, { ok: true, ignored: "stale" });
 
     if (type === "integration-configuration.transferred") {
-      const owner = newOwner(event.payload);
-      if (owner) await store.put({ ...record, ownerId: owner });
+      // Every verified transfer ends older setup sessions, even when it names no new owner. Its time
+      // becomes the record's createdAt, so a replay of this or an older transfer changes nothing.
+      const t = eventTime(event);
+      await store.put({
+        ...record,
+        ownerId: newOwner(event.payload) ?? record.ownerId,
+        createdAt: t !== null && t > Date.parse(record.createdAt) ? new Date(t).toISOString() : record.createdAt,
+        sessionGen: record.sessionGen + 1,
+      });
       return json(200, { ok: true });
     }
 

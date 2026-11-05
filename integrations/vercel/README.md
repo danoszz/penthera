@@ -27,14 +27,15 @@ One record per installation, and nothing else:
 | `ownerId` | the team id, or the user or account id for a personal account (`personal` if a transfer to a personal account names none) |
 | `ciphertext`, `iv`, `tag` | the Vercel access token, encrypted with AES-256-GCM |
 | `keyVersion` | which key encrypted it, for rotation |
-| `createdAt` | when it was last installed. A reinstall moves it forward, so a replayed older uninstall event is ignored |
+| `createdAt` | when it was last installed or transferred. It moves forward, so a replayed older uninstall or transfer event is ignored |
+| `sessionGen` | a counter that only goes up, on every install and every transfer. Setup sessions are bound to it |
 
 The store refuses a record with any other field (`lib/store.mjs`). Project
 names, repos, emails, deployment URLs and scan results are never stored. Project
 ids and names are read live from Vercel to draw the pages, then dropped.
 
 So the stored data is: an installation id, a team or account id, an encrypted
-token and a date. No other data about you or your projects.
+token, a date and a counter. No other data about you or your projects.
 
 Outside the store, Vercel's own request logs for this project record each
 request's path and query string. That includes `/install?code=...` (the code is
@@ -125,10 +126,11 @@ does not wait for a workflow that is not committed yet.
   owner. Form posts need the session cookie (SameSite=Lax), a form token bound
   to it, and a same-origin `Origin` header when the browser sends one.
 - **Session binding:** the 30-minute setup cookie carries the configuration id,
-  the owner and the install time it was issued for, signed. Every request
-  checks them against the stored record. A transfer changes the owner and a
-  reinstall changes the install time, so either one ends every older session,
-  and the new owner gets a session only by installing. Uninstall deletes the
+  the owner and the record's `sessionGen` when it was issued, signed. Every
+  request checks them against the stored record. Every install and every
+  verified transfer bumps `sessionGen`, also a transfer that names no new owner
+  or one that moves A to B and back to A, so each ends every older session.
+  The new owner gets a session only by installing. Uninstall deletes the
   record, which ends sessions too.
 - **Risk left (login CSRF):** an attacker can send someone a link with the
   attacker's own fresh install code and `source=marketplace`. The victim's

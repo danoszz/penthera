@@ -18,8 +18,9 @@ For each installation, and nothing else:
 
 - Vercel's configuration id for the installation,
 - your team id, or your user or account id for a personal account,
-- a Vercel access token, encrypted (AES-256-GCM), and
-- the date of the latest install.
+- a Vercel access token, encrypted (AES-256-GCM),
+- the date of the latest install or transfer, and
+- a counter that ends old setup sessions after an install or a transfer.
 
 ## What never reaches us
 

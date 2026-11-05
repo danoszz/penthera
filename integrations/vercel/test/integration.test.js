@@ -179,7 +179,7 @@ describe("OAuth install", () => {
     expect(Object.fromEntries(form)).toEqual({ client_id: "oac_testclient", client_secret: CLIENT_SECRET, code: CODE, redirect_uri: `${BASE}/install` });
 
     const [record] = store.dump();
-    expect(Object.keys(record).sort()).toEqual(["ciphertext", "configurationId", "createdAt", "iv", "keyVersion", "ownerId", "tag"]);
+    expect(Object.keys(record).sort()).toEqual(["ciphertext", "configurationId", "createdAt", "iv", "keyVersion", "ownerId", "sessionGen", "tag"]);
     expect(record).toMatchObject({ configurationId: CFG, ownerId: TEAM, keyVersion: "v1" });
     expect(JSON.stringify(store.dump())).not.toContain(ACCESS_TOKEN);
     expect(openToken(record, CFG, parseKeys(e.PENTHERA_TOKEN_KEYS))).toBe(ACCESS_TOKEN);
@@ -349,7 +349,7 @@ describe("uninstall", () => {
     const before = store.dump()[0];
     const raw = JSON.stringify({ type: "integration-configuration.transferred", payload: { configuration: { id: CFG }, newTeamId: "team_New1" } });
     await app.webhook(signed(raw));
-    expect(store.dump()[0]).toEqual({ ...before, ownerId: "team_New1" });
+    expect(store.dump()[0]).toEqual({ ...before, ownerId: "team_New1", sessionGen: before.sessionGen + 1 });
   });
 
   it("the weekly sweep deletes records whose token no longer works, and needs the cron secret", async () => {
@@ -424,7 +424,7 @@ describe("store", () => {
   it("refuses any field beyond the documented record", async () => {
     const store = memoryStore();
     const keys = parseKeys(`v1:${b64key()}`);
-    const record = { configurationId: CFG, ownerId: TEAM, ...sealToken("t", CFG, keys), createdAt: "2026-11-05T00:00:00.000Z" };
+    const record = { configurationId: CFG, ownerId: TEAM, ...sealToken("t", CFG, keys), createdAt: "2026-11-05T00:00:00.000Z", sessionGen: 1 };
     await store.put(record);
     await expect(store.put({ ...record, projectName: "shop" })).rejects.toThrow(/exactly/);
     await expect(store.put({ ...record, token: "t" })).rejects.toThrow(/exactly/);
@@ -485,7 +485,7 @@ describe("review fixes", () => {
     return new Request(`${BASE}/webhook`, { method: "POST", body: raw, headers: { "x-vercel-signature": createHmac("sha1", secret).update(raw).digest("hex") } });
   };
   const victim = async (store, keys) =>
-    store.put({ configurationId: CFG, ownerId: TEAM, ...sealToken("at_victim", CFG, keys), createdAt: "2026-11-01T00:00:00.000Z" });
+    store.put({ configurationId: CFG, ownerId: TEAM, ...sealToken("at_victim", CFG, keys), createdAt: "2026-11-01T00:00:00.000Z", sessionGen: 1 });
   const exchangeOnly = (body) => async (u) =>
     String(u).includes("access_token") ? new Response(JSON.stringify(body), { status: 200 }) : new Response("{}", { status: 200 });
 
@@ -629,5 +629,51 @@ describe("sessions end when the record changes", () => {
     const { cookieKey } = await import("../lib/crypto.mjs");
     const old = signValue({ c: CFG, n: null, e: Date.now() + 60_000 }, cookieKey(parseKeys(e.PENTHERA_TOKEN_KEYS)));
     expect((await app.setup(get("/setup", { cookie: `__Host-pv_session=${old}` }))).status).toBe(401);
+  });
+});
+
+describe("session generation", () => {
+  const signed = (event) => {
+    const raw = JSON.stringify(event);
+    return new Request(`${BASE}/webhook`, { method: "POST", body: raw, headers: { "x-vercel-signature": createHmac("sha1", CLIENT_SECRET).update(raw).digest("hex") } });
+  };
+  const transfer = (payload, createdAt) => signed({ type: "integration-configuration.transferred", ...(createdAt ? { createdAt } : {}), payload: { configuration: { id: CFG }, ...payload } });
+  const live = async (app, cookie) => (await app.setup(get("/setup", { cookie }))).status;
+
+  it("a transfer that names no new owner still ends older sessions", async () => {
+    const { app, cookie, store } = await installed();
+    await app.webhook(transfer({ previousTeamId: TEAM }));
+    expect(store.dump()[0]).toMatchObject({ ownerId: TEAM, sessionGen: 2 });
+    expect(await live(app, cookie)).toBe(401);
+  });
+
+  it("a transfer A to B to A does not bring the old session back", async () => {
+    const { app, cookie, store } = await installed();
+    await app.webhook(transfer({ previousTeamId: TEAM, newTeamId: "team_B1" }));
+    await app.webhook(transfer({ previousTeamId: "team_B1", newTeamId: TEAM }));
+    expect(store.dump()[0]).toMatchObject({ ownerId: TEAM, sessionGen: 3 });
+    expect(await live(app, cookie)).toBe(401);
+    const csrf = "unused";
+    expect((await app.setup(post("/setup", `csrf=${csrf}&remove=prj_one`, { cookie, origin: BASE }))).status).toBe(401);
+  });
+
+  it("two quick transfers each bump the generation, and a replay of the older one changes nothing", async () => {
+    let t = Date.parse("2026-11-05T12:00:00.000Z");
+    const ctx = setup({ now: () => t });
+    const cookie = cookieJar(await ctx.app.install(get(installUrl())));
+    const first = t + 1_000;
+    await ctx.app.webhook(transfer({ newTeamId: "team_B1" }, first));
+    await ctx.app.webhook(transfer({ newTeamId: "team_C1" }, first + 1));
+    expect(ctx.store.dump()[0]).toMatchObject({ ownerId: "team_C1", sessionGen: 3 });
+    expect(await (await ctx.app.webhook(transfer({ newTeamId: "team_B1" }, first))).json()).toMatchObject({ ignored: "stale" });
+    expect(ctx.store.dump()[0]).toMatchObject({ ownerId: "team_C1", sessionGen: 3 });
+    expect(await live(ctx.app, cookie)).toBe(401);
+  });
+
+  it("the store refuses a record without a positive sessionGen", async () => {
+    const keys = parseKeys(`v1:${b64key()}`);
+    const base = { configurationId: CFG, ownerId: TEAM, ...sealToken("t", CFG, keys), createdAt: "2026-11-05T00:00:00.000Z" };
+    await expect(memoryStore().put(base)).rejects.toThrow(/exactly/);
+    await expect(memoryStore().put({ ...base, sessionGen: 0 })).rejects.toThrow(/sessionGen/);
   });
 });
