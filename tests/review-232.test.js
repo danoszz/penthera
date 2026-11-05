@@ -247,3 +247,24 @@ describe.skipIf(!posix)("9: a refused file in deps is a finding, not the end", (
     expect(r.findings.map((x) => x.title)).toContain("File not read: package-lock.json");
   });
 });
+
+describe("secret tags never cover a short value", () => {
+  it("tags a long value, and leaves a finding with a value under 20 characters untagged", async () => {
+    const { mkdtempSync, writeFileSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const { scanSecrets } = await import("../lib/whitebox/secrets.js");
+    const scan = async (text) => {
+      const dir = mkdtempSync(join(tmpdir(), "tags-"));
+      writeFileSync(join(dir, "config.js"), text);
+      const r = await scanSecrets(dir);
+      return (r.findings ?? r).filter((f) => f.source === "secret-scan");
+    };
+    const long = await scan(`const password = "${"xk_demo_" + "Q7fLm2Rt9Vw4Zp8Ka3Jd"}";\n`);
+    expect(long.length).toBeGreaterThan(0);
+    expect(long.every((f) => Array.isArray(f.valueTags) && f.valueTags.length > 0)).toBe(true);
+    const short = await scan(`const password = "${"xk" + "Q7fLm2"}";\n`);
+    expect(short.length).toBeGreaterThan(0);
+    expect(short.some((f) => "valueTags" in f)).toBe(false);
+  });
+});
