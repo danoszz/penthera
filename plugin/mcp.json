@@ -6,7 +6,7 @@
       "command": "npx",
       "args": [
         "-y",
-        "penthera@2.3.0",
+        "penthera@2.3.1",
         "mcp"
       ]
     }

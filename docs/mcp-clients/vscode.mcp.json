@@ -3,7 +3,7 @@
     "penthera": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "penthera@2.3.0", "mcp"]
+      "args": ["-y", "penthera@2.3.1", "mcp"]
     }
   }
 }

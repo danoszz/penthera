@@ -82,8 +82,8 @@ issues". The MCP lines pin the version.
 | Agent | Run this |
 |---|---|
 | Claude Code, plugin (skill and MCP server) | `claude plugin marketplace add danoszz/penthera`, then `claude plugin install penthera@penthera` |
-| Claude Code, MCP server only | `claude mcp add penthera -- npx -y penthera@2.3.0 mcp` |
-| Codex | `codex mcp add penthera -- npx -y penthera@2.3.0 mcp` |
+| Claude Code, MCP server only | `claude mcp add penthera -- npx -y penthera@2.3.1 mcp` |
+| Codex | `codex mcp add penthera -- npx -y penthera@2.3.1 mcp` |
 | GitHub Copilot CLI | `copilot plugin marketplace add danoszz/penthera`, then `copilot plugin install penthera@penthera` |
 | GitHub Copilot in VS Code | the `code --add-mcp` line in [mcp.md](docs/commands/mcp.md#github-copilot) |
 | Gemini CLI | `gemini extensions install https://github.com/danoszz/penthera` |
@@ -281,7 +281,7 @@ never fails CI. Whether it finds more than the rules alone is not measured yet
 | Scans: URL, repo, dependencies, AI tooling, installs, pre-commit hook | **Stable**: in every release since 1.x, covered by the tests and the release gate |
 | Fix loop and local dashboard (`penthera ui`) | **Stable**; the dashboard was redesigned in 1.9.0 |
 | MCP server, Agent Skill, Claude Code plugin | **Stable**, since 1.9.0 |
-| Gemini CLI extension | **Stable**: it installs the newest release (2.3.0) |
+| Gemini CLI extension | **Stable**: it installs the newest release (2.3.1) |
 | Evidence bundles, NIS2 and CRA drafts | **Stable** as readiness tooling, not a certification |
 | AI mode (`--ai`) | **Experimental**: whether it finds more than the rules alone is not measured yet ([AI mode](docs/ai-mode.md)) |
 | Live check on [penthera.org](https://penthera.org) | **Beta**: passive only, [terms](docs/live-check-terms.md) |
@@ -357,8 +357,8 @@ The [claim map](docs/claims.md) ties these claims to the tests that hold them.
 **Verify it yourself.** In an empty folder:
 
 ```bash
-npm install penthera@2.3.0 && npm audit signatures
-npx penthera@2.3.0 rules list
+npm install penthera@2.3.1 && npm audit signatures
+npx penthera@2.3.1 rules list
 ```
 
 The first checks npm's registry signature and the build provenance of the
@@ -444,7 +444,7 @@ What changed, what we are measuring, and what comes next, in one place.
 
 | | Where it stands | Read more |
 |---|---|---|
-| **Latest release** | 2.3.0 (2026-11-05) on npm `latest`: GitHub Actions workflow checks, less noise on the first run, a verdict-first repo scan, no runtime dependencies, and an install line per agent | [CHANGELOG](CHANGELOG.md), [roadmap](ROADMAP.md) |
+| **Latest release** | 2.3.1 (2026-11-05) on npm `latest`, a fix for a slow workflow check in 2.3.0. 2.3.0 brought: GitHub Actions workflow checks, less noise on the first run, a verdict-first repo scan, no runtime dependencies, and an install line per agent | [CHANGELOG](CHANGELOG.md), [roadmap](ROADMAP.md) |
 | **Research** | Public benchmarks (E11b) published: on a sealed half of four public datasets, 1st of the free tools on npm and PyPI malware (tied 1st to 3rd), 1st on JS library injection bugs (tied 1st to 4th), 2nd on leaked secrets ([summary](#public-benchmarks)). E10 pilot published: precision 0.88, recall 0.07 to 0.71 on two known-vulnerable apps after fixes (one labeller, not independent; a re-run is pending because default scans no longer send login checks). E1 on real code is pre-registered; E8 (agent guardrails) is a draft | [E11b results](bench/public/RESULTS.md), [E10 results](bench/known-vuln/RESULTS.md), [E1 pre-registration](docs/research/prereg/E1-real-world-accuracy.md), [agents safely](docs/agents-safely.md) |
 | **Next** | Real-world precision and recall with intervals (E1), published whatever the result | [Roadmap: next](ROADMAP.md#next), [research plan](docs/vision-2.0.md) |
 

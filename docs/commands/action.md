@@ -62,7 +62,7 @@ SARIF to code scanning. Copy it into `.github/workflows/`, or let
 `penthera init` write it when the repo has agent config. The step it runs:
 
 ```yaml
-- run: npx --yes penthera@2.3.0 agents "$GITHUB_WORKSPACE" --sarif "$RUNNER_TEMP/penthera-agents.sarif"
+- run: npx --yes penthera@2.3.1 agents "$GITHUB_WORKSPACE" --sarif "$RUNNER_TEMP/penthera-agents.sarif"
 ```
 
 The rules that [`penthera agents`](agents.md#rules-for-auto-run-registries-and-environment)

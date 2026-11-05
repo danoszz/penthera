@@ -4,6 +4,16 @@ All notable changes to Penthera are documented here. Versioning follows [SemVer]
 
 ## [Unreleased]
 
+## [2.3.1] - 2026-11-05
+
+### Security
+
+- **A crafted workflow can no longer stall a repo scan.** The check for `pull/<number>/head` in a script re-read the rest of the line at every `pull/`, so one long line of unclosed `pull/${{` took seconds (4 s for 175 KB) and blocked the CLI and the MCP server. It now reads the line once. Found by Vercel Security Review on 2.3.0.
+
+### Docs
+
+- **Every copyable pin now says 2.3.0:** the README, AGENTS.md, the docs, `llms-install.md` and the Action SHA in the examples. The 2027 security guide's step 7 now gives the command, since the workflow checks shipped in 2.3.0.
+
 ## [2.3.0] - 2026-11-05
 
 ### Security
