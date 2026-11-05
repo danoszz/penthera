@@ -71,7 +71,7 @@ function printRun(r, { verbose }) {
   else if (r.below.length) L.push(dim(`  + ${r.below.length} below ${r.blockOn}, not blocking (-v to list)`));
   L.push("");
   L.push(`  Fix and \`git add\` again. A false positive? Add it to penthera.suppress.json:`);
-  L.push(dim(`    { "version": 1, "suppress": [{ "id": "${r.blocking[0].id}", "reason": "why this is safe" }] }`));
+  L.push(dim(`    { "version": 1, "suppress": [{ "id": "${r.blocking[0].id}", "severity": "${r.blocking[0].severity}", "reason": "why this is safe" }] }`));
   L.push(`  To skip the check for one commit: ${bold("git commit --no-verify")} ${dim("(the finding still ships)")}`);
   L.push("");
   process.stderr.write(L.join("\n") + "\n");

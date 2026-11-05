@@ -105,6 +105,23 @@ penthera https://myapp.com --auth-cookie "session=abc123"
 Writing to `-o reports/scan.json` also drops a human-readable `reports/scan.md`
 next to it. `penthera init` can add `reports/` to your `.gitignore`.
 
+### What `--baseline` counts as new
+
+A finding is new when the baseline report has no finding with the same
+identity (source, category, file or URL, and title). Since 2.3.2 it is also new when:
+
+- its severity is above the baseline's for that identity, so a low that became
+  critical fails `--baseline -q`;
+- it is a secret, and it now holds more lines than in the baseline, or shows a
+  masked value the baseline didn't (a second key of one rule in one file);
+- it is an eval or exec sink, and it lists a call the baseline didn't. Line
+  numbers are left out, so an edit above the call changes nothing.
+
+A sink finding lists at most 5 calls, so a sixth call in the same file is not
+seen as new. 2.3.2 also changed how short values are masked, so a baseline
+written by an earlier version can show its secrets as new once. Write a fresh
+baseline after the upgrade.
+
 ### Exit codes
 
 | Code | Meaning |
@@ -128,7 +145,9 @@ not one per route.
 
 Every finding has an id, `fid` in `-o` JSON, beside the title in the terminal report and
 in the Id column of the Markdown report's findings tables.
-The brief doesn't print it. Use it with `penthera memory suppress <fid> --reason "..."`.
+The brief doesn't print it. Use it with `penthera memory suppress <fid> --reason "..." --severity <level>`.
+A suppression covers the finding up to that severity, and medium when you give
+none. If the finding escalates past it, it shows again.
 
 ---
 

@@ -103,7 +103,8 @@ describe("values that are not passwords", () => {
   it("a translation folder runs only the fixed-shape rules", async () => {
     const { isShapesOnlyFile } = await import("../lib/whitebox/secrets.js");
     expect(isShapesOnlyFile("src/locales/de.json")).toBe(true);
-    expect(isShapesOnlyFile("app/i18n/messages.js")).toBe(true);
+    // Code in a translation folder gets every rule (2.3.2, B07).
+    expect(isShapesOnlyFile("app/i18n/messages.js")).toBe(false);
     expect(isShapesOnlyFile("config/database.json")).toBe(false);
   });
 });
