@@ -36,7 +36,15 @@ On every pull request it posts one comment with the capability diff against
 the PR base and edits that same comment on each push. It also uploads SARIF to
 code scanning. Penthera runs from the action's own checkout: no npx and no
 install from npm. Penthera has no runtime dependencies, so no mode runs `npm ci`. On fork PRs the
-token is read-only, so the diff goes to the job summary instead. Inputs: `mode`, `path`, `base-ref`, `url`,
+token is read-only, so the diff goes to the job summary instead.
+
+The job fails when the scan is incomplete, even with `fail-on: none`. That
+happens when Penthera could not read a lockfile or requirements file (a FIFO,
+a device, a link out of the project, over the 64 MiB cap, or an `-r` include
+like that), so the packages it lists were not checked. The CLI exits 2. The PR
+comment says `Incomplete:` and names the file, SARIF is still uploaded, and
+then the step "Fail on an incomplete scan" fails the job. Any other exit 2 (a
+crash, a bad input) fails the job at once, with no comment or SARIF. Inputs: `mode`, `path`, `base-ref`, `url`,
 `fail-on`, `comment`, `footer`, `sarif`, `penthera-version`, `github-token`. Copy the full workflow, with
 permissions and a lockfile paths filter, from
 [`docs/examples/pr-dependency-review.yml`](https://github.com/danoszz/penthera/blob/main/docs/examples/pr-dependency-review.yml).
@@ -84,7 +92,8 @@ Pin the Penthera version, so every run is checked by the same rules, and use
 `--baseline` for counts of what is new, or `--baseline ... -q` to report and
 gate on new findings only. `penthera --repo .`
 and `penthera deps` exit 1 on high or critical findings, so either works as a
-gate.
+gate. `penthera deps` exits 2 when it could not read a dependency input, so
+treat any nonzero exit as a failed check.
 
 ## Before you cut a release
 

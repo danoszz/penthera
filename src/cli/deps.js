@@ -36,7 +36,7 @@ export const DEPS_UNSUPPORTED = [
  * The license policy for this run: `--license-policy <preset|file>`, else the
  * `licenses` section of penthera.policy.json, else none.
  */
-export async function resolveLicensePolicy(root, flag) {
+export async function resolveLicensePolicy(root, flag, { onWarning = (m) => process.stderr.write(`\n  \x1b[33mwarning\x1b[0m ${m}\n`) } = {}) {
   const { normalizeLicensePolicy, LICENSE_PRESETS } = await import("../../lib/deps/license.js");
   if (flag) {
     if (LICENSE_PRESETS[flag]) return normalizeLicensePolicy({ preset: flag }, "--license-policy");
@@ -47,7 +47,9 @@ export async function resolveLicensePolicy(root, flag) {
     return normalizeLicensePolicy(raw && typeof raw === "object" && "licenses" in raw ? raw.licenses : raw, `${flag}: licenses`);
   }
   const { loadPolicy } = await import("../../lib/install/policy.js");
-  return loadPolicy(root).policy.licenses;
+  const { policy, warning } = loadPolicy(root);
+  if (warning) onWarning(warning);
+  return policy.licenses;
 }
 
 export async function runDeps(args, opts, { version }) {

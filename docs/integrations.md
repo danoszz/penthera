@@ -12,7 +12,7 @@ Penthera runs on your machine. Pick your tool below. There are three ways in:
 - **You run it** in a terminal, or in CI with the [GitHub Action](commands/action.md).
 - **You check the live app** on [penthera.org](https://penthera.org). It's passive, nothing is stored, and it only needs a URL. This is the route for browser-only app builders.
 
-The MCP tools only read your project, never apply fixes, run no shell and send no attack payloads. `scan_url` reaches loopback only, unless you add `"--allow-host", "app.example.com"` to `args`, and only for a host you're allowed to test. A redirect may also move within the target's registrable domain. Details: [the MCP server](commands/mcp.md).
+The MCP tools only read your project, never apply fixes, run no shell and send no attack payloads. `scan_url` reaches loopback only, unless you add `"--allow-host", "app.example.com"` to `args`, and only for a host you're allowed to test. A redirect may also move between the apex and `www.`, or to a subdomain of the target, never to a sibling or a parent host. Details: [the MCP server](commands/mcp.md).
 
 The commands below pin a version on purpose: an update never reaches you unless you change the pin.
 

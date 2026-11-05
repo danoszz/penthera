@@ -13,6 +13,7 @@ import { createGit } from "../agent/git.js";
 import { existsSync, mkdirSync, writeFileSync, appendFileSync, lstatSync, realpathSync } from "node:fs";
 import { resolve, join, relative, isAbsolute, sep, dirname } from "node:path";
 import { readFileSync } from "node:fs";
+import { readRepoFile } from "../../lib/fs-safe.js";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
@@ -455,7 +456,7 @@ export function agentsWorkflowYaml(pin = null) {
 /** Whether a Penthera workflow under .github/workflows already runs the agents check. */
 function hasAgentsWorkflow(root, workflows) {
   return workflows.some((f) => {
-    try { return /penthera@\S+\s+agents\b|penthera\.js\s+agents\b|mode:\s*["']?agents\b/.test(readFileSync(join(root, f), "utf-8")); } catch { return false; }
+    try { return /penthera@\S+\s+agents\b|penthera\.js\s+agents\b|mode:\s*["']?agents\b/.test(readRepoFile(join(root, f), { root, maxBytes: 1024 * 1024 })); } catch { return false; }
   });
 }
 

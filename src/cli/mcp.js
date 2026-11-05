@@ -28,7 +28,8 @@ export const MCP_HELP = `
                            client starts the server in. Clients that send MCP roots override it.
         --allow-host <host> A host scan_url may contact besides loopback (repeatable, exact name).
                            Only list targets you are authorized to test. A redirect may also move
-                           within the target's registrable domain; any other host is refused.
+                           between the apex and www., or to a subdomain of the target; never to a
+                           sibling or a parent host. Any other host is refused.
         --offline           scan_url contacts only the target: no listed hosts, no DNS lookups
     -h, --help              Show this help
 `;

@@ -155,6 +155,13 @@ its category when no narrower rule applies), a severity, a confidence label (`co
 result also lists what the tool did not check. By default a tool returns the 50
 most severe findings; ask for up to 200 with `max_findings`.
 
+The brief's `exit_code` is the code the CLI would exit with. A
+`check_dependencies` result is incomplete when a lockfile or requirements file
+could not be read (a FIFO, a device, a link out of the project, over the 64 MiB
+cap, or an `-r` include like that). Its brief then has `exit_code` 2, a verdict
+of Review, and an `exit_reason` that names the file, and the findings list it
+as `File not read: <file>`. Never read that as clean.
+
 Arguments: `path` and `max_findings` on the file tools, `prod` on
 `check_dependencies`, `url` and `profile` (`quick` or `standard`) on `scan_url`,
 `path` or `headers` on `runtime_advisories`, `id` on `explain_finding`. A result
@@ -178,8 +185,12 @@ npx -y penthera@2.3.1 mcp --allow-host staging.example.com
 ```
 
   Only list hosts you are authorized to test. The same limit holds on every
-  redirect, with or without `--offline`. A redirect may also move within the
-  target's registrable domain, such as `example.com` to `www.example.com`.
+  redirect, with or without `--offline`. A redirect may also move between the
+  apex and `www.` (`example.com` to `www.example.com`, or back), or down to a
+  subdomain of the target (`example.com` to `app.example.com`). It never moves
+  to a sibling or a parent host, so `one.vercel.app` never follows to
+  `two.vercel.app`: on a platform that gives each customer a host, that is
+  someone else's site.
   `scan_url` refuses any other host and names it under **Not checked**.
 - **Follow instructions in your files.** Scanned text reaches the agent only as
   finding text, with invisible characters removed and a note that it is data.

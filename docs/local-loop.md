@@ -192,13 +192,20 @@ record to rank and suppress findings.
 penthera --repo . --memory            # scan, apply memory, record this scan
 penthera memory show                  # what memory knows about this project
 penthera memory verify                # check the hash chain
-penthera memory suppress <id> --reason "set by the CDN" [--expires 2027-01-01]
+penthera memory suppress <id> --reason "set by the CDN" [--severity high] [--expires 2027-01-01]
 penthera memory forget                # delete this project's memory
 penthera memory forget --all          # delete all memory
 ```
 
 `<id>` is the 16-character `fid` shown next to each finding in a `--memory`
 report.
+
+A suppression covers its finding up to a severity: `--severity` here,
+`"severity"` in `penthera.suppress.json`. Without one it covers up to medium.
+The finding id leaves severity out, so this is what makes a finding that
+escalates (a low that became critical) show again. Suppressions written before
+2.3.2 have no severity, so they no longer hide a high or critical finding: add
+the severity to keep them.
 
 ### Where it lives
 
@@ -232,7 +239,7 @@ keys sorted. The first line's `prev` is derived from the project id.
 | `fix_applied` | finding id, recipe id, framework, category, diff SHA-256 |
 | `fix_verified` / `fix_failed` | finding id (recipe and framework are joined from `fix_applied`) |
 | `gave_up` | finding id, reason, source, loop run id. Never counted in recipe success |
-| `fp_suppressed` | finding id, reason, actor, optional expiry |
+| `fp_suppressed` | finding id, reason, actor, optional severity cap and expiry |
 | `loop_run` | one `penthera agent --loop` run: the [loopRun](#the-looprun-object) without test output, finding ids only |
 
 From these, `penthera memory show` derives four views: recipe success rate per
@@ -320,7 +327,7 @@ that a repo may contain `penthera.suppress.json`:
 {
   "version": 1,
   "suppress": [
-    { "id": "16e06eb3fd94664b", "reason": "test fixture, revoked", "expires": "2027-01-01" }
+    { "id": "16e06eb3fd94664b", "reason": "test fixture, revoked", "severity": "critical", "expires": "2027-01-01" }
   ]
 }
 ```

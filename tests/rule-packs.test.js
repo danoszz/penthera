@@ -443,7 +443,7 @@ describe("pack rules in the engines", () => {
     expect(findSecretsInText(token)).toEqual([]);
     expect(findExecPatterns(cmd)).toEqual([]);
     addRulePack(SIGNED, { signers: testSigners() });
-    expect(findSecretsInText(token)).toEqual([{ name: "Acme fixture token", severity: "critical", match: token, index: 0 }]);
+    expect(findSecretsInText(token)).toEqual([{ name: "Acme fixture token", severity: "critical", match: token, index: 0, taggable: true }]);
     expect(findExecPatterns(cmd).map((m) => m.rule)).toEqual(["fixture-pipe-to-node-eval"]);
     expect(activeSecretPatterns().at(-1)).toMatchObject({ name: "Acme fixture token", pack: "fixture-signed" });
     resetRulePacks();
