@@ -385,6 +385,13 @@ live once a maintainer approves it with 2FA. **Do not run `npm publish` locally.
 6. Approve the staged version with 2FA: npmjs.com → penthera → Staged Packages →
    Approve, or `npm stage list penthera` and `npm stage approve <stage-id>`.
    Check the file list and provenance before you approve.
+   Once npm serves it as `latest`, two places follow:
+   - **Anthropic's plugin directory follows the `plugin-claude-live` branch.** The
+     `Plugin live` workflow moves that branch to the newest commit on `main`
+     whose `plugin/.mcp.json` pins the version npm serves, within the hour or
+     on the next push to `main`, and only forward. Nothing to do by hand.
+   - **The official MCP Registry** needs one publish from `main`:
+     `mcp-publisher login github`, then `mcp-publisher publish`.
 7. After the version is live, update every pin users copy: `penthera@<version>`
    across `README.md`, `AGENTS.md`, `docs/`, `skills/penthera/SKILL.md` and
    `llms-install.md`, the action SHA in `docs/commands/action.md` and
