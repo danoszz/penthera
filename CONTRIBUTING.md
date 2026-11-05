@@ -350,7 +350,8 @@ live once a maintainer approves it with 2FA. **Do not run `npm publish` locally.
    - `.claude-plugin/plugin.json` (`version`)
    - `.claude-plugin/marketplace.json` (`metadata.version`)
    - `plugin/.claude-plugin/plugin.json` (`version`), `plugin/skills/penthera/SKILL.md`
-     (a copy of the skill) and `plugin/.mcp.json` (the pin)
+     (a copy of the skill) and `plugin/.mcp.json` (the pin), plus the Agent Plugins
+     copies `plugin/plugin.json` and `plugin/mcp.json`; a test keeps them equal
    - `CITATION.cff` (`version`)
    - `docs/METHODOLOGY.md` (the "How to cite" block)
    - `server.json` (`version` and `packages[0].version`) and the pins in

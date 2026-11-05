@@ -76,37 +76,23 @@ area and the three things to fix first. It scans your running app only after
 you confirm the app is yours. Nothing is committed or pushed
 ([guided start](docs/commands/init.md)).
 
-**In your coding agent, as a skill.** Then ask "scan my app for security
-issues":
+**In your coding agent.** Pick yours, then ask "scan my app for security
+issues". The MCP lines pin the version.
 
-```bash
-npx skills add danoszz/penthera
-```
+| Agent | Run this |
+|---|---|
+| Claude Code, plugin (skill and MCP server) | `claude plugin marketplace add danoszz/penthera`, then `claude plugin install penthera@penthera` |
+| Claude Code, MCP server only | `claude mcp add penthera -- npx -y penthera@2.2.0 mcp` |
+| Codex | `codex mcp add penthera -- npx -y penthera@2.2.0 mcp` |
+| GitHub Copilot CLI | `copilot plugin marketplace add danoszz/penthera`, then `copilot plugin install penthera@penthera` |
+| GitHub Copilot in VS Code | the `code --add-mcp` line in [mcp.md](docs/commands/mcp.md#github-copilot) |
+| Gemini CLI | `gemini extensions install https://github.com/danoszz/penthera` |
+| Cursor, Windsurf | the JSON in [mcp.md](docs/commands/mcp.md#cursor-and-windsurf) |
+| Any agent that reads skills | `npx skills add danoszz/penthera` |
 
-**In your coding agent, as an MCP server.** Six read-only tools for Claude Code,
-Cursor, Codex, VS Code and Windsurf. Pin the version:
-
-```bash
-claude mcp add penthera -- npx -y penthera@2.2.0 mcp
-```
-
-**In Claude Code, as a plugin.** From Claude Code's prompt:
-
-```
-/plugin marketplace add danoszz/penthera
-/plugin install penthera@penthera
-```
-
-**In Gemini CLI, as an extension.** It runs the MCP server pinned in
-[`gemini-extension.json`](gemini-extension.json), which follows the newest
-release, release candidates included:
-
-```bash
-gemini extensions install https://github.com/danoszz/penthera
-```
-
-Other clients: [docs/commands/mcp.md](docs/commands/mcp.md). Other skill install
-routes: [docs/commands/skill.md](docs/commands/skill.md).
+The skill tells your agent how to run Penthera; the MCP server gives it six
+read-only tools. More routes: [skill.md](docs/commands/skill.md),
+[mcp.md](docs/commands/mcp.md).
 
 To run it in a container:
 `docker build -t penthera . && docker run --rm penthera https://your-app.example`.

@@ -27,12 +27,21 @@ cp -r skills/penthera .cursor/skills/penthera     # Cursor
 cp -r skills/penthera .claude/skills/penthera     # Claude Code
 ```
 
-Or as a Claude Code plugin (installs the skill):
+Or as a plugin, with the skill and the MCP server together. In Claude Code:
 
 ```bash
-/plugin marketplace add danoszz/penthera
-/plugin install penthera@penthera
+claude plugin marketplace add danoszz/penthera
+claude plugin install penthera@penthera
 ```
+
+In GitHub Copilot CLI, which reads the same marketplace file:
+
+```bash
+copilot plugin marketplace add danoszz/penthera
+copilot plugin install penthera@penthera
+```
+
+Codex and Gemini CLI take the MCP server instead: see [mcp.md](mcp.md#codex).
 
 For Claude.ai (web), zip and upload the skill:
 

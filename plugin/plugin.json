@@ -1,0 +1,27 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "penthera",
+  "version": "2.2.0",
+  "description": "Offline cyber security agent for your apps and AI coding tools. Open R&D: measured in public, improved every release.",
+  "author": {
+    "name": "Daan van der Zwaag",
+    "url": "https://github.com/danoszz"
+  },
+  "homepage": "https://penthera.org",
+  "repository": "https://github.com/danoszz/penthera",
+  "license": "MIT",
+  "keywords": [
+    "security",
+    "scanner",
+    "pentest",
+    "owasp",
+    "sarif",
+    "secrets",
+    "cli",
+    "vibecoding",
+    "supply-chain",
+    "mcp",
+    "ai-security",
+    "nis2"
+  ]
+}
