@@ -41,21 +41,30 @@ export function chooseTarget(commits, latest) {
 
 const git = (...args) => execFileSync("git", args, { encoding: "utf-8", stdio: ["ignore", "pipe", "pipe"] }).trim();
 
-function main() {
-  const dry = process.argv.includes("--dry-run");
-  const latest = execFileSync("npm", ["view", "penthera", "version"], { encoding: "utf-8" }).trim();
-  const shas = git("rev-list", `--max-count=${MAX_COMMITS}`, "origin/main").split("\n").filter(Boolean);
-  // Newest first; stop at the first commit that pins latest.
+/**
+ * Commits on `ref`'s first-parent line, newest first, with their plugin pin,
+ * stopping at the first that pins `latest`. First parent only: a merge's side
+ * branch holds a contributor's intermediate commits, which nobody reviewed as
+ * a snapshot, so a plugin that a PR added and then removed is never a candidate.
+ */
+export function candidates(ref, latest, run = git) {
+  const shas = run("rev-list", "--first-parent", `--max-count=${MAX_COMMITS}`, ref).split("\n").filter(Boolean);
   const commits = [];
   for (const sha of shas) {
     let text = "";
-    try { text = git("show", `${sha}:${MCP}`); } catch { /* no plugin folder in this commit */ }
+    try { text = run("show", `${sha}:${MCP}`); } catch { /* no plugin folder in this commit */ }
     commits.push({ sha, pin: pinOf(text) });
     if (commits.at(-1).pin === latest) break;
   }
-  const target = chooseTarget(commits, latest);
+  return commits;
+}
+
+function main() {
+  const dry = process.argv.includes("--dry-run");
+  const latest = execFileSync("npm", ["view", "penthera", "version"], { encoding: "utf-8" }).trim();
+  const target = chooseTarget(candidates("origin/main", latest), latest);
   if (!target) {
-    console.error(`No commit in the last ${MAX_COMMITS} on main pins penthera@${latest}; ${BRANCH} stays where it is.`);
+    console.error(`No commit in the last ${MAX_COMMITS} on main's first-parent line pins penthera@${latest}; ${BRANCH} stays where it is.`);
     process.exit(1);
   }
   let current = null;
