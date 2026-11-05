@@ -7,7 +7,7 @@
  *   ids()                -> every stored configurationId (for the sweep)
  *
  * A record is exactly { configurationId, ownerId, ciphertext, iv, tag,
- * keyVersion, createdAt, sessionGen }. put() refuses anything else, so no other field can
+ * keyVersion, createdAt, sessionNonce }. put() refuses anything else, so no other field can
  * reach the store by accident.
  *
  * Two implementations: memoryStore() for tests, and redisStore() for
@@ -16,14 +16,15 @@
  * KV_REST_API_URL and KV_REST_API_TOKEN on the project. README.md says why
  * this store was picked.
  */
-const FIELDS = ["configurationId", "ownerId", "ciphertext", "iv", "tag", "keyVersion", "createdAt", "sessionGen"];
+const FIELDS = ["configurationId", "ownerId", "ciphertext", "iv", "tag", "keyVersion", "createdAt", "sessionNonce"];
 const PREFIX = "pv:cfg:";
 
 export function assertRecord(record) {
   const keys = Object.keys(record ?? {}).sort();
   if (keys.join() !== [...FIELDS].sort().join()) throw new Error("store: a record has exactly the documented fields");
   if (!/^icfg_[A-Za-z0-9]{1,64}$/.test(record.configurationId)) throw new Error("store: bad configurationId");
-  if (!Number.isSafeInteger(record.sessionGen) || record.sessionGen < 1) throw new Error("store: bad sessionGen");
+  // At least 128 random bits, base64url (lib/app.mjs makes 192).
+  if (!/^[A-Za-z0-9_-]{22,128}$/.test(record.sessionNonce ?? "")) throw new Error("store: bad sessionNonce");
   return record;
 }
 

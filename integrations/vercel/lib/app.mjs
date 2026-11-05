@@ -68,17 +68,18 @@ export function createApp({ env = process.env, store, fetch: fetchImpl = globalT
 
   /**
    * The install session from the cookie, with its record, or null. The cookie is bound to the
-   * record's session generation when it was issued: a counter that only goes up, on every install
-   * and every verified transfer, whether or not the owner changed. So a transfer (also A to B to A,
-   * or one that names no new owner) or a reinstall ends every older session: the new owner needs a
-   * fresh install to get one. The owner is checked too, as a second guard.
+   * record's session nonce when it was issued: 192 random bits, made fresh on every install and
+   * every verified transfer, whether or not the owner changed. So a transfer (also A to B to A, or
+   * one that names no new owner), a reinstall, or an uninstall and reinstall of the same id ends
+   * every older session: a deleted record never comes back with a matching nonce. The new owner
+   * needs a fresh install to get a session. The owner is checked too, as a second guard.
    */
   async function session(request, c) {
     const raw = readCookie(request, SESSION);
     const data = raw && unsignValue(raw, cookieKey(c.keys), now());
-    if (!data || !CONFIG_ID.test(data.c) || typeof data.o !== "string" || !Number.isSafeInteger(data.s)) return null;
+    if (!data || !CONFIG_ID.test(data.c) || typeof data.o !== "string" || typeof data.s !== "string") return null;
     const record = await store.get(data.c);
-    if (!record || !safeEqual(record.ownerId, data.o) || record.sessionGen !== data.s) return null;
+    if (!record || !safeEqual(record.ownerId, data.o) || !safeEqual(record.sessionNonce, data.s)) return null;
     return { raw, configurationId: data.c, next: data.n ?? null, record };
   }
 
@@ -163,9 +164,9 @@ export function createApp({ env = process.env, store, fetch: fetchImpl = globalT
     }
     // createdAt is the latest install, so a replayed older uninstall event cannot delete it.
     const createdAt = new Date(now()).toISOString();
-    const sessionGen = (previous?.sessionGen ?? 0) + 1;
-    await store.put({ configurationId, ownerId, ...sealToken(token.accessToken, configurationId, c.keys), createdAt, sessionGen });
-    const value = signValue({ c: configurationId, o: ownerId, s: sessionGen, n: next, e: now() + SESSION_MS }, cookieKey(c.keys));
+    const sessionNonce = randomToken(24);
+    await store.put({ configurationId, ownerId, ...sealToken(token.accessToken, configurationId, c.keys), createdAt, sessionNonce });
+    const value = signValue({ c: configurationId, o: ownerId, s: sessionNonce, n: next, e: now() + SESSION_MS }, cookieKey(c.keys));
     cookies.push(setCookie(SESSION, value, SESSION_MS / 1000));
     return redirect("/setup", { cookies });
   }
@@ -343,7 +344,7 @@ ${FOOTER}`);
         ...record,
         ownerId: newOwner(event.payload) ?? record.ownerId,
         createdAt: t !== null && t > Date.parse(record.createdAt) ? new Date(t).toISOString() : record.createdAt,
-        sessionGen: record.sessionGen + 1,
+        sessionNonce: randomToken(24),
       });
       return json(200, { ok: true });
     }
