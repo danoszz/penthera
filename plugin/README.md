@@ -28,9 +28,8 @@ from npm; after that it runs offline.
 
 ## What it may do without asking
 
-The skill pre-approves only Penthera's own commands (`penthera`, `npx -y penthera`,
-`npx --no-install penthera`) and reading files. Claude asks you before it edits a
-file or runs any other command.
+The skill pre-approves only reading files. Claude asks you before it runs any
+command, Penthera's own included, and before it edits a file.
 
 ## Data
 

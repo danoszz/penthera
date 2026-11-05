@@ -46,12 +46,10 @@ describe("plugin/ folder", () => {
     expect(png.length).toBeLessThan(2 * 1024 * 1024);
   });
 
-  it("pre-approves only Penthera's own commands", () => {
-    const line = readFileSync("skills/penthera/SKILL.md", "utf-8").match(/^allowed-tools:\s*"([^"]*)"/m)?.[1] ?? "";
-    const entries = line.match(/\S+\([^)]*\)|\S+/g) ?? [];
-    for (const e of entries) {
-      expect(["Write", "Edit", "Bash"], e).not.toContain(e);
-      if (e.startsWith("Bash(")) expect(e, e).toMatch(/^Bash\((penthera|npx -y penthera@\d+\.\d+\.\d+|npx --no-install penthera):\*\)$/);
+  it("pre-approves no shell commands, only reading (the directory holds broad Bash entries)", () => {
+    for (const f of ["skills/penthera/SKILL.md", join(PLUGIN, "skills/penthera/SKILL.md")]) {
+      const line = readFileSync(f, "utf-8").match(/^allowed-tools:\s*"([^"]*)"/m)?.[1];
+      expect(line, f).toBe("Read");
     }
   });
 
