@@ -4,6 +4,139 @@ All notable changes to Penthera are documented here. Versioning follows [SemVer]
 
 ## [Unreleased]
 
+## [2.3.0] - 2026-11-05
+
+### Security
+
+- **The pre-commit hook ignores what the repo sets in its environment.** A repo can shape that environment
+  through direnv or a project `.npmrc`. The installed hook now drops `NODE_OPTIONS` and `NODE_PATH`, which could
+  load the repo's code into the check and let a staged secret through. A global `penthera` runs only when its
+  real path is outside the repo. The `npx` fallback runs from `/`, without the repo's `npm_config_*` settings,
+  with npm's own registry and your account's own cache. The lockfile check always reads your account's npm
+  cache too, so a repo's `cache=` can't hide the packages it adds. `penthera hook run` takes `--repo <dir>`.
+  Reinstall the hook with `penthera hook install` to get the new script.
+- **The live check refuses IPv6 forms of internal addresses.** `new URL()` writes `[::ffff:127.0.0.1]` as
+  `[::ffff:7f00:1]`, and the guard only knew the dotted form, so penthera.org's live check could be pointed at
+  loopback, link-local (169.254.169.254) or private addresses written that way. We found it ourselves and proved it on loopback only, with no
+  report of use. The guard now reads every IPv6 address as numbers and checks the IPv4 address inside mapped,
+  compatible, NAT64, 6to4 and Teredo forms; it refuses local-use NAT64 and the discard prefix, and treats
+  nothing outside 2000::/3 as public. The CLI counts these forms as local, as their IPv4 forms are. Its
+  loopback-only and named-host guards already refused them, and tests now hold that.
+- **Live check limits.** The per-site limit counts a registrable domain once, while each app on a shared host
+  such as `vercel.app` counts apart. An IPv6 visitor counts by their /64. A full limit store drops its oldest
+  entries instead of every limit at once. The function stops after 15 seconds instead of 60.
+- **minimatch 11.0.4 for eslint.** An override lifts minimatch from 10.2.6 to 11.0.4 for the lint tools, which
+  fixes GHSA-g3hv-75wg-m249, a denial of service. eslint 10 still asks for minimatch 10, so no upstream release
+  fixes it yet. It's a dev dependency: the published package has no runtime dependencies and doesn't include it.
+- **`yaml` is pinned to an exact version.** A new `yaml` release no longer reaches your install until we have checked it and shipped it.
+- **Penthera checks every pull request from a fork before CI runs.** A new workflow reads the changed files as data, without installing or running anything from the pull request, runs Penthera on them, and labels the PR `standard-paths` or `needs-maintainer-review` (for changes to CI, install or agent files). A maintainer approves the full CI run after reading its comment. CONTRIBUTING.md describes it.
+- **No runtime dependencies.** The `yaml` parser that reads skill frontmatter and Nuclei templates now ships
+  inside the package: version 2.9.1, unchanged, with its ISC license and the npm tarball's sha512 in
+  `lib/vendor/yaml`. A test fails if a byte of it changes. Installing Penthera fetches nothing else, and the
+  GitHub Action's `mode: agents` no longer runs `npm ci`. The package grows by about 74 KB packed, and a full
+  install shrinks by about 38 KB, because yaml's own tarball is no longer fetched.
+
+### Detection
+
+- **A repo scan checks your GitHub Actions workflows.** Three rules from GitHub's guidance on securing workflows: `gha-pwn-request` (a `pull_request_target`, `workflow_run`, `issue_comment` or `issues` workflow checks out or fetches the pull request's code), `gha-script-injection` (text an outsider writes reaches a `run:` script or an `actions/github-script` script through `${{ }}`), and `gha-unpinned-action` (an action used by a movable tag instead of a commit SHA). Each workflow is parsed as YAML, so every spelling that means the same thing gives the same finding. A workflow that is over 256 KB or isn't valid YAML is reported as `gha-workflow-unchecked` instead of passed unread. It runs nothing and points to the line. Penthera's own workflows pass.
+- **Fewer rows for one problem, and fewer status lines as findings.** Tuned on five starter apps, kept out of
+  every benchmark. On those apps the repo scan went from 7 findings, 4 of them noise, to 1.
+  - A runtime pin on an end-of-life line gives one end-of-life finding that lists the advisories the line won't
+    get a fix for, with their CVEs, where it gave one HIGH row per advisory as well. When the pin is in several
+    files, the finding points at the Dockerfile.
+  - Route analysis reads Next.js route handlers anywhere under `app/` or `src/app/`, not only under `app/api`,
+    and a Worker's `export default { fetch }` entry. Handlers written as `export const PUT = …` or
+    `export { handler as GET }` get their methods.
+  - "No API routes directory found" and "Found N API routes" are no longer findings. Coverage says how many
+    routes were read, or that a client-only app has no server routes, where it said "not run".
+  - The next-step line says the fix plan also checks cookie flags, CORS and rate limits, where it said "It".
+- **A byte-order mark no longer hides a config or a lock file.** Agent configs,
+  `package.json`, lock files and `penthera.lock` that start with a BOM are now
+  read, as VS Code, npm and Node tools read them.
+- **A key written with `\u` escapes is found.** The secret scan also reads the
+  text with printable `\uXXXX` escapes decoded, so `"sk_live_…"` and a
+  service-account file with escaped keys are caught.
+- **`fetch(url).then(r => r.text()).then(eval)` is a remote eval.** Passing
+  `eval` as a callback no longer slips past `agents/js-eval-remote`.
+- **The eval and exec check says when it stops.** It reads at most 5,000 code
+  files; past that it now adds an info note, and Coverage lists the unread
+  files instead of counting them as examined.
+- **A rule gate in the tests.** Every rule is read from the code and must be
+  fired by a fixture, high and critical findings must reach the exit code, and
+  readers that skip input must leave a trace. Today's gaps are listed with a
+  reason and can only shrink. Same-meaning tests rewrite each bad fixture
+  (CRLF, BOM, key order, escapes, comments, long lines) and expect the same
+  findings.
+
+### Changed
+
+- **A repo scan opens with its verdict.** In a terminal, `penthera --repo .` starts with one screen: what it
+  checked and in how many files, the top three things to act on with where and how to fix each, what it didn't
+  check, and one next step, the same as the agent brief's. When nothing is found it says "Nothing found in what
+  Penthera checked", where it said "Clean scan, no issues found". Exit codes don't change.
+- **The Markdown report shows each finding's id.** The findings tables in `reports/scan.md` have an Id
+  column with the `fid` that `penthera memory suppress` takes, so a reader of the report can suppress a
+  finding without opening the JSON (#232).
+- **An exposed OpenAPI specification has its own rule, `openapi-exposed`.** The finding used to carry only its category, so `explain_finding` gave the general advice for exposed files and the brief could not name it. `explain_finding` with `openapi-exposed` now says how to stop serving the spec, and the rule shows up in the brief, the MCP results and SARIF. In GitHub code scanning the finding moves from the `exposure` rule to `openapi-exposed`.
+- **Two Penthera checks per commit in this repository.** The Penthera GitHub App sums up every CI job as **Penthera: security** and **Penthera: safe build**, each with a table of what ran. Pull requests run the install matrix on Ubuntu only, and the full matrix runs on `main`. A CODEOWNERS file asks for the maintainer's review on CI, install and agent files. The PR triage comment now comes from the app.
+- **This repository pins its own skill and MCP server in `penthera.lock`.** `penthera agents .` on the repo no longer reports a missing lock, and a later change to `skills/penthera/` or the root `.mcp.json` shows up until it is re-pinned. CONTRIBUTING says when to re-pin, including in the release steps.
+- **The pre-CI check on outside pull requests puts its verdict up front.** The comment now shows Penthera's one-line verdict without opening anything, and the full brief as plain text, without the notes about logins and server routes that never apply to a pull request's few changed files. Text quoted from a pull request's files stays in a code block.
+- **Vercel builds the site only from `main`.** Pull requests, including ones from forks, no longer start a Vercel deployment, so a fork no longer shows a red "Authorization required to deploy" check and fork code never builds on Vercel.
+
+### Fixed
+
+- **A key in a test file no longer lands in Act on as a confirmed high.** The brief now moves findings in `tests/`, `__tests__/` and files named `*.test.*` or `*.spec.*` to Likely noise, with the reason "in test files". The finding is still listed and counted, and the exit code does not change. A fixtures folder keeps its own reason. The new paths are named in the Likely noise section of `docs/commands/brief.md`.
+- **`penthera init` pins the current release.** The workflow it writes pins the Action to v2.2.0's commit, and
+  the AI tooling workflow runs `npx penthera@<the version you ran>`. It pinned v2.1.2, whose `deps` can stall on
+  big bundles under Node 22.
+- **The fix window shows what you approve.** A context line is hidden only when it holds a value that could be a
+  secret, not because it quotes a sentence or mentions `password`. A changed line keeps its error message,
+  where the secrets recipe's own `throw new Error("Set STRIPE_SECRET …")` used to show as `"***"`.
+- **The install matrix tests a real upgrade.** Its upgrade job installs the previous minor release (2.1.2 for
+  2.2.x, from `scripts/ci/upgrade-from.mjs`) and names it. It read "from 1.9.0" while it reinstalled 2.2.0.
+- **Dependabot's pin bumps can merge.** The provenance and docs checks pass a pull request only when GitHub
+  verifies every commit as Dependabot's and it touches nothing but dependency pins. Everything else stays
+  strict.
+- **A `penthera.lock` pinned on Windows now matches on Linux and macOS, and the other way round.** On Windows, `penthera agents --pin` wrote keys such as `skill:.claude\skills\demo`, so a lock committed from one OS reported every skill and MCP server outside the repo root as new on the other. Keys and report paths inside the repo now always use `/`. A lock pinned on Windows before still works: its pins match the new keys, so a changed skill still shows as changed (high), not new. The next `penthera agents --pin` writes the new keys.
+- **Markdown reports show `-` when scan duration is missing.**\
+- **The Markdown report names the right version.** When no version was passed, the header said "v0.2.0". It now
+  names the installed Penthera version.
+- **The terminal report no longer writes color codes into a pipe or a file.** Only `NO_COLOR` used to turn them off, so `penthera --repo . --verbose > scan.txt` filled the file with escape codes. The report now follows the rest of the CLI: colors only when stdout is a terminal, `NO_COLOR` still turns them off, `FORCE_COLOR=1` keeps them in a pipe and `FORCE_COLOR=0` turns them off in a terminal, for the CLI's other output too.
+- **A Windows clone with the default `core.autocrlf=true` runs again.** Git turned the bundled rule packs into CRLF on checkout, so their SHA-256 sums and signature no longer matched and every command stopped with "Bundled rule pack core failed verification". `.gitattributes` now keeps `lib/rules/` and the rule-pack test fixtures byte for byte. In an existing clone, delete `lib/rules` and `tests/fixtures/rules` and run `git checkout -- lib/rules tests/fixtures/rules`. The npm package was not affected.
+
+### Site
+
+- **Benchmark pages pass Google's Dataset checks.** The source datasets are now marked as the work each benchmark is based on, not as datasets of ours with no description, creator or license, and the benchmarks page lists its four parts in full. Search Console flagged both.
+- **The bottom dock stays readable on every page.** On the paper pages
+  (research, news and posts) the dock could show dark text on a dark plate,
+  with only Install visible. The dock's text now follows its own plate, and
+  paper pages always get the light plate. docs: none, site styling only.
+- **The EU flag is back on penthera.org.** "Evidence for EU rules" returns as
+  its own blue section between trust and the questions, with its disclaimer.
+  docs: none, site page only.
+
+### Docs
+
+- **The E10 line in the README states its limit.** No run logs in, so the 0.71 recall doesn't cover login or access rules. The claim map ties that to a test.
+- **One install line per agent.** The README, `docs/commands/mcp.md` and `docs/commands/skill.md` give a pinned, copyable line for Claude Code, Codex, GitHub Copilot (CLI and VS Code), Gemini CLI, Cursor and Windsurf, and `npx skills add`, each checked against the agent's own docs.
+- **The plugin works in GitHub Copilot CLI and Codex too.** `plugin/` now also carries Agent Plugins 1.0.0 manifests, `plugin.json` and `mcp.json`, beside the Claude Code ones. A test keeps the two sets equal, and the internal audit checks their versions.
+- **The MCP listing calls Penthera a security scanner.** Its description opened with "security agent", a noun
+  the listings no longer use.
+- **The E11b split manifests left the repo.** They're assets of the v2.2.0 release now. `npm run bench:public -- --fetch-split` gets them and checks each against `bench/public/split.sha256`.
+- The action examples pin the v2.2.0 commit, and the upgrade test in the install matrix starts from 2.2.0.
+- **The scan docs say how many requests the quick profile sends.** About 180: 182 against the test
+  server, more on a site whose OpenAPI spec lists more paths. A test fails if the count against the
+  test server grows past the documented number (#235).
+- **The README names the `AI-Assisted:` trailer.** The section on how Penthera is built said AI-written commits
+  carry a co-author trailer; they carry `AI-Assisted:` instead.
+- **The README says who builds Penthera and how it compares.** Two lines under the daily notes link to the
+  maintainer's section in `docs/trust.md` and to "How it fits with other tools".
+- **A Practical Guide to Security for 2027.** Ten steps for small teams that build with coding agents, five for this week and five for the next 30 days. Each step says what to do, the Penthera command if one helps, and its limit. Two steps say plainly that Penthera can't help with them. It's in `docs/security-guide-2027.md`, linked from the README, and on the blog.
+- **The README shows the Socket score.** A badge links to Penthera's page on socket.dev, next to the OpenSSF Scorecard.
+- **A team playbook: how Penthera is built with a team of AI sessions.** `docs/team-playbook.md` describes the lead chat, the role sessions, files as shared memory and the checks that end every loop, with a starter prompt that sets the method up in your own repo, and an optional, opt-in security check for each loop.
+- **A form for wrong findings.** New issues offer "Wrong finding", which asks for the command, the version, the
+  finding's title, rule id and file and line, and says never to paste a real key.
+
 ## [2.2.0] - 2026-11-01
 
 Penthera now says plainly what it read, what it fixed and what is left, on every surface. A run that read nothing never reads as clean.

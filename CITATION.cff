@@ -15,8 +15,8 @@ authors:
 repository-code: "https://github.com/danoszz/penthera"
 url: "https://github.com/danoszz/penthera"
 license: MIT
-version: 2.2.0
-date-released: 2026-11-01
+version: 2.3.0
+date-released: 2026-11-05
 keywords:
   - security
   - vulnerability scanner
