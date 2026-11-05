@@ -3,28 +3,21 @@
   "selfScan": {
     "repo": [
       {
-        "fingerprint": "3c60d75a39b500d2",
-        "severity": "high",
-        "title": "Generic API key assignment in source",
-        "location": "tests/detection-hardening.test.js",
-        "reason": "Deliberate fixture: fake secrets that check the secret scanner tells placeholders from real-looking values (tests/detection-hardening.test.js). Reported since the scanner checks every match, not only the first placeholder. Never a real credential."
-      },
-      {
-        "fingerprint": "380ecd59238f04f6",
+        "fingerprint": "0990e88c8201b2ed",
         "severity": "high",
         "title": "Hardcoded password in source",
         "location": "tests/detection-hardening.test.js",
         "reason": "Deliberate fixture: fake secrets that check the secret scanner tells placeholders from real-looking values (tests/detection-hardening.test.js). Reported since the scanner checks every match, not only the first placeholder. Never a real credential."
       },
       {
-        "fingerprint": "8649b788e4112b44",
+        "fingerprint": "a21b414e9fa822b3",
         "severity": "high",
         "title": "Generic API key assignment in source",
         "location": "tests/fixtures/fix/express/server.js",
         "reason": "Deliberate fixture: a fake hardcoded secret that the secret-to-env fix recipe moves to an environment variable (tests/fix.test.js). Never a real credential."
       },
       {
-        "fingerprint": "c20ca5be7bd83e29",
+        "fingerprint": "75c8106956ddba42",
         "severity": "high",
         "title": "JWT secret assignment in source",
         "location": "tests/fixtures/fix/next/app/api/login/route.ts",
@@ -35,28 +28,21 @@
     "deps": [],
     "hook": [
       {
-        "fingerprint": "3c60d75a39b500d2",
-        "severity": "high",
-        "title": "Generic API key assignment in source",
-        "location": "tests/detection-hardening.test.js",
-        "reason": "Deliberate fixture: fake secrets that check the secret scanner tells placeholders from real-looking values (tests/detection-hardening.test.js). Reported since the scanner checks every match, not only the first placeholder. Never a real credential."
-      },
-      {
-        "fingerprint": "380ecd59238f04f6",
+        "fingerprint": "0990e88c8201b2ed",
         "severity": "high",
         "title": "Hardcoded password in source",
         "location": "tests/detection-hardening.test.js",
         "reason": "Deliberate fixture: fake secrets that check the secret scanner tells placeholders from real-looking values (tests/detection-hardening.test.js). Reported since the scanner checks every match, not only the first placeholder. Never a real credential."
       },
       {
-        "fingerprint": "8649b788e4112b44",
+        "fingerprint": "a21b414e9fa822b3",
         "severity": "high",
         "title": "Generic API key assignment in source",
         "location": "tests/fixtures/fix/express/server.js",
         "reason": "Deliberate fixture: a fake hardcoded secret that the secret-to-env fix recipe moves to an environment variable (tests/fix.test.js). Never a real credential."
       },
       {
-        "fingerprint": "c20ca5be7bd83e29",
+        "fingerprint": "75c8106956ddba42",
         "severity": "high",
         "title": "JWT secret assignment in source",
         "location": "tests/fixtures/fix/next/app/api/login/route.ts",
