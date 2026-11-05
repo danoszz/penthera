@@ -386,7 +386,7 @@ live once a maintainer approves it with 2FA. **Do not run `npm publish` locally.
    Approve, or `npm stage list penthera` and `npm stage approve <stage-id>`.
    Check the file list and provenance before you approve.
    Once npm serves it as `latest`, two places follow:
-   - **Anthropic's plugin directory follows the `plugin-live` branch.** The
+   - **Anthropic's plugin directory follows the `plugin-claude-live` branch.** The
      `Plugin live` workflow moves that branch to the newest commit on `main`
      whose `plugin/.mcp.json` pins the version npm serves, within the hour or
      on the next push to `main`, and only forward. Nothing to do by hand.

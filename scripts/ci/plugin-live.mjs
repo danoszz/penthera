@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Moves the `plugin-live` branch, which Anthropic's plugin directory follows,
+ * Moves the `plugin-claude-live` branch, which Anthropic's plugin directory follows,
  * to the newest commit on main whose plugin pins the version npm serves as
  * `latest`. A release PR bumps the pin before the maintainer approves the
  * version on npm, so main can point at a version that doesn't exist yet; this
@@ -12,7 +12,7 @@
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-const BRANCH = "plugin-live";
+const BRANCH = "plugin-claude-live";
 const MCP = "plugin/.mcp.json";
 // How far back on main to look for a commit with the published pin.
 const MAX_COMMITS = 500;

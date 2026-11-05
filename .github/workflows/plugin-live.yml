@@ -1,9 +1,9 @@
-# Moves `plugin-live`, the branch Anthropic's plugin directory follows, to the
+# Moves `plugin-claude-live`, the branch Anthropic's plugin directory follows, to the
 # newest commit on main whose plugin pins the version npm serves as `latest`.
 #
 # A release PR bumps the plugin's pin before the maintainer approves the
 # version on npm, so main can briefly point at a version that isn't published.
-# plugin-live never does: it moves only once npm has the version, and only
+# plugin-claude-live never does: it moves only once npm has the version, and only
 # forward. Runs our own script from main; no pull request code runs here.
 name: Plugin live
 
@@ -34,5 +34,5 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
-      - name: Move plugin-live to the published plugin
+      - name: Move plugin-claude-live to the published plugin
         run: node scripts/ci/plugin-live.mjs
