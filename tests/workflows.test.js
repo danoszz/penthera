@@ -396,6 +396,14 @@ describe("crafted workflows can't make the check slow", () => {
     expect(timed(run(('git -c "x ').repeat(20000)))).toBeLessThan(2000);
   });
 
+  it("keeps a shell variable inside a git option value, and one coordinate system under Unicode (Vercel, 5 Nov)", () => {
+    const run = (body, env = "") => `on: pull_request_target\n${env}jobs:\n  a:\n    steps:\n      - run: |\n${body.split("\n").map((x) => "          " + x).join("\n")}\n`;
+    const sha = "env:\n  SHA: ${{ github.event.pull_request.head.sha }}\n";
+    expect(ids(run('git -C ./$DIR fetch origin "$SHA"\ngit checkout FETCH_HEAD && npm ci', sha))).toEqual(["gha-pwn-request:high"]);
+    expect(ids(run('git -c core.x=$X fetch origin "$SHA"', sha))).toEqual(["gha-pwn-request:high"]);
+    expect(ids(run(`# ${"\u0130".repeat(5000)}\ngit fetch origin \${{ github.event.pull_request.head.sha }}\ngit checkout FETCH_HEAD`))).toEqual(["gha-pwn-request:high"]);
+  });
+
   it("finds every expression's end in one pass, even with unclosed quotes", () => {
     expect(timed(I + "      - run: echo " + "${{ ' }} ".repeat(25000) + "\n")).toBeLessThan(2000);
     expect(exprSpans("a ${{ 'x}}' }} b ${{ c")).toEqual([{ start: 2, close: 12, open: false }, { start: 17, close: 22, open: true }]);
