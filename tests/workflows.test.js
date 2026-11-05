@@ -401,6 +401,10 @@ describe("crafted workflows can't make the check slow", () => {
     const sha = "env:\n  SHA: ${{ github.event.pull_request.head.sha }}\n";
     expect(ids(run('git -C ./$DIR fetch origin "$SHA"\ngit checkout FETCH_HEAD && npm ci', sha))).toEqual(["gha-pwn-request:high"]);
     expect(ids(run('git -c core.x=$X fetch origin "$SHA"', sha))).toEqual(["gha-pwn-request:high"]);
+    const gitVar = "env:\n  GIT: git\n  SHA: ${{ github.event.pull_request.head.sha }}\n";
+    for (const cmd of ["$GIT", "${GIT}"]) {
+      expect(ids(run(`${cmd} -C . fetch origin "$SHA"\ngit checkout FETCH_HEAD && npm ci`, gitVar)), cmd).toEqual(["gha-pwn-request:high"]);
+    }
     expect(ids(run(`# ${"\u0130".repeat(5000)}\ngit fetch origin \${{ github.event.pull_request.head.sha }}\ngit checkout FETCH_HEAD`))).toEqual(["gha-pwn-request:high"]);
   });
 
