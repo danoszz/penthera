@@ -156,12 +156,12 @@ describe("C03: line numbers stay linear", () => {
   // An absolute budget failed on CI's Node 22, whose regex engine is ~50x
   // slower here than Node 24+ while still linear (3 to 6.6 s, 5 Nov 2026).
   it("scanSecrets on 2 MB of newlines and 200 keys", () => {
-    const one = repo({ "config.js": "\n".repeat(1024 * 1024) + keys + "\n" });
+    const one = repo({ "config.js": "\n".repeat(1024 * 1024) + keys + "\n" }); // 1 MB against 2 MB
     const two = repo({ "config.js": "\n".repeat(2 * 1024 * 1024) + keys + "\n" });
     try {
       let f;
-      const t1 = cpuMs(() => scanSecrets(one), { runs: 3 });
-      const t2 = cpuMs(() => { f = scanSecrets(two); }, { runs: 3 });
+      const t1 = cpuMs(() => scanSecrets(one), { runs: 2 });
+      const t2 = cpuMs(() => { f = scanSecrets(two); }, { runs: 2 });
       expect(f[0].line).toBe(2 * 1024 * 1024 + 1);
       expect(f[0].lines).toHaveLength(200);
       expect(f[0].lines.at(-1)).toBe(2 * 1024 * 1024 + 200);
@@ -171,7 +171,7 @@ describe("C03: line numbers stay linear", () => {
       rmSync(one, { recursive: true, force: true });
       rmSync(two, { recursive: true, force: true });
     }
-  });
+  }, 90_000); // four scans; Node 22 takes 3 to 6 s for each 2 MB one
 
   it("findSecretsInText with a \\u escape (the decoded pass)", () => {
     const body = "\\u0041\n" + "\n".repeat(2 * 1024 * 1024) + keys;
