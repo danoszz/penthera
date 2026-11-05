@@ -53,7 +53,7 @@ describe("B: no tag for a human-chosen password", () => {
   });
 
   it("a password that holds sk- and 20 letters gets no tag, and the report no salt (Fact-checker, 2.3.2)", () => {
-    const pw = ["whi", "sk-MyFavouritePassword2024abc"].join("");
+    const pw = ["whi", "sk", "-MyFavourite", "Password2024abc"].join("");
     const { findings } = scan("config.py", `password = "${pw}"\n`);
     expect(findings.length).toBeGreaterThan(0);
     expect(findings.some((f) => "valueTags" in f)).toBe(false);
