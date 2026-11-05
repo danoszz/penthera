@@ -1,11 +1,11 @@
 {
   "name": "penthera",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "description": "Offline, rule-based security checks for your repo, dependencies, AI agent config and local app. Six read-only MCP tools.",
   "mcpServers": {
     "penthera": {
       "command": "npx",
-      "args": ["-y", "penthera@2.2.0", "mcp"]
+      "args": ["-y", "penthera@2.3.0", "mcp"]
     }
   }
 }

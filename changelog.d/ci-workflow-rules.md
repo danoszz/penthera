@@ -1,3 +1,0 @@
-section: Detection
-
-- **A repo scan checks your GitHub Actions workflows.** Three rules from GitHub's guidance on securing workflows: `gha-pwn-request` (a `pull_request_target`, `workflow_run`, `issue_comment` or `issues` workflow checks out or fetches the pull request's code), `gha-script-injection` (text an outsider writes reaches a `run:` script or an `actions/github-script` script through `${{ }}`), and `gha-unpinned-action` (an action used by a movable tag instead of a commit SHA). Each workflow is parsed as YAML, so every spelling that means the same thing gives the same finding. A workflow that is over 256 KB or isn't valid YAML is reported as `gha-workflow-unchecked` instead of passed unread. It runs nothing and points to the line. Penthera's own workflows pass.

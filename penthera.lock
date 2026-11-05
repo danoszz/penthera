@@ -6,12 +6,12 @@
     "mcp:.mcp.json#penthera": {
       "kind": "mcp",
       "scope": "repo",
-      "sha256": "74bf364b22fd1bb7eb23a830515940be57b202c940fc76281b29a3f5e9691ff8"
+      "sha256": "5b30e074c23a6fc5c1d6c1119483e6d78e75a995e4659a675377283691668493"
     },
     "skill:skills/penthera": {
       "kind": "skill",
       "scope": "repo",
-      "sha256": "fa15d8f27015cd01e9483c04e01092a9b95cc8806e290cfa64dcebcad0ae6632"
+      "sha256": "0c0f29c16929624be53738c4c084aef04404c56f01fa911ab80f1361eb1a85fc"
     }
   }
 }
