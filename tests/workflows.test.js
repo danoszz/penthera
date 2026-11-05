@@ -297,6 +297,19 @@ describe("crafted workflows can't make the check slow", () => {
     expect(timed(I + `      - run: echo \${{ ${"(".repeat(60000)}github.event.issue.title${")".repeat(60000)} }}\n`)).toBeLessThan(2000);
   });
 
+  it("resolves each alias once, however often jobs and steps reuse it (Vercel, 5 Nov)", () => {
+    const L = ["on: pull_request_target", "pad:"];
+    for (let i = 0; i < 25000; i++) L.push(`  - ${i}`);
+    L.push("defs:", "  s: &s {uses: actions/checkout@v4, with: {ref: main}, run: echo hi}");
+    L.push(`  steps: &st [${Array(40).fill("*s").join(", ")}]`, "  job: &j {runs-on: x, steps: *st}", "jobs:");
+    for (let i = 0; i < 40; i++) L.push(`  j${i}: *j`);
+    const text = L.join("\n") + "\n";
+    expect(text.length).toBeLessThan(256 * 1024);
+    let found;
+    expect(cpuMs(() => { found = checkWorkflow(text, "x.yml"); }, { runs: 3 })).toBeLessThan(2000);
+    expect(found.map((f) => `${f.templateId}:${f.severity}`)).toEqual(["gha-unpinned-action:low"]);
+  });
+
   it("checks one very long line in well under a second", () => {
     expect(timed(" ".repeat(250 * 1024) + "run")).toBeLessThan(2000);
     expect(timed(I + "      - run: " + "${{ github.event." + "a.".repeat(100 * 1024) + " }}\n")).toBeLessThan(2000);
