@@ -29,7 +29,7 @@ function refusedFileFinding(e, repoPath) {
   return {
     severity: "info",
     title: `File not read: ${name}`,
-    description: `\`${name}\` was not read because ${e.reason}, so what it holds was not checked. Make it a regular file inside the project.`,
+    description: `\`${name}\` was not read because ${e.reason}, so what it holds was not checked. The scan is incomplete and exits 2. Make it a regular file inside the project.`,
     url: name,
     file: name,
     category: "config",
@@ -127,6 +127,18 @@ export async function scanRepo(repoPath, opts = {}) {
   const ignored = gitIgnored(repoPath);
   // Every return goes through here: the ledger says what was read, including
   // when route analysis found nothing to read.
+  // A refused file (a link out, a device, a FIFO, over the size cap) is an info
+  // finding and makes the run incomplete, so it exits 2 (src/report/exit.js):
+  // a route file too large to read must never pass as clean.
+  const named = new Set();
+  const noteRefused = (e) => {
+    const f = refusedFileFinding(e, repoPath);
+    if (named.has(f.file)) return;
+    named.add(f.file);
+    result.findings.push(f);
+    (result.incomplete ||= []).push({ file: f.file, reason: e.reason || e.message });
+  };
+
   const finish = () => {
     result.coverage = buildCoverage(repoPath, result, { ignored });
     result.duration = Date.now() - startTime;
@@ -148,7 +160,7 @@ export async function scanRepo(repoPath, opts = {}) {
   // Library mode: a publishable package's exported parameters are sources too.
   const library = detectLibrary(repoPath, opts.library);
   result.library = { enabled: library.enabled, reason: library.reason };
-  if (library.refused) result.findings.push(refusedFileFinding(library.refused, repoPath));
+  if (library.refused) noteRefused(library.refused);
   result.findings.push(...scanCodeSinks(repoPath, { library, ignored }));
   result.executedProbes.push("code-sinks");
 
@@ -183,15 +195,11 @@ export async function scanRepo(repoPath, opts = {}) {
     return finish();
   }
 
-  // Files the route scan would have read but refused (a link out, a device, a
-  // FIFO, too large) become info findings, one per file: never a silent pass.
+  // Files the route scan would have read but refused: one info finding per file,
+  // and the run is incomplete (noteRefused). Never a silent pass.
   const refused = [];
-  const named = new Set();
   const reportRefused = () => {
-    for (const e of refused.splice(0)) {
-      const f = refusedFileFinding(e, repoPath);
-      if (!named.has(f.file)) { named.add(f.file); result.findings.push(f); }
-    }
+    for (const e of refused.splice(0)) noteRefused(e);
   };
 
   if (apiRoot) {

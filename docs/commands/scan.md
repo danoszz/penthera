@@ -137,7 +137,7 @@ baseline after the upgrade.
 |------|---------|
 | `0` | No critical or high rule fired. This run does not prove login, access rules or payments are right |
 | `1` | Critical or high findings detected (other tools' too, with `--giants`) |
-| `2` | Scan failed or is incomplete (unreachable target, missing path, bad config, a tool the policy requires did not run, a dependency input `penthera deps` refused to read) |
+| `2` | Scan failed or is incomplete (unreachable target, missing path, bad config, a tool the policy requires did not run, a file the scan had to read but refused: a route or server file over 5 MiB, a dependency input, agent config) |
 
 A firewall that refuses the scan isn't a failed scan. The verdict is `Site not read`,
 with no grade, and the exit code follows the findings Penthera could still make, such
