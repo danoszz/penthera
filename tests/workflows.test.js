@@ -321,6 +321,17 @@ describe("crafted workflows can't make the check slow", () => {
     expect(found.map((f) => `${f.templateId}:${f.severity}`)).toEqual(["gha-unpinned-action:low"]);
   });
 
+  it("reads pull/<ref>/head in one pass, however many unclosed pull/${{ a line has (Vercel, 5 Nov)", () => {
+    const run = (line) => `on: pull_request_target\njobs:\n  a:\n    steps:\n      - run: ${line}\n`;
+    expect(timed(run("git fetch " + "pull/${{ ".repeat(25000)))).toBeLessThan(2000);
+    expect(timed(run("git fetch " + "pull/x".repeat(40000)))).toBeLessThan(2000);
+    expect(ids(run("git fetch origin pull/123/head:pr && git checkout pr"))).toEqual(["gha-pwn-request:high"]);
+    expect(ids(run("git fetch origin pull/${{ github.event.number }}/merge"))).toEqual(["gha-pwn-request:high"]);
+    expect(ids(run("git fetch origin pull/${{ x }} pull/${{ github.event.number }}/head"))).toEqual(["gha-pwn-request:high"]);
+    expect(ids(run("git log --grep pull/123/headline"))).toEqual([]);
+    expect(ids(run("git fetch origin mypull/123/head"))).toEqual([]);
+  });
+
   it("checks one very long line in well under a second", () => {
     expect(timed(" ".repeat(250 * 1024) + "run")).toBeLessThan(2000);
     expect(timed(I + "      - run: " + "${{ github.event." + "a.".repeat(100 * 1024) + " }}\n")).toBeLessThan(2000);
