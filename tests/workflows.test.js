@@ -347,6 +347,19 @@ describe("crafted workflows can't make the check slow", () => {
     expect(ids(run("echo pull/1/head"))).toEqual([]);
   });
 
+  it("reads each script line's pull/ once, with many git lines and alias reuse (Vercel, 5 Nov)", () => {
+    const body = "git status\n".repeat(11000) + "echo pull/1/head\n";
+    const one = `on: pull_request_target\njobs:\n  a:\n    steps:\n      - run: |\n${body.split("\n").map((x) => "          " + x).join("\n")}\n`;
+    expect(one.length).toBeLessThan(256 * 1024);
+    expect(timed(one)).toBeLessThan(2000);
+    // Near-matches defeat the fast string search; aliases make 90 jobs reuse the
+    // script. Over 2 minutes on the code before this fix.
+    const near = ("git pullpullpullpullpullpull\n").repeat(7000).split("\n").map((x) => "      " + x).join("\n");
+    const reused = `on: pull_request_target\ndefs:\n  s: &s\n    run: |\n${near}\njobs:\n${Array.from({ length: 90 }, (_, i) => `  j${i}:\n    steps: [*s]\n`).join("")}`;
+    expect(reused.length).toBeLessThan(256 * 1024);
+    expect(timed(reused)).toBeLessThan(2000);
+  });
+
   it("finds every expression's end in one pass, even with unclosed quotes", () => {
     expect(timed(I + "      - run: echo " + "${{ ' }} ".repeat(25000) + "\n")).toBeLessThan(2000);
     expect(exprSpans("a ${{ 'x}}' }} b ${{ c")).toEqual([{ start: 2, close: 12, open: false }, { start: 17, close: 22, open: true }]);
