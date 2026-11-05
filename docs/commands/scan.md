@@ -13,7 +13,7 @@ Black-box scans of a running app (localhost, preview, or staging) and white-box 
 | Mode | Command | Coverage |
 |------|---------|----------|
 | **URL scan** | `penthera https://example.com` | TLS, fingerprinting, endpoint discovery, templates, CORS, cookies, JS CVEs, param discovery, OpenAPI/FastAPI probes, security headers, auth hardening |
-| **Repo scan** | `penthera --repo ./my-app` | API route discovery (Next.js, Express, Hono, Fastify), trust-boundary mapping, hardcoded-secret scanning (including Anthropic, OpenAI, Gemini, Groq, Hugging Face and other AI provider keys) |
+| **Repo scan** | `penthera --repo ./my-app` | API route discovery (Next.js, Express, Hono, Fastify), trust-boundary mapping, hardcoded-secret scanning (including Anthropic, OpenAI, Gemini, Groq, Hugging Face and other AI provider keys), and your GitHub Actions workflows ([below](#github-actions-workflows)) |
 | **Combined** | `penthera https://staging.app --repo .` | Black-box and white-box in one run |
 | **Interactive** | `penthera` *(no args)* | Setup wizard: detects the project, runs the offline checks, offers the hook and workflow ([init.md](init.md)) |
 | **Machine audit** | `penthera --machine` | macOS checks (keyloggers, persistence, rootkits) |
@@ -149,6 +149,21 @@ routes, for example `--deep reached 3 of 13 routes in your code.`
 | Audience report | `--audience developer\|owner\|auditor\|agent` | The same scan written for a developer, an owner, an auditor or an AI assistant ([docs/evidence.md](../evidence.md#audience-reports), [brief.md](brief.md)) |
 | Your template | `--report-template file.md` | Your own Markdown with `{{summary.critical}}`, `{{#each findings}}`, `{{#if x}}`; no code runs |
 | **Evidence bundle** | `--evidence <dir> [--sign-key <ssh-key>]` | All reports plus `manifest.json` with SHA-256s, optionally SSH-signed. Auditors check it with `penthera evidence verify <dir> --allowed-signers <file>` ([docs/evidence.md](../evidence.md)) |
+
+### GitHub Actions workflows
+
+A `--repo` scan reads the workflows GitHub runs, in `.github/workflows/`. It parses each one as YAML and runs nothing. Three rules come from GitHub's own guidance on securing workflows, and a fourth reports a workflow it can't read:
+
+| Rule | Severity | What it means |
+|------|----------|---------------|
+| `gha-pwn-request` | high | A `pull_request_target`, `workflow_run`, `issue_comment` or `issues` workflow checks out the pull request's code (its head, merge commit or fork), or fetches it in a script (`gh pr checkout`, `refs/pull/`). That code then runs with your repository's token and secrets. Medium when an `if:` that every path must pass limits it to pull requests from your own repository. |
+| `gha-script-injection` | high | Text an outsider writes (a PR title, an issue body, a branch name) goes into a `run:` script or an `actions/github-script` `script:` through `${{ }}`, where it becomes code. Pass it through `env:` instead. |
+| `gha-unpinned-action` | medium (low for `actions/*`, `github/*`) | An action or reusable workflow is used by a tag or branch its owner can move. Pin the full commit SHA. |
+| `gha-workflow-unchecked` | high | A workflow is over 256 KB, or isn't valid YAML (duplicate keys included). Penthera reports it instead of passing it unread. |
+
+Each finding points to the file and line. `explain_finding` knows all four ids. Every spelling YAML allows means the same thing here: quoted keys, escapes, block scalars, flow style, anchors. Expressions are compared without case, with `['x']` read as `.x`.
+
+**Limits.** It doesn't follow reusable workflows or composite actions into their own files, and it doesn't trace a value through `env:` or a step output into a script. A clean result means none of these patterns was found in what it read. It doesn't prove the workflow is safe.
 
 ### Coverage: what a repo scan read
 
