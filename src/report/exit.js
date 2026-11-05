@@ -11,13 +11,15 @@ const MAX_NAMED = 3;
 export const isSevere = (f) => f.severity === "critical" || f.severity === "high";
 
 /**
- * 2: a tool the policy requires did not run. 1: a critical or high finding,
+ * 2: the scan is incomplete: a tool the policy requires did not run, or an
+ * input it had to read was refused (`incomplete`, from deps: a lockfile over
+ * the size cap, a requirements -r include that is a device). 1: a critical or high finding,
  * wherever it sits, or other tools' unless the policy says giants.failOn: never.
  * A bucket says how likely a finding is to matter; it does not pass a run, so a
  * live-format key in a fixture still fails.
  */
 export function exitCodeOf(result) {
-  if (result.giants?.requiredNotRun?.length) return 2;
+  if (result.giants?.requiredNotRun?.length || result.incomplete?.length) return 2;
   return (result.findings || []).some(isSevere) || giantsGate(result) ? 1 : 0;
 }
 
@@ -43,7 +45,11 @@ export function exitReason(results) {
   if (code === 0) return null;
   if (code === 2) {
     const tools = [...new Set(list.flatMap((r) => r.giants?.requiredNotRun || []))].map((t) => cleanText(t, 60));
-    return `The CLI exits 2 on this: the policy requires ${tools.join(", ")}, which did not run.`;
+    const files = [...new Set(list.flatMap((r) => (r.incomplete || []).map((x) => x.file)))].map((f) => cleanText(f, 120));
+    const parts = [];
+    if (tools.length) parts.push(`the policy requires ${tools.join(", ")}, which did not run`);
+    if (files.length) parts.push(`the scan is incomplete, an input it had to check was not read: ${files.slice(0, MAX_NAMED).join(", ")}${files.length > MAX_NAMED ? ` and ${files.length - MAX_NAMED} more` : ""}`);
+    return `The CLI exits 2 on this: ${parts.join("; ")}.`;
   }
   const own = list.flatMap((r) => r.findings || []).filter(isSevere).length;
   const others = list.flatMap((r) => (giantsGate(r) ? r.giants.findings.filter(isSevere) : []));

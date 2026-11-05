@@ -157,7 +157,8 @@ export const TOOLS = [
       return buildResult({
         tool: "check_dependencies", target: display, findings: stampProvenance(raw.findings, raw.timestamp), limits: DEPS_LIMITS, maxFindings: args.max_findings,
         extra: { ecosystem: d.ecosystem || null, lockfile: d.lockfile || null, packages: d.total ?? null, scanned: d.scanned ?? null, capabilities: d.capabilityCounts || {} },
-        scan: { mode: "deps" },
+        // incomplete: a refused input; the brief then exits 2 and lists it as not checked.
+        scan: { mode: "deps", ...(raw.incomplete ? { incomplete: raw.incomplete } : {}) },
       });
     },
   },

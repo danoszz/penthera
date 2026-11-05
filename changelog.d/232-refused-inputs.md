@@ -1,0 +1,3 @@
+section: Security
+
+- **A dependency file Penthera can't read fails `penthera deps` with exit 2, and the rest is still checked.** A lockfile or requirements file that is a FIFO, a device, a link out of the project or over the 64 MiB cap is not read. It is an info finding, `File not read: <file>`, the other inputs are still scanned, and the run is incomplete: it exits 2, and the brief says why. A refused `-r` include (`-r /dev/null`, say) skips only the include, so the other pins in that file are still checked. An unreadable input never passes CI as an empty tree. `penthera install` stops when it can't read the proposed lockfile. Vercel Security Review found two ways an earlier 2.3.2 build exited 0 here.
