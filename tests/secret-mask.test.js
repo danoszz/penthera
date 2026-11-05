@@ -4,7 +4,8 @@
  * show a short secret whole: DB_PASSWORD=Xk9q used to become DB_P…Xk9q.
  */
 import { describe, it, expect } from "vitest";
-import { maskMatch, findSecretsInText } from "../lib/whitebox/secrets.js";
+import { maskMatch, maskRaw, findSecretsInText } from "../lib/whitebox/secrets.js";
+import { maskSecretsIn } from "../lib/giants/finding.js";
 
 describe("maskMatch", () => {
   it("keeps an assignment's name and masks its value", () => {
@@ -27,5 +28,19 @@ describe("maskMatch", () => {
     const pw = "Xk9qZ";
     const hits = findSecretsInText(`DB_PASSWORD=${pw}\n`, { path: ".env" });
     for (const h of hits) expect(maskMatch(h.match)).not.toContain(pw.slice(-4));
+  });
+
+  it("never reads base64 padding as an assignment (Vercel, 5 Nov)", () => {
+    const b64 = "QUJDREVGR0hJSktMTU5PUFFSU1RVVg==";
+    expect(maskMatch(b64)).toBe("QUJD…Vg==");
+    expect(maskMatch(b64)).not.toContain("SktMTU5P");
+    expect(maskMatch("abc==")).toBe("***");
+  });
+
+  it("masks a bare value from another tool with no prefix kept, through the evidence text", () => {
+    const raw = "QUJDREVGR0hJSktMTU5PUFFSU1RVVg==";
+    const out = maskSecretsIn(`trufflehog found ${raw} in config`, [raw]);
+    expect(out).not.toContain("SktMTU5P");
+    expect(maskRaw("user:hunter2hunter2")).toBe("***");
   });
 });
