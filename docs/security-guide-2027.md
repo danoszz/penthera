@@ -19,7 +19,7 @@ Ten steps: five for this week, five for the next 30 days. Each one says what to 
 List your public domains, previews and staging included, and look at them the way a stranger would.
 
 ```bash
-npx penthera@2.3.1 https://your-app.com
+npx penthera@2.3.2 https://your-app.com
 ```
 
 Or ask your coding agent: Penthera's MCP server has `scan_url`, which only reaches hosts you list. The checks are passive: TLS, headers, cookies, CORS, exposed files, OpenAPI. It sends no injection payloads.
@@ -31,8 +31,8 @@ Or ask your coding agent: Penthera's MCP server has `scan_url`, which only reach
 Once a key is pushed, rotating it is the only fix. Stop it at the commit:
 
 ```bash
-npx penthera@2.3.1 hook install
-npx penthera@2.3.1 --repo .
+npx penthera@2.3.2 hook install
+npx penthera@2.3.2 --repo .
 ```
 
 The hook checks what you're about to commit: secrets and AI provider keys, agent config, and new packages when the lockfile changes. The repo scan finds what's already there.
@@ -44,8 +44,8 @@ The hook checks what you're about to commit: secrets and AI provider keys, agent
 Your agents run code too: skills, MCP servers, hooks, permissions, plugins, rule files.
 
 ```bash
-npx penthera@2.3.1 agents
-npx penthera@2.3.1 agents --pin
+npx penthera@2.3.2 agents
+npx penthera@2.3.2 agents --pin
 ```
 
 `agents` grades the setup A to F. `--pin` writes `penthera.lock`, so a skill or MCP server that changes later shows up on the next run.
@@ -57,7 +57,7 @@ npx penthera@2.3.1 agents --pin
 Agents add packages fast. Check a package before any of its code runs:
 
 ```bash
-npx penthera@2.3.1 install some-package
+npx penthera@2.3.2 install some-package
 ```
 
 It resolves the new tree with scripts off and fetches without unpacking. It lists new install scripts and what the new packages can do, checks names for typosquats, and asks before running anything.
@@ -69,7 +69,7 @@ Add a delay too: pnpm can refuse versions younger than a set age (`minimumReleas
 ### 5. Know what your packages can do
 
 ```bash
-npx penthera@2.3.1 deps
+npx penthera@2.3.2 deps
 ```
 
 It reads your installed packages and lists what each one can do (install scripts, shell, network, credential access), and which ones are new or gained a capability.
@@ -81,7 +81,7 @@ It reads your installed packages and lists what each one can do (install scripts
 ### 6. Put the checks in CI
 
 ```bash
-npx penthera@2.3.1 init
+npx penthera@2.3.2 init
 ```
 
 `init` offers the hook and a GitHub workflow. The [GitHub Action](https://github.com/danoszz/penthera/blob/main/docs/commands/action.md) runs on pull requests. Make CI install from the lockfile (`npm ci`, not `npm install`).
@@ -92,7 +92,7 @@ npx penthera@2.3.1 init
 
 Pin actions to a commit SHA, not a tag. Never let `pull_request_target` check out a pull request's code. Never put a PR title or branch name straight into a `run:` script. GitHub's guide covers all three: [Security hardening for GitHub Actions](https://docs.github.com/en/actions/security-for-github-actions/security-guides/security-hardening-for-github-actions).
 
-**Penthera:** since 2.3.0, `npx penthera@2.3.1 --repo .` checks all three (`gha-unpinned-action`, `gha-pwn-request`, `gha-script-injection`). It reads `.github/workflows/` and runs nothing.
+**Penthera:** since 2.3.0, `npx penthera@2.3.2 --repo .` checks all three (`gha-unpinned-action`, `gha-pwn-request`, `gha-script-injection`). It reads `.github/workflows/` and runs nothing.
 
 ### 8. Retire long-lived keys
 
