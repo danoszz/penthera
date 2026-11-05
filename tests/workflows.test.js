@@ -385,6 +385,17 @@ describe("crafted workflows can't make the check slow", () => {
     expect(ids(run('git log "$SHA"', "env:\n  SHA: ${{ github.event.pull_request.head.sha }}\n"))).toEqual([]);
   });
 
+  it("keeps every git form the old regex caught, and normalizes a long expression once (review, 5 Nov)", () => {
+    const run = (body) => `on: pull_request_target\njobs:\n  a:\n    steps:\n      - run: |\n${body.split("\n").map((x) => "          " + x).join("\n")}\n`;
+    for (const l of ["echo ok;git checkout ${{ github.head_ref }}", "(git checkout ${{ github.head_ref }})", "x=$(git checkout ${{ github.head_ref }})",
+      "/usr/bin/git checkout ${{ github.head_ref }}", "git fetch&&git checkout ${{ github.head_ref }}", 'git -c http.extraheader="AUTHORIZATION: basic x" fetch origin ${{ github.head_ref }}']) {
+      expect(ids(run(l)), l).toContain("gha-pwn-request:high");
+    }
+    expect(timed(run("${{ github.head_ref\n" + "git fetch\n".repeat(16000)))).toBeLessThan(2000);
+    expect(timed(run("x ${{ 'a\n" + "git fetch\n".repeat(16000) + "' }}"))).toBeLessThan(2000);
+    expect(timed(run(('git -c "x ').repeat(20000)))).toBeLessThan(2000);
+  });
+
   it("finds every expression's end in one pass, even with unclosed quotes", () => {
     expect(timed(I + "      - run: echo " + "${{ ' }} ".repeat(25000) + "\n")).toBeLessThan(2000);
     expect(exprSpans("a ${{ 'x}}' }} b ${{ c")).toEqual([{ start: 2, close: 12, open: false }, { start: 17, close: 22, open: true }]);
