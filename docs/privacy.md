@@ -56,7 +56,7 @@ The dashboard keeps one thing between restarts: the word Simple or Advanced, in
 penthera http://localhost:3000 --offline
 ```
 
-With `--offline`, the HTTP client refuses every host except the scan target. A redirect may only move to a host on the target's registrable domain (`example.com` to `www.example.com`). In practice:
+With `--offline`, the HTTP client refuses every host except the scan target. A redirect may only move to a host on the target's registrable domain (`example.com` to `www.example.com`). On a platform that gives each customer a host, such as `vercel.app`, `github.io` or `s3.amazonaws.com`, a redirect stays on the target's own host: `one.vercel.app` never follows to `two.vercel.app`. In practice:
 
 - **Recon is skipped.** No queries go to crt.sh, the Wayback Machine or OTX.
 - **The Retire.js database comes from the snapshot vendored in the package** (`lib/data/retire-jsrepository.json.gz`), refreshed by `scripts/refresh-retire-db.mjs`. The source URL, fetch date and SHA-256 sit next to it in `retire-jsrepository.meta.json`, so you can check it against upstream. Online scans fall back to the snapshot too when the live download fails.

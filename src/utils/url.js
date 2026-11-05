@@ -83,13 +83,39 @@ export function redirectsToHost(locationHeader, requestUrl, attackerHost) {
 const SECOND_LEVEL_SUFFIXES = new Set(["ac", "co", "com", "edu", "gov", "ltd", "ne", "net", "or", "org", "plc"]);
 
 /**
+ * Platforms that give each customer a host under one domain: one.vercel.app
+ * and two.vercel.app belong to different people. Not the Public Suffix List,
+ * and not complete: a platform missing here makes two tenants look like one
+ * site, so keep adding them. lib/blackbox/email-dns.js reads the same list.
+ */
+export const SHARED_HOST_DOMAINS = [
+  "vercel.app", "now.sh", "netlify.app", "pages.dev", "workers.dev", "github.io", "gitlab.io", "fly.dev",
+  "onrender.com", "herokuapp.com", "up.railway.app", "web.app", "firebaseapp.com", "azurewebsites.net",
+  "amplifyapp.com", "replit.app", "repl.co", "lovable.app", "surge.sh", "cloudfront.net",
+  // Storage, functions and tunnels: also one host per customer.
+  "amazonaws.com", "azurestaticapps.net", "blob.core.windows.net", "appspot.com", "storage.googleapis.com",
+  "run.app", "cloudfunctions.net", "r2.dev", "deno.dev", "glitch.me", "bitbucket.io",
+  "codeberg.page", "ngrok.io", "ngrok-free.app", "ngrok.app", "trycloudflare.com", "loca.lt",
+  "supabase.co", "webflow.io", "framer.app", "wixsite.com", "myshopify.com", "pythonanywhere.com",
+];
+
+/** The shared platform a host sits on (the platform's apex included), or null. */
+export function sharedPlatform(hostname) {
+  const host = String(hostname).toLowerCase().replace(/\.$/, "");
+  return SHARED_HOST_DOMAINS.find((d) => host === d || host.endsWith(`.${d}`)) ?? null;
+}
+
+/**
  * Registrable domain of a hostname, e.g. "app.staging.example.com" →
  * "example.com", "shop.example.co.uk" → "example.co.uk". IPs and
- * single-label hosts come back unchanged.
+ * single-label hosts come back unchanged. A host on a shared platform
+ * (SHARED_HOST_DOMAINS) is its own site: "one.vercel.app" comes back whole,
+ * never "vercel.app", so a redirect to another tenant is not "the same site".
  */
 export function registrableDomain(hostname) {
   const host = String(hostname).toLowerCase().replace(/\.$/, "");
   if (/^\d{1,3}(\.\d{1,3}){3}$/.test(host) || host.includes(":") || host.startsWith("[")) return host;
+  if (sharedPlatform(host)) return host;
   const parts = host.split(".");
   if (parts.length <= 2) return host;
   const tld = parts[parts.length - 1];

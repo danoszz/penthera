@@ -119,6 +119,9 @@ export function checkEgress(url, opts = {}, ctx = currentEgress()) {
   if (ctx.allowHosts.has(host)) return { allowed: true };
   const sameHost = host === ctx.targetHost;
   // A redirect may move within the target's registrable domain (apex -> www).
+  // On a shared platform (vercel.app, github.io, s3.amazonaws.com...) each
+  // host is its own registrable domain, so no redirect leaves the target's
+  // host there: another tenant is a third party.
   const sameSite = opts.redirect && ctx.targetDomain && !isIpLike(host) && registrableDomain(host) === ctx.targetDomain;
   if (!sameHost && !sameSite) {
     return { allowed: false, reason: `${host} is not the scan target (${ctx.targetHost})` };
