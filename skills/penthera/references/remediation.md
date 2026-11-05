@@ -56,7 +56,7 @@ module.exports = {
 };
 ```
 
-**Express** ([helmet](https://www.npmjs.com/package/helmet)):
+**Express** (the `helmet` package):
 ```js
 import helmet from "helmet";
 app.use(helmet()); // CSP, X-Frame-Options, HSTS, X-Content-Type-Options, Referrer-Policy
@@ -137,7 +137,7 @@ def admin(): ...
 **Finding:** the server reflects an arbitrary `Origin`, or uses `*` together with credentials.
 **Fix:** allowlist explicit origins; never reflect a user-supplied origin with credentials.
 
-**Express** ([cors](https://www.npmjs.com/package/cors)):
+**Express** (the `cors` package):
 ```js
 import cors from "cors";
 app.use(cors({ origin: ["https://app.example.com"], credentials: true }));
@@ -160,14 +160,14 @@ app.add_middleware(CORSMiddleware, allow_origins=["https://app.example.com"], al
 **Finding:** No login rate limiting detected.
 **Fix:** throttle auth and other expensive endpoints.
 
-**Express** ([express-rate-limit](https://www.npmjs.com/package/express-rate-limit)):
+**Express** (the `express-rate-limit` package):
 ```js
 import rateLimit from "express-rate-limit";
 app.use("/api/login", rateLimit({ windowMs: 15 * 60 * 1000, max: 10 }));
 ```
 
 **Fastify:** `@fastify/rate-limit`. **Next.js:** an edge limiter such as `@upstash/ratelimit` in `middleware.ts`.
-**FastAPI:** [slowapi](https://pypi.org/project/slowapi/) with `@limiter.limit("10/15minutes")`.
+**FastAPI:** the `slowapi` package with `@limiter.limit("10/15minutes")`.
 
 **Verify:** re-scan; rapid repeated requests are throttled (HTTP 429).
 
