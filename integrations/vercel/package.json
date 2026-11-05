@@ -1,0 +1,10 @@
+{
+  "name": "penthera-vercel-integration",
+  "private": true,
+  "description": "Penthera's Vercel integration server: registers the Penthera GitHub Action as a Vercel Deployment Check. Deployed on its own, never part of the npm package.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": "22.x"
+  }
+}
