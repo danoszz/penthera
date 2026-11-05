@@ -360,6 +360,31 @@ describe("crafted workflows can't make the check slow", () => {
     expect(timed(reused)).toBeLessThan(2000);
   });
 
+  it("evaluates a job or step that aliases reuse once, on any trigger (review, 5 Nov)", () => {
+    const script = "echo ${{ github.sha }}\n".repeat(3000).split("\n").map((x) => "      " + x).join("\n");
+    for (const on of ["push", "pull_request_target"]) {
+      const y = `on: ${on}\ndefs:\n  s: &S\n    run: |\n${script}\njobs:\n  j0: &J\n    steps: [${Array(50).fill("*S").join(", ")}]\n${Array.from({ length: 48 }, (_, i) => `  j${i + 1}: *J\n`).join("")}`;
+      expect(y.length).toBeLessThan(256 * 1024);
+      expect(timed(y)).toBeLessThan(2000);
+    }
+  });
+
+  it("reads env scopes as a chain, not a copy per step", () => {
+    const n = 11000;
+    const y = `on: pull_request_target\nenv:\n${Array.from({ length: n }, (_, i) => `  V${i}: x\n`).join("")}jobs:\n  a:\n    steps:\n${"      - {}\n".repeat(n)}`;
+    expect(y.length).toBeLessThan(256 * 1024);
+    expect(timed(y)).toBeLessThan(2000);
+  });
+
+  it("finds a PR fetch behind git options, a shell variable or a split expression", () => {
+    const run = (body, env = "") => `on: pull_request_target\n${env}jobs:\n  a:\n    steps:\n      - run: |\n${body.split("\n").map((x) => "          " + x).join("\n")}\n`;
+    expect(ids(run("git -C . fetch origin ${{ github.event.pull_request.head.sha }} && npm test"))).toEqual(["gha-pwn-request:high"]);
+    expect(ids(run("git -c http.extraheader=x fetch origin ${{ github.event.pull_request.head.sha }}"))).toEqual(["gha-pwn-request:high"]);
+    expect(ids(run('git fetch origin "$SHA" && npm test', "env:\n  SHA: ${{ github.event.pull_request.head.sha }}\n"))).toEqual(["gha-pwn-request:high"]);
+    expect(ids(run("git fetch origin ${{\ngithub.event.pull_request.head.sha }} && npm test"))).toEqual(["gha-pwn-request:high"]);
+    expect(ids(run('git log "$SHA"', "env:\n  SHA: ${{ github.event.pull_request.head.sha }}\n"))).toEqual([]);
+  });
+
   it("finds every expression's end in one pass, even with unclosed quotes", () => {
     expect(timed(I + "      - run: echo " + "${{ ' }} ".repeat(25000) + "\n")).toBeLessThan(2000);
     expect(exprSpans("a ${{ 'x}}' }} b ${{ c")).toEqual([{ start: 2, close: 12, open: false }, { start: 17, close: 22, open: true }]);
@@ -387,6 +412,11 @@ describe("pullRef means what the regex it replaced meant", () => {
   it("agrees with the old regex on 5,000 generated lines", () => {
     fc.assert(fc.property(fc.array(piece, { maxLength: 14 }), (parts) => {
       const line = parts.join("");
+      // Intended difference: a pull/ inside another ${{ }} is expression text,
+      // not script text, so GitHub never runs it as a fetch.
+      const inside = (at) => exprSpans(line).some((sp) => sp.start < at && at < sp.close);
+      const offsets = [...line.matchAll(/pull\//g)].map((m) => m.index);
+      fc.pre(!offsets.some(inside));
       expect(pullRef(line)).toBe(OLD.test(line));
     }), { numRuns: 5000 });
   });
