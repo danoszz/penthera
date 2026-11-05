@@ -114,7 +114,7 @@ npx penthera hook install
     mode: agents
 ```
 
-Or copy one file that runs `npx --yes penthera@2.2.0 agents` on every pull request and uploads SARIF: [`github-actions-agents.yml`](https://github.com/danoszz/penthera/blob/main/docs/examples/github-actions-agents.yml) ([details](action.md#the-agent-config-check-in-one-file)).
+Or copy one file that runs `npx --yes penthera@2.3.0 agents` on every pull request and uploads SARIF: [`github-actions-agents.yml`](https://github.com/danoszz/penthera/blob/main/docs/examples/github-actions-agents.yml) ([details](action.md#the-agent-config-check-in-one-file)).
 
 The rules in [Rules for auto-run, registries and environment](#rules-for-auto-run-registries-and-environment), the Not checked line and the skill-folder changes shipped in 2.1.0. Penthera 2.0.0 does not have them. They run once you pin 2.1.0 or later.
 

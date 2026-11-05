@@ -3,7 +3,7 @@
 > **Project page.** For "what do we paste into mcp.so, Smithery and Glama?"
 
 Ready-to-paste text for MCP directories. **Not submitted.** Submitting is the
-maintainer's step, after `penthera@2.2.0` is on npm and the server is in the
+maintainer's step, after `penthera@2.3.0` is on npm and the server is in the
 official MCP Registry. Keep the version pinned everywhere it appears.
 
 ## Fields
@@ -53,13 +53,13 @@ dependency.
   "mcpServers": {
     "penthera": {
       "command": "npx",
-      "args": ["-y", "penthera@2.2.0", "mcp"]
+      "args": ["-y", "penthera@2.3.0", "mcp"]
     }
   }
 }
 ```
 
-Claude Code: `claude mcp add penthera -- npx -y penthera@2.2.0 mcp`
+Claude Code: `claude mcp add penthera -- npx -y penthera@2.3.0 mcp`
 
 ## Per directory
 
