@@ -14,7 +14,7 @@ pull requests, a scan step in your own workflow, and the
 
 ```yaml
 - name: "Penthera: your open-source cyber security agent"
-  uses: danoszz/penthera@cee9ed3455b58d29f4929ffad84e1cce3e828b1f # v2.3.0
+  uses: danoszz/penthera@3b4c837aaae81966ad95645e0f84dc9f9353d0ab # v2.3.1
   with:
     mode: deps        # deps | agents | scan (scan also needs url:)
     fail-on: none     # none | high | critical
@@ -22,7 +22,7 @@ pull requests, a scan step in your own workflow, and the
 
 Pin the action to a release commit SHA, not a tag: a tag can be moved, a
 commit cannot. Find the SHA for a release with
-`git ls-remote https://github.com/danoszz/penthera refs/tags/v2.3.0`.
+`git ls-remote https://github.com/danoszz/penthera refs/tags/v2.3.1`.
 
 The action's name contains a colon, so a `name:` line that holds it needs
 quotes. The snippet on the GitHub Marketplace page may print the name without
