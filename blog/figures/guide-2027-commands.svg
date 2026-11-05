@@ -3,7 +3,7 @@
 <desc id="d">For each of the ten steps, the Penthera command if there is one, and its limit. 01 Know what you expose: &lt;url> · MCP scan_url; Doesn't log in. 02 Keep secrets out of git: hook install · --repo .; Your repo, not your laptop. 03 Audit what your agents load: agents · agents --pin; No editor extensions yet. 04 Look before you install: install &lt;pkg>; No release-age check. 05 Know what your packages can do: deps; No CVE lookup. 06 Put the checks in CI: init · the GitHub Action; No lockfile-install check yet. 07 Harden your workflows: --repo . (workflows); Not reusable workflows in other files. 08 Retire long-lived keys: Finds hardcoded keys; Can't rotate them. 09 Lock down accounts and devices: Not Penthera; Identity provider, MDM, EDR. 10 Log it and plan the bad day: Not Penthera; Your platform's logs.</desc>
 <rect x="0.5" y="0.5" width="639" height="593" fill="#fdfdfa" stroke="#12151a"/>
 <text x="16" y="34" font-size="21" font-weight="500" letter-spacing="-0.4" fill="#12151a">Which command covers which step, and where it stops</text>
-<text x="16" y="58" font-size="13.5" font-family="ui-monospace, 'SF Mono', Menlo, monospace" fill="#6b6e73">Each command runs as npx penthera@2.3.0 …</text>
+<text x="16" y="58" font-size="13.5" font-family="ui-monospace, 'SF Mono', Menlo, monospace" fill="#6b6e73">Each command runs as npx penthera@2.3.1 …</text>
 <rect x="16" y="74" width="608" height="48" fill="#ebebe6" opacity="0.6"/>
 <text x="26" y="103" font-size="14" font-family="ui-monospace, 'SF Mono', Menlo, monospace" fill="#6b6e73">01</text>
 <text x="60" y="103" font-size="16" fill="#12151a">Know what you expose</text>
