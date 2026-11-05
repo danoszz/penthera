@@ -1,0 +1,36 @@
+{
+  "unfired": {
+    "agents/file-too-large": "needs a file over the agent reader's size limit; too large to keep as a fixture",
+    "agents/lock-changed": "needs a pinned penthera.lock and a changed config, which no fixture folder holds; tests/same-meaning.test.js and tests/bypasses.test.js cover lock-changed with a temp lock",
+    "agents/lock-new": "needs a pinned penthera.lock and a changed config, which no fixture folder holds; tests/same-meaning.test.js and tests/bypasses.test.js cover lock-changed with a temp lock",
+    "agents/lock-outdated": "needs a pinned penthera.lock and a changed config, which no fixture folder holds; tests/same-meaning.test.js and tests/bypasses.test.js cover lock-changed with a temp lock",
+    "agents/lock-removed": "needs a pinned penthera.lock and a changed config, which no fixture folder holds; tests/same-meaning.test.js and tests/bypasses.test.js cover lock-changed with a temp lock",
+    "agents/skill-venv": "needs a virtualenv inside a skill folder; not yet a fixture",
+    "agents/symlink-escape": "needs a symlink out of the project; git fixtures do not keep it",
+    "agents/unknown-binary": "needs an executable binary in a skill folder; not yet a fixture",
+    "deps:deserialize": "no deps fixture package uses an unsafe deserializer yet",
+    "deps:dynamic-require": "no deps fixture package requires a computed path yet",
+    "deps:startup-hook": "no deps fixture package sets a startup hook yet",
+    "template:cors-null-origin": "template fires only against a server that answers its path; the loopback mock server does not serve it yet",
+    "template:cors-wildcard": "template fires only against a server that answers its path; the loopback mock server does not serve it yet",
+    "template:cve-2025-29927-nextjs-middleware-bypass": "template fires only against a server that answers its path; the loopback mock server does not serve it yet",
+    "template:directory-listing": "template fires only against a server that answers its path; the loopback mock server does not serve it yet",
+    "template:env-file-exposure": "template fires only against a server that answers its path; the loopback mock server does not serve it yet",
+    "template:env-local-exposure": "template fires only against a server that answers its path; the loopback mock server does not serve it yet",
+    "template:error-stack-trace": "template fires only against a server that answers its path; the loopback mock server does not serve it yet",
+    "template:firebase-database-open-read": "template fires only against a server that answers its path; the loopback mock server does not serve it yet",
+    "template:git-config-exposure": "template fires only against a server that answers its path; the loopback mock server does not serve it yet",
+    "template:git-head-exposure": "template fires only against a server that answers its path; the loopback mock server does not serve it yet",
+    "template:graphql-introspection": "template fires only against a server that answers its path; the loopback mock server does not serve it yet",
+    "template:nextjs-debug-endpoint": "template fires only against a server that answers its path; the loopback mock server does not serve it yet",
+    "template:nextjs-sourcemap-exposure": "template fires only against a server that answers its path; the loopback mock server does not serve it yet",
+    "template:prometheus-metrics-exposed": "template fires only against a server that answers its path; the loopback mock server does not serve it yet",
+    "template:service-account-key-exposure": "template fires only against a server that answers its path; the loopback mock server does not serve it yet",
+    "template:swagger-ui-exposed": "template fires only against a server that answers its path; the loopback mock server does not serve it yet"
+  },
+  "silentSkips": {
+    "lib/whitebox/secrets.js:MAX_LINES_PER_FINDING": "not a skip: the finding is still raised, only its list of lines is capped",
+    "lib/deps/capabilities.js:MAX_WINDOWS": "fails closed: a command too long to read counts as matching",
+    "lib/deps/capabilities.js:MAX_COMMAND": "fails closed: a command too long to read counts as matching"
+  }
+}

@@ -53,6 +53,7 @@ const SKIP_LABELS = {
   "skipped-folder": "in folders the scan skips (virtualenvs, caches, folders git ignores)",
   "type-not-read": "of a file type the scan does not read",
   "too-large": "over the size limit",
+  "sink-file-cap": "past the eval and exec check's 5,000-file limit",
   "no-api-surface": "not analysed because no API routes were found",
   "language-not-supported": "in a language route analysis does not support",
 };
