@@ -40,9 +40,13 @@ On staged content only (the git index, not your working tree):
       → Load it from an env var or secret store and unstage the file; rotate it if it was ever pushed or shared.
 
   Fix and `git add` again. A false positive? Add it to penthera.suppress.json:
-    { "version": 1, "suppress": [{ "id": "b5914a44a2058da9", "reason": "why this is safe" }] }
+    { "version": 1, "suppress": [{ "id": "b5914a44a2058da9", "severity": "critical", "reason": "why this is safe" }] }
   To skip the check for one commit: git commit --no-verify (the finding still ships)
 ```
+
+An entry's `severity` is the most severe the finding may be and stay
+suppressed. An entry without one covers up to medium, as entries written
+before 2.3.2 do, so a finding that escalates to high or critical blocks again.
 
 It blocks on high and critical by default and takes about 0.1 to 0.5 s.
 Configure it in `penthera.policy.json`:

@@ -105,7 +105,7 @@ describe("penthera hook run", () => {
     const first = await runHook(repo);
     expect(first.blocking).toHaveLength(1);
 
-    write("penthera.suppress.json", JSON.stringify({ version: 1, suppress: [{ id: first.blocking[0].id, reason: "test fixture" }] }));
+    write("penthera.suppress.json", JSON.stringify({ version: 1, suppress: [{ id: first.blocking[0].id, severity: first.blocking[0].severity, reason: "test fixture" }] }));
     git("add", "penthera.suppress.json");
     const sup = await runHook(repo);
     expect(sup.blocking).toHaveLength(0);
@@ -146,7 +146,7 @@ describe("penthera hook run", () => {
     git("add", "a.js");
     const first = await runHook(repo);
     // Unstaged edits that would loosen the check are ignored, with a warning.
-    write("penthera.suppress.json", JSON.stringify({ version: 1, suppress: [{ id: first.blocking[0].id, reason: "sneaky" }] }));
+    write("penthera.suppress.json", JSON.stringify({ version: 1, suppress: [{ id: first.blocking[0].id, severity: first.blocking[0].severity, reason: "sneaky" }] }));
     write("penthera.policy.json", JSON.stringify({ hook: { ignore: ["a.js"], blockOn: "critical" } }));
     const r = await runHook(repo);
     expect(r.blocking).toHaveLength(1);
