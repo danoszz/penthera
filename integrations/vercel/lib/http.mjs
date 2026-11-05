@@ -96,11 +96,11 @@ export function readCookie(request, name) {
   return null;
 }
 
-/** Vercel's `next` URL, only if it points back at vercel.com over https. Anything else is an open redirect. */
+/** Vercel's `next` URL, only if it is https on exactly vercel.com, the one host CSP form-action allows. Anything else is an open redirect. */
 export function safeNext(value) {
   try {
     const u = new URL(String(value ?? ""));
-    return u.protocol === "https:" && (u.hostname === "vercel.com" || u.hostname.endsWith(".vercel.com")) && !u.username && !u.password
+    return u.protocol === "https:" && u.hostname === "vercel.com" && (u.port === "" || u.port === "443") && !u.username && !u.password
       ? u.toString()
       : null;
   } catch {

@@ -17,9 +17,9 @@ for the data it handles on its own platform.
 For each installation, and nothing else:
 
 - Vercel's configuration id for the installation,
-- your team id, or your user id for a personal account,
+- your team id, or your user or account id for a personal account,
 - a Vercel access token, encrypted (AES-256-GCM), and
-- the date of the install.
+- the date of the latest install.
 
 ## What never reaches us
 
@@ -52,9 +52,11 @@ your token.
 - Upstash, through the Vercel Marketplace, stores the records listed above in
   [region]. [Transfer safeguards.]
 
-Vercel's request logs record each request's path and query string. That
-includes the one-time install code, which is spent at once, and the
-configuration id. They are kept for Vercel's plan default of [period].
+Separately from the stored record, Vercel's request logs for the server record
+each request's path and query string. That includes the one-time install code
+(spent within seconds, usable once), the configuration id, your team id and
+Vercel's return address. These logs are kept by Vercel for its plan default of
+[period]. We do not export or analyze them.
 
 ## How long
 

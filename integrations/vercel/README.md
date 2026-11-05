@@ -24,20 +24,33 @@ One record per installation, and nothing else:
 | Field | What it is |
 |---|---|
 | `configurationId` | Vercel's id for the installation (`icfg_...`) |
-| `ownerId` | the team id, or the user id for a personal account |
+| `ownerId` | the team id, or the user or account id for a personal account (`personal` if a transfer to a personal account names none) |
 | `ciphertext`, `iv`, `tag` | the Vercel access token, encrypted with AES-256-GCM |
 | `keyVersion` | which key encrypted it, for rotation |
-| `createdAt` | when it was first installed |
+| `createdAt` | when it was last installed. A reinstall moves it forward, so a replayed older uninstall event is ignored |
 
 The store refuses a record with any other field (`lib/store.mjs`). Project
 names, repos, emails, deployment URLs and scan results are never stored. Project
 ids and names are read live from Vercel to draw the pages, then dropped.
 
+So the stored data is: an installation id, a team or account id, an encrypted
+token and a date. No other data about you or your projects.
+
+Outside the store, Vercel's own request logs for this project record each
+request's path and query string. That includes `/install?code=...` (the code is
+spent within seconds and works once), the `configurationId`, the `teamId` and
+Vercel's `next` URL. Those logs are Vercel's, kept for the plan's default
+retention, and we do not export them.
+
 The record is deleted:
 
-- when Vercel sends a signed `integration-configuration.removed` webhook, and
-- by a weekly cron (`/api/sweep`) for any record whose token Vercel no longer
-  accepts (401, 403 or 404), in case a webhook was lost.
+- when Vercel sends a signed `integration-configuration.removed` webhook. The
+  record goes first, before any other call, so a slow Vercel API cannot stop
+  it. A store error answers 500, and Vercel retries for 24 hours.
+- by a weekly cron (`/api/sweep`) for any record whose token Vercel answers
+  with 401 or 404, in case a webhook was lost. A 403 keeps the record: it can be
+  a disabled installation that comes back, or a transfer whose webhook was
+  missed. Vercel sends `removed` when either one ends.
 
 The token is encrypted with the configuration id as associated data, so a
 ciphertext moved onto another record does not decrypt. The key lives in a
@@ -100,13 +113,31 @@ does not wait for a workflow that is not committed yet.
   with `crypto.timingSafeEqual` after a format and length check. A missing or
   wrong signature gets a 403 and changes nothing. The body is parsed only after
   the check.
+- **Install binding:** the code exchange must return the same
+  `installation_id` as the redirect's `configurationId`, and the same team when
+  the redirect names one. Otherwise nothing is stored. An existing record is
+  never given to a different owner (409).
 - **CSRF:** installs started from `/start` must return the `state` we set in an
-  HttpOnly `__Host-` cookie. Installs started on vercel.com carry no state; the
-  one-time code, exchanged server side, guards those. Form posts need the
-  session cookie (SameSite=Lax), a form token bound to it, and a same-origin
-  `Origin` header when the browser sends one.
+  HttpOnly `__Host-` cookie, and a browser that holds that cookie must send the
+  matching state. Installs started on vercel.com carry no state (Vercel's
+  docs), so they must say `source=marketplace` or `source=deploy-button`, and
+  the session is set only after the exchange proves the configuration and its
+  owner. Form posts need the session cookie (SameSite=Lax), a form token bound
+  to it, and a same-origin `Origin` header when the browser sends one.
+- **Risk left (login CSRF):** an attacker can send someone a link with the
+  attacker's own fresh install code and `source=marketplace`. The victim's
+  browser then opens the attacker's setup page, for the attacker's own
+  account. The victim's data and records are not touched, and the attacker
+  gains nothing they did not already have. The fix would need Vercel to send
+  `state` on every flow.
 - **Open redirect:** the `next` URL is followed only if it is `https://` on
-  `vercel.com`.
+  exactly `vercel.com`, the one host the CSP's `form-action` allows.
+- **Rate limits:** each `/install` makes one outbound call to Vercel, so a
+  visitor gets 10 a minute per function instance. Instances count on their
+  own, so the real limit is a Firewall rule (below).
+- **Replay:** a signed `removed` or `transferred` event older than the record's
+  `createdAt` changes nothing. Configuration ids are never reused (Vercel's
+  docs), so a replay can only hit a record that a reinstall brought back.
 - **Headers on every answer:** a CSP with `default-src 'none'`, no scripts, the
   one inline style allowed by hash, `form-action 'self' https://vercel.com`,
   `frame-ancestors 'none'`; HSTS, `nosniff`, `X-Frame-Options: DENY`,
@@ -166,6 +197,19 @@ node -e "console.log('v1:' + require('crypto').randomBytes(32).toString('base64'
 | API scopes | Deployment Checks: Read/Write. Projects: Read. Nothing else |
 | Checks API toggle | Off, unless the scope test below says it is needed |
 
+### Firewall rate limit (dashboard only)
+
+`vercel.json` cannot hold Firewall rules. In the integration project: Firewall,
+Configure, New Rule:
+
+- **Name:** `install-webhook-rate-limit`
+- **If:** Request Path matches `^/(install|start|webhook)$`
+- **Then:** Rate Limit, Fixed Window, 60 seconds, 30 requests, key IP, action
+  Default (429)
+
+Then Review Changes and Publish. Rate limiting is billed by usage on Pro;
+this traffic is tiny, but it counts toward the €5 cap.
+
 ## Deploy
 
 1. Create a Vercel project from this repo with **Root Directory**
@@ -205,9 +249,11 @@ Not verified, because it needs a live integration:
   default as read from its source. Confirm it on a real deploy.
 - **The GitHub prefill.** `github.com/<owner>/<repo>/new/<branch>?filename=&value=`
   works today but is not a documented GitHub API.
-- **Whether the cron's 403 on a disabled configuration should delete.** It does
-  now, per the spec. A disabled install that is later reactivated would need a
-  reinstall.
+- **That the code exchange always returns `installation_id`.** Vercel's example
+  shows it. The server now refuses an exchange without it.
+- **The transfer payload for a personal account.** The docs list
+  `newTeamId` and `newAccountId`; the server uses whichever names the new
+  owner.
 
 End-to-end check: install on your own project, commit the workflow from the
 link, turn on the check, push to production and see it held then released,

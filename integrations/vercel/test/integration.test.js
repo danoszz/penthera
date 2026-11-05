@@ -190,11 +190,13 @@ describe("OAuth install", () => {
   });
 
   it("a second install with the same configurationId overwrites, never duplicates", async () => {
-    const ctx = await installed();
-    const first = ctx.store.dump()[0];
+    let t = 1_000_000;
+    const ctx = setup({ now: () => t });
+    await ctx.app.install(get(installUrl()));
+    t += 60_000;
     await ctx.app.install(get(installUrl()));
     expect(ctx.store.dump()).toHaveLength(1);
-    expect(ctx.store.dump()[0].createdAt).toBe(first.createdAt);
+    expect(ctx.store.dump()[0].createdAt).toBe(new Date(t).toISOString());
   });
 
   it("refuses a rejected code, a bad next URL and missing parameters, storing nothing", async () => {
@@ -208,7 +210,7 @@ describe("OAuth install", () => {
 
   it("only returns to vercel.com", () => {
     expect(safeNext(NEXT)).toBe(NEXT);
-    for (const bad of ["http://vercel.com/x", "https://vercel.com.evil.example/", "https://user@vercel.com/", "javascript:alert(1)", "//vercel.com", ""]) {
+    for (const bad of ["http://vercel.com/x", "https://vercel.com.evil.example/", "https://user@vercel.com/", "https://api.vercel.com/x", "https://vercel.com:8443/x", "javascript:alert(1)", "//vercel.com", ""]) {
       expect(safeNext(bad)).toBeNull();
     }
   });
@@ -351,7 +353,7 @@ describe("uninstall", () => {
   });
 
   it("the weekly sweep deletes records whose token no longer works, and needs the cron secret", async () => {
-    const ctx = await installed({ vercel: { fail: { "GET /v10/projects": 403 } } });
+    const ctx = await installed({ vercel: { fail: { "GET /v10/projects": 401 } } });
     expect((await ctx.app.sweep(get("/sweep"))).status).toBe(401);
     expect(ctx.store.dump()).toHaveLength(1);
     const res = await ctx.app.sweep(get("/sweep", { authorization: `Bearer ${ctx.env.CRON_SECRET}` }));
@@ -474,5 +476,119 @@ describe("workflow and repo rules", () => {
     const pkg = JSON.parse(readFileSync(here("../package.json"), "utf8"));
     expect(pkg.dependencies ?? {}).toEqual({});
     expect(pkg.devDependencies ?? {}).toEqual({});
+  });
+});
+
+describe("review fixes", () => {
+  const signed = (event, secret = CLIENT_SECRET) => {
+    const raw = JSON.stringify(event);
+    return new Request(`${BASE}/webhook`, { method: "POST", body: raw, headers: { "x-vercel-signature": createHmac("sha1", secret).update(raw).digest("hex") } });
+  };
+  const victim = async (store, keys) =>
+    store.put({ configurationId: CFG, ownerId: TEAM, ...sealToken("at_victim", CFG, keys), createdAt: "2026-11-01T00:00:00.000Z" });
+  const exchangeOnly = (body) => async (u) =>
+    String(u).includes("access_token") ? new Response(JSON.stringify(body), { status: 200 }) : new Response("{}", { status: 200 });
+
+  it("refuses an exchange that does not name the configuration, and leaves the record alone", async () => {
+    const e = env();
+    const keys = parseKeys(e.PENTHERA_TOKEN_KEYS);
+    const store = memoryStore();
+    await victim(store, keys);
+    const app = createApp({ env: e, store, fetch: exchangeOnly({ access_token: "at_attacker", user_id: "user_att" }) });
+    const res = await app.install(get(installUrl().replace(`&teamId=${TEAM}`, "")));
+    expect(res.status).toBe(400);
+    expect(openToken(await store.get(CFG), CFG, keys)).toBe("at_victim");
+  });
+
+  it("never hands an existing record to another owner", async () => {
+    const e = env();
+    const keys = parseKeys(e.PENTHERA_TOKEN_KEYS);
+    const store = memoryStore();
+    await victim(store, keys);
+    const app = createApp({ env: e, store, fetch: exchangeOnly({ access_token: "at_attacker", installation_id: CFG, user_id: "user_att", team_id: null }) });
+    const res = await app.install(get(installUrl().replace(`&teamId=${TEAM}`, "")));
+    expect(res.status).toBe(409);
+    expect(res.headers.getSetCookie().some((c) => c.startsWith("__Host-pv_session="))).toBe(false);
+    expect(openToken(await store.get(CFG), CFG, keys)).toBe("at_victim");
+  });
+
+  it("refuses an install with neither state nor a Vercel source, and one that drops the state its cookie expects", async () => {
+    const { app, vercel } = setup();
+    const bare = await app.install(get(`/install?code=${CODE}&configurationId=${CFG}`));
+    expect(bare.status).toBe(403);
+    const dropped = await app.install(get(installUrl(), { cookie: "__Host-pv_state=expected" }));
+    expect(dropped.status).toBe(403);
+    expect(vercel.calls).toHaveLength(0);
+  });
+
+  it("limits install exchanges per visitor", async () => {
+    const { app, vercel } = setup();
+    const statuses = [];
+    for (let i = 0; i < 12; i++) statuses.push((await app.install(get(installUrl(), { "x-real-ip": "203.0.113.9" }))).status);
+    expect(statuses.slice(0, 10).every((s) => s !== 429)).toBe(true);
+    expect(statuses.slice(10)).toEqual([429, 429]);
+    expect(vercel.calls.filter((c) => c.url.pathname === "/v2/oauth/access_token")).toHaveLength(10);
+  });
+
+  it("uninstall deletes the record before any Vercel call, however slow Vercel is", async () => {
+    const e = env();
+    const keys = parseKeys(e.PENTHERA_TOKEN_KEYS);
+    const order = [];
+    const inner = memoryStore();
+    await victim(inner, keys);
+    const store = { ...inner, delete: async (id) => (order.push("delete"), inner.delete(id)) };
+    let t = 0;
+    const fetch = async () => {
+      order.push("fetch");
+      t += 9_900;
+      return new Response(JSON.stringify({ error: { code: "slow" } }), { status: 500 });
+    };
+    const app = createApp({ env: e, store, fetch, now: () => t });
+    const res = await app.webhook(signed({ type: "integration-configuration.removed", payload: { configuration: { id: CFG, projects: ["prj_a", "prj_b", "prj_c"] } } }));
+    expect(res.status).toBe(200);
+    expect(order[0]).toBe("delete");
+    expect(t).toBeLessThanOrEqual(25_000);
+    expect(inner.dump()).toHaveLength(0);
+  });
+
+  it("answers 500 when the store fails, so Vercel retries the uninstall", async () => {
+    const store = { ...memoryStore(), get: async () => { throw new Error("down"); } };
+    const app = createApp({ env: env(), store, fetch: mockVercel().fetch });
+    const res = await app.webhook(signed({ type: "integration-configuration.removed", payload: { configuration: { id: CFG } } }));
+    expect(res.status).toBe(500);
+  });
+
+  it("ignores a replayed uninstall older than the current install", async () => {
+    const { app, store } = await installed({ now: () => Date.parse("2026-11-05T12:00:00.000Z") });
+    const old = { createdAt: Date.parse("2026-11-04T12:00:00.000Z"), type: "integration-configuration.removed", payload: { configuration: { id: CFG } } };
+    expect(await (await app.webhook(signed(old))).json()).toMatchObject({ ignored: "stale" });
+    expect(store.dump()).toHaveLength(1);
+    const fresh = { ...old, createdAt: Date.parse("2026-11-06T12:00:00.000Z") };
+    expect(await (await app.webhook(signed(fresh))).json()).toMatchObject({ deleted: true });
+    expect(store.dump()).toHaveLength(0);
+  });
+
+  it("the sweep keeps a record on 403, which can be a missed transfer or a disabled install", async () => {
+    const ctx = await installed({ vercel: { fail: { "GET /v10/projects": 403 } } });
+    const res = await ctx.app.sweep(get("/sweep", { authorization: `Bearer ${ctx.env.CRON_SECRET}` }));
+    expect(await res.json()).toMatchObject({ checked: 1, removed: 0 });
+    expect(ctx.store.dump()).toHaveLength(1);
+  });
+
+  it("a transfer to a personal account re-keys the owner, and later calls carry no teamId", async () => {
+    const { app, store, vercel, cookie } = await installed();
+    await app.webhook(signed({ type: "integration-configuration.transferred", payload: { configuration: { id: CFG }, previousTeamId: TEAM, newTeamId: null, newAccountId: "user_New1" } }));
+    expect(store.dump()[0].ownerId).toBe("user_New1");
+    await app.setup(get("/setup", { cookie }));
+    const list = vercel.calls.filter((c) => c.url.pathname === "/v10/projects").at(-1);
+    expect(list.url.searchParams.has("teamId")).toBe(false);
+  });
+
+  it("refuses a GCM tag shorter than 16 bytes", () => {
+    const keys = parseKeys(`v1:${b64key()}`);
+    const sealed = sealToken(ACCESS_TOKEN, CFG, keys);
+    for (const n of [4, 8, 12]) {
+      expect(() => openToken({ ...sealed, tag: Buffer.from(sealed.tag, "base64").subarray(0, n).toString("base64") }, CFG, keys)).toThrow();
+    }
   });
 });

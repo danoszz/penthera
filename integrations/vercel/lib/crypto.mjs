@@ -46,9 +46,12 @@ export function sealToken(token, configurationId, keys) {
 export function openToken(sealed, configurationId, keys) {
   const entry = keys.find((k) => k.version === sealed.keyVersion);
   if (!entry) throw new ConfigError("no key for this record's keyVersion");
-  const decipher = createDecipheriv("aes-256-gcm", entry.key, Buffer.from(sealed.iv, "base64"));
+  // A full 16-byte tag only: Node 22 still accepts shorter GCM tags unless told the length.
+  const tag = Buffer.from(sealed.tag, "base64");
+  if (tag.length !== 16) throw new Error("bad tag length");
+  const decipher = createDecipheriv("aes-256-gcm", entry.key, Buffer.from(sealed.iv, "base64"), { authTagLength: 16 });
   decipher.setAAD(Buffer.from(configurationId, "utf8"));
-  decipher.setAuthTag(Buffer.from(sealed.tag, "base64"));
+  decipher.setAuthTag(tag);
   return Buffer.concat([decipher.update(Buffer.from(sealed.ciphertext, "base64")), decipher.final()]).toString("utf8");
 }
 

@@ -53,7 +53,7 @@ export async function exchangeCode({ code, clientId, clientSecret, redirectUri, 
 
 /** A client bound to one install's token and owner. */
 export function vercelClient({ token, teamId, fetch: f = globalThis.fetch }) {
-  async function call(method, path, { query = {}, body } = {}) {
+  async function call(method, path, { query = {}, body, signal } = {}) {
     const url = new URL(path, API);
     for (const [k, v] of Object.entries(query)) if (v !== undefined && v !== null) url.searchParams.set(k, String(v));
     if (teamId) url.searchParams.set("teamId", teamId);
@@ -61,7 +61,7 @@ export function vercelClient({ token, teamId, fetch: f = globalThis.fetch }) {
       method,
       headers: { Authorization: `Bearer ${token}`, ...(body ? { "Content-Type": "application/json" } : {}) },
       body: body ? JSON.stringify(body) : undefined,
-      signal: AbortSignal.timeout(10_000),
+      signal: signal ? AbortSignal.any([AbortSignal.timeout(10_000), signal]) : AbortSignal.timeout(10_000),
     });
     if (!res.ok) await fail(res);
     return res.status === 204 ? null : res.json().catch(() => null);
@@ -74,18 +74,18 @@ export function vercelClient({ token, teamId, fetch: f = globalThis.fetch }) {
       const list = Array.isArray(json) ? json : (json?.projects ?? []);
       return { projects: list.map(projectView), next: json?.pagination?.next ?? null };
     },
-    async getProject(id) {
-      return projectView(await call("GET", `/v9/projects/${enc(id)}`));
+    async getProject(id, { signal } = {}) {
+      return projectView(await call("GET", `/v9/projects/${enc(id)}`, { signal }));
     },
-    async listChecks(projectId) {
-      const json = await call("GET", `/v2/projects/${enc(projectId)}/checks`);
+    async listChecks(projectId, { signal } = {}) {
+      const json = await call("GET", `/v2/projects/${enc(projectId)}/checks`, { signal });
       return Array.isArray(json?.checks) ? json.checks : [];
     },
     async createCheck(projectId, body) {
       return call("POST", `/v2/projects/${enc(projectId)}/checks`, { body });
     },
-    async deleteCheck(projectId, checkId) {
-      return call("DELETE", `/v2/projects/${enc(projectId)}/checks/${enc(checkId)}`);
+    async deleteCheck(projectId, checkId, { signal } = {}) {
+      return call("DELETE", `/v2/projects/${enc(projectId)}/checks/${enc(checkId)}`, { signal });
     },
   };
 }

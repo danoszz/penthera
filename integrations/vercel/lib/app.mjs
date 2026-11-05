@@ -29,6 +29,10 @@ const MAX_PROJECTS_PER_POST = 20;
 const CONFIG_ID = /^icfg_[A-Za-z0-9]{1,64}$/;
 const TEAM_ID = /^team_[A-Za-z0-9]{1,64}$/;
 const PROJECT_ID = /^prj_[A-Za-z0-9]{1,64}$/;
+/** Best-effort check cleanup on uninstall stays well inside the webhook's maxDuration (25 s). */
+const CLEANUP_MS = 15_000;
+/** Install exchanges per visitor per minute, per function instance. The firewall rule in README.md is the real limit. */
+const INSTALLS_PER_MINUTE = 10;
 
 /** Reads and checks the env once per call. Throws ConfigError without echoing values. */
 export function readConfig(env) {
@@ -71,6 +75,18 @@ export function createApp({ env = process.env, store, fetch: fetchImpl = globalT
     return record ? { raw, configurationId: data.c, next: data.n ?? null, record } : null;
   }
 
+  // Each /install makes one outbound exchange, so a visitor gets a few a minute. Per instance only.
+  const installHits = new Map();
+  function installLimited(request) {
+    const who = (request.headers.get("x-real-ip") ?? request.headers.get("x-forwarded-for")?.split(",")[0] ?? "unknown").trim();
+    const t = now();
+    const recent = (installHits.get(who) ?? []).filter((x) => x > t - 60_000);
+    recent.push(t);
+    if (installHits.size > 10_000) installHits.clear();
+    installHits.set(who, recent);
+    return recent.length > INSTALLS_PER_MINUTE;
+  }
+
   const formToken = (s, c) => mac(cookieKey(c.keys), `form:${s.raw}`);
 
   // A form post must come from our own pages: same origin when the browser says, and the session's form token.
@@ -102,13 +118,19 @@ export function createApp({ env = process.env, store, fetch: fetchImpl = globalT
     if (teamId && !TEAM_ID.test(teamId)) return message(400, "Bad team id", "Start the install from Vercel.");
     if (q.get("next") && !next) return message(400, "Bad return address", "The return address does not point at vercel.com.");
 
-    // CSRF: an install we started (/start) must come back with the state we set in the cookie.
-    // Installs started on vercel.com (marketplace, deploy button) carry no state.
+    // CSRF: an install we started (/start) must come back with the state we set in the cookie, and
+    // a browser that holds that cookie must send the matching state. Installs started on vercel.com
+    // (marketplace, deploy button) carry no state; they must say so in `source`, and the session is
+    // bound only after the exchange proves the configuration and its owner (README, "Security").
     const cookies = [];
-    if (state || source === "external") {
-      if (!safeEqual(state, readCookie(request, STATE))) return message(403, "Install check failed", "This install did not start here, or took longer than 15 minutes. Start it again from Vercel.");
+    const stateCookie = readCookie(request, STATE);
+    if (state || stateCookie || source === "external") {
+      if (!safeEqual(state, stateCookie)) return message(403, "Install check failed", "This install did not start here, or took longer than 15 minutes. Start it again from Vercel.", { cookies: [clearCookie(STATE)] });
       cookies.push(clearCookie(STATE));
+    } else if (source !== "marketplace" && source !== "deploy-button") {
+      return message(403, "Install check failed", "Start the install from Vercel.");
     }
+    if (installLimited(request)) return message(429, "Too many installs", "Wait a minute and start the install again from Vercel.", { cookies });
 
     let token;
     try {
@@ -117,20 +139,27 @@ export function createApp({ env = process.env, store, fetch: fetchImpl = globalT
       logError("exchange_failed", { status: e.status ?? 0, code: e.code ?? "network", configurationId });
       return message(502, "Vercel did not accept the install", "The code may have expired (it lasts 30 minutes) or been used already. Start the install again from Vercel.", { cookies });
     }
-    if ((token.configurationId && token.configurationId !== configurationId) || (teamId && token.teamId && token.teamId !== teamId)) {
+    // The exchange must name the configuration this redirect claims, and the team, or we store nothing.
+    if (token.configurationId !== configurationId || (teamId && token.teamId !== teamId)) {
       logError("configuration_mismatch", { configurationId });
       return message(400, "Install mismatch", "Start the install again from Vercel.", { cookies });
     }
     const ownerId = token.teamId ?? token.userId ?? teamId;
     if (!ownerId) return message(502, "Vercel sent no owner", "Start the install again from Vercel.", { cookies });
 
-    // One record per configuration. A deploy-button install may reuse an existing id: we overwrite it, never duplicate.
+    // One record per configuration. A deploy-button install may reuse an existing id: we overwrite it,
+    // never duplicate, and never hand a record to another owner.
     const previous = await store.get(configurationId);
+    if (previous && previous.ownerId !== ownerId) {
+      logError("owner_mismatch", { configurationId });
+      return message(409, "Install mismatch", "This installation belongs to another account. Install again from Vercel.", { cookies });
+    }
+    // createdAt is the latest install, so a replayed older uninstall event cannot delete it.
     await store.put({
       configurationId,
       ownerId,
       ...sealToken(token.accessToken, configurationId, c.keys),
-      createdAt: previous?.createdAt ?? new Date(now()).toISOString(),
+      createdAt: new Date(now()).toISOString(),
     });
     const value = signValue({ c: configurationId, n: next, e: now() + SESSION_MS }, cookieKey(c.keys));
     cookies.push(setCookie(SESSION, value, SESSION_MS / 1000));
@@ -286,43 +315,75 @@ ${FOOTER}`);
       return json(400, { error: "bad_json" });
     }
     const id = event?.payload?.configuration?.id;
-    if (event?.type === "integration-configuration.removed" && CONFIG_ID.test(id ?? "")) {
-      const record = await store.get(id);
-      try {
-        if (record) await removeOurChecks(record, c.keys, event.payload.configuration.projects);
-      } finally {
-        await store.delete(id);
-      }
-      return json(200, { ok: true, deleted: true });
+    const type = event?.type;
+    if ((type !== "integration-configuration.removed" && type !== "integration-configuration.transferred") || !CONFIG_ID.test(id ?? "")) {
+      return json(200, { ok: true, ignored: true });
     }
-    if (event?.type === "integration-configuration.transferred" && CONFIG_ID.test(id ?? "")) {
-      const record = await store.get(id);
-      const owner = event.payload.newTeamId;
-      if (record && TEAM_ID.test(owner ?? "")) await store.put({ ...record, ownerId: owner });
+    // A store error answers 500, so Vercel retries for up to 24 hours.
+    let record;
+    try {
+      record = await store.get(id);
+    } catch {
+      logError("store_failed", { configurationId: id, route: "webhook" });
+      return json(500, { error: "store_unavailable" });
+    }
+    if (!record) return json(200, { ok: true, deleted: type === "integration-configuration.removed" });
+    // A signed event replayed after a newer install of the same id changes nothing.
+    if (eventTime(event) !== null && eventTime(event) <= Date.parse(record.createdAt)) return json(200, { ok: true, ignored: "stale" });
+
+    if (type === "integration-configuration.transferred") {
+      const owner = newOwner(event.payload);
+      if (owner) await store.put({ ...record, ownerId: owner });
       return json(200, { ok: true });
     }
-    return json(200, { ok: true, ignored: true });
+
+    // Removed: open the token into memory, delete the record first, then tidy up best effort.
+    let api = null;
+    try {
+      api = client(record, c.keys);
+    } catch {}
+    try {
+      await store.delete(id);
+    } catch {
+      logError("store_failed", { configurationId: id, route: "webhook" });
+      return json(500, { error: "store_unavailable" });
+    }
+    if (api) await removeOurChecks(api, event.payload.configuration.projects);
+    return json(200, { ok: true, deleted: true });
+  }
+
+  /** The event's creation time in ms, or null when it has none. */
+  function eventTime(event) {
+    const t = typeof event?.createdAt === "number" ? event.createdAt : Date.parse(event?.createdAt ?? "");
+    return Number.isFinite(t) ? t : null;
+  }
+
+  /**
+   * The owner after a transfer: the new team, or for a personal account the new account id.
+   * Any id that is not a team id makes the client call without teamId.
+   */
+  function newOwner(payload) {
+    if (TEAM_ID.test(payload?.newTeamId ?? "")) return payload.newTeamId;
+    if (/^[A-Za-z0-9_]{1,64}$/.test(payload?.newAccountId ?? "")) return payload.newAccountId;
+    return payload?.newTeamId === null ? "personal" : null;
   }
 
   /**
    * Best effort, inside the webhook's 30 seconds: Vercel probably revokes the token before it
    * sends `removed`, and then every call fails and we only delete the record.
    */
-  async function removeOurChecks(record, keys, projectIds) {
+  async function removeOurChecks(api, projectIds) {
     const ids = (Array.isArray(projectIds) ? projectIds : []).filter((p) => PROJECT_ID.test(p)).slice(0, 50);
-    if (!ids.length) return;
-    let api;
-    try {
-      api = client(record, keys);
-    } catch {
-      return;
-    }
-    const deadline = now() + 15_000;
+    const signal = AbortSignal.timeout(CLEANUP_MS);
+    const deadline = now() + CLEANUP_MS;
     for (const pid of ids) {
-      if (now() > deadline) break;
+      if (signal.aborted || now() > deadline) break;
       try {
-        const project = await api.getProject(pid);
-        for (const check of await api.listChecks(pid)) if (isOurCheck(check, project.name)) await api.deleteCheck(pid, check.id);
+        const project = await api.getProject(pid, { signal });
+        for (const check of await api.listChecks(pid, { signal })) {
+          if (signal.aborted || now() > deadline) return;
+          if (isOurCheck(check, project.name)) await api.deleteCheck(pid, check.id, { signal });
+        }
       } catch (e) {
         if (e instanceof VercelError && (e.status === 401 || e.status === 403)) return;
       }
@@ -343,8 +404,9 @@ ${FOOTER}`);
       try {
         await client(record, c.keys).listProjects({ limit: 1 });
       } catch (e) {
-        // 401, 403 (also a disabled configuration) and 404 mean the install is gone or unusable.
-        if (e instanceof VercelError && [401, 403, 404].includes(e.status)) {
+        // 401 and 404 mean the install is gone. A 403 is kept: it can be a disabled configuration that
+        // comes back, or a transfer whose webhook we missed. Vercel sends `removed` when either ends.
+        if (e instanceof VercelError && (e.status === 401 || e.status === 404)) {
           await store.delete(id);
           removed++;
         } else if (!(e instanceof VercelError)) {
