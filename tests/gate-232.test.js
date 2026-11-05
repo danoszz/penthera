@@ -151,16 +151,26 @@ describe("C03: line numbers stay linear", () => {
   const aws = (i) => `"AKIAQ3EGRZ7XN${String(i).padStart(3, "0").replace(/\d/g, (d) => L[d])}PLMQ"`;
   const keys = Array.from({ length: 200 }, (_, i) => `k${i}=${aws(i)}`).join("\n");
 
+  // Linear, measured as growth: twice the input may take about twice the time,
+  // never four times (the old line counting was quadratic: 26.7 s at 2 MB).
+  // An absolute budget failed on CI's Node 22, whose regex engine is ~50x
+  // slower here than Node 24+ while still linear (3 to 6.6 s, 5 Nov 2026).
   it("scanSecrets on 2 MB of newlines and 200 keys", () => {
-    const dir = repo({ "config.js": "\n".repeat(2 * 1024 * 1024) + keys + "\n" });
+    const one = repo({ "config.js": "\n".repeat(1024 * 1024) + keys + "\n" });
+    const two = repo({ "config.js": "\n".repeat(2 * 1024 * 1024) + keys + "\n" });
     try {
       let f;
-      const ms = cpuMs(() => { f = scanSecrets(dir); }, { runs: 2 });
+      const t1 = cpuMs(() => scanSecrets(one), { runs: 3 });
+      const t2 = cpuMs(() => { f = scanSecrets(two); }, { runs: 3 });
       expect(f[0].line).toBe(2 * 1024 * 1024 + 1);
       expect(f[0].lines).toHaveLength(200);
       expect(f[0].lines.at(-1)).toBe(2 * 1024 * 1024 + 200);
-      expect(ms).toBeLessThan(1500);
-    } finally { rmSync(dir, { recursive: true, force: true }); }
+      expect(t2, `1 MB: ${t1} ms, 2 MB: ${t2} ms`).toBeLessThan(3 * t1 + 300);
+      expect(t2).toBeLessThan(15_000);
+    } finally {
+      rmSync(one, { recursive: true, force: true });
+      rmSync(two, { recursive: true, force: true });
+    }
   });
 
   it("findSecretsInText with a \\u escape (the decoded pass)", () => {
