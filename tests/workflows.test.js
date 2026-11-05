@@ -244,6 +244,17 @@ describe("exceptions hold only when the expression proves them", () => {
     expect(ids(I + "      - run: echo ${{ format('a}}', 'b') != 'c' && github.event.issue.title }}\n")).toEqual(["gha-script-injection:high"]);
   });
 
+  it("a step reused by a guarded and an unguarded job keeps its high finding (Vercel, 5 Nov)", () => {
+    const steps = "      - uses: actions/checkout@v4\n        with:\n          ref: ${{ github.event.pull_request.head.sha }}\n";
+    for (const [first, second] of [["guarded", "open"], ["open", "guarded"]]) {
+      const job = (name, ref) => name === "guarded"
+        ? `  guarded:\n    if: ${SAME}\n    steps: ${ref}\n`
+        : `  open:\n    steps: ${ref}\n`;
+      const yml = `on: pull_request_target\nanchors:\n  s: &s\n${steps.replace(/^ {6}/gm, "    ")}jobs:\n${job(first, "*s")}${job(second, "*s")}`;
+      expect(ids(yml), `${first} first`).toEqual(["gha-pwn-request:high"]);
+    }
+  });
+
   it("the merged guard needs the same proof", () => {
     const yml = (cond) => `on:\n  pull_request_target:\n    types: [closed]\njobs:\n  a:\n    if: ${cond}\n    steps:\n      - uses: actions/checkout@v4\n        with:\n          ref: \${{ github.event.pull_request.merge_commit_sha }}\n`;
     expect(ids(yml("github.event.pull_request.merged == true"))).toEqual([]);
