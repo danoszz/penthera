@@ -431,6 +431,7 @@ describe("our own workflows", () => {
 // readings agree, it must give the old regex's answer for every input.
 describe("pullRef means what the regex it replaced meant", () => {
   const OLD = /\bpull\/(\$\{\{[^}]*\}\}|[^/\s]+)\/(head|merge)\b/;
+  const MULTI = /\bpull\/(\$\{\{[^}]*\}\}){2,}\/(head|merge)\b/;
   const piece = fc.constantFrom("pull/", "${{", " }}", "/head", "/merge", "/headx", " ", "x", "1", "/", "a.b", "-", "_", "git fetch ");
   it("agrees with the old regex on 5,000 generated lines", () => {
     fc.assert(fc.property(fc.array(piece, { maxLength: 14 }), (parts) => {
@@ -440,8 +441,17 @@ describe("pullRef means what the regex it replaced meant", () => {
       const inside = (at) => exprSpans(line).some((sp) => sp.start < at && at < sp.close);
       const offsets = [...line.matchAll(/pull\//g)].map((m) => m.index);
       fc.pre(!offsets.some(inside));
-      expect(pullRef(line)).toBe(OLD.test(line));
+      // Intended superset (R12): a ref number built from several expressions
+      // back to back, pull/${{ a }}${{ b }}/merge, is still a pull ref. The old
+      // regex took one expression only. Found by fast-check on CI, seed 1358429370.
+      if (pullRef(line) && !OLD.test(line)) expect(MULTI.test(line), line).toBe(true);
+      else expect(pullRef(line), line).toBe(OLD.test(line));
     }), { numRuns: 5000 });
+  });
+
+  it("counts a pull ref built from several expressions back to back", () => {
+    expect(pullRef("pull/${{ }}${{ }}/merge")).toBe(true);
+    expect(pullRef("refs/pull/${{ github.event.number }}${{ env.X }}/head")).toBe(true);
   });
 });
 
