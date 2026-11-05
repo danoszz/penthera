@@ -8,7 +8,7 @@ All notable changes to Penthera are documented here. Versioning follows [SemVer]
 
 ### Security
 
-- **A crafted workflow can no longer stall a repo scan.** The check for `pull/<number>/head` in a script re-read the rest of the line at every `pull/`, so one long line of unclosed `pull/${{` took seconds (4 s for 175 KB) and blocked the CLI and the MCP server. It now reads the line once. Found by Vercel Security Review on 2.3.0.
+- **A crafted workflow can no longer stall a repo scan.** The check for `pull/<number>/head` in a script re-read the rest of the line at every `pull/`, so one long line of unclosed `pull/${{` took seconds (4 s for 175 KB) and blocked the CLI and the MCP server. It now reads the script once, with one quote-aware pass that finds where every `${{ }}` ends, so a `}}` inside a string, an expression that runs onto the next line, a `\` line continuation and two expressions in a row no longer hide a `pull/…/head` fetch either. Found by Vercel Security Review on 2.3.0 and an adversarial review of the fix.
 
 ### Docs
 

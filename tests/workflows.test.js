@@ -7,7 +7,8 @@ import { mkdtempSync, mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
-import { checkWorkflow, scanWorkflows } from "../lib/whitebox/workflows.js";
+import fc from "fast-check";
+import { checkWorkflow, scanWorkflows, pullRef, exprSpans } from "../lib/whitebox/workflows.js";
 import { cpuMs } from "./fixtures/cpu-time.js";
 
 const rules = (text) => checkWorkflow(text, ".github/workflows/x.yml").map((f) => `${f.templateId}:${f.line}`);
@@ -332,6 +333,25 @@ describe("crafted workflows can't make the check slow", () => {
     expect(ids(run("git fetch origin mypull/123/head"))).toEqual([]);
   });
 
+  it("a '}}' inside a string doesn't end a pull/ expression early (Vercel, 5 Nov)", () => {
+    const run = (line) => `on: pull_request_target\njobs:\n  a:\n    steps:\n      - run: ${line}\n`;
+    expect(ids(run("git fetch origin pull/${{ github.event.number||'}}' }}/head:pr && git checkout pr"))).toEqual(["gha-pwn-request:high"]);
+    expect(ids(run("git fetch origin pull/${{ format('{0}}}', github.event.number) }}/merge"))).toEqual(["gha-pwn-request:high"]);
+  });
+
+  it("reads expressions across lines, \\ continuations and expressions in a row (review, 5 Nov)", () => {
+    const run = (body) => `on: pull_request_target\njobs:\n  a:\n    steps:\n      - run: |\n${body.split("\n").map((x) => "          " + x).join("\n")}\n`;
+    expect(ids(run("echo ${{ contains('a\n${{ ', 'z') }} && git fetch origin pull/${{ github.event.number }}/head && make"))).toEqual(["gha-pwn-request:high"]);
+    expect(ids(run("git fetch origin \\\npull/${{ github.event.number }}/head"))).toEqual(["gha-pwn-request:high"]);
+    expect(ids(run("git fetch origin pull/${{ github.event.number }}${{ '' }}/head"))).toEqual(["gha-pwn-request:high"]);
+    expect(ids(run("echo pull/1/head"))).toEqual([]);
+  });
+
+  it("finds every expression's end in one pass, even with unclosed quotes", () => {
+    expect(timed(I + "      - run: echo " + "${{ ' }} ".repeat(25000) + "\n")).toBeLessThan(2000);
+    expect(exprSpans("a ${{ 'x}}' }} b ${{ c")).toEqual([{ start: 2, close: 12, open: false }, { start: 17, close: 22, open: true }]);
+  });
+
   it("checks one very long line in well under a second", () => {
     expect(timed(" ".repeat(250 * 1024) + "run")).toBeLessThan(2000);
     expect(timed(I + "      - run: " + "${{ github.event." + "a.".repeat(100 * 1024) + " }}\n")).toBeLessThan(2000);
@@ -342,5 +362,31 @@ describe("our own workflows", () => {
   it("have no pwn request or script injection", () => {
     const serious = scanWorkflows(".").filter((f) => f.templateId !== "gha-unpinned-action");
     expect(serious.map((f) => `${f.file}:${f.line} ${f.templateId}`)).toEqual([]);
+  });
+});
+
+// pullRef replaced a regex for speed (a Vercel finding). A speed refactor must
+// keep the meaning: on lines without quotes or lone braces, where the two
+// readings agree, it must give the old regex's answer for every input.
+describe("pullRef means what the regex it replaced meant", () => {
+  const OLD = /\bpull\/(\$\{\{[^}]*\}\}|[^/\s]+)\/(head|merge)\b/;
+  const piece = fc.constantFrom("pull/", "${{", " }}", "/head", "/merge", "/headx", " ", "x", "1", "/", "a.b", "-", "_", "git fetch ");
+  it("agrees with the old regex on 5,000 generated lines", () => {
+    fc.assert(fc.property(fc.array(piece, { maxLength: 14 }), (parts) => {
+      const line = parts.join("");
+      expect(pullRef(line)).toBe(OLD.test(line));
+    }), { numRuns: 5000 });
+  });
+});
+
+// R11, enforced: exprSpans is the only reader of expression boundaries. A
+// second, ad-hoc search for }} is how the 5 Nov bypass got in.
+describe("one parser per grammar", () => {
+  it("only exprSpans looks for }} in lib/whitebox/workflows.js", async () => {
+    const { readFileSync } = await import("node:fs");
+    const src = readFileSync(new URL("../lib/whitebox/workflows.js", import.meta.url), "utf-8");
+    const body = src.slice(src.indexOf("export function exprSpans"), src.indexOf("/** Each ${{ }} in a string, normalized"));
+    const outside = src.replace(body, "");
+    expect(outside.match(/indexOf\("\}\}"|"\}" && \w+\[\w+ \+ 1\] === "\}"/g)).toBeNull();
   });
 });
