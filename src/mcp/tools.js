@@ -93,7 +93,8 @@ export const TOOLS = [
       return buildResult({
         tool: "scan_repo", target: display, findings: merged.findings, limits: REPO_LIMITS, maxFindings: args.max_findings,
         extra: { routes: Array.isArray(raw.attackSurface) ? raw.attackSurface.length : 0, coverage: coverageOf(raw.coverage) },
-        scan: { mode: "repo", coverage: raw.coverage },
+        // incomplete: a refused file; the brief then has exit_code 2.
+        scan: { mode: "repo", coverage: raw.coverage, ...(raw.incomplete ? { incomplete: raw.incomplete } : {}) },
       });
     },
   },
@@ -176,7 +177,8 @@ export const TOOLS = [
       return buildResult({
         tool: "audit_ai_tooling", target: display, findings: stampProvenance(raw.findings, raw.timestamp), limits: AGENTS_LIMITS, maxFindings: args.max_findings,
         extra: { grade: a.grade ?? null, score: a.score ?? null, inventory: a.inventory ? { ...a.inventory, configFiles: (a.inventory.configFiles || []).slice(0, 50).map((f) => cleanText(f, 300)) } : null },
-        scan: { mode: "agents", agents: a },
+        // incomplete: agent config that was there but not read; the brief then has exit_code 2.
+        scan: { mode: "agents", agents: a, ...(raw.incomplete ? { incomplete: raw.incomplete } : {}) },
       });
     },
   },

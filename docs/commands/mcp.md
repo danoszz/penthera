@@ -160,7 +160,9 @@ The brief's `exit_code` is the code the CLI would exit with. A
 could not be read (a FIFO, a device, a link out of the project, over the 64 MiB
 cap, or an `-r` include like that). Its brief then has `exit_code` 2, a verdict
 of Review, and an `exit_reason` that names the file, and the findings list it
-as `File not read: <file>`. Never read that as clean.
+as `File not read: <file>`. Never read that as clean. `scan_repo` and
+`audit_ai_tooling` work the same way for a source or agent config file they
+could not read, such as a route file over 5 MiB.
 
 Arguments: `path` and `max_findings` on the file tools, `prod` on
 `check_dependencies`, `url` and `profile` (`quick` or `standard`) on `scan_url`,
