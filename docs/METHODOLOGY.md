@@ -631,7 +631,8 @@ are welcome (see [MANIFESTO.md](MANIFESTO.md)).
   `.po` in a folder such as `locales/` or `i18n/`), and in `build/`, `dist/`,
   `coverage/`, `reports/` and `vendor/` at the repo root, only the fixed-shape
   rules run, so unprefixed secrets and secrets in notes are missed there.
-  `.env` files get every rule wherever they are. A root folder of that kind is
+  `.env`, `*.env` and `*.env.*` files and shell scripts (`.sh`, `.bash`,
+  `.zsh`) get every rule wherever they are. A root folder of that kind is
   skipped when git ignores it. Below the root those
   names get every rule. Dependencies (`node_modules`, virtualenvs) are never
   read.

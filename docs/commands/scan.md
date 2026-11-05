@@ -112,8 +112,12 @@ identity (source, category, file or URL, and title). Since 2.3.2 it is also new 
 
 - its severity is above the baseline's for that identity, so a low that became
   critical fails `--baseline -q`;
-- it is a secret, and it now holds more lines than in the baseline, or shows a
-  masked value the baseline didn't (a second key of one rule in one file);
+- it is a secret, and it now holds more lines than in the baseline, or holds a
+  value the baseline didn't (a second key of one rule in one file, or one key
+  swapped for another). A `--repo` report keeps a short salted hash of each
+  secret value (`valueTags`, with the salt in `secretTagSalt`), never the
+  value, and `--baseline` reuses the baseline's salt to compare them. A
+  baseline without tags compares the first masked value, as before;
 - it is an eval or exec sink, and it lists a call the baseline didn't. Line
   numbers are left out, so an edit above the call changes nothing.
 

@@ -175,7 +175,7 @@ function noiseGroup(group, reason) {
   };
 }
 
-const rootOutputRead = (dirs) => `The secret scan ran only its fixed-shape rules (key prefixes, private keys) in ${dirs.map((d) => `${d}/`).join(", ")} at the repo root, and none in such a folder git ignores. Below the root, folders with these names get every rule.`;
+const rootOutputRead = (dirs) => `The secret scan ran only its fixed-shape rules (key prefixes, private keys) in ${dirs.map((d) => `${d}/`).join(", ")} at the repo root (env files and shell scripts there got every rule), and none in such a folder git ignores. Below the root, folders with these names get every rule.`;
 
 const filesText = (n) => `${n} file${n === 1 ? "" : "s"}`;
 
