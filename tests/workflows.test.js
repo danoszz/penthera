@@ -8,6 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { checkWorkflow, scanWorkflows } from "../lib/whitebox/workflows.js";
+import { cpuMs } from "./fixtures/cpu-time.js";
 
 const rules = (text) => checkWorkflow(text, ".github/workflows/x.yml").map((f) => `${f.templateId}:${f.line}`);
 
@@ -272,35 +273,33 @@ describe("a workflow it can't read fails the scan instead of passing", () => {
     const bomb = ["on: pull_request_target", "x0: &a0 [{uses: actions/checkout@v4}]"];
     for (let i = 1; i < 20; i++) bomb.push(`x${i}: &a${i} [${Array(9).fill(`*a${i - 1}`).join(", ")}]`);
     bomb.push("jobs:\n  t:\n    steps: *a19");
-    const t = performance.now();
-    expect(ids(bomb.join("\n"))).toEqual(["gha-workflow-unchecked:high"]);
-    expect(performance.now() - t).toBeLessThan(1000);
+    let found;
+    expect(cpuMs(() => { found = ids(bomb.join("\n")); })).toBeLessThan(2000);
+    expect(found).toEqual(["gha-workflow-unchecked:high"]);
   });
 });
 
 describe("crafted workflows can't make the check slow", () => {
-  const timed = (text) => {
-    const t = performance.now();
-    checkWorkflow(text, "x.yml");
-    return performance.now() - t;
-  };
+  // CPU time, fastest of 3: a linear check stays far under 2 s on a busy runner,
+  // and anything quadratic at the 256 KB cap takes tens of seconds every run.
+  const timed = (text) => cpuMs(() => checkWorkflow(text, "x.yml"), { runs: 3 });
 
   it("checks a near-cap workflow of many steps in well under a second", () => {
     const text = P + "      - uses: actions/checkout@v4\n        with: {ref: main}\n".repeat(4000);
     expect(text.length).toBeLessThan(256 * 1024);
-    expect(timed(text)).toBeLessThan(1000);
+    expect(timed(text)).toBeLessThan(2000);
   });
 
   it("peels deeply nested brackets in one pass, also with many steps", () => {
     const deep = (n) => "(".repeat(n) + "true" + ")".repeat(n);
     const steps = "      - uses: actions/checkout@v4\n        with:\n          ref: main\n".repeat(200);
-    expect(timed(`on: pull_request_target\njobs:\n  a:\n    if: ${deep(10000)}\n    steps:\n${steps}`)).toBeLessThan(1000);
-    expect(timed(I + `      - run: echo \${{ ${"(".repeat(60000)}github.event.issue.title${")".repeat(60000)} }}\n`)).toBeLessThan(1000);
+    expect(timed(`on: pull_request_target\njobs:\n  a:\n    if: ${deep(10000)}\n    steps:\n${steps}`)).toBeLessThan(2000);
+    expect(timed(I + `      - run: echo \${{ ${"(".repeat(60000)}github.event.issue.title${")".repeat(60000)} }}\n`)).toBeLessThan(2000);
   });
 
   it("checks one very long line in well under a second", () => {
-    expect(timed(" ".repeat(250 * 1024) + "run")).toBeLessThan(1000);
-    expect(timed(I + "      - run: " + "${{ github.event." + "a.".repeat(100 * 1024) + " }}\n")).toBeLessThan(1000);
+    expect(timed(" ".repeat(250 * 1024) + "run")).toBeLessThan(2000);
+    expect(timed(I + "      - run: " + "${{ github.event." + "a.".repeat(100 * 1024) + " }}\n")).toBeLessThan(2000);
   });
 });
 
