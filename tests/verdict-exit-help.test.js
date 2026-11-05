@@ -48,7 +48,9 @@ function repoWith(files) {
 
 function run(args, env = {}, nodeArgs = []) {
   const home = tmp("pk-verdict-home-");
-  const full = { ...process.env, HOME: home, NO_COLOR: "1", ...env };
+  // FORCE_COLOR from the caller (the audit sets it to 0) would decide the styling tests.
+  const { FORCE_COLOR: _force, ...inherited } = process.env;
+  const full = { ...inherited, HOME: home, NO_COLOR: "1", ...env };
   for (const [k, v] of Object.entries(env)) if (v === undefined) delete full[k];
   const child = spawn(process.execPath, [...nodeArgs, BIN, ...args], { cwd: home, env: full, stdio: ["ignore", "pipe", "pipe"] });
   let out = "";
