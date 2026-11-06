@@ -202,8 +202,11 @@ why the others were not: file type not read, over the size limit, a language
 route analysis does not support, or no server routes found (a client-only app
 has none). Large files are scanned, not skipped: the secret scan reads files up
 to 512 MiB, and the eval and exec check up to 64 MiB, both in overlapping
-chunks, so a hit across a chunk edge is still found. Minified code gives no
-code-pattern findings, whatever its size. A file over those limits, or one that
+chunks, so a hit across a chunk edge is still found. The eval and exec check
+streams a large file and carries the lexer's state from one piece to the next,
+so a string or comment across an edge can't hide code, and memory stays
+bounded whatever the file's size. Minified code gives no code-pattern findings, whatever its
+size; comments don't count toward minified. A file over those limits, or one that
 can't be read at all (a FIFO, a device, no permission), is named and makes the
 scan incomplete: it exits 2. A route or server file linked to another file in
 the project is read through the link. One linked out of the project or to
