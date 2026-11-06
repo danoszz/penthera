@@ -7,7 +7,7 @@ import { createApp } from "../lib/app.mjs";
 import { parseKeys, sealToken } from "../lib/crypto.mjs";
 import { setLogSink } from "../lib/log.mjs";
 import { GITHUB_ISSUER, GITHUB_JWKS_URL, jwksCache, verifyGithubToken } from "../lib/oidc.mjs";
-import { memoryStore, redisStore } from "../lib/store.mjs";
+import { REJECT_REASONS, STAT_FIELDS, STAT_TTL_SECONDS, memoryStore, redisStore } from "../lib/store.mjs";
 import { WORKFLOW_YAML } from "../lib/workflow.mjs";
 
 const BASE = "https://penthera-vercel.example.test";
@@ -453,6 +453,71 @@ describe("project links", () => {
     expect(sent.find((c) => c[0] === "SCAN")[2]).toBe("MATCH");
     expect(sent.find((c) => c[0] === "SCAN")[3]).toBe("pv:prj:*");
     expect(sent.find((c) => c[0] === "MGET")).toEqual(["MGET", "pv:prj:prj_one", "pv:prj:prj_gone"]);
+  });
+});
+
+describe("anonymous daily totals", () => {
+  const DAY = new Date(T0).toISOString().slice(0, 10);
+
+  it("counts received, succeeded, failed and rejected by reason, under the date only", async () => {
+    const ctx = await enabled();
+    expect((await ctx.app.report(report(jwt(claims()), { deploymentId: "dpl_one", projectId: "prj_one", conclusion: "failed" }))).status).toBe(200);
+    await ctx.app.report(report(jwt(claims()))); // already completed
+    await ctx.app.report(report(jwt(claims(T0, { aud: "https://evil.example" }))));
+    await ctx.app.report(report(null));
+    expect(await ctx.store.stats(DAY)).toEqual({ received: 4, failed: 1, rejected_already_completed: 1, rejected_bad_token: 1, rejected_unauthorized: 1 });
+    const other = await enabled({ queued: true });
+    await other.app.report(report(jwt(claims())));
+    expect(await other.store.stats(DAY)).toEqual({ received: 1, succeeded: 1 });
+    // Nothing but the date and the counter names: no project, deployment, team, configuration or address.
+    const dump = JSON.stringify({ days: ctx.store.statDays(), stats: await ctx.store.stats(DAY) });
+    for (const id of ["prj_", "dpl_", "team_", "icfg_", "198.51.100", "acme"]) expect(dump).not.toContain(id);
+    expect(ctx.store.statDays()).toEqual([DAY]);
+  });
+
+  it("every reason /report can answer has a counter, and nothing else does", () => {
+    expect([...STAT_FIELDS].sort()).toEqual(["failed", "received", "succeeded", ...REJECT_REASONS.map((r) => `rejected_${r}`)].sort());
+  });
+
+  it("does not count rate-limited requests, and a store error while counting changes no answer", async () => {
+    const ctx = await enabled();
+    for (let i = 0; i < 35; i++) await ctx.app.report(report("x.y.z"));
+    expect((await ctx.store.stats(DAY)).received).toBe(30);
+    const other = await enabled();
+    other.store.countStat = async () => {
+      throw new Error("store down");
+    };
+    expect((await other.app.report(report(jwt(claims())))).status).toBe(200);
+    expect(other.vercel.runs.dpl_one[0].conclusion).toBe("succeeded");
+  });
+
+  it("a clock out of range counts nothing and still answers", async () => {
+    const ctx = await enabled();
+    ctx.tick(8.64e15);
+    expect((await ctx.app.report(report(null))).status).toBe(401);
+    expect(ctx.store.statDays()).toEqual([]);
+  });
+
+  it("the store refuses any other counter name or day", async () => {
+    const store = memoryStore();
+    await store.countStat(DAY, "received");
+    await expect(store.countStat(DAY, "rejected_prj_one")).rejects.toThrow(/documented names/);
+    await expect(store.countStat(DAY, "project")).rejects.toThrow(/documented names/);
+    await expect(store.countStat("prj_one", "received")).rejects.toThrow(/day/);
+  });
+
+  it("the Redis store keeps one hash per day that expires after 90 days", async () => {
+    const sent = [];
+    const fetch = async (url, init) => {
+      const cmd = JSON.parse(init.body);
+      sent.push(cmd);
+      return new Response(JSON.stringify({ result: cmd[0] === "HGETALL" ? ["received", "3", "succeeded", "2"] : 1 }), { status: 200 });
+    };
+    const store = redisStore({ url: "https://kv.example.test", token: "kvtoken", fetch });
+    await store.countStat(DAY, "received");
+    expect(sent).toEqual([["HINCRBY", `pv:stats:${DAY}`, "received", "1"], ["EXPIRE", `pv:stats:${DAY}`, String(STAT_TTL_SECONDS)]]);
+    expect(STAT_TTL_SECONDS).toBe(90 * 86_400);
+    expect(await store.stats(DAY)).toEqual({ received: 3, succeeded: 2 });
   });
 });
 

@@ -14,6 +14,14 @@
  *   links()            -> [{ key, link }] for every stored link, key being the projectId it is
  *                         stored under and link the parsed value or null (uninstall, sweep)
  *
+ * and one anonymous counter set per UTC day, for upkeep (README, "What it keeps"):
+ *
+ *   countStat(day, field) -> adds 1 to that day's counter; the day's key expires 90 days after
+ *                            its last write
+ *   stats(day)            -> { field: count } for that day
+ *
+ * A counter has no id of any kind: the key is the date, the field one of STAT_FIELDS.
+ *
  * A record is exactly { configurationId, ownerId, ciphertext, iv, tag,
  * keyVersion, createdAt, sessionNonce }, and a link exactly { projectId, configurationId }.
  * put() and putLink() refuse anything else, so no other field can reach the store by accident.
@@ -28,6 +36,21 @@ const FIELDS = ["configurationId", "ownerId", "ciphertext", "iv", "tag", "keyVer
 const PREFIX = "pv:cfg:";
 const LINK_FIELDS = ["configurationId", "projectId"];
 const LINK_PREFIX = "pv:prj:";
+const STAT_PREFIX = "pv:stats:";
+export const STAT_TTL_SECONDS = 90 * 86_400;
+/** Why POST /report refused a relay: its error codes, and nothing else. */
+export const REJECT_REASONS = [
+  "unauthorized", "too_large", "bad_json", "bad_body", "bad_deployment", "bad_project", "bad_conclusion",
+  "bad_token", "workflow_not_allowed", "try_again", "not_enabled", "repository_mismatch", "deployment_mismatch",
+  "already_completed", "vercel_unavailable",
+];
+/** The only counter names: relays received, relayed as succeeded or failed, and rejected by reason. */
+export const STAT_FIELDS = new Set(["received", "succeeded", "failed", ...REJECT_REASONS.map((r) => `rejected_${r}`)]);
+
+export function assertStat(day, field) {
+  if (typeof day !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(day)) throw new Error("store: bad stats day");
+  if (!STAT_FIELDS.has(field)) throw new Error("store: a counter has one of the documented names");
+}
 
 export function assertRecord(record) {
   const keys = Object.keys(record ?? {}).sort();
@@ -49,6 +72,7 @@ export function assertLink(link) {
 export function memoryStore() {
   const map = new Map();
   const linkMap = new Map();
+  const statMap = new Map();
   return {
     async get(id) {
       const v = map.get(id);
@@ -78,6 +102,17 @@ export function memoryStore() {
     async links() {
       return [...linkMap.entries()].map(([key, v]) => ({ key, link: v && typeof v === "object" ? { ...v } : null }));
     },
+    async countStat(day, field) {
+      assertStat(day, field);
+      const counts = statMap.get(day) ?? {};
+      counts[field] = (counts[field] ?? 0) + 1;
+      statMap.set(day, counts);
+    },
+    async stats(day) {
+      return { ...(statMap.get(day) ?? {}) };
+    },
+    /** Tests only: every stats key. */
+    statDays: () => [...statMap.keys()],
     /** Tests only: the raw contents. */
     dump: () => [...map.values()].map((v) => ({ ...v })),
     dumpLinks: () => [...linkMap.values()].map((v) => ({ ...v })),
@@ -126,6 +161,17 @@ export function redisStore({ url, token, fetch: fetchImpl = globalThis.fetch }) 
     },
     async ids() {
       return (await scan(PREFIX)).map((k) => k.slice(PREFIX.length));
+    },
+    async countStat(day, field) {
+      assertStat(day, field);
+      await command("HINCRBY", STAT_PREFIX + day, field, "1");
+      await command("EXPIRE", STAT_PREFIX + day, String(STAT_TTL_SECONDS));
+    },
+    async stats(day) {
+      const flat = (await command("HGETALL", STAT_PREFIX + day)) ?? [];
+      const out = {};
+      for (let i = 0; i + 1 < flat.length; i += 2) out[flat[i]] = Number(flat[i + 1]);
+      return out;
     },
     async getLink(projectId) {
       const raw = await command("GET", LINK_PREFIX + projectId);

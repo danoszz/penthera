@@ -62,9 +62,9 @@ const asks = ({ open = false } = {}) => `<details class="faq"${open ? " open" : 
 <dt>Access to Vercel</dt>
 <dd>Deployment Checks, read and write, to add and remove the check and to set its result for each production deploy. Projects, read, to list your projects and their repos. Nothing else.</dd>
 <dt>What this server keeps</dt>
-<dd>One encrypted install token, with the installation id, your team or user id, the install date and a random value that ends old setup sessions. For each project with the check on, the project id and which installation turned it on. We delete all of it when you uninstall. No code, no deployment URLs, no results.</dd>
+<dd>One encrypted install token, with the installation id, your team or user id, the install date and a random value that ends old setup sessions. For each project with the check on, the project id and which installation turned it on. We delete all of it when you uninstall. Apart from that, anonymous daily totals with no ids, deleted after 90 days. No code, no deployment URLs, no results.</dd>
 <dt>What the workflow does</dt>
-<dd>It runs Penthera's passive scan on your deployment, in your own GitHub Actions, and holds no secrets. For a production deploy it then sends us three things: the deployment id, the project id, and pass or fail, with a token GitHub signs for your repo. We check the token, set the check's result in Vercel, and keep nothing. The findings stay in GitHub: the job summary and a run artifact.</dd>
+<dd>It runs Penthera's passive scan on your deployment, in your own GitHub Actions, and holds no secrets. For a production deploy it then sends us three things: the deployment id, the project id, and pass or fail, with a token GitHub signs for your repo. We check the token, set the check's result in Vercel, and keep nothing about it, only anonymous daily totals to keep the service working. The findings stay in GitHub: the job summary and a run artifact.</dd>
 <dt>What it never does</dt>
 <dd>It never reads your code, never writes to your repo beyond one commit status, and never sends findings or code to us. It doesn't attack your site: it reads your pages and sends one login with obviously fake credentials, to check a wrong password is refused.</dd>
 <dt>Why you commit the workflow yourself</dt>
@@ -535,9 +535,38 @@ ${asks({ open: true })}`);
    *
    * Only then is the run's conclusion set. Nothing about the scan or the request is stored.
    */
+  /**
+   * POST /report, counted. Each relay adds 1 to today's anonymous totals: received, then
+   * succeeded, failed or rejected_<reason>. The counters hold no id, no IP and nothing from the
+   * request; a store error while counting never changes the answer. Rate-limited requests are not
+   * counted, so a flood costs no store writes.
+   */
   async function report(request) {
-    const c = cfg();
     if (reportLimited(request)) return json(429, { error: "rate_limited" });
+    const res = await relay(request);
+    let field = null;
+    try {
+      const out = await res.clone().json();
+      field = res.status === 200 && (out?.conclusion === "succeeded" || out?.conclusion === "failed") ? out.conclusion : `rejected_${out?.error}`;
+    } catch {}
+    await count("received");
+    if (field) await count(field);
+    return res;
+  }
+
+  /** Adds 1 to one of today's counters (UTC). A bad clock or an unknown name counts nothing. */
+  async function count(field) {
+    try {
+      // toISOString throws for a time out of range, so a broken clock counts nothing.
+      const day = new Date(now()).toISOString().slice(0, 10);
+      await store.countStat(day, field);
+    } catch {
+      logError("stats_failed", { route: "report" });
+    }
+  }
+
+  async function relay(request) {
+    const c = cfg();
     const auth = /^Bearer ([A-Za-z0-9_.-]{1,8192})$/.exec(request.headers.get("authorization") ?? "");
     if (!auth) return json(401, { error: "unauthorized" });
     const raw = await readBody(request, 1024);

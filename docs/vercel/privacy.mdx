@@ -39,6 +39,12 @@ your project is connected to.
 We then set the Penthera check's result in Vercel, and keep none of it: not the
 ids, not the result, not the token. Our own logs hold an error code at most.
 
+To keep the service working, we count anonymous daily totals: how many results
+arrived that day, how many passed, failed, or were refused and why. The totals
+are numbers under a date. They hold no project, deployment, team or
+installation id and no IP address, so they cannot be tied to you. Each day's
+totals are deleted after 90 days.
+
 ## What never reaches us
 
 Your source code, deployment URLs, findings, GitHub access tokens, Vercel
@@ -56,7 +62,8 @@ Art. 6(1)(b)).
 
 ## No tracking
 
-No analytics, no tracking, no profiling, no advertising. We do not sell or
+No analytics beyond the anonymous daily totals above, no tracking, no
+profiling, no advertising. We do not sell or
 share your data. During the install we set two strictly necessary cookies: a
 CSRF check (up to 15 minutes) and a setup session (30 minutes). Neither holds
 your token.
@@ -83,7 +90,7 @@ do not export or analyze them.
 
 ## How long
 
-Until you uninstall: Vercel tells us, and we delete the record and its project
+The anonymous daily totals: 90 days. Everything else, until you uninstall: Vercel tells us, and we delete the record and its project
 links. Removing the check from a project deletes that project's link. A weekly
 check also deletes any record whose token Vercel no longer accepts, and any
 link whose installation is gone.

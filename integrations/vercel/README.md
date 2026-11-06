@@ -39,14 +39,28 @@ which installation's token to use:
 | `projectId` | the Vercel project id (`prj_...`), also the key |
 | `configurationId` | the installation that turned the check on |
 
-The store refuses a record or a link with any other field (`lib/store.mjs`).
+And one set of anonymous counters per UTC day, for upkeep and bugs, under
+`pv:stats:<YYYY-MM-DD>`, each day's key expiring 90 days after its last write:
+
+| Counter | What it counts that day |
+|---|---|
+| `received` | calls to `POST /report` (rate-limited ones are not counted) |
+| `succeeded`, `failed` | results relayed to Vercel |
+| `rejected_<reason>` | refusals, by `/report`'s error code (`bad_token`, `repository_mismatch`, `not_enabled`, and the rest in `REJECT_REASONS`) |
+
+A counter holds a number and nothing else: no project, deployment, team or
+configuration id, no IP, nothing from the request. The key is the date.
+
+The store refuses a record, a link or a counter with any other field or name
+(`lib/store.mjs`).
 Project names, repos, emails, deployment ids, deployment URLs and scan results
 are never stored. Project names and repos are read live from Vercel to draw the
 pages and to check a report, then dropped.
 
 So the stored data is: an installation id, a team or account id, an encrypted
 token, a date, a random value, and the ids of the projects you turned the check
-on for. No other data about you or your projects.
+on for. No other data about you or your projects. Beside it, anonymous daily
+totals that name nobody.
 
 A link is deleted when you remove the check from the setup page, when the
 installation is removed (every link that names it, whatever key it sits under),
@@ -213,7 +227,9 @@ server (`lib/oidc.mjs`, `lib/app.mjs` `report`):
    replayed token cannot flip a result.
 
 Any failure leaves the run as it was, so the deploy stays held until Vercel's
-timeout. Nothing from the request is stored or logged beyond an error code.
+timeout. Nothing from the request is stored or logged beyond an error code and
+one tick on today's anonymous counters (above). A store error while counting
+changes no answer.
 `/report` answers 404 when the check is not on for the project; the workflow
 then passes with a notice, for people who use the commit status alone.
 
@@ -283,11 +299,13 @@ a commit status directly. The relay adds no new way in; it keeps the gate at
   which proves nothing about who clicked. So without the install session the
   page shows nothing account-specific.
 - **No telemetry:** no analytics, no Speed Insights, no third-party scripts, no
-  install counter. The server subscribes to no deployment events, so deployment
+  install counter. The only counters are the anonymous daily relay totals in
+  "What it keeps". The server subscribes to no deployment events, so deployment
   URLs never reach it. Per production deploy it receives the project id, the
   deployment id, pass or fail, and GitHub's signed token (which names the
   repository, workflow, run, commit and the GitHub account that started the
-  run). It checks them, sets the result in Vercel, and keeps none of it.
+  run). It checks them, sets the result in Vercel, and keeps none of it,
+  only one tick on the day's anonymous totals.
 - **Rule 4:** the server runs no model and has no dependencies. The verdict is
   the Action's exit code, from fixed rules with `fail-on: high`. The relay only
   carries it; it decides nothing.
