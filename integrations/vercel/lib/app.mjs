@@ -37,6 +37,14 @@ const CLOCK_SKEW_MS = 10 * 60_000;
 const INSTALLS_PER_MINUTE = 10;
 
 /** Reads and checks the env once per call. Throws ConfigError without echoing values. */
+
+// The page anyone sees who opens the bare domain. Static, no script, no data.
+const HOME = `<div class="void"><div>
+<pre class="shrug">¯\\_(ツ)_/¯</pre>
+<p>Not much to find here. Found something anyway?</p>
+<a class="btn" href="https://github.com/danoszz/penthera" rel="noopener noreferrer">Open a pull request</a>
+</div></div>`;
+
 export function readConfig(env) {
   const need = (name) => {
     if (!env[name]) throw new ConfigError(`${name} is not set`);
@@ -512,6 +520,7 @@ ${FOOTER}`);
     configure: guard(method({ GET: configure })),
     webhook: guard(method({ POST: webhook })),
     sweep: guard(method({ GET: sweep })),
+    home: method({ GET: async () => html(200, "Penthera", HOME) }),
     health: method({ GET: async () => json(200, { ok: true }) }),
   };
 }
