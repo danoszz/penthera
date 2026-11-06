@@ -41,7 +41,7 @@ const INSTALLS_PER_MINUTE = 10;
 // The page anyone sees who opens the bare domain. Static, no script, no data.
 const HOME = `<div class="void"><div>
 <pre class="shrug">¯\\_(ツ)_/¯</pre>
-<p>Nothing to hack here. Found a bug anyway?</p>
+<p>Not much to find here. Found something anyway?</p>
 <a class="btn" href="https://github.com/danoszz/penthera" rel="noopener noreferrer">Open a pull request</a>
 </div></div>`;
 

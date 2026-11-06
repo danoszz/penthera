@@ -817,7 +817,7 @@ describe("home page", () => {
     const res = await app.home(new Request(`${BASE}/`));
     expect(res.status).toBe(200);
     const body = await res.text();
-    expect(body).toContain("Nothing to hack here.");
+    expect(body).toContain("Not much to find here.");
     expect(body).toContain("¯\\_(ツ)_/¯");
     expect(body).toContain("https://github.com/danoszz/penthera");
     expect(body).not.toMatch(/<script/i);
