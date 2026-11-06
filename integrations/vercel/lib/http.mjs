@@ -9,16 +9,17 @@
 import { createHash } from "node:crypto";
 
 const STYLE = `
-:root{color-scheme:light dark;--fg:#111;--bg:#fff;--muted:#555;--line:#ddd;--accent:#0b57d0}
-@media (prefers-color-scheme:dark){:root{--fg:#eee;--bg:#111;--muted:#aaa;--line:#333;--accent:#8ab4f8}}
-body{font:16px/1.5 system-ui,sans-serif;color:var(--fg);background:var(--bg);margin:0;padding:24px 16px}
-main{max-width:640px;margin:0 auto}h1{font-size:22px;margin:0 0 8px}p{margin:8px 0}
-.muted{color:var(--muted);font-size:14px}ul{list-style:none;padding:0}
-li{border:1px solid var(--line);border-radius:8px;padding:12px;margin:8px 0;display:flex;gap:12px;align-items:flex-start}
+:root{color-scheme:dark;--fg:#e8e8e8;--bg:#000;--muted:#8a8a8a;--line:#262626;--accent:#0000ed;--on:#fff}
+body{font:16px/1.55 system-ui,sans-serif;color:var(--fg);background:var(--bg);margin:0;padding:24px 16px}
+main{max-width:640px;margin:8vh auto 0}h1{font-size:22px;margin:0 0 8px}p{margin:8px 0}
+.muted{color:var(--muted);font:13px/1.5 ui-monospace,monospace;letter-spacing:.02em}ul{list-style:none;padding:0}
+li{border:1px solid var(--line);border-radius:0;padding:12px;margin:8px 0;display:flex;gap:12px;align-items:flex-start}
 li .name{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:420px;display:block}
-li.off{opacity:.55}button,.button{font:inherit;background:var(--accent);color:var(--bg);border:0;border-radius:6px;padding:8px 14px;text-decoration:none;display:inline-block;cursor:pointer}
-button.quiet{background:transparent;color:var(--accent);border:1px solid var(--line);padding:4px 10px}
-textarea{width:100%;height:220px;font:12px/1.4 ui-monospace,monospace;box-sizing:border-box;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:6px}
+li.off{opacity:.55}button,.button{font:13px/1 ui-monospace,monospace;letter-spacing:.02em;background:var(--accent);color:var(--on);border:1px solid var(--accent);box-shadow:0 0 0 2px var(--bg),0 0 0 3px var(--fg);border-radius:0;min-height:36px;padding:0 14px;text-decoration:none;display:inline-flex;align-items:center;cursor:pointer}
+button:hover,.button:hover{background:var(--fg);color:var(--accent);border-color:var(--fg)}
+a{color:var(--fg)}
+button.quiet{background:transparent;color:var(--fg);border:1px solid var(--line);box-shadow:none;min-height:28px;padding:0 10px}
+textarea{width:100%;height:220px;font:12px/1.4 ui-monospace,monospace;box-sizing:border-box;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:0}
 .void{position:fixed;inset:0;background:#000;color:#bbb;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px;box-sizing:border-box}
 .shrug{font:40px/1 ui-monospace,monospace;color:#fff;margin:0 0 24px;white-space:pre}.void p{font-size:17px;margin:0 0 28px}
 .void .btn{display:inline-flex;align-items:center;min-height:36px;padding:0 14px;background:#0000ed;color:#fff;border:1px solid #0000ed;box-shadow:0 0 0 2px #000,0 0 0 3px #fff;border-radius:0;font:13px/1 ui-monospace,monospace;letter-spacing:.02em;text-decoration:none}
@@ -44,7 +45,7 @@ export const SECURITY_HEADERS = {
   "Strict-Transport-Security": "max-age=63072000; includeSubDomains",
   "X-Content-Type-Options": "nosniff",
   "X-Frame-Options": "DENY",
-  "Referrer-Policy": "no-referrer",
+  "Referrer-Policy": "same-origin",
   "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=(), usb=(), browsing-topics=()",
   "Cross-Origin-Opener-Policy": "unsafe-none",
   "Cross-Origin-Resource-Policy": "same-origin",
