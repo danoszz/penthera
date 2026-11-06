@@ -142,9 +142,14 @@ penthera deps --license-policy legal/policy.json # a file with a "licenses" sect
 
 Without the flag, `penthera deps` applies the `licenses` section of
 `penthera.policy.json` when there is one. A policy file that is not a regular
-file inside the project, or is over 1 MiB, is not read: `deps`, `install` and
-`--giants` print a warning and use the default policy, and AI mode does not
+file inside the project, or is over 1 MiB, is not read. A policy can tighten
+the gate, so this never passes quietly: `deps` and `--giants` check with the
+default policy and exit 2 as incomplete, `install` stops, and AI mode does not
 run.
+
+An installed package is read in full. A link inside the package folder is
+followed and read. A link out of the package, a link to nothing, or a FIFO or
+device in the folder makes the package "could not be scanned", never clean.
 
 ```json
 {

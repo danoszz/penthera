@@ -147,7 +147,10 @@ export async function scanRepo(repoPath, opts = {}) {
 
   // ── Phase 1: Secret scanning (whole repo) ─────────────────────────────
   progress("Scanning for hardcoded secrets...");
-  result.findings.push(...scanSecrets(repoPath, { ignored }));
+  // So is a file the secret scan could not read (a FIFO, a device, over 512 MiB).
+  const secretRefused = [];
+  result.findings.push(...scanSecrets(repoPath, { ignored, refused: secretRefused }));
+  for (const e of secretRefused) noteRefused(e);
   result.executedProbes.push("secret-scanning");
 
   // ── Phase 1b: Runtime pins (Dockerfile, .tool-versions, ...) vs advisories
@@ -161,7 +164,10 @@ export async function scanRepo(repoPath, opts = {}) {
   const library = detectLibrary(repoPath, opts.library);
   result.library = { enabled: library.enabled, reason: library.reason };
   if (library.refused) noteRefused(library.refused);
-  result.findings.push(...scanCodeSinks(repoPath, { library, ignored }));
+  // A code file the sink check could not read is named and makes the run incomplete.
+  const sinkRefused = [];
+  result.findings.push(...scanCodeSinks(repoPath, { library, ignored, refused: sinkRefused }));
+  for (const e of sinkRefused) noteRefused(e);
   result.executedProbes.push("code-sinks");
 
   // ── Phase 1d: GitHub Actions workflows (.github/workflows) ────────────

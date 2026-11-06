@@ -13,7 +13,10 @@ import { join } from "node:path";
 import { scanDeps } from "../lib/deps/index.js";
 import { scanRepo } from "../src/scan-repo.js";
 import { scanAgents } from "../lib/agents/index.js";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
+import { scanCodeSinks } from "../lib/whitebox/code-sinks.js";
+import { scanSecrets } from "../lib/whitebox/secrets.js";
+import { loadPolicy } from "../lib/install/policy.js";
 import { exitCodeOf } from "../src/report/exit.js";
 import { mergeResults } from "../src/cli/merge-results.js";
 
@@ -238,4 +241,109 @@ describe.skipIf(!posix)("final sweep: a package file that can't be read leaves t
     const r = await scanDeps(d, { ecosystem: "npm", cacheDir: tmp() });
     expect(r.deps.unscanned.find((u) => u.package === "dep@1.0.0")?.reason ?? "").toMatch(/could not be read.*evil\.js|evil\.js/);
   });
+});
+
+describe("Daan's five (6 Nov): scan it rather than skip it", () => {
+  const CLI = join(import.meta.dirname, "..", "bin", "penthera.js");
+  const cli = (args, cwd) => spawnSync(process.execPath, [CLI, ...args], { cwd, encoding: "utf-8", env: { ...process.env, HOME: tmp("penthera-home-"), NO_COLOR: "1" }, timeout: 120_000 });
+  // About 700 KB of ordinary server code, not minified: past the old 512 KB cap.
+  const filler = (n) => Array.from({ length: n }, (_, i) => `function handler${i}(a, b) { return a + b + ${i}; }`).join("\n");
+
+  it("1: a sink past 512 KB in a large server file is found; so is one at a chunk edge", () => {
+    const d = tmp();
+    mkdirSync(join(d, "src"));
+    const head = `const { exec } = require("child_process");\n`;
+    const lines = filler(14000).split("\n");
+    // One call at the end, and one right where the first 512 KB chunk ends.
+    let size = head.length, edge = 0;
+    while (size < 512 * 1024 - 200) size += lines[edge++].length + 1;
+    lines.splice(edge, 0, "app.post('/a', (req, res) => {", "  exec(req.body.cmd);", "});");
+    lines.push("app.post('/b', (req, res) => { exec(req.query.c); });");
+    writeFileSync(join(d, "src", "server.js"), head + lines.join("\n") + "\n");
+    const hits = scanCodeSinks(d).filter((f) => f.pattern === "command-injection");
+    expect(hits).toHaveLength(1);
+    expect(hits[0].description).toMatch(/exec on line \d+ \(from the request\), exec on line \d+ \(from the request\)/);
+  });
+
+  it.skipIf(!posix || process.getuid?.() === 0)("2: a server file the sink check cannot read is named, and --repo exits 2", async () => {
+    const d = tmp();
+    mkdirSync(join(d, "lib"));
+    writeFileSync(join(d, "lib", "run.js"), "require('child_process').exec(process.argv[2]);\n");
+    chmodSync(join(d, "lib", "run.js"), 0o000);
+    execFileSync("mkfifo", [join(d, "lib", "pipe.js")]);
+    const refused = [];
+    scanCodeSinks(d, { refused });
+    expect(refused.map((r) => r.path.split("/").pop()).sort()).toEqual(["pipe.js", "run.js"]);
+    const r = await scanRepo(d, { offline: true });
+    expect(r.incomplete?.map((x) => x.file)).toEqual(expect.arrayContaining(["lib/pipe.js", "lib/run.js"]));
+    expect(exitCodeOf(r)).toBe(2);
+  });
+
+  it.skipIf(!posix)("3: the secret scan names a FIFO .env and a file over its limit; --repo exits 2", async () => {
+    const d = tmp();
+    execFileSync("mkfifo", [join(d, ".env")]);
+    writeFileSync(join(d, "config.js"), `const a = 1;\n${"// pad\n".repeat(400)}`);
+    const refused = [];
+    scanSecrets(d, { refused, maxBytes: 1024 });
+    expect(refused.map((r) => r.path.split("/").pop()).sort()).toEqual([".env", "config.js"]);
+    const r = await scanRepo(d, { offline: true });
+    expect(r.incomplete?.map((x) => x.file)).toContain(".env");
+    expect(exitCodeOf(r)).toBe(2);
+  });
+
+  it.skipIf(!posix)("4: a link inside an installed package is read; one out of it or to nothing makes it unscanned", async () => {
+    const make = (link) => {
+      const d = tmp();
+      writeFileSync(join(d, "package-lock.json"), JSON.stringify({ name: "app", lockfileVersion: 3, packages: { "": { name: "app", dependencies: { dep: "1.0.0" } }, "node_modules/dep": { version: "1.0.0" } } }));
+      const pkg = join(d, "node_modules", "dep");
+      mkdirSync(join(pkg, "lib"), { recursive: true });
+      writeFileSync(join(pkg, "package.json"), JSON.stringify({ name: "dep", version: "1.0.0", main: "index.js" }));
+      writeFileSync(join(pkg, "lib", "real.js"), "require('https').request('https://x.example');\n");
+      link(pkg);
+      return d;
+    };
+    const scan = async (d) => (await scanDeps(d, { ecosystem: "npm", cacheDir: tmp() })).deps;
+    // Inside: index.js -> lib/real.js is read, so its network use is seen.
+    const inside = await scan(make((pkg) => symlinkSync("lib/real.js", join(pkg, "index.js"))));
+    expect(inside.unscanned).toEqual([]);
+    expect(Object.keys(inside.packages[0].capabilities || {})).toContain("network");
+    // Out of the package, and to nothing: unscanned, never clean.
+    const outFile = join(tmp(), "evil.js");
+    writeFileSync(outFile, "require('https');\n");
+    const out = await scan(make((pkg) => symlinkSync(outFile, join(pkg, "index.js"))));
+    expect(out.unscanned[0]?.reason).toMatch(/index\.js is a link out of the package/);
+    const broken = await scan(make((pkg) => symlinkSync("nope.js", join(pkg, "index.js"))));
+    expect(broken.unscanned[0]?.reason).toMatch(/index\.js is a link to nothing/);
+  });
+
+  it.skipIf(!posix)("5: a penthera.policy.json that is there but not read: deps exits 2, install stops", () => {
+    const d = tmp();
+    writeFileSync(join(d, "package.json"), JSON.stringify({ name: "app", version: "1.0.0" }));
+    writeFileSync(join(d, "package-lock.json"), JSON.stringify({ name: "app", lockfileVersion: 3, packages: { "": { name: "app" } } }));
+    execFileSync("mkfifo", [join(d, "penthera.policy.json")]);
+    expect(loadPolicy(d).refused).toMatchObject({ file: "penthera.policy.json" });
+    const deps = cli(["deps", d, "--json"], d);
+    expect(deps.status).toBe(2);
+    expect(JSON.parse(deps.stdout).incomplete.map((x) => x.file)).toContain("penthera.policy.json");
+    const install = cli(["install", "left-pad", "--yes"], d);
+    expect(install.status).toBe(2);
+    expect(install.stderr).toMatch(/penthera\.policy\.json was not read.*Nothing was installed/);
+    // A broken link counts as there too.
+    const b = tmp();
+    symlinkSync(join(b, "missing.json"), join(b, "penthera.policy.json"));
+    // Refused, or an error that stops the run: either way never "no policy".
+    let p;
+    try { p = loadPolicy(b); } catch (e) { p = { refused: e.message }; }
+    expect(p.refused).toBeTruthy();
+  }, 120_000);
+
+  it("a repo with a 3 MB minified bundle and nothing bad in it still exits 0", async () => {
+    const d = tmp();
+    mkdirSync(join(d, "src"));
+    const chunk = "var a=function(b){return b*2},c=[1,2,3].map(a);";
+    writeFileSync(join(d, "src", "app.bundle.js"), chunk.repeat(Math.ceil((3 * 1024 * 1024) / chunk.length)) + "\n");
+    const r = await scanRepo(d, { offline: true });
+    expect(r.incomplete).toBeUndefined();
+    expect(exitCodeOf(mergeResults([r]))).toBe(0);
+  }, 60_000);
 });

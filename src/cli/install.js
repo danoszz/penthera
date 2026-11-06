@@ -154,7 +154,13 @@ export async function runInstall(argv) {
   let policyPath;
   try {
     let warning;
-    ({ policy, path: policyPath, warning } = loadPolicy(root, opts.policy ? resolve(opts.policy) : null));
+    let refused;
+    ({ policy, path: policyPath, warning, refused } = loadPolicy(root, opts.policy ? resolve(opts.policy) : null));
+    // install is the gate the policy tightens: one that is there but not read stops it.
+    if (refused) {
+      printError(`${warning.replace(/ The scan used the default policy.*$/, "")} Nothing was installed. Make it a regular file inside the project, or pass --policy <file>.`);
+      return 2;
+    }
     if (warning) process.stderr.write(`\n  ${yellow("warning")} ${warning}\n`);
   } catch (e) {
     printError(e.message);

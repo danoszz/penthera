@@ -200,7 +200,12 @@ JSON (`coverage`) reports. For each check (the secret scan, route and
 code-pattern analysis, runtime versions) it says how many files were read and
 why the others were not: file type not read, over the size limit, a language
 route analysis does not support, or no server routes found (a client-only app
-has none). Route analysis reads Next.js route handlers anywhere under `app/` or
+has none). Large files are scanned, not skipped: the secret scan reads files up
+to 512 MiB, and the eval and exec check up to 64 MiB, both in overlapping
+chunks, so a hit across a chunk edge is still found. Minified code gives no
+code-pattern findings, whatever its size. A file over those limits, or one that
+can't be read at all (a FIFO, a device, no permission), is named and makes the
+scan incomplete: it exits 2. Route analysis reads Next.js route handlers anywhere under `app/` or
 `src/app/` and a Worker's `export default { fetch }` entry, besides Express,
 Hono and Fastify routes. How many routes it found is part of Coverage, not a
 finding. Source files no code
