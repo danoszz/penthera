@@ -201,7 +201,7 @@ code-pattern analysis, runtime versions) it says how many files were read and
 why the others were not: file type not read, over the size limit, a language
 route analysis does not support, or no server routes found (a client-only app
 has none). Each file is read whole, up to a size limit: 64 MiB for the secret
-scan and 12 MiB for the eval and exec check. Minified code gives no
+scan and 4 MiB for the eval and exec check. Minified code gives no
 code-pattern findings, whatever its size; comments don't count toward minified,
 and Coverage lists minified files. A file over those limits, or one that
 can't be read at all (a FIFO, a device, no permission), is named and makes the

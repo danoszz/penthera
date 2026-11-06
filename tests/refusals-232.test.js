@@ -524,14 +524,14 @@ describe("chunk lexing and minified() (Fact-checker on 75122f8..971a727)", () =>
 });
 
 describe("the sink check streams large files with the lexer state carried (memory bounded)", () => {
-  // The largest file the sink check reads whole (12 MiB): found, at a peak under budget.
-  it("a 12 MiB server file, the largest read whole: the sink at its end is found, peak under 512 MB", () => {
+  // The largest file the sink check reads whole (4 MiB): found, at a peak under budget.
+  it("a 4 MiB server file, the largest read whole: the sink at its end is found, peak under 512 MB", () => {
     const d = tmp();
     mkdirSync(join(d, "lib"));
     const f = openSync(join(d, "lib", "big.js"), "w");
     writeSync(f, `const { exec } = require("child_process");\n`);
     const block = "function f(a, b) { return a + b; }\n".repeat(4096);
-    for (let n = 0; n < 12 * 1024 * 1024 - block.length - 100; n += block.length) writeSync(f, block);
+    for (let n = 0; n < 4 * 1024 * 1024 - block.length - 100; n += block.length) writeSync(f, block);
     writeSync(f, "module.exports = (req) => exec(req.body.c);\n");
     closeSync(f);
     const lib = join(import.meta.dirname, "..", "lib", "whitebox", "code-sinks.js");
@@ -665,14 +665,14 @@ describe("row 4 on the secret scan and the sink cap: no crash, no read of what i
     expect(best / 4).toBeLessThan(150);
   });
 
-  it("a sparse file over the 12 MiB sink cap is named without being read", () => {
+  it("a sparse file over the 4 MiB sink cap is named without being read", () => {
     const d = tmp();
-    sparse(join(d, "giant.js"), 12 * 1024 * 1024 + 1);
+    sparse(join(d, "giant.js"), 4 * 1024 * 1024 + 1);
     const refused = [];
     const s = Date.now();
     scanCodeSinks(d, { refused });
     expect(Date.now() - s).toBeLessThan(2000);
-    expect(refused.map((r) => r.reason)).toEqual([expect.stringMatching(/over the 12 MiB limit/)]);
+    expect(refused.map((r) => r.reason)).toEqual([expect.stringMatching(/over the 4 MiB limit/)]);
   });
 });
 
@@ -757,10 +757,10 @@ describe("2.3.2 reads every file whole, under a cap (Vercel K, L, M)", () => {
     scanSecrets(sec, { refused });
     expect(refused.map((r) => r.reason)).toEqual([expect.stringMatching(/over the 64 MiB secret-scan limit/)]);
     expect(exitCodeOf(await scanRepo(sec, { offline: true }))).toBe(2);
-    // Sink check: 12 MiB.
+    // Sink check: 4 MiB.
     const sink = tmp();
     mkdirSync(join(sink, "lib"));
-    sparse(join(sink, "lib", "big.js"), 12 * 1024 * 1024 + 1);
+    sparse(join(sink, "lib", "big.js"), 4 * 1024 * 1024 + 1);
     expect(exitCodeOf(await scanRepo(sink, { offline: true }))).toBe(2);
     // Hook script: 16 MiB.
     const hk = tmp();
@@ -1073,14 +1073,14 @@ describe("bounded work per file (Vercel Security Review, 2.3.2)", () => {
     expect(exitCodeOf(r)).toBe(2);
   });
 
-  it("sink check at the 12 MiB read cap: taint-heavy, sink-heavy and binding-heavy files take seconds", () => {
+  it("sink check at the 4 MiB read cap: taint-heavy, sink-heavy and binding-heavy files take seconds", () => {
     timed(`
       const { findSinks } = await import(${mod("lib/whitebox/code-sinks.js")});
-      const CAP = 12 * 1024 * 1024 - 64;
+      const CAP = 4 * 1024 * 1024 - 64;
       const grow = (f) => { const parts = []; let n = 0; for (let i = 0; n < CAP - 64; i++) { const s = f(i); parts.push(s); n += s.length; } return parts.join(""); };
-      await time("12 MiB taint chain", () => findSinks(grow((i) => \`const a\${i} = \${i ? "a" + (i - 1) : "req.body"};\\n\`) + "exec(a1);\\n" + 'const cp = require("child_process");\\n', { compact: true }));
-      await time("12 MiB of sinks", () => findSinks('const cp = require("child_process");\\n' + grow(() => "cp.exec(req.body.c); cp.spawn('sh', ['-c', q]);\\n"), { compact: true, library: true }));
-      await time("12 MiB of bindings", () => findSinks(grow((i) => \`const cp\${i} = require("child_process"); const o\${i} = { run: cp\${i}.exec }; o\${i}.run(y);\\n\`), { compact: true }));`, 20_000, 120_000);
+      await time("4 MiB taint chain", () => findSinks(grow((i) => \`const a\${i} = \${i ? "a" + (i - 1) : "req.body"};\\n\`) + "exec(a1);\\n" + 'const cp = require("child_process");\\n', { compact: true }));
+      await time("4 MiB of sinks", () => findSinks('const cp = require("child_process");\\n' + grow(() => "cp.exec(req.body.c); cp.spawn('sh', ['-c', q]);\\n"), { compact: true, library: true }));
+      await time("4 MiB of bindings", () => findSinks(grow((i) => \`const cp\${i} = require("child_process"); const o\${i} = { run: cp\${i}.exec }; o\${i}.run(y);\\n\`), { compact: true }));`, 5000, 18_000);
   });
 
   it("secret scan: a long run of key words (`a.token.a.token…`) is read once, and finds what it found", () => {
