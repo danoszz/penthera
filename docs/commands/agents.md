@@ -18,7 +18,8 @@ A critical finding is an F. Otherwise the score is 100 minus 30, 15, 5 and 1 per
 critical, high, medium and low finding: A from 90, B from 75, C from 60, D from
 40. Exit 1 on a critical or high finding, 0 otherwise, 2 for a bad path or an
 incomplete scan: agent config that is there but was not read (a FIFO, a
-device, a link out, a file over 5 MiB) is named, and the run exits 2.
+device, a folder, a broken link, a link out of the project, a file you may not
+read, a file over 5 MiB) is named, and the run exits 2.
 
 ```bash
 penthera agents                 # this repo: .mcp.json, .claude/, .cursor/, AGENTS.md, CLAUDE.md, skills/

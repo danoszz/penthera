@@ -7,7 +7,7 @@
  * past a cap.
  */
 import { describe, it, expect } from "vitest";
-import { mkdtempSync, mkdirSync, writeFileSync, truncateSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, truncateSync, symlinkSync, chmodSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { scanDeps } from "../lib/deps/index.js";
@@ -147,5 +147,95 @@ describe("3: penthera agents: agent config that is there but not read makes the 
     put(d, "skills/py/SKILL.md", "---\nname: py\n---\nok\n");
     const r = await scanAgents(d);
     expect(r.incomplete).toBeUndefined();
+  });
+});
+
+describe("Fact-checker recheck: every agent config that is there but not read, and an unread .pth", () => {
+  const MCP = ".mcp.json";
+  // Every way a config can be there and not read. Each must make the run incomplete.
+  const kinds = {
+    fifo: (p) => execFileSync("mkfifo", [p]),
+    folder: (p) => mkdirSync(p),
+    "broken link": (p) => symlinkSync(join(tmpdir(), "penthera-no-such-target"), p),
+    "link out": (p) => { const out = join(tmp(), "outside.json"); writeFileSync(out, "{}"); symlinkSync(out, p); },
+    oversized: (p) => sparse(p, 5 * 1024 * 1024 + 1),
+    ...(process.getuid?.() === 0 ? {} : { "no permission": (p) => { writeFileSync(p, "{}"); chmodSync(p, 0o000); } }),
+  };
+
+  for (const [kind, make] of Object.entries(kinds)) {
+    it.skipIf(!posix)(`${kind}: .mcp.json, .claude/settings.json, CLAUDE.md and a SKILL.md each exit 2`, async () => {
+      for (const rel of [MCP, ".claude/settings.json", "CLAUDE.md", "skills/x/SKILL.md"]) {
+        const d = tmp();
+        mkdirSync(join(d, rel, ".."), { recursive: true });
+        make(join(d, rel));
+        const r = await scanAgents(d);
+        expect(r.incomplete?.map((x) => x.file), `${kind} ${rel}`).toContain(rel);
+        expect(exitCodeOf(r), `${kind} ${rel}`).toBe(2);
+      }
+    });
+  }
+
+  it.skipIf(!posix)("a named skill whose SKILL.md is a FIFO exits 2", async () => {
+    const d = tmp();
+    execFileSync("mkfifo", [join(d, "SKILL.md")]);
+    writeFileSync(join(d, "run.sh"), "echo hi\n");
+    const r = await scanAgents(d, { skillTarget: true });
+    expect(r.incomplete?.map((x) => x.file)).toContain("SKILL.md");
+    expect(exitCodeOf(r)).toBe(2);
+  });
+
+  it("an unowned .pth over 16 MiB in site-packages: named, incomplete, exit 2", async () => {
+    const d = tmp();
+    const site = venv(d, [["goodpkg", "1.0.0"]]);
+    sparse(join(site, "zz-startup.pth"), OVER_META);
+    const r = await py(d);
+    expect(r.incomplete?.map((x) => x.file)).toEqual([expect.stringMatching(/zz-startup\.pth$/)]);
+    expect(exitCodeOf(mergeResults([r]))).toBe(2);
+  });
+
+  it.skipIf(!posix)("an unowned .pth that is a FIFO: incomplete, exit 2; a small one is read as before", async () => {
+    const d = tmp();
+    const site = venv(d, [["goodpkg", "1.0.0"]]);
+    execFileSync("mkfifo", [join(site, "zz-startup.pth")]);
+    expect(exitCodeOf(await py(d))).toBe(2);
+    const ok = tmp();
+    const site2 = venv(ok, [["goodpkg", "1.0.0"]]);
+    writeFileSync(join(site2, "paths.pth"), "/opt/lib\n");
+    const r = await py(ok);
+    expect(r.incomplete).toBeUndefined();
+  });
+});
+
+describe.skipIf(!posix)("final sweep: a package file that can't be read leaves the package unscanned", () => {
+  it("Python: a .py in RECORD that is a FIFO makes the package unscanned, never clean", async () => {
+    const d = tmp();
+    const site = venv(d, [["goodpkg", "1.0.0"]]);
+    writeFileSync(join(site, "goodpkg-1.0.0.dist-info", "RECORD"), "goodpkg/__init__.py,,\ngoodpkg/evil.py,,\n");
+    execFileSync("mkfifo", [join(site, "goodpkg", "evil.py")]);
+    const r = await py(d);
+    expect(r.deps.unscanned.find((u) => u.package === "goodpkg@1.0.0")?.reason).toMatch(/could not be read.*evil\.py/);
+  });
+
+  it("Python: an egg whose installed-files.txt is a FIFO: unscanned and incomplete", async () => {
+    const d = tmp();
+    const site = venv(d, []);
+    const egg = join(site, "eggpkg-2.0.egg-info");
+    mkdirSync(egg);
+    writeFileSync(join(egg, "PKG-INFO"), "Metadata-Version: 1.1\nName: eggpkg\nVersion: 2.0\n");
+    execFileSync("mkfifo", [join(egg, "installed-files.txt")]);
+    const r = await py(d);
+    expect(r.deps.unscanned.find((u) => u.package === "eggpkg@2.0")?.reason).toMatch(/installed-files\.txt was not read/);
+    expect(exitCodeOf(r)).toBe(2);
+  });
+
+  it("npm: an installed .js that is a FIFO makes the package unscanned", async () => {
+    const d = tmp();
+    writeFileSync(join(d, "package-lock.json"), JSON.stringify({ name: "app", lockfileVersion: 3, packages: { "": { name: "app", dependencies: { dep: "1.0.0" } }, "node_modules/dep": { version: "1.0.0" } } }));
+    mkdirSync(join(d, "node_modules", "dep"), { recursive: true });
+    writeFileSync(join(d, "node_modules", "dep", "package.json"), JSON.stringify({ name: "dep", version: "1.0.0", main: "index.js" }));
+    writeFileSync(join(d, "node_modules", "dep", "index.js"), "module.exports = 1;\n");
+    execFileSync("mkfifo", [join(d, "node_modules", "dep", "evil.js")]);
+    const r = await scanDeps(d, { ecosystem: "npm", cacheDir: tmp() });
+    expect(r.deps.unscanned.find((u) => u.package === "dep@1.0.0")?.reason ?? "").toMatch(/could not be read.*evil\.js|evil\.js/);
   });
 });

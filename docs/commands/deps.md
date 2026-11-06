@@ -92,7 +92,9 @@ is incomplete, so it exits 2, even when nothing else was found. A file Penthera
 could not read never passes CI as an empty tree. In a virtualenv, a package
 whose `METADATA` or `RECORD` is not read (over 16 MiB, a FIFO, a device) stays
 in the report, named from its `.dist-info` folder and marked as not scanned,
-and the run exits 2.
+and the run exits 2. So does a startup `.pth` file in `site-packages` that is
+not read. A package with a code file Penthera could not read is not scanned,
+never clean.
 
 ```bash
 penthera deps                          # uv.lock + .venv
