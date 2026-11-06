@@ -160,19 +160,22 @@ describe("E8: the coverage ledger counts what the eval check did not read", () =
     const r = await scanRepo(root, { quiet: true });
     const sinks = r.coverage.families.find((f) => f.id === "code-sinks");
     expect(sinks.ran).toBe(true);
-    expect(sinks.examined).toBe(1);
-    expect(sinks.skipped.minified).toBe(1);
+    // A minified file is checked like any other and only noted (Red Team E23).
+    expect(sinks.examined).toBe(2);
+    expect(sinks.minified).toBe(1);
+    expect(sinks.skipped.minified).toBeUndefined();
     expect(sinks.skipped["too-large"]).toBeUndefined();
     writeFileSync(join(root, "src", "giant.js"), "");
     truncateSync(join(root, "src", "giant.js"), 64 * 1024 * 1024 + 1); // sparse
     const cov = buildCoverage(root, { ...r, sinkMinified: ["src/huge.js"] });
     const s2 = cov.families.find((f) => f.id === "code-sinks");
     expect(s2.skipped["too-large"]).toBe(1);
-    expect(s2.examined).toBe(1);
+    expect(s2.examined).toBe(2);
+    expect(s2.minified).toBe(1);
     expect(sinks.skipped, JSON.stringify(sinks)).toMatchObject({ "sink-skipped-folder": 2 });
     expect(s2.skipped, JSON.stringify(s2)).toMatchObject({ "sink-skipped-folder": 2 });
     const row = coverageMarkdown(cov).find((l) => l.startsWith("| eval, vm and exec sinks"));
-    expect(row).toMatch(/^\| eval, vm and exec sinks \| 1 \|/);
+    expect(row).toMatch(/^\| eval, vm and exec sinks \| 2 \|/);
     expect(row).toMatch(/1 over the size limit/);
     expect(row).toMatch(/2 in a folder the eval and exec check skips/);
   });

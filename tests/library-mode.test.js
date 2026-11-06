@@ -88,9 +88,11 @@ describe("long lines", () => {
     const src = `const table = [${"1,".repeat(3000)}1];\n${ordinary}\nconst out = ${EVAL}("[" + text + "]");\n`;
     expect(findSinks(src)).toMatchObject([{ pattern: "eval", line: 302 }]);
   });
-  it("still skips a file that is mostly long lines (minified)", () => {
+  it("scans a file that is mostly long lines (minified) too, and notes it", () => {
     const src = `${"var a=b(c);".repeat(2000)}${EVAL}(x);\n${"var d=e(f);".repeat(2000)}\n`;
-    expect(findSinks(src)).toEqual([]);
+    let noted = false;
+    expect(findSinks(src, { onMinified: () => (noted = true) })).toMatchObject([{ pattern: "eval", confidence: "potential" }]);
+    expect(noted).toBe(true);
   });
 });
 

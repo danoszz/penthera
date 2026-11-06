@@ -503,11 +503,13 @@ describe("chunk lexing and minified() (Fact-checker on 75122f8..971a727)", () =>
     }
   });
 
-  it("a real minified bundle still gives nothing", () => {
+  it("a real minified bundle is scanned too, and listed as minified (Red Team E23)", () => {
     const d = tmp();
     mkdirSync(join(d, "lib"));
     writeFileSync(join(d, "lib", "b.js"), `${"var a=function(b){return eval(b)};".repeat(30000)}\n`);
-    expect(scanCodeSinks(d)).toEqual([]);
+    const minified = [];
+    expect(scanCodeSinks(d, { minified })).toMatchObject([{ pattern: "eval", confidence: "potential" }]);
+    expect(minified).toEqual(["lib/b.js"]);
   });
 
   it.skipIf(!posix)("a hook script linked out of the project: incomplete, exit 2", async () => {
@@ -854,7 +856,7 @@ describe("line terminators and padding in the sink check (Fact-checker on 3e5051
     const m = tmp();
     mkdirSync(join(m, "lib"));
     writeFileSync(join(m, "lib", "b.js"), `${"var a=function(b){return eval(b)};".repeat(30000)}\n`);
-    expect(scanCodeSinks(m)).toEqual([]); // a real minified file still gives nothing
+    expect(scanCodeSinks(m).map((f) => f.confidence)).toEqual(["potential"]); // minified, scanned anyway
   });
 });
 
@@ -1182,3 +1184,71 @@ function scanCodeSinksText(src) {
   writeFileSync(join(d, "src", "x.js"), src);
   return scanCodeSinks(d).map((f) => f.title.split(" in ")[0]);
 }
+
+// Red Team E23 (2.3.2): four bugs the harness proved on main and on the PR
+// tip. The case ids are the harness's (private/experiments/red-team-e23).
+describe("Red Team E23", () => {
+  const py = (d) => scanDeps(d, { ecosystem: "python", pipCacheDir: tmp(), uvCacheDir: tmp() });
+
+  // meta:code-sinks:95, :101, :104
+  for (const [id, blob] of [["95", `const blob = "${"x".repeat(5000)}";`], ["101", `const blob = "${"x".repeat(60000)}";`], ["104", `const t = \`${"y".repeat(9000)}\`;`]]) {
+    it(`meta:code-sinks:${id}: one long string literal does not hide exec(req.body.code) (minified is a note only)`, async () => {
+      const d = tmp();
+      mkdirSync(join(d, "src"));
+      writeFileSync(join(d, "src", "server.js"), `const { exec } = require("child_process");\nconst express = require("express");\n${blob}\nconst app = express();\napp.post("/run", (req, res) => { exec(req.body.code); res.end(); });\n`);
+      const r = await scanRepo(d, { offline: true });
+      expect(r.findings.some((f) => f.pattern === "command-injection" && f.file === "src/server.js")).toBe(true);
+      expect(exitCodeOf(r)).toBe(1);
+    });
+  }
+
+  // meta:deps-python:192, :193, :198: CR, mixed and form-feed line ends, as pip's splitlines reads them.
+  for (const [id, eol] of [["192", "\r"], ["193", "\r\n"], ["198", "\f"]]) {
+    it(`meta:deps-python:${id}: a requirements file with ${JSON.stringify(eol)} line ends still finds the malicious pin`, async () => {
+      const d = tmp();
+      writeFileSync(join(d, "requirements.txt"), ["requests==2.31.0", "litellm==1.107.0", "idna==3.7"].join(eol) + eol);
+      const r = await py(d);
+      expect(r.deps.total).toBe(3);
+      expect(r.findings.some((f) => /litellm/.test(f.title) && f.severity === "critical")).toBe(true);
+    });
+  }
+  // meta:deps-python:199-202: decoys that must stay clean.
+  for (const [id, text] of [["199", "requests==2.31.0\r# litellm==1.107.0\r"], ["200", "requests==2.31.0\r\ridna==3.7\r"], ["201", "# litellm==1.107.0\rrequests==2.31.0"], ["202", "requests==2.31.0 # litellm==1.107.0\r"]]) {
+    it(`meta:deps-python:${id}: decoy stays clean`, async () => {
+      const d = tmp();
+      writeFileSync(join(d, "requirements.txt"), text);
+      const r = await py(d);
+      expect(r.findings.some((f) => /litellm/.test(f.title))).toBe(false);
+    });
+  }
+  it("a .pth import line after a bare CR is read, as site.py reads it", async () => {
+    const { pthImportLines } = await import("../lib/deps/python/capabilities.js");
+    expect(pthImportLines("/some/path\rimport os; os.system('x')\r").map((l) => l.line)).toEqual([2]);
+  });
+
+  it("dos:deps-python:229: a 128 KiB requirements line takes milliseconds, not seconds", async () => {
+    const d = tmp();
+    writeFileSync(join(d, "requirements.txt"), "a-".repeat(65536) + "\n");
+    const s = performance.now();
+    await py(d);
+    expect(performance.now() - s).toBeLessThan(1500); // 6.4 s before
+  });
+
+  // meta:deps-venv:241, :249: an unreadable METADATA or RECORD keeps the package, unscanned, exit 2.
+  const rootUser = typeof process.getuid === "function" && process.getuid() === 0;
+  for (const [id, file] of [["241", "METADATA"], ["249", "RECORD"]]) {
+    it.skipIf(process.platform === "win32" || rootUser)(`meta:deps-venv:${id}: an unreadable ${file} keeps the package and the run is incomplete`, async () => {
+      const d = tmp();
+      const di = join(d, ".venv", "lib", "python3.12", "site-packages", "litellm-1.107.0.dist-info");
+      mkdirSync(di, { recursive: true });
+      writeFileSync(join(d, ".venv", "pyvenv.cfg"), "home = /usr/bin\n");
+      writeFileSync(join(di, "METADATA"), "Metadata-Version: 2.1\nName: litellm\nVersion: 1.107.0\n");
+      writeFileSync(join(di, "RECORD"), "litellm/__init__.py,,\n");
+      chmodSync(join(di, file), 0);
+      const r = await py(d);
+      expect(r.findings.some((f) => /litellm@1\.107\.0/.test(f.title) && f.severity === "critical")).toBe(true);
+      expect(r.incomplete).toEqual([expect.objectContaining({ reason: expect.stringMatching(/EACCES/) })]);
+      expect(exitCodeOf(r)).toBe(2);
+    });
+  }
+});

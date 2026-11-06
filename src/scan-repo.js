@@ -178,7 +178,7 @@ export async function scanRepo(repoPath, opts = {}) {
   if (library.refused) noteRefused(library.refused);
   // A code file the sink check could not read is named and makes the run incomplete.
   const sinkRefused = [];
-  // Minified files get no sink findings: the coverage ledger lists them.
+  // Minified files are checked too; the coverage ledger notes how many.
   result.sinkMinified = [];
   result.findings.push(...scanCodeSinks(repoPath, { library, ignored, refused: sinkRefused, minified: result.sinkMinified }));
   for (const e of sinkRefused) noteRefused(e);
