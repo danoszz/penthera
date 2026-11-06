@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Moves the `plugin-claude-live` branch, which Anthropic's plugin directory follows,
- * to the newest commit on main whose plugin pins the version npm serves as
+ * to the newest commit on main whose plugin skill pins the version npm serves as
  * `latest`. A release PR bumps the pin before the maintainer approves the
  * version on npm, so main can point at a version that doesn't exist yet; this
  * branch never does. It only moves forward (a fast-forward), never rewrites.
@@ -13,21 +13,25 @@ import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const BRANCH = "plugin-claude-live";
-const MCP = "plugin/.mcp.json";
+// The plugin is skill-only: the skill runs `npx -y penthera@<pin>`, so its pin is
+// the version the plugin runs. (Until 2.3.2 the plugin also had a .mcp.json with
+// the same pin; Anthropic's directory refuses local MCP servers from unverified
+// publishers, so it was removed. Every earlier commit's skill carries that pin too.)
+const SKILL = "plugin/skills/penthera/SKILL.md";
 // How far back on main to look for a commit with the published pin.
 const MAX_COMMITS = 500;
 
-/** The penthera version a plugin .mcp.json pins, or null. */
+/**
+ * The penthera version the plugin's skill pins, or null. Every `penthera@<version>`
+ * in it must be the same plain x.y.z; a release candidate or two different pins
+ * give null. `penthera@next` and `penthera@latest` are not pins and are ignored.
+ */
 export function pinOf(text) {
-  let json;
-  try { json = JSON.parse(text); } catch { return null; }
-  const args = json?.mcpServers?.penthera?.args;
-  if (!Array.isArray(args)) return null;
-  for (const a of args) {
-    const m = /^penthera@(\d+\.\d+\.\d+)$/.exec(String(a));
-    if (m) return m[1];
-  }
-  return null;
+  const pins = new Set();
+  for (const m of String(text).matchAll(/\bpenthera@(\d[0-9A-Za-z.+-]*)/g)) pins.add(m[1].replace(/[.,;:]+$/, ""));
+  if (pins.size !== 1) return null;
+  const [pin] = pins;
+  return /^\d+\.\d+\.\d+$/.test(pin) ? pin : null;
 }
 
 /**
@@ -52,7 +56,7 @@ export function candidates(ref, latest, run = git) {
   const commits = [];
   for (const sha of shas) {
     let text = "";
-    try { text = run("show", `${sha}:${MCP}`); } catch { /* no plugin folder in this commit */ }
+    try { text = run("show", `${sha}:${SKILL}`); } catch { /* no plugin folder in this commit */ }
     commits.push({ sha, pin: pinOf(text) });
     if (commits.at(-1).pin === latest) break;
   }

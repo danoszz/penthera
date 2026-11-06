@@ -21,9 +21,8 @@ describe("plugin/ folder", () => {
     for (const f of src) expect(readFileSync(join(PLUGIN, "skills/penthera", f), "utf-8"), f).toBe(readFileSync(join("skills/penthera", f), "utf-8"));
   });
 
-  it("has the same licence and MCP pin as the repo, and the package version", () => {
+  it("has the same licence as the repo, and the package version", () => {
     expect(readFileSync(join(PLUGIN, "LICENSE"), "utf-8")).toBe(readFileSync("LICENSE", "utf-8"));
-    expect(JSON.parse(readFileSync(join(PLUGIN, ".mcp.json"), "utf-8"))).toEqual(JSON.parse(readFileSync(".mcp.json", "utf-8")));
     const manifest = JSON.parse(readFileSync(join(PLUGIN, ".claude-plugin/plugin.json"), "utf-8"));
     expect(manifest.version).toBe(pkg.version);
     expect(manifest.name).toBe("penthera");
@@ -51,6 +50,26 @@ describe("plugin/ folder", () => {
       const line = readFileSync(f, "utf-8").match(/^allowed-tools:\s*"([^"]*)"/m)?.[1];
       expect(line, f).toBe("Read");
     }
+  });
+
+  // Anthropic's directory refused the plugin on 6 Nov 2026 (LOCAL_CODE_MCP_SERVER):
+  // it takes MCP servers that run on the user's computer only from verified
+  // publishers. The plugin is skill-only; users add the server with `claude mcp add`.
+  it("declares no MCP server in any manifest the directory or another client reads", () => {
+    for (const f of [".mcp.json", "mcp.json", ".claude-plugin/.mcp.json"]) expect(existsSync(join(PLUGIN, f)), f).toBe(false);
+    for (const f of ["plugin.json", ".claude-plugin/plugin.json"]) {
+      const manifest = JSON.parse(readFileSync(join(PLUGIN, f), "utf-8"));
+      expect(manifest.mcpServers, f).toBeUndefined();
+      expect(manifest.keywords, f).not.toContain("mcp");
+    }
+    const market = JSON.parse(readFileSync(".claude-plugin/marketplace.json", "utf-8"));
+    expect(market.plugins.find((p) => p.name === "penthera").mcpServers).toBeUndefined();
+  });
+
+  it("tells the user how to add the MCP server themselves, pinned", () => {
+    const v = pkg.version;
+    const add = `claude mcp add penthera -- npx -y penthera@${v} mcp`;
+    for (const f of [join(PLUGIN, "README.md"), join(PLUGIN, "skills/penthera/SKILL.md")]) expect(readFileSync(f, "utf-8"), f).toContain(add);
   });
 
   it("is the folder the marketplace entry installs", () => {

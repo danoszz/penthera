@@ -27,7 +27,11 @@ cp -r skills/penthera .cursor/skills/penthera     # Cursor
 cp -r skills/penthera .claude/skills/penthera     # Claude Code
 ```
 
-Or as a plugin, with the skill and the MCP server together. In Claude Code:
+Or as a plugin. The plugin holds only the skill, which runs the pinned CLI; it
+starts no MCP server (Anthropic's plugin directory accepts a server that runs
+on your computer only from verified publishers). To add the MCP server, run
+`claude mcp add penthera -- npx -y penthera@2.3.2 mcp` ([mcp.md](mcp.md#claude-code)).
+In Claude Code:
 
 ```bash
 claude plugin marketplace add danoszz/penthera

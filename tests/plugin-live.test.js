@@ -11,11 +11,16 @@ import { join } from "node:path";
 import { pinOf, chooseTarget, candidates } from "../scripts/ci/plugin-live.mjs";
 
 describe("plugin-claude-live", () => {
-  it("reads the pinned version from the plugin's .mcp.json", () => {
-    expect(pinOf(readFileSync("plugin/.mcp.json", "utf-8"))).toBe(JSON.parse(readFileSync("package.json", "utf-8")).version);
-    expect(pinOf('{"mcpServers":{"penthera":{"args":["-y","penthera@2.4.0","mcp"]}}}')).toBe("2.4.0");
-    expect(pinOf('{"mcpServers":{"penthera":{"args":["-y","penthera@latest","mcp"]}}}')).toBeNull();
-    expect(pinOf("not json")).toBeNull();
+  it("reads the pinned version from the plugin's skill (the plugin has no .mcp.json)", () => {
+    expect(pinOf(readFileSync("plugin/skills/penthera/SKILL.md", "utf-8"))).toBe(JSON.parse(readFileSync("package.json", "utf-8")).version);
+    expect(pinOf("run `npx -y penthera@2.4.0 --repo .`, or `npx penthera@next` for the rc.")).toBe("2.4.0");
+    expect(pinOf("npx -y penthera@2.4.0 and npx -y penthera@2.4.0.")).toBe("2.4.0");
+  });
+
+  it("reads no pin from a skill with a release candidate, two versions or none", () => {
+    for (const text of ["npx -y penthera@2.4.0-rc.1", "penthera@2.3.1 then penthera@2.4.0", "npx penthera@latest", "penthera@2.4", "", "not a skill"]) {
+      expect(pinOf(text), text).toBeNull();
+    }
   });
 
   it("picks the newest commit that pins npm's latest, never one ahead of it", () => {
@@ -39,8 +44,8 @@ describe("plugin-claude-live", () => {
     const env = { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1", HOME: dir };
     const run = (...a) => execFileSync("git", ["-C", dir, ...a], { encoding: "utf-8", env, stdio: ["ignore", "pipe", "pipe"] }).trim();
     const pin = (v) => {
-      mkdirSync(join(dir, "plugin"), { recursive: true });
-      writeFileSync(join(dir, "plugin/.mcp.json"), JSON.stringify({ mcpServers: { penthera: { args: ["-y", `penthera@${v}`, "mcp"] } } }));
+      mkdirSync(join(dir, "plugin/skills/penthera"), { recursive: true });
+      writeFileSync(join(dir, "plugin/skills/penthera/SKILL.md"), `Run \`npx -y penthera@${v} --repo .\`.\n`);
     };
     let clock = 1_700_000_000; // distinct, increasing dates so rev-list's order is fixed
     const dated = () => { clock += 60; return { ...env, GIT_AUTHOR_DATE: `${clock} +0000`, GIT_COMMITTER_DATE: `${clock} +0000` }; };
