@@ -4,8 +4,8 @@
  * (unscanned) and makes the scan incomplete; a route file over the route cap
  * in --repo does the same. Both exit 2.
  *
- * The METADATA cap is lowered through a mock of fs-safe, so no test writes a
- * 16 MiB file.
+ * The METADATA and route caps are lowered through a mock of fs-safe, so no
+ * test writes a large file.
  */
 import { describe, it, expect, vi } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, chmodSync, symlinkSync } from "node:fs";
@@ -18,7 +18,8 @@ vi.mock(import("../lib/fs-safe.js"), async (importOriginal) => {
   const orig = await importOriginal();
   return {
     ...orig,
-    readRepoFile: (p, o = {}) => orig.readRepoFile(p, /(?:METADATA|PKG-INFO)$/.test(String(p)) ? { ...o, maxBytes: CAP } : o),
+    // The METADATA cap (16 MiB) and the route cap (5 MiB) are lowered, so no test writes a large file.
+    readRepoFile: (p, o = {}) => orig.readRepoFile(p, /(?:METADATA|PKG-INFO|route\.ts)$/.test(String(p)) ? { ...o, maxBytes: CAP } : o),
   };
 });
 
@@ -90,8 +91,8 @@ describe("a route over the route cap makes --repo incomplete", () => {
     mkdirSync(join(d, "app/api/run"), { recursive: true });
     writeFileSync(join(d, "package.json"), JSON.stringify({ name: "app", private: true }));
     const code = `import { exec } from "node:child_process";\nexport async function POST(req) {\n  const body = await req.json();\n  exec(body.code);\n  return Response.json({ ok: true });\n}\n`;
-    // Past the 5 MiB route cap, padded with blank space so nothing else matches.
-    writeFileSync(join(d, "app/api/run/route.ts"), `${code}${"\n".repeat(5 * 1024 * 1024 + 1)}`);
+    // Past the (lowered) route cap, padded with blank space so nothing else matches.
+    writeFileSync(join(d, "app/api/run/route.ts"), `${code}${"\n".repeat(CAP + 1)}`);
     const r = await scanRepo(d);
     expect(r.incomplete).toEqual([{ file: "app/api/run/route.ts", reason: expect.stringMatching(/over the .*limit/) }]);
     expect(r.findings.some((f) => f.severity === "info" && f.title === "File not read: app/api/run/route.ts")).toBe(true);
