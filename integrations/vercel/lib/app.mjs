@@ -45,8 +45,8 @@ export function readConfig(env) {
   const baseUrl = new URL(need("PUBLIC_BASE_URL"));
   if (baseUrl.protocol !== "https:" && baseUrl.hostname !== "localhost") throw new ConfigError("PUBLIC_BASE_URL must be https");
   return {
-    clientId: need("VERCEL_CLIENT_ID"),
-    clientSecret: need("VERCEL_CLIENT_SECRET"),
+    clientId: need("INTEGRATION_CLIENT_ID"),
+    clientSecret: need("INTEGRATION_CLIENT_SECRET"),
     keys: parseKeys(env.PENTHERA_TOKEN_KEYS),
     origin: baseUrl.origin,
     redirectUri: `${baseUrl.origin}/install`,

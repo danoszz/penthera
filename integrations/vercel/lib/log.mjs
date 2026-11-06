@@ -7,7 +7,7 @@
  * the secret env vars are masked wherever they appear.
  */
 const FIELDS = new Set(["configurationId", "status", "code", "route", "count"]);
-const SECRET_ENV = ["VERCEL_CLIENT_SECRET", "PENTHERA_TOKEN_KEYS", "KV_REST_API_TOKEN", "CRON_SECRET"];
+const SECRET_ENV = ["INTEGRATION_CLIENT_SECRET", "PENTHERA_TOKEN_KEYS", "KV_REST_API_TOKEN", "CRON_SECRET"];
 
 // Long opaque strings (tokens, codes, keys) and anything after a bearer or key= label.
 const CREDENTIAL = /\b(?:bearer\s+\S+|(?:access_token|client_secret|code|token|key)=\S+|[A-Za-z0-9_\-+/=]{20,})/gi;
