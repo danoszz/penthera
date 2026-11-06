@@ -59,12 +59,41 @@ export function readConfig(env) {
 export function createApp({ env = process.env, store, fetch: fetchImpl = globalThis.fetch, now = Date.now }) {
   const cfg = () => readConfig(env);
 
-  const client = (record, keys) =>
+  /**
+   * A record from the store, only if it is the record for `id`: the id we looked up, which came
+   * from a signed cookie, a signed webhook or the store's own key. A record whose configurationId
+   * says otherwise was moved or edited in the store and is never used.
+   */
+  async function load(id) {
+    const record = await store.get(id);
+    if (!record) return null;
+    if (record.configurationId !== id) {
+      logError("record_mismatch", { configurationId: id });
+      return null;
+    }
+    return record;
+  }
+
+  /**
+   * A Vercel client for the record under the trusted `id`. The id is the AAD, never the record's own
+   * field, so a ciphertext moved from another installation fails to decrypt and no call is made.
+   */
+  const client = (record, id, keys) =>
     vercelClient({
-      token: openToken(record, record.configurationId, keys),
+      token: openToken(record, id, keys),
       teamId: TEAM_ID.test(record.ownerId) ? record.ownerId : null,
       fetch: fetchImpl,
     });
+
+  /** The client, or null when the token does not decrypt under `id`. */
+  function tryClient(record, id, keys) {
+    try {
+      return client(record, id, keys);
+    } catch (e) {
+      logError("token_unreadable", { configurationId: id, code: e instanceof ConfigError ? "config" : "decrypt" });
+      return null;
+    }
+  }
 
   /**
    * The install session from the cookie, with its record, or null. The cookie is bound to the
@@ -78,9 +107,10 @@ export function createApp({ env = process.env, store, fetch: fetchImpl = globalT
     const raw = readCookie(request, SESSION);
     const data = raw && unsignValue(raw, cookieKey(c.keys), now());
     if (!data || !CONFIG_ID.test(data.c) || typeof data.o !== "string" || typeof data.s !== "string") return null;
-    const record = await store.get(data.c);
+    const record = await load(data.c);
     if (!record || !safeEqual(record.ownerId, data.o) || !safeEqual(record.sessionNonce, data.s)) return null;
-    return { raw, configurationId: data.c, next: data.n ?? null, record };
+    const api = tryClient(record, data.c, c.keys);
+    return api ? { raw, configurationId: data.c, next: data.n ?? null, record, api } : null;
   }
 
   // Each /install makes one outbound exchange, so a visitor gets a few a minute. Per instance only.
@@ -157,7 +187,7 @@ export function createApp({ env = process.env, store, fetch: fetchImpl = globalT
 
     // One record per configuration. A deploy-button install may reuse an existing id: we overwrite it,
     // never duplicate, and never hand a record to another owner.
-    const previous = await store.get(configurationId);
+    const previous = await load(configurationId);
     if (previous && previous.ownerId !== ownerId) {
       logError("owner_mismatch", { configurationId });
       return message(409, "Install mismatch", "This installation belongs to another account. Install again from Vercel.", { cookies });
@@ -176,7 +206,7 @@ export function createApp({ env = process.env, store, fetch: fetchImpl = globalT
     const s = await session(request, c);
     if (!s) return expired();
     const from = new URL(request.url).searchParams.get("from");
-    const api = client(s.record, c.keys);
+    const api = s.api;
     let page;
     try {
       page = await api.listProjects({ from: /^\d{1,16}$/.test(from ?? "") ? from : undefined });
@@ -222,7 +252,7 @@ ${FOOTER}`);
     if (!s) return expired();
     const form = await readForm(request);
     if (!form || !formAllowed(request, form, s, c)) return message(403, "Form check failed", "Reload the page and try again.");
-    const api = client(s.record, c.keys);
+    const api = s.api;
 
     const removeId = form.get("remove");
     if (removeId) {
@@ -332,7 +362,22 @@ ${FOOTER}`);
       logError("store_failed", { configurationId: id, route: "webhook" });
       return json(500, { error: "store_unavailable" });
     }
-    if (!record) return json(200, { ok: true, deleted: type === "integration-configuration.removed" });
+    // A record whose own id is not the one Vercel signed for was tampered with: for `removed` the key
+    // is still deleted, with no call to Vercel; a transfer leaves it alone.
+    const trusted = record && record.configurationId === id ? record : null;
+    if (record && !trusted) logError("record_mismatch", { configurationId: id });
+    if (!trusted) {
+      if (record && type === "integration-configuration.removed") {
+        try {
+          await store.delete(id);
+        } catch {
+          logError("store_failed", { configurationId: id, route: "webhook" });
+          return json(500, { error: "store_unavailable" });
+        }
+      }
+      return json(200, { ok: true, deleted: type === "integration-configuration.removed" });
+    }
+    record = trusted;
     // A signed event replayed after a newer install of the same id changes nothing.
     if (eventTime(event) !== null && eventTime(event) <= Date.parse(record.createdAt)) return json(200, { ok: true, ignored: "stale" });
 
@@ -350,10 +395,7 @@ ${FOOTER}`);
     }
 
     // Removed: open the token into memory, delete the record first, then tidy up best effort.
-    let api = null;
-    try {
-      api = client(record, c.keys);
-    } catch {}
+    const api = tryClient(record, id, c.keys);
     try {
       await store.delete(id);
     } catch {
@@ -410,11 +452,13 @@ ${FOOTER}`);
     const deadline = now() + 50_000;
     for (const id of await store.ids()) {
       if (now() > deadline) break;
-      const record = await store.get(id);
+      const record = await load(id);
       if (!record) continue;
       checked++;
+      const api = tryClient(record, id, c.keys);
+      if (!api) continue;
       try {
-        await client(record, c.keys).listProjects({ limit: 1 });
+        await api.listProjects({ limit: 1 });
       } catch (e) {
         // 401 and 404 mean the install is gone. A 403 is kept: it can be a disabled configuration that
         // comes back, or a transfer whose webhook we missed. Vercel sends `removed` when either ends.

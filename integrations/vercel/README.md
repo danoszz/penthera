@@ -54,7 +54,11 @@ The record is deleted:
   missed. Vercel sends `removed` when either one ends.
 
 The token is encrypted with the configuration id as associated data, so a
-ciphertext moved onto another record does not decrypt. The key lives in a
+ciphertext moved onto another record does not decrypt. The id used to decrypt
+is always the trusted one: the store key, the signed session cookie or the
+signed webhook. A record whose own `configurationId` differs from that id is
+never used, so someone who can write to the store cannot move one
+installation's token under another key and have it decrypt. The key lives in a
 Vercel environment variable; the data lives in the store. They are in different
 systems.
 

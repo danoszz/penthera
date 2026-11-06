@@ -697,3 +697,71 @@ describe("session nonce", () => {
     await expect(memoryStore().put({ ...base, sessionNonce: 1 })).rejects.toThrow(/sessionNonce/);
   });
 });
+
+describe("records are bound to the id they were looked up by", () => {
+  const VICTIM = "icfg_Victim123";
+  const signed = (event) => {
+    const raw = JSON.stringify(event);
+    return new Request(`${BASE}/webhook`, { method: "POST", body: raw, headers: { "x-vercel-signature": createHmac("sha1", CLIENT_SECRET).update(raw).digest("hex") } });
+  };
+
+  // A store an attacker with Redis read/write can shape freely: keys and records need not agree.
+  function rawStore() {
+    const map = new Map();
+    return {
+      map,
+      get: async (id) => (map.has(id) ? { ...map.get(id) } : null),
+      put: async (r) => map.set(r.configurationId, { ...r }),
+      delete: async (id) => map.delete(id),
+      ids: async () => [...map.keys()],
+    };
+  }
+
+  /**
+   * The attacker installs normally as CFG and holds a live cookie. Then, in the store, the victim's
+   * sealed token goes under CFG: either the victim's whole record with its own configurationId
+   * ("moved"), or only its ciphertext inside the attacker's record ("swapped").
+   */
+  async function transplanted(shape) {
+    const store = rawStore();
+    const ctx = setup({ store });
+    const cookie = cookieJar(await ctx.app.install(get(installUrl())));
+    const keys = parseKeys(ctx.env.PENTHERA_TOKEN_KEYS);
+    const victimSeal = sealToken(`at_victim_${randomBytes(8).toString("hex")}`, VICTIM, keys);
+    const mine = store.map.get(CFG);
+    store.map.set(CFG, shape === "moved" ? { ...mine, ...victimSeal, configurationId: VICTIM } : { ...mine, ...victimSeal });
+    ctx.vercel.calls.length = 0;
+    return { ...ctx, store, cookie };
+  }
+
+  for (const shape of ["moved", "swapped"]) {
+    it(`setup refuses a ${shape} ciphertext and calls nothing`, async () => {
+      const { app, cookie, vercel } = await transplanted(shape);
+      expect((await app.setup(get("/setup", { cookie }))).status).toBe(401);
+      expect((await app.setup(post("/setup", "csrf=x&remove=prj_one", { cookie, origin: BASE }))).status).toBe(401);
+      expect(vercel.calls).toHaveLength(0);
+    });
+
+    it(`the uninstall webhook deletes a ${shape} record without calling Vercel`, async () => {
+      const { app, store, vercel } = await transplanted(shape);
+      const res = await app.webhook(signed({ type: "integration-configuration.removed", payload: { configuration: { id: CFG, projects: ["prj_one"] } } }));
+      expect(res.status).toBe(200);
+      expect(store.map.has(CFG)).toBe(false);
+      expect(vercel.calls).toHaveLength(0);
+    });
+
+    it(`the sweep makes no call with a ${shape} record`, async () => {
+      const { app, vercel, env: e } = await transplanted(shape);
+      const res = await app.sweep(get("/sweep", { authorization: `Bearer ${e.CRON_SECRET}` }));
+      expect(res.status).toBe(200);
+      expect(vercel.calls).toHaveLength(0);
+    });
+  }
+
+  it("a transfer leaves a moved record alone", async () => {
+    const { app, store } = await transplanted("moved");
+    const before = store.map.get(CFG);
+    await app.webhook(signed({ type: "integration-configuration.transferred", payload: { configuration: { id: CFG }, newTeamId: "team_B1" } }));
+    expect(store.map.get(CFG)).toEqual(before);
+  });
+});
