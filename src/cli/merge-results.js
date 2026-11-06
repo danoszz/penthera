@@ -38,6 +38,8 @@ export function mergeResults(results) {
       coverage: results.find((r) => r.coverage)?.coverage || null,
       errors: results.flatMap((r) => r.errors || []),
       findings: dedupeFindings(results.flatMap((r) => r.findings || [])),
+      // A refused input in any target makes the merged run incomplete (exit 2).
+      ...(results.some((r) => r.incomplete?.length) ? { incomplete: results.flatMap((r) => r.incomplete || []) } : {}),
     };
   }
 
