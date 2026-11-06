@@ -17,7 +17,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { scanCodeSinks } from "../lib/whitebox/code-sinks.js";
 import { lexJs } from "../lib/whitebox/js-lex.js";
 import { openSync, closeSync, statSync as statOf, writeSync, utimesSync } from "node:fs";
-import { scanSecrets } from "../lib/whitebox/secrets.js";
+import { scanSecrets, findSecretsInText } from "../lib/whitebox/secrets.js";
 import { loadPolicy } from "../lib/install/policy.js";
 import { exitCodeOf } from "../src/report/exit.js";
 import { mergeResults } from "../src/cli/merge-results.js";
@@ -652,6 +652,16 @@ describe("row 4 on the secret scan and the sink cap: no crash, no read of what i
     writeFileSync(join(d, "data.js"), `const img = "${"A".repeat(8 * 1024 * 1024 + 10)}";\nconst k = "${["sk", "live", "4eC39HqLyjWDarjtT1zdp7dc"].join("_")}";\n`);
     const findings = scanSecrets(d, { refused: [] });
     expect(findings.some((f) => /Stripe/.test(f.title))).toBe(true);
+  });
+
+  // Per MiB, so it holds on any runner and any Node version: the session-secret
+  // rule's leading lookbehind cost about 720 ms per MiB on Node 22 (CI timed out
+  // on 8 MiB); it is about 5 ms now. Best of three, to keep scheduler noise out.
+  it("the secret scan costs well under 150 ms per MiB of masked text, on any Node", () => {
+    const text = `const img = "${"A".repeat(4 * 1024 * 1024)}";\napp.use(session({ secret: "kq7Zp9longenough" }));\n`;
+    let best = Infinity;
+    for (let i = 0; i < 3; i++) { const s = performance.now(); findSecretsInText(text, { path: "data.js" }); best = Math.min(best, performance.now() - s); }
+    expect(best / 4).toBeLessThan(150);
   });
 
   it("a sparse file over the 16 MiB sink cap is named without being read", () => {
