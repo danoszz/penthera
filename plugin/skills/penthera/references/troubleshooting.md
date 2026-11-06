@@ -102,12 +102,13 @@ penthera https://myapp.com -o reports/previous.json
 - the `github/codeql-action/upload-sarif` step has `if: always()`
 - Repository has code scanning enabled
 
-## Preflight script failures
+## Preflight failures
 
-Run manually for diagnostics, from the project folder (the script is in this skill's folder):
+Run each preflight check in SKILL.md by hand, from the project folder:
 
 ```bash
-bash <this skill's folder>/scripts/preflight.sh https://myapp.com
+node --version      # v22 or later
+mkdir -p reports
 ```
 
-Fix each reported check before scanning.
+Then run the `--version` line from "Resolve CLI command" in SKILL.md. Fix each one that fails before scanning.

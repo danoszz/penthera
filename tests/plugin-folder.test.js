@@ -1,9 +1,10 @@
 /**
  * plugin/ is what Anthropic's plugin directory reads and what
  * `/plugin install penthera@penthera` installs. It carries a copy of the skill,
- * so this keeps the copy identical to skills/penthera and the folder inside the
- * directory's limits (no package files, nothing past the file and size caps,
- * a square PNG icon, no broad shell entries in allowed-tools).
+ * so this keeps the copy identical to skills/penthera (except scripts/) and the
+ * folder inside the directory's limits (only allowed file types, no package
+ * files, nothing past the file and size caps, a square PNG icon, no broad shell
+ * entries in allowed-tools).
  */
 import { describe, it, expect } from "vitest";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
@@ -12,10 +13,20 @@ import { join, relative } from "node:path";
 const PLUGIN = "plugin";
 const files = (dir) => readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? files(join(dir, e.name)) : [join(dir, e.name)]));
 const pkg = JSON.parse(readFileSync("package.json", "utf-8"));
+// skills/penthera/scripts/ (preflight.sh, validate-report.*) stays in the repo for
+// a checkout, the internal audit and `npx skills add`; the plugin may not ship it.
+const skillFiles = (dir) => files(dir).map((f) => relative(dir, f)).filter((f) => !f.startsWith("scripts/")).sort();
+
+// Anthropic's directory refused the plugin on 6 Nov 2026 (LOCAL_CODE_FILE_TYPE):
+// unverified publishers may ship only these file types, plus the licence, readme,
+// .gitignore and icon.
+const ALLOWED_EXT = /\.(?:md|markdown|txt|json|ya?ml|png|jpe?g|gif|webp|ico)$/i;
+const ALLOWED_NAME = /^(?:LICEN[CS]E(?:\.\w+)?|README(?:\.\w+)?|\.gitignore)$/i;
+const disallowedFiles = (paths) => paths.filter((f) => !ALLOWED_EXT.test(f) && !ALLOWED_NAME.test(f.split(/[\\/]/).pop()));
 
 describe("plugin/ folder", () => {
-  it("holds an exact copy of skills/penthera", () => {
-    const src = files("skills/penthera").map((f) => relative("skills/penthera", f)).sort();
+  it("holds an exact copy of skills/penthera, without its scripts", () => {
+    const src = skillFiles("skills/penthera");
     const copy = files(join(PLUGIN, "skills/penthera")).map((f) => relative(join(PLUGIN, "skills/penthera"), f)).sort();
     expect(copy).toEqual(src);
     for (const f of src) expect(readFileSync(join(PLUGIN, "skills/penthera", f), "utf-8"), f).toBe(readFileSync(join("skills/penthera", f), "utf-8"));
@@ -33,6 +44,16 @@ describe("plugin/ folder", () => {
     const all = files(PLUGIN);
     expect(all.length).toBeLessThan(512);
     for (const f of all) expect(statSync(f).size, f).toBeLessThan(256 * 1024);
+  });
+
+  it("ships only the file types the directory takes from an unverified publisher", () => {
+    expect(disallowedFiles(files(PLUGIN))).toEqual([]);
+    expect(disallowedFiles(["p/LICENSE", "p/README.md", "p/.gitignore", "p/a.json", "p/b.yml", "p/i.png", "p/s/x.sh", "p/s/y.mjs", "p/z.js", "p/run"]))
+      .toEqual(["p/s/x.sh", "p/s/y.mjs", "p/z.js", "p/run"]);
+  });
+
+  it("has a skill that calls no script", () => {
+    for (const f of files(join(PLUGIN, "skills/penthera"))) expect(readFileSync(f, "utf-8"), f).not.toMatch(/scripts\/[\w.-]+\.(?:sh|mjs|js|py)/);
   });
 
   it("has a square PNG icon between 512 and 2048 px", () => {
