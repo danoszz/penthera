@@ -31,6 +31,8 @@ const TEAM_ID = /^team_[A-Za-z0-9]{1,64}$/;
 const PROJECT_ID = /^prj_[A-Za-z0-9]{1,64}$/;
 /** Best-effort check cleanup on uninstall stays well inside the webhook's maxDuration (25 s). */
 const CLEANUP_MS = 15_000;
+/** How far Vercel's event clock may run ahead of ours before a stored time counts as tampered. */
+const CLOCK_SKEW_MS = 10 * 60_000;
 /** Install exchanges per visitor per minute, per function instance. The firewall rule in README.md is the real limit. */
 const INSTALLS_PER_MINUTE = 10;
 
@@ -379,7 +381,13 @@ ${FOOTER}`);
     }
     record = trusted;
     // A signed event replayed after a newer install of the same id changes nothing.
-    if (eventTime(event) !== null && eventTime(event) <= Date.parse(record.createdAt)) return json(200, { ok: true, ignored: "stale" });
+    // createdAt comes from the store. A time beyond our own clock plus a little skew is treated as
+    // unreadable and the replay check is skipped: capping it would still make every real uninstall,
+    // dated about now, look stale and keep the record forever.
+    const latest = now() + CLOCK_SKEW_MS;
+    const parsedAt = Date.parse(record.createdAt);
+    const installedAt = parsedAt <= latest ? parsedAt : NaN;
+    if (eventTime(event) !== null && Number.isFinite(installedAt) && eventTime(event) <= installedAt) return json(200, { ok: true, ignored: "stale" });
 
     if (type === "integration-configuration.transferred") {
       // Every verified transfer ends older setup sessions, even when it names no new owner. Its time
@@ -388,7 +396,7 @@ ${FOOTER}`);
       await store.put({
         ...record,
         ownerId: newOwner(event.payload) ?? record.ownerId,
-        createdAt: t !== null && t > Date.parse(record.createdAt) ? new Date(t).toISOString() : record.createdAt,
+        createdAt: new Date(t !== null && !(t <= installedAt) ? Math.min(t, latest) : Number.isFinite(installedAt) ? installedAt : now()).toISOString(),
         sessionNonce: randomToken(24),
       });
       return json(200, { ok: true });

@@ -765,3 +765,48 @@ describe("records are bound to the id they were looked up by", () => {
     expect(store.map.get(CFG)).toEqual(before);
   });
 });
+
+describe("store fields are not trusted for the replay check", () => {
+  const removed = (createdAt) => {
+    const raw = JSON.stringify({ type: "integration-configuration.removed", createdAt, payload: { configuration: { id: CFG } } });
+    return new Request(`${BASE}/webhook`, { method: "POST", body: raw, headers: { "x-vercel-signature": createHmac("sha1", CLIENT_SECRET).update(raw).digest("hex") } });
+  };
+
+  // The clock moves: install at t0, tamper, then a real uninstall a day later, dated by that clock.
+  for (const tampered of ["2099-01-01T00:00:00.000Z", "12345"]) {
+    it(`a real uninstall deletes a record whose stored createdAt was set to ${tampered}`, async () => {
+      let t = Date.parse("2026-11-06T12:00:00.000Z");
+      const store = memoryStore();
+      const ctx = setup({ store, now: () => t });
+      await ctx.app.install(get(installUrl()));
+      await store.put({ ...store.dump()[0], createdAt: tampered });
+      t += 24 * 60 * 60_000;
+      expect(await (await ctx.app.webhook(removed(t))).json()).toMatchObject({ deleted: true });
+      expect(store.dump()).toHaveLength(0);
+    });
+  }
+
+  it("with a moving clock, a replay older than a reinstall is ignored and a real uninstall 1 s later deletes", async () => {
+    let t = Date.parse("2026-11-06T12:00:00.000Z");
+    const store = memoryStore();
+    const ctx = setup({ store, now: () => t });
+    await ctx.app.install(get(installUrl()));
+    const oldUninstall = t + 5_000;
+    t += 60_000;
+    await ctx.app.install(get(installUrl()));
+    expect(await (await ctx.app.webhook(removed(oldUninstall))).json()).toMatchObject({ ignored: "stale" });
+    expect(store.dump()).toHaveLength(1);
+    t += 1_000;
+    expect(await (await ctx.app.webhook(removed(t))).json()).toMatchObject({ deleted: true });
+    expect(store.dump()).toHaveLength(0);
+  });
+
+  it("an unreadable createdAt skips the replay check instead of blocking the uninstall", async () => {
+    const store = memoryStore();
+    const ctx = setup({ store });
+    await ctx.app.install(get(installUrl()));
+    await store.put({ ...store.dump()[0], createdAt: "not a date" });
+    await ctx.app.webhook(removed(Date.now()));
+    expect(store.dump()).toHaveLength(0);
+  });
+});
