@@ -543,13 +543,15 @@ describe("the sink check streams large files with the lexer state carried (memor
     expect(streamed).toEqual(whole);
   });
 
-  it("a 60 MiB server file: the sink at its end is found with a 32 MB heap, at a bounded peak", () => {
+  // 24 MiB, not 60: the bound is what counts (whole-file lexing ran out of a
+  // 32 MB heap here too), and the test must stay fast on a slow CI runner.
+  it("a 24 MiB server file: the sink at its end is found with a 32 MB heap, at a bounded peak", () => {
     const d = tmp();
     mkdirSync(join(d, "lib"));
     const f = openSync(join(d, "lib", "big.js"), "w");
     writeSync(f, `const { exec } = require("child_process");\n`);
     const block = "function f(a, b) { return a + b; }\n".repeat(4096);
-    for (let n = 0; n < 60 * 1024 * 1024; n += block.length) writeSync(f, block);
+    for (let n = 0; n < 24 * 1024 * 1024; n += block.length) writeSync(f, block);
     writeSync(f, "module.exports = (req) => exec(req.body.c);\n");
     closeSync(f);
     const lib = join(import.meta.dirname, "..", "lib", "whitebox", "code-sinks.js");
@@ -632,5 +634,24 @@ describe("Vercel E and F: hook scripts across chunk edges, and no cache across a
     utimesSync(join(hooks, "a.sh"), t, t);
     const second = await scanAgents(d);
     expect(second.findings.find((f) => f.templateId === "agents/hook-exec")?.severity).toBe("critical");
+  });
+});
+
+describe("row 4 on the secret scan and the sink cap: no crash, no read of what is over the cap", () => {
+  it("one 8 MiB run of base64-like text no longer crashes the secret scan", () => {
+    const d = tmp();
+    writeFileSync(join(d, "data.js"), `const img = "${"A".repeat(8 * 1024 * 1024 + 10)}";\nconst k = "${["sk", "live", "4eC39HqLyjWDarjtT1zdp7dc"].join("_")}";\n`);
+    const findings = scanSecrets(d, { refused: [] });
+    expect(findings.some((f) => /Stripe/.test(f.title))).toBe(true);
+  });
+
+  it("a sparse file over the 64 MiB sink cap is named without being read", () => {
+    const d = tmp();
+    sparse(join(d, "giant.js"), 64 * 1024 * 1024 + 1);
+    const refused = [];
+    const s = Date.now();
+    scanCodeSinks(d, { refused });
+    expect(Date.now() - s).toBeLessThan(2000);
+    expect(refused.map((r) => r.reason)).toEqual([expect.stringMatching(/over the 64 MiB limit/)]);
   });
 });

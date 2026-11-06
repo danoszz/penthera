@@ -146,8 +146,9 @@ describe("E7: reports leave out sections that do not apply to the mode", () => {
 
 describe("E8: the coverage ledger counts what the eval check did not read", () => {
   // 2.3.2: a file over 512 KB is now read (streamed), not skipped, so the 600 KB
-  // one counts as examined. Only a file over the 64 MiB read cap is "over the size
-  // limit" (sparse here, so nothing large is written), and a minified one is listed.
+  // one-line file counts as minified, not as over the size limit. Only a file
+  // over the 64 MiB read cap is "over the size limit": checked through the
+  // coverage ledger alone, which only stats it, so no test reads 64 MiB.
   it("reports files over the size limit and skipped folders", async () => {
     const big = `export const blob = "${"a".repeat(600 * 1024)}";\n`;
     const root = repo({
@@ -156,17 +157,21 @@ describe("E8: the coverage ledger counts what the eval check did not read", () =
       "tests/helper.js": "eval(x)\n",
       "apps/web/.next-dev/chunk.js": "eval(x)\n",
     });
-    writeFileSync(join(root, "src", "giant.js"), "");
-    truncateSync(join(root, "src", "giant.js"), 64 * 1024 * 1024 + 1);
     const r = await scanRepo(root, { quiet: true });
     const sinks = r.coverage.families.find((f) => f.id === "code-sinks");
     expect(sinks.ran).toBe(true);
     expect(sinks.examined).toBe(1);
-    expect(sinks.skipped.minified).toBe(1); // huge.js: one 600 KB line, read and found minified
-    expect(sinks.skipped["too-large"]).toBe(1);
-    expect(r.incomplete?.map((x) => x.file)).toContain("src/giant.js");
+    expect(sinks.skipped.minified).toBe(1);
+    expect(sinks.skipped["too-large"]).toBeUndefined();
+    writeFileSync(join(root, "src", "giant.js"), "");
+    truncateSync(join(root, "src", "giant.js"), 64 * 1024 * 1024 + 1); // sparse
+    const cov = buildCoverage(root, { ...r, sinkMinified: ["src/huge.js"] });
+    const s2 = cov.families.find((f) => f.id === "code-sinks");
+    expect(s2.skipped["too-large"]).toBe(1);
+    expect(s2.examined).toBe(1);
     expect(sinks.skipped, JSON.stringify(sinks)).toMatchObject({ "sink-skipped-folder": 2 });
-    const row = coverageMarkdown(r.coverage).find((l) => l.startsWith("| eval, vm and exec sinks"));
+    expect(s2.skipped, JSON.stringify(s2)).toMatchObject({ "sink-skipped-folder": 2 });
+    const row = coverageMarkdown(cov).find((l) => l.startsWith("| eval, vm and exec sinks"));
     expect(row).toMatch(/^\| eval, vm and exec sinks \| 1 \|/);
     expect(row).toMatch(/1 over the size limit/);
     expect(row).toMatch(/2 in a folder the eval and exec check skips/);
