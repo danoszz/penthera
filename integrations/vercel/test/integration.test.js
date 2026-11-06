@@ -468,6 +468,22 @@ describe("pages", () => {
     }
   });
 
+  it("pick, workflow and configure say what Penthera asks for, and why, without a script", async () => {
+    const { app, cookie } = await installed();
+    const pick = await (await app.setup(get("/setup", { cookie }))).text();
+    const csrf = /name="csrf" value="([^"]+)"/.exec(pick)[1];
+    const workflow = await (await app.setup(post("/setup", `csrf=${csrf}&action=workflow&p=prj_one`, { cookie, origin: BASE }))).text();
+    const configure = await (await app.configure(get(`/configure?configurationId=${CFG}`))).text();
+    for (const page of [pick, workflow, configure]) {
+      expect(page).toContain("<summary>What Penthera asks for, and why</summary>");
+      expect(page).toContain("Deployment Checks, read and write");
+      expect(page).toContain('href="https://github.com/danoszz/penthera/tree/main/integrations/vercel"');
+      expect(page).not.toMatch(/<script/i);
+    }
+    expect(pick).toContain('<details class="faq">');
+    expect(configure).toContain('<details class="faq" open>');
+  });
+
   it("an expired session and a failed form check each offer a way out", async () => {
     const { app, cookie } = await installed();
     expect(await (await app.setup(get("/setup"))).text()).toContain('<a class="btn go" href="/start">Install again</a>');

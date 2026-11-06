@@ -75,6 +75,18 @@ textarea{display:block;width:100%;height:17rem;margin:12px 0 0;padding:16px;font
 textarea:focus-visible{outline-offset:0}
 textarea+.lede{margin-top:32px}
 .callout{max-width:36rem;margin-top:48px;padding-left:16px;border-left:4px solid #fff;color:var(--text-1)}
+.faq{margin-top:48px;background:var(--plate)}
+.faq summary{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:64px;padding:12px 20px;list-style:none;cursor:pointer;font-size:var(--t-lead);font-weight:500;line-height:1.2;letter-spacing:-.02em;color:var(--text-1)}
+.faq summary::-webkit-details-marker{display:none}
+.faq summary::after{content:"+";flex:none;font-family:var(--px);font-size:var(--t-lead);line-height:1;color:var(--accent-ink)}
+.faq[open] summary::after{content:"−"}
+.faq summary:focus-visible{outline-offset:0}
+.faq dl{margin:0;padding:4px 20px 0}
+.faq dt{margin-top:20px;font-weight:500;line-height:1.35;color:var(--text-1)}
+.faq dt:first-child{margin-top:0}
+.faq dd{max-width:36rem;margin:4px 0 0;font-size:var(--t-small);line-height:1.5;color:var(--text-2)}
+.faq .links{display:flex;flex-wrap:wrap;gap:0 24px;margin:16px 0 0;padding:0 20px 12px;list-style:none;font-family:var(--px);font-size:var(--t-note);letter-spacing:.02em}
+.faq .links a{display:inline-flex;align-items:center;min-height:var(--target)}
 .foot{width:100%;max-width:calc(var(--measure) + 2 * var(--gutter));padding:64px var(--gutter) calc(var(--veil) + 16px);font-family:var(--px);font-size:var(--t-note);line-height:1.6;letter-spacing:.02em;color:var(--text-3)}
 .foot ul{display:flex;flex-wrap:wrap;gap:0 24px;margin:8px 0 0;padding:0;list-style:none}
 .home{display:grid;place-items:center;max-width:none;padding-bottom:var(--veil);text-align:center}

@@ -45,6 +45,24 @@ const HOME = `<div>
 <a class="btn go" href="https://github.com/danoszz/penthera" rel="noopener noreferrer">Open a pull request</a>
 </div>`;
 
+// What the integration asks for, and why. Each line is checked against lib/ and workflow/penthera-vercel.yml.
+const SOURCE_URL = "https://github.com/danoszz/penthera/tree/main/integrations/vercel";
+const asks = ({ open = false } = {}) => `<details class="faq"${open ? " open" : ""}><summary>What Penthera asks for, and why</summary>
+<dl>
+<dt>Access to Vercel</dt>
+<dd>Deployment Checks, read and write, to add and remove the check. Projects, read, to list your projects and their repos. Nothing else.</dd>
+<dt>What this server keeps</dt>
+<dd>One encrypted install token, with the installation id, your team or user id, the install date and a random value that ends old setup sessions. We delete it when you uninstall. No code, no deployment URLs, no results.</dd>
+<dt>What the workflow does</dt>
+<dd>It runs Penthera's passive scan on your deployment, in your own GitHub Actions. It holds no secrets and sends nothing to us. The findings show in the job summary and as a run artifact.</dd>
+<dt>What it never does</dt>
+<dd>It never reads your code, never writes to your repo beyond the one commit status Vercel waits for, and never stores results with us. It doesn't attack your site: it reads your pages and sends one login with obviously fake credentials, to check a wrong password is refused.</dd>
+<dt>Why you commit the workflow yourself</dt>
+<dd>We don't ask for write access to your repos, on purpose. One commit by you is the price.</dd>
+</dl>
+<ul class="links"><li><a href="https://docs.penthera.org/vercel/terms" target="_blank" rel="noopener noreferrer">Terms</a></li><li><a href="https://docs.penthera.org/vercel/privacy" target="_blank" rel="noopener noreferrer">Privacy</a></li><li><a href="${SOURCE_URL}" target="_blank" rel="noopener noreferrer">Source on GitHub</a></li></ul>
+</details>`;
+
 export function readConfig(env) {
   const need = (name) => {
     if (!env[name]) throw new ConfigError(`${name} is not set`);
@@ -252,7 +270,8 @@ export function createApp({ env = process.env, store, fetch: fetchImpl = globalT
 ${more}
 <div class="act"><button class="btn go" type="submit">Next: add the workflow</button></div>
 </form>
-<p class="small">The check blocks promotion to production when Penthera finds a high or critical issue. Previews are scanned too and never blocked.</p>`, { step: "Step 1 of 2" });
+<p class="small">The check blocks promotion to production when Penthera finds a high or critical issue. Previews are scanned too and never blocked.</p>
+${asks()}`, { step: "Step 1 of 2" });
   }
 
   async function setupPost(request) {
@@ -326,7 +345,8 @@ ${more}
 <p class="callout">Commit the workflow first. Once the check is on, a production deploy waits for it.</p>
 <div class="act"><button class="btn go" type="submit">Turn on the check</button></div>
 </form>
-<p class="small">Your next production deploy will wait for Penthera's check. Findings show in the GitHub job summary. Nothing is sent to us.</p>`, { step: "Step 2 of 2" });
+<p class="small">Your next production deploy will wait for Penthera's check. Findings show in the GitHub job summary. Nothing is sent to us.</p>
+${asks()}`, { step: "Step 2 of 2" });
   }
 
   async function configure(request) {
@@ -342,7 +362,8 @@ ${more}
 <textarea readonly spellcheck="false" wrap="off" aria-label="Workflow file">${esc(WORKFLOW_YAML)}</textarea>
 <p class="lede">To turn the check off for one project: Vercel, Project Settings, Deployment Checks, and remove the Penthera check. You can also delete the workflow file.</p>
 <p class="lede">To add projects: give the integration access to them in Vercel, then install again from <a href="/start" target="_blank" rel="noopener noreferrer">this link</a>. Changing projects from this page works for 30 minutes after an install.</p>
-<p class="lede">To uninstall: Vercel, Settings, Integrations, Penthera, Manage, Uninstall. We delete the stored token then. Remove the Penthera check from each project too, or production deploys keep waiting for it.</p>`);
+<p class="lede">To uninstall: Vercel, Settings, Integrations, Penthera, Manage, Uninstall. We delete the stored token then. Remove the Penthera check from each project too, or production deploys keep waiting for it.</p>
+${asks({ open: true })}`);
   }
 
   async function webhook(request) {
