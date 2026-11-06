@@ -40,11 +40,9 @@ const INSTALLS_PER_MINUTE = 10;
 
 // The page anyone sees who opens the bare domain. Static, no script, no data.
 const HOME = `<div class="void"><div>
-<p class="oh">OH OH.</p>
-<h1>You're poking at Penthera's Vercel server.</h1>
-<p>Not much to find: it keeps one encrypted install token per Vercel install, and the scans run in your own GitHub Actions.</p>
-<p>Found a bug? <a href="https://github.com/danoszz/penthera" rel="noopener noreferrer">Send a pull request</a>. Found a hole? <a href="https://github.com/danoszz/penthera/security/policy" rel="noopener noreferrer">Tell us privately first</a>.</p>
-<p class="muted">Penthera: open source, offline, rules you can check.</p>
+<pre class="shrug">¯\\_(ツ)_/¯</pre>
+<p>Nothing to hack here. Found a bug anyway?</p>
+<a class="btn" href="https://github.com/danoszz/penthera" rel="noopener noreferrer">Open a pull request</a>
 </div></div>`;
 
 export function readConfig(env) {

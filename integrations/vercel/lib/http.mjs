@@ -19,8 +19,10 @@ li .name{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowr
 li.off{opacity:.55}button,.button{font:inherit;background:var(--accent);color:var(--bg);border:0;border-radius:6px;padding:8px 14px;text-decoration:none;display:inline-block;cursor:pointer}
 button.quiet{background:transparent;color:var(--accent);border:1px solid var(--line);padding:4px 10px}
 textarea{width:100%;height:220px;font:12px/1.4 ui-monospace,monospace;box-sizing:border-box;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:6px}
-.void{position:fixed;inset:0;background:#000;color:#d8d8d8;display:flex;align-items:center;justify-content:center;padding:24px;box-sizing:border-box}
-.void>div{max-width:520px}.void h1{color:#fff;font-weight:500}.void a{color:#fff}.void .muted{color:#777}.oh{font:13px/1 ui-monospace,monospace;color:#777;letter-spacing:.2em}
+.void{position:fixed;inset:0;background:#000;color:#bbb;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px;box-sizing:border-box}
+.shrug{font:40px/1 ui-monospace,monospace;color:#fff;margin:0 0 24px;white-space:pre}.void p{font-size:17px;margin:0 0 28px}
+.void .btn{display:inline-flex;align-items:center;min-height:36px;padding:0 14px;background:#0000ed;color:#fff;border:1px solid #0000ed;box-shadow:0 0 0 2px #000,0 0 0 3px #fff;border-radius:0;font:13px/1 ui-monospace,monospace;letter-spacing:.02em;text-decoration:none}
+.void .btn:hover{background:#fff;color:#0000ed;border-color:#fff}
 .grow{flex:1;min-width:0}.warn{border-left:3px solid #b26a00;padding-left:10px}code{font-size:14px;word-break:break-all}
 `;
 const STYLE_HASH = createHash("sha256").update(STYLE).digest("base64");
