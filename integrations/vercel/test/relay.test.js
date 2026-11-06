@@ -38,10 +38,11 @@ function claims(t = T0, extra = {}) {
   const s = Math.floor(t / 1000);
   return {
     iss: GITHUB_ISSUER,
-    aud: BASE,
+    aud: `${BASE}/report/dpl_one`,
     repository: "acme/shop",
     repository_id: "4242",
     repository_owner: "acme",
+    repository_owner_id: "77",
     event_name: "repository_dispatch",
     ref: "refs/heads/main",
     workflow_ref: "acme/shop/.github/workflows/penthera-vercel.yml@refs/heads/main",
@@ -54,11 +55,12 @@ function claims(t = T0, extra = {}) {
 }
 
 const PROJECTS = {
-  prj_one: { id: "prj_one", name: "shop", link: { type: "github", org: "acme", repo: "shop", repoId: 4242, productionBranch: "main" } },
-  prj_two: { id: "prj_two", name: "blog", link: { type: "github", org: "acme", repo: "blog", repoId: 5151, productionBranch: "main" } },
+  prj_one: { id: "prj_one", name: "shop", link: { type: "github", org: "acme", repo: "shop", repoId: 4242, repoOwnerId: 77, productionBranch: "main" } },
+  prj_two: { id: "prj_two", name: "blog", link: { type: "github", org: "acme", repo: "blog", repoId: 5151, repoOwnerId: 77, productionBranch: "main" } },
 };
-// Which project each deployment belongs to, as Vercel knows it.
-const DEPLOYMENTS = { dpl_one: "prj_one", dpl_two: "prj_two" };
+// Which project each deployment belongs to, and its target, as Vercel knows it.
+const DEPLOYMENTS = { dpl_one: "prj_one", dpl_two: "prj_two", dpl_preview: "prj_one" };
+const TARGETS = { dpl_one: "production", dpl_two: "production", dpl_preview: null };
 
 function mock({ jwksStatus = 200 } = {}) {
   const calls = [];
@@ -87,6 +89,9 @@ function mock({ jwksStatus = 200 } = {}) {
     if ((m = /^\/v2\/projects\/([^/]+)\/checks\/([^/]+)$/.exec(url.pathname)) && method === "DELETE") {
       checks[m[1]] = (checks[m[1]] ?? []).filter((c) => c.id !== m[2]);
       return reply(204);
+    }
+    if ((m = /^\/v13\/deployments\/([^/]+)$/.exec(url.pathname))) {
+      return DEPLOYMENTS[m[1]] ? reply(200, { id: m[1], projectId: DEPLOYMENTS[m[1]], target: TARGETS[m[1]], url: "x.vercel.app" }) : reply(404, { error: { code: "not_found" } });
     }
     if ((m = /^\/v2\/deployments\/([^/]+)\/check-runs$/.exec(url.pathname))) {
       if (!DEPLOYMENTS[m[1]]) return reply(404, { error: { code: "not_found" } });
@@ -184,7 +189,11 @@ describe("POST /report relays pass or fail to our check run", () => {
   const refused = [
     ["no token", () => null, 401],
     ["a token for another audience", (t) => jwt(claims(t, { aud: "https://evil.example" })), 401],
-    ["an audience list", (t) => jwt(claims(t, { aud: [BASE] })), 401],
+    ["an audience list", (t) => jwt(claims(t, { aud: [`${BASE}/report/dpl_one`] })), 401],
+    ["the bare origin as audience", (t) => jwt(claims(t, { aud: BASE })), 401],
+    ["a token for another deployment", (t) => jwt(claims(t, { aud: `${BASE}/report/dpl_two` })), 401],
+    ["a token with no repository_owner_id", (t) => jwt(claims(t, { repository_owner_id: undefined })), 401],
+    ["another repository owner id", (t) => jwt(claims(t, { repository_owner_id: "78" })), 403],
     ["another issuer", (t) => jwt(claims(t, { iss: "https://evil.example" })), 401],
     ["an expired token", (t) => jwt(claims(t - 20 * 60_000)), 401],
     ["a token not valid yet", (t) => jwt(claims(t, { nbf: Math.floor(t / 1000) + 600 })), 401],
@@ -245,15 +254,39 @@ describe("POST /report relays pass or fail to our check run", () => {
   it("refuses a deployment of another project, even when Vercel would start a run on it", async () => {
     const ctx = await enabled();
     // The token and project are right; the deployment belongs to prj_two.
-    const res = await ctx.app.report(report(jwt(claims()), { deploymentId: "dpl_two", projectId: "prj_one", conclusion: "succeeded" }));
+    const res = await ctx.app.report(report(jwt(claims(T0, { aud: `${BASE}/report/dpl_two` })), { deploymentId: "dpl_two", projectId: "prj_one", conclusion: "succeeded" }));
     expect(res.status).toBe(403);
-    expect(patches(ctx.vercel)).toHaveLength(0);
+    expect(await res.json()).toEqual({ error: "deployment_mismatch" });
+    // The deployment is read before any write: no run is started on it, nothing is set.
+    expect(ctx.vercel.calls.filter((c) => c.method !== "GET" && c.url.pathname.startsWith("/v2/deployments/"))).toHaveLength(0);
+    expect(ctx.vercel.runs.dpl_two ?? []).toHaveLength(0);
+  });
+
+  it("refuses a preview deployment of the right project, before any write", async () => {
+    const ctx = await enabled();
+    const res = await ctx.app.report(report(jwt(claims(T0, { aud: `${BASE}/report/dpl_preview` })), { deploymentId: "dpl_preview", projectId: "prj_one", conclusion: "succeeded" }));
+    expect(res.status).toBe(403);
+    expect(ctx.vercel.calls.filter((c) => c.method !== "GET" && c.url.pathname.startsWith("/v2/deployments/"))).toHaveLength(0);
+  });
+
+  it("fails closed when Vercel gives no GitHub repository id for the project", async () => {
+    const ctx = await enabled();
+    const saved = PROJECTS.prj_one.link.repoId;
+    delete PROJECTS.prj_one.link.repoId;
+    try {
+      const res = await ctx.app.report(report(jwt(claims())));
+      expect(res.status).toBe(403);
+      expect(await res.json()).toEqual({ error: "repository_mismatch" });
+      expect(patches(ctx.vercel)).toHaveLength(0);
+    } finally {
+      PROJECTS.prj_one.link.repoId = saved;
+    }
   });
 
   it("refuses a project the check is not on, and a project whose link names another installation", async () => {
     const ctx = await enabled();
     // prj_two has no link.
-    const blog = jwt(claims(T0, { repository: "acme/blog", repository_id: "5151", workflow_ref: "acme/blog/.github/workflows/penthera-vercel.yml@refs/heads/main" }));
+    const blog = jwt(claims(T0, { aud: `${BASE}/report/dpl_two`, repository: "acme/blog", repository_id: "5151", workflow_ref: "acme/blog/.github/workflows/penthera-vercel.yml@refs/heads/main" }));
     expect((await ctx.app.report(report(blog, { deploymentId: "dpl_two", projectId: "prj_two", conclusion: "succeeded" }))).status).toBe(404);
 
     // Someone with store access points prj_one at another installation that has a working token.
@@ -357,14 +390,14 @@ describe("GitHub's key set", () => {
 
   it("verifyGithubToken accepts a good token and returns its claims", async () => {
     const v = mock();
-    const out = await verifyGithubToken(jwt(claims()), { audience: BASE, jwks: jwksCache({ fetch: v.fetch, now: () => T0 }), now: () => T0 });
+    const out = await verifyGithubToken(jwt(claims()), { audience: `${BASE}/report/dpl_one`, jwks: jwksCache({ fetch: v.fetch, now: () => T0 }), now: () => T0 });
     expect(out.repository).toBe("acme/shop");
     await expect(verifyGithubToken(jwt(claims()), { audience: "", jwks: jwksCache({ fetch: v.fetch, now: () => T0 }), now: () => T0 })).rejects.toThrow(/bad_audience/);
   });
 
   it("refuses every algorithm but RS256 before it looks up a key", async () => {
     const v = mock();
-    const opts = { audience: BASE, jwks: jwksCache({ fetch: v.fetch, now: () => T0 }), now: () => T0 };
+    const opts = { audience: `${BASE}/report/dpl_one`, jwks: jwksCache({ fetch: v.fetch, now: () => T0 }), now: () => T0 };
     for (const alg of ["none", "HS256", "RS512", "PS256", "ES256", undefined]) {
       await expect(verifyGithubToken(jwt(claims(), { header: { alg } }), opts)).rejects.toThrow(/bad_alg/);
     }
@@ -459,16 +492,17 @@ describe("project links", () => {
 describe("anonymous daily totals", () => {
   const DAY = new Date(T0).toISOString().slice(0, 10);
 
-  it("counts received, succeeded, failed and rejected by reason, under the date only", async () => {
+  it("writes relays that reached Vercel at once, and refusals at most once a minute", async () => {
     const ctx = await enabled();
     expect((await ctx.app.report(report(jwt(claims()), { deploymentId: "dpl_one", projectId: "prj_one", conclusion: "failed" }))).status).toBe(200);
-    await ctx.app.report(report(jwt(claims()))); // already completed
+    expect(await ctx.store.stats(DAY)).toEqual({ received: 1, failed: 1 });
+    await ctx.app.report(report(jwt(claims()))); // 409, the first refusal: flushed at once
     await ctx.app.report(report(jwt(claims(T0, { aud: "https://evil.example" }))));
     await ctx.app.report(report(null));
-    expect(await ctx.store.stats(DAY)).toEqual({ received: 4, failed: 1, rejected_already_completed: 1, rejected_bad_token: 1, rejected_unauthorized: 1 });
-    const other = await enabled({ queued: true });
-    await other.app.report(report(jwt(claims())));
-    expect(await other.store.stats(DAY)).toEqual({ received: 1, succeeded: 1 });
+    expect(await ctx.store.stats(DAY)).toEqual({ received: 2, failed: 1, rejected_already_completed: 1 });
+    ctx.tick(61_000);
+    await ctx.app.report(report(null));
+    expect(await ctx.store.stats(DAY)).toEqual({ received: 5, failed: 1, rejected_already_completed: 1, rejected_bad_token: 1, rejected_unauthorized: 2 });
     // Nothing but the date and the counter names: no project, deployment, team, configuration or address.
     const dump = JSON.stringify({ days: ctx.store.statDays(), stats: await ctx.store.stats(DAY) });
     for (const id of ["prj_", "dpl_", "team_", "icfg_", "198.51.100", "acme"]) expect(dump).not.toContain(id);
@@ -479,12 +513,51 @@ describe("anonymous daily totals", () => {
     expect([...STAT_FIELDS].sort()).toEqual(["failed", "received", "succeeded", ...REJECT_REASONS.map((r) => `rejected_${r}`)].sort());
   });
 
+  it("a flood of junk, or of valid tokens from a stranger's repo, costs a few store commands a minute", async () => {
+    const kv = [];
+    const vercel = mock();
+    const fetch = async (u, i) => {
+      if (String(u).startsWith("https://kv.example.test")) {
+        const cmd = JSON.parse(i.body);
+        kv.push(cmd);
+        const value = cmd[0] === "GET" ? null : cmd[0] === "SCAN" ? ["0", []] : 1;
+        return new Response(JSON.stringify({ result: value }), { status: 200 });
+      }
+      return vercel.fetch(u, i);
+    };
+    const store = redisStore({ url: "https://kv.example.test", token: "kvtoken", fetch });
+    const env = {
+      INTEGRATION_CLIENT_ID: "oac_testclient", INTEGRATION_CLIENT_SECRET: CLIENT_SECRET, PUBLIC_BASE_URL: BASE,
+      PENTHERA_TOKEN_KEYS: `v1:${randomBytes(32).toString("base64")}`,
+    };
+    let t = T0;
+    const app = createApp({ env, store, fetch, now: () => t });
+    // A stranger's own repo mints valid tokens for our audience; the project is not linked.
+    const stranger = jwt(claims(T0, { repository: "evil/x", repository_id: "1", repository_owner_id: "2", workflow_ref: "evil/x/.github/workflows/penthera-vercel.yml@refs/heads/main" }));
+    for (let i = 0; i < 20; i++) {
+      const ip = `203.0.113.${i}`;
+      await app.report(report("a.b.c", {}, { "x-real-ip": ip }));
+      await app.report(report(stranger, undefined, { "x-real-ip": ip }));
+    }
+    const writes = () => kv.filter((c) => c[0] === "HINCRBY" || c[0] === "EXPIRE");
+    // The first refusal flushes at once (2 counters + 1 EXPIRE); the other 39 wait in memory.
+    expect(writes()).toHaveLength(3);
+    t += 61_000;
+    await app.report(report("a.b.c", {}));
+    // One flush: three counter names, and no second EXPIRE for the same day.
+    expect(writes()).toHaveLength(6);
+    expect(writes().filter((c) => c[0] === "EXPIRE")).toHaveLength(1);
+    expect(writes().slice(3).map((c) => [c[2], c[3]]).sort()).toEqual([["received", "40"], ["rejected_bad_body", "20"], ["rejected_not_enabled", "20"]].sort());
+  });
+
   it("does not count rate-limited requests, and a store error while counting changes no answer", async () => {
     const ctx = await enabled();
     for (let i = 0; i < 35; i++) await ctx.app.report(report("x.y.z"));
-    expect((await ctx.store.stats(DAY)).received).toBe(30);
+    ctx.tick(61_000);
+    await ctx.app.report(report("x.y.z"));
+    expect((await ctx.store.stats(DAY)).received).toBe(31);
     const other = await enabled();
-    other.store.countStat = async () => {
+    other.store.countStats = async () => {
       throw new Error("store down");
     };
     expect((await other.app.report(report(jwt(claims())))).status).toBe(200);
@@ -498,15 +571,18 @@ describe("anonymous daily totals", () => {
     expect(ctx.store.statDays()).toEqual([]);
   });
 
-  it("the store refuses any other counter name or day", async () => {
+  it("the store refuses any other counter name, day or count", async () => {
     const store = memoryStore();
-    await store.countStat(DAY, "received");
-    await expect(store.countStat(DAY, "rejected_prj_one")).rejects.toThrow(/documented names/);
-    await expect(store.countStat(DAY, "project")).rejects.toThrow(/documented names/);
-    await expect(store.countStat("prj_one", "received")).rejects.toThrow(/day/);
+    await store.countStats(DAY, { received: 2 });
+    await expect(store.countStats(DAY, { rejected_prj_one: 1 })).rejects.toThrow(/documented names/);
+    await expect(store.countStats(DAY, { project: 1 })).rejects.toThrow(/documented names/);
+    await expect(store.countStats("prj_one", { received: 1 })).rejects.toThrow(/day/);
+    await expect(store.countStats(DAY, { received: -1 })).rejects.toThrow(/count/);
+    await expect(store.countStats(DAY, { received: 1.5 })).rejects.toThrow(/count/);
+    await expect(store.countStats(DAY, {})).rejects.toThrow(/no counts/);
   });
 
-  it("the Redis store keeps one hash per day that expires after 90 days", async () => {
+  it("the Redis store keeps one hash per day and sets its 90-day expiry once", async () => {
     const sent = [];
     const fetch = async (url, init) => {
       const cmd = JSON.parse(init.body);
@@ -514,8 +590,14 @@ describe("anonymous daily totals", () => {
       return new Response(JSON.stringify({ result: cmd[0] === "HGETALL" ? ["received", "3", "succeeded", "2"] : 1 }), { status: 200 });
     };
     const store = redisStore({ url: "https://kv.example.test", token: "kvtoken", fetch });
-    await store.countStat(DAY, "received");
-    expect(sent).toEqual([["HINCRBY", `pv:stats:${DAY}`, "received", "1"], ["EXPIRE", `pv:stats:${DAY}`, String(STAT_TTL_SECONDS)]]);
+    await store.countStats(DAY, { received: 1 });
+    await store.countStats(DAY, { received: 1, succeeded: 1 });
+    expect(sent).toEqual([
+      ["HINCRBY", `pv:stats:${DAY}`, "received", "1"],
+      ["EXPIRE", `pv:stats:${DAY}`, String(STAT_TTL_SECONDS)],
+      ["HINCRBY", `pv:stats:${DAY}`, "received", "1"],
+      ["HINCRBY", `pv:stats:${DAY}`, "succeeded", "1"],
+    ]);
     expect(STAT_TTL_SECONDS).toBe(90 * 86_400);
     expect(await store.stats(DAY)).toEqual({ received: 3, succeeded: 2 });
   });
@@ -528,7 +610,9 @@ describe("the workflow reports to the relay", () => {
     expect(WORKFLOW_YAML).toContain("vercel/repository-dispatch/actions/status@");
     const step = WORKFLOW_YAML.slice(WORKFLOW_YAML.indexOf("- name: Report pass or fail"));
     expect(step).toMatch(/if: always\(\) && github\.event\.client_payload\.environment == 'production'/);
-    expect(step).toContain("audience=https%3A%2F%2Fvercel.penthera.org");
+    expect(step).toContain("audience=https%3A%2F%2Fvercel.penthera.org%2Freport%2F$DEPLOYMENT_ID");
+    // The id is checked against its shape before it goes into the token request.
+    expect(step.indexOf("grep -Eq '^dpl_")).toBeLessThan(step.indexOf("ACTIONS_ID_TOKEN_REQUEST_URL"));
     expect(step).toContain('if [ "$SCAN_OUTCOME" = "success" ]; then conclusion=succeeded; fi');
     expect(step).toContain("conclusion=failed");
     // Untrusted dispatch values reach the shell only through env.

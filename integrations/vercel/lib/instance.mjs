@@ -29,7 +29,7 @@ function lazyStore() {
     putLink: (l) => open().putLink(l),
     deleteLink: (id) => open().deleteLink(id),
     links: () => open().links(),
-    countStat: (day, field) => open().countStat(day, field),
+    countStats: (day, counts) => open().countStats(day, counts),
     stats: (day) => open().stats(day),
   };
 }

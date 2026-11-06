@@ -16,9 +16,9 @@
  *
  * and one anonymous counter set per UTC day, for upkeep (README, "What it keeps"):
  *
- *   countStat(day, field) -> adds 1 to that day's counter; the day's key expires 90 days after
- *                            its last write
- *   stats(day)            -> { field: count } for that day
+ *   countStats(day, counts) -> adds { field: n } to that day's counters; the day's key is given a
+ *                              90-day expiry once per store instance (not on every write)
+ *   stats(day)              -> { field: count } for that day
  *
  * A counter has no id of any kind: the key is the date, the field one of STAT_FIELDS.
  *
@@ -47,9 +47,15 @@ export const REJECT_REASONS = [
 /** The only counter names: relays received, relayed as succeeded or failed, and rejected by reason. */
 export const STAT_FIELDS = new Set(["received", "succeeded", "failed", ...REJECT_REASONS.map((r) => `rejected_${r}`)]);
 
-export function assertStat(day, field) {
+export function assertStats(day, counts) {
   if (typeof day !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(day)) throw new Error("store: bad stats day");
-  if (!STAT_FIELDS.has(field)) throw new Error("store: a counter has one of the documented names");
+  const entries = Object.entries(counts ?? {});
+  if (!entries.length) throw new Error("store: no counts");
+  for (const [field, n] of entries) {
+    if (!STAT_FIELDS.has(field)) throw new Error("store: a counter has one of the documented names");
+    if (!Number.isSafeInteger(n) || n < 1 || n > 1_000_000) throw new Error("store: bad count");
+  }
+  return entries;
 }
 
 export function assertRecord(record) {
@@ -102,10 +108,10 @@ export function memoryStore() {
     async links() {
       return [...linkMap.entries()].map(([key, v]) => ({ key, link: v && typeof v === "object" ? { ...v } : null }));
     },
-    async countStat(day, field) {
-      assertStat(day, field);
+    async countStats(day, add) {
+      const entries = assertStats(day, add);
       const counts = statMap.get(day) ?? {};
-      counts[field] = (counts[field] ?? 0) + 1;
+      for (const [field, n] of entries) counts[field] = (counts[field] ?? 0) + n;
       statMap.set(day, counts);
     },
     async stats(day) {
@@ -137,6 +143,7 @@ export function redisStore({ url, token, fetch: fetchImpl = globalThis.fetch }) 
     if (json.error) throw new Error("store_command_failed");
     return json.result;
   }
+  const expiring = new Set();
   async function scan(prefix) {
     const out = [];
     let cursor = "0";
@@ -162,10 +169,16 @@ export function redisStore({ url, token, fetch: fetchImpl = globalThis.fetch }) 
     async ids() {
       return (await scan(PREFIX)).map((k) => k.slice(PREFIX.length));
     },
-    async countStat(day, field) {
-      assertStat(day, field);
-      await command("HINCRBY", STAT_PREFIX + day, field, "1");
-      await command("EXPIRE", STAT_PREFIX + day, String(STAT_TTL_SECONDS));
+    async countStats(day, add) {
+      const entries = assertStats(day, add);
+      for (const [field, n] of entries) await command("HINCRBY", STAT_PREFIX + day, field, String(n));
+      // One EXPIRE per day key per instance, not one per write. The key stops being written after
+      // its day, so it is gone at most 90 days after the day's first write in each instance.
+      if (!expiring.has(day)) {
+        await command("EXPIRE", STAT_PREFIX + day, String(STAT_TTL_SECONDS));
+        if (expiring.size > 400) expiring.clear();
+        expiring.add(day);
+      }
     },
     async stats(day) {
       const flat = (await command("HGETALL", STAT_PREFIX + day)) ?? [];

@@ -20,6 +20,7 @@ import {
 import { clearCookie, esc, html, json, message, readBody, readCookie, readForm, redirect, safeNext, setCookie } from "./http.mjs";
 import { logError } from "./log.mjs";
 import { OidcError, jwksCache, verifyGithubToken } from "./oidc.mjs";
+import { STAT_FIELDS } from "./store.mjs";
 import { VercelError, exchangeCode, vercelClient } from "./vercel.mjs";
 import { WORKFLOW_PATH, WORKFLOW_YAML, checkBody, checkName, githubNewFileUrl, isIntegrationCheck, isOurCheck } from "./workflow.mjs";
 
@@ -39,6 +40,11 @@ const REPORT_FIELDS = ["conclusion", "deploymentId", "projectId"];
 const CONCLUSIONS = new Set(["succeeded", "failed"]);
 /** Reports per runner address per minute, per function instance. The firewall rule in README.md is the real limit. */
 const REPORTS_PER_MINUTE = 30;
+/** Unverified refusals are written to the counters at most this often, per instance. */
+const STATS_FLUSH_MS = 60_000;
+
+/** The OIDC audience the workflow asks GitHub for: this server's /report for one deployment. */
+export const reportAudience = (origin, deploymentId) => `${origin}/report/${deploymentId}`;
 /** Best-effort check cleanup on uninstall stays well inside the webhook's maxDuration (25 s). */
 const CLEANUP_MS = 15_000;
 /** How far Vercel's event clock may run ahead of ours before a stored time counts as tampered. */
@@ -60,7 +66,7 @@ const SOURCE_URL = "https://github.com/danoszz/penthera/tree/main/integrations/v
 const asks = ({ open = false } = {}) => `<details class="faq"${open ? " open" : ""}><summary>What Penthera asks for, and why</summary>
 <dl>
 <dt>Access to Vercel</dt>
-<dd>Deployment Checks, read and write, to add and remove the check and to set its result for each production deploy. Projects, read, to list your projects and their repos. Nothing else.</dd>
+<dd>Deployment Checks, read and write, to add and remove the check and to set its result for each production deploy. Projects, read, to list your projects and their repos. Deployments, read, to confirm a result is for a production deploy of that project. Nothing else.</dd>
 <dt>What this server keeps</dt>
 <dd>One encrypted install token, with the installation id, your team or user id, the install date and a random value that ends old setup sessions. For each project with the check on, the project id and which installation turned it on. We delete all of it when you uninstall. Apart from that, anonymous daily totals with no ids, deleted after 90 days. No code, no deployment URLs, no results.</dd>
 <dt>What the workflow does</dt>
@@ -518,28 +524,13 @@ ${asks({ open: true })}`);
   }
 
   /**
-   * POST /report: the workflow's pass or fail for one production deployment, relayed to our check.
+   * POST /report, counted in anonymous daily totals (no id, no IP, nothing from the request).
    *
-   * Body: exactly { deploymentId, projectId, conclusion: "succeeded" | "failed" }. Authorization: a
-   * GitHub Actions OIDC token for this server's origin (lib/oidc.mjs). Every id that decides
-   * anything is checked against Vercel with the token of the installation that turned the check on:
-   *
-   *   1. the token is GitHub's, for us, current, from the Penthera workflow file, run by a
-   *      repository_dispatch (Vercel's), in some repository R;
-   *   2. the project's link names an installation, whose record and token we hold;
-   *   3. that installation's token reads the project live from Vercel, and the project is
-   *      connected to R (name, and GitHub's repository id when Vercel gives it);
-   *   4. the project has this installation's own check, and the deployment has a run of exactly
-   *      that check, which Vercel says belongs to this project and this deployment;
-   *   5. the run is not completed yet, so a result is never overwritten.
-   *
-   * Only then is the run's conclusion set. Nothing about the scan or the request is stored.
-   */
-  /**
-   * POST /report, counted. Each relay adds 1 to today's anonymous totals: received, then
-   * succeeded, failed or rejected_<reason>. The counters hold no id, no IP and nothing from the
-   * request; a store error while counting never changes the answer. Rate-limited requests are not
-   * counted, so a flood costs no store writes.
+   * Only a relay that reached Vercel (200: succeeded or failed) is written at once, as received
+   * plus its result. Every refusal, also one with a valid GitHub token (anyone can mint one from
+   * their own repo), is added up in this instance's memory and written at most once a minute, so
+   * junk requests cannot spend the store's quota. Rate-limited requests are not counted at all.
+   * A store error while counting never changes the answer.
    */
   async function report(request) {
     if (reportLimited(request)) return json(429, { error: "rate_limited" });
@@ -549,22 +540,69 @@ ${asks({ open: true })}`);
       const out = await res.clone().json();
       field = res.status === 200 && (out?.conclusion === "succeeded" || out?.conclusion === "failed") ? out.conclusion : `rejected_${out?.error}`;
     } catch {}
-    await count("received");
-    if (field) await count(field);
+    const day = today();
+    if (day && field && STAT_FIELDS.has(field)) {
+      if (res.status === 200) await writeStats(day, { received: 1, [field]: 1 });
+      else {
+        if (!pendingStats.has(day) && pendingStats.size >= 3) pendingStats.delete(pendingStats.keys().next().value);
+        const counts = pendingStats.get(day) ?? pendingStats.set(day, {}).get(day);
+        for (const f of ["received", field]) counts[f] = Math.min((counts[f] ?? 0) + 1, 1_000_000);
+      }
+    }
+    await flushStats();
     return res;
   }
 
-  /** Adds 1 to one of today's counters (UTC). A bad clock or an unknown name counts nothing. */
-  async function count(field) {
+  // Unverified refusals, by day, waiting for the next flush. At most a few days and 15 names.
+  const pendingStats = new Map();
+  let flushedAt = -Infinity;
+
+  /** Writes the waiting counts if a minute has passed since the last flush (or the clock moved back). */
+  async function flushStats() {
+    const t = now();
+    if (!pendingStats.size || !(t - flushedAt >= STATS_FLUSH_MS || t < flushedAt)) return;
+    flushedAt = t;
+    const batch = [...pendingStats.entries()];
+    pendingStats.clear();
+    for (const [day, counts] of batch) await writeStats(day, counts);
+  }
+
+  /** Today's date in UTC, or null for a clock out of range. */
+  function today() {
     try {
-      // toISOString throws for a time out of range, so a broken clock counts nothing.
-      const day = new Date(now()).toISOString().slice(0, 10);
-      await store.countStat(day, field);
+      return new Date(now()).toISOString().slice(0, 10);
+    } catch {
+      return null;
+    }
+  }
+
+  async function writeStats(day, counts) {
+    try {
+      await store.countStats(day, counts);
     } catch {
       logError("stats_failed", { route: "report" });
     }
   }
 
+  /**
+   * POST /report: the workflow's pass or fail for one production deployment, relayed to our check.
+   *
+   * Body: exactly { deploymentId, projectId, conclusion: "succeeded" | "failed" }. Authorization: a
+   * GitHub Actions OIDC token for this server's origin (lib/oidc.mjs). Every id that decides
+   * anything is checked against Vercel with the token of the installation that turned the check on:
+   *
+   *   1. the token is GitHub's, for us and this one deployment (aud <origin>/report/<deploymentId>),
+   *      current, from the Penthera workflow file, run by a repository_dispatch, in some repo R;
+   *   2. the project's link names an installation, whose record and token we hold;
+   *   3. that installation's token reads the project live from Vercel, and the project is
+   *      connected to R (name and GitHub's repository id, both required; owner id when given),
+   *      and the deployment, read before any write, is a production deployment of the project;
+   *   4. the project has this installation's own check, and the deployment has a run of exactly
+   *      that check, which Vercel says belongs to this project and this deployment;
+   *   5. the run is not completed yet, so a result is never overwritten.
+   *
+   * Only then is the run's conclusion set. Nothing about the scan or the request is stored.
+   */
   async function relay(request) {
     const c = cfg();
     const auth = /^Bearer ([A-Za-z0-9_.-]{1,8192})$/.exec(request.headers.get("authorization") ?? "");
@@ -587,7 +625,8 @@ ${asks({ open: true })}`);
     // 1. GitHub's token, for us, from our workflow file.
     let claims;
     try {
-      claims = await verifyGithubToken(auth[1], { audience: c.origin, jwks, now });
+      // The audience names the deployment, so a token works for exactly one deployment.
+      claims = await verifyGithubToken(auth[1], { audience: reportAudience(c.origin, deploymentId), jwks, now });
     } catch (e) {
       const code = e instanceof OidcError ? e.code : "malformed";
       if (code === "jwks_unavailable") {
@@ -598,7 +637,8 @@ ${asks({ open: true })}`);
     }
     const repo = typeof claims.repository === "string" && GITHUB_REPO.test(claims.repository) ? claims.repository : null;
     const repoId = typeof claims.repository_id === "string" && /^\d{1,20}$/.test(claims.repository_id) ? claims.repository_id : null;
-    if (!repo || !repoId) return json(401, { error: "bad_token" });
+    const ownerId = typeof claims.repository_owner_id === "string" && /^\d{1,20}$/.test(claims.repository_owner_id) ? claims.repository_owner_id : null;
+    if (!repo || !repoId || !ownerId) return json(401, { error: "bad_token" });
     if (claims.event_name !== "repository_dispatch" || typeof claims.workflow_ref !== "string" || !claims.workflow_ref.startsWith(`${repo}/${WORKFLOW_PATH}@`)) {
       return json(403, { error: "workflow_not_allowed" });
     }
@@ -618,10 +658,20 @@ ${asks({ open: true })}`);
     if (!api) return json(404, { error: "not_enabled" });
 
     try {
-      // 3. The project, read live with that installation's token, is connected to the token's repo.
+      // 3. The project, read live with that installation's token, is connected to the token's repo:
+      //    the name, and GitHub's repository id, which must be there (a name can change hands). The
+      //    owner id is compared too when Vercel gives it.
       const project = await api.getProject(projectId);
-      if (project.id !== projectId || !project.repo || project.repo.toLowerCase() !== repo.toLowerCase() || (project.repoId && project.repoId !== repoId)) {
+      if (
+        project.id !== projectId || !project.repo || project.repo.toLowerCase() !== repo.toLowerCase() ||
+        !project.repoId || project.repoId !== repoId || (project.repoOwnerId && project.repoOwnerId !== ownerId)
+      ) {
         return json(403, { error: "repository_mismatch" });
+      }
+      // 3b. The deployment belongs to this project and is a production deployment, before any write.
+      const deployment = await api.getDeployment(deploymentId);
+      if (deployment.id !== deploymentId || deployment.projectId !== projectId || deployment.target !== "production") {
+        return json(403, { error: "deployment_mismatch" });
       }
       // 4. This installation's check on the project, and its run on this deployment.
       const check = (await api.listChecks(projectId)).find((k) => isIntegrationCheck(k, configurationId) && typeof k.id === "string" && k.id);

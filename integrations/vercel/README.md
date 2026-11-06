@@ -51,6 +51,13 @@ And one set of anonymous counters per UTC day, for upkeep and bugs, under
 A counter holds a number and nothing else: no project, deployment, team or
 configuration id, no IP, nothing from the request. The key is the date.
 
+Only a relay that reached Vercel is written at once. Every refusal, also one
+with a valid GitHub token (anyone can mint one from their own repo), is added up
+in the function instance's memory and written at most once a minute, and each
+day key gets its `EXPIRE` once per instance. So junk traffic costs a few store
+commands a minute per instance, not two writes per request. Counts still in
+memory when an instance stops are lost; these are rough totals.
+
 The store refuses a record, a link or a counter with any other field or name
 (`lib/store.mjs`).
 Project names, repos, emails, deployment ids, deployment URLs and scan results
@@ -198,8 +205,9 @@ deployments only, and sends exactly
 Vercel's dispatch payload (`client_payload.id`, `client_payload.project.id`).
 
 It sends a GitHub Actions OIDC token as `Authorization: Bearer`, requested with
-`audience=https://vercel.penthera.org` (the job has `id-token: write`). The
-server (`lib/oidc.mjs`, `lib/app.mjs` `report`):
+`audience=https://vercel.penthera.org/report/<deploymentId>` (the job has
+`id-token: write`), so a token is good for one deployment only. The server
+(`lib/oidc.mjs`, `lib/app.mjs` `relay`):
 
 1. **Token.** RS256 only, refused before any key lookup otherwise (`alg: none`,
    HS256 with the public key, and the rest). The key comes by `kid` from
@@ -207,7 +215,7 @@ server (`lib/oidc.mjs`, `lib/app.mjs` `report`):
    cached 10 minutes per instance, refetched at most once a minute for an
    unknown `kid`, and refetched when the clock moves backwards. `iss` must be
    `https://token.actions.githubusercontent.com` and `aud` exactly
-   `PUBLIC_BASE_URL`'s origin. `exp`, `nbf` and `iat` must all be numbers, with
+   `<PUBLIC_BASE_URL origin>/report/<deploymentId>` for the body's deployment. `exp`, `nbf` and `iat` must all be numbers, with
    30 seconds of leeway, and a token may live at most one hour.
 2. **Workflow.** `event_name` must be `repository_dispatch` (Vercel's) and
    `workflow_ref` must be `<repository>/.github/workflows/penthera-vercel.yml@...`.
@@ -217,13 +225,18 @@ server (`lib/oidc.mjs`, `lib/app.mjs` `report`):
    not decrypt).
 4. **Repository.** With that token, the project is read live from Vercel. Its
    connected repo must equal the token's `repository` (case-insensitive), and
-   its GitHub repository id the token's `repository_id` when Vercel gives one,
-   so a deleted and recreated repo of the same name cannot report.
-5. **Check and deployment.** The project must carry this installation's own
-   check (`source.integrationConfigurationId`). The run must be a run of exactly
-   that check, and Vercel's run must name this project and this deployment.
-   This needs no Deployments scope.
-6. **Once.** A run that is already `completed` is never changed (409), so a
+   its GitHub repository id (`link.repoId`) the token's `repository_id`. A
+   project with no repository id is refused, so a renamed, deleted or recreated
+   repo of the same name cannot report. The owner id (`link.repoOwnerId`) is
+   compared with `repository_owner_id` when Vercel gives it; the token must
+   carry one.
+5. **Deployment, before any write.** `GET /v13/deployments/{id}` must name this
+   project and target `production`. Only then is a run looked up, started or
+   changed.
+6. **Check and run.** The project must carry this installation's own check
+   (`source.integrationConfigurationId`). The run must be a run of exactly that
+   check, and Vercel's run must name this project and this deployment.
+7. **Once.** A run that is already `completed` is never changed (409), so a
    replayed token cannot flip a result.
 
 Any failure leaves the run as it was, so the deploy stays held until Vercel's
@@ -348,7 +361,7 @@ node -e "console.log('v1:' + require('crypto').randomBytes(32).toString('base64'
 | Webhook URL | `<PUBLIC_BASE_URL>/webhook` |
 | Webhook events | `integration-configuration.removed` and `integration-configuration.transferred`. No deployment events |
 | Configuration URL | `<PUBLIC_BASE_URL>/configure` |
-| API scopes | Deployment Checks: Read/Write. Projects: Read. Nothing else |
+| API scopes | Deployment Checks: Read/Write. Projects: Read. Deployments: Read (the relay reads which project a deployment belongs to before it writes). Nothing else |
 | Checks API toggle | On: the integration now owns its check. The v2 docs do not say the toggle is required; if "Turn on the check" still answers 400 or 403, this and the scope are the first two things to check |
 
 ### Firewall rate limit (dashboard only)
@@ -401,8 +414,12 @@ Not verified, because it needs a live integration:
 - **`timeout: 1200`.** The default is 300 seconds; the job may take 15
   minutes. The docs give no maximum. If Vercel refuses it, lower it in
   `lib/workflow.mjs`.
-- **`link.repoId` on `GET /v9/projects/{id}`.** The relay compares it with the
-  token's `repository_id` when present, and falls back to the repo name.
+- **`link.repoId` and `link.repoOwnerId` on `GET /v9/projects/{id}`.** The relay
+  refuses a project without `repoId`; if Vercel never sends it, every report is
+  refused and deploys wait for the timeout. `repoOwnerId` is compared when
+  present.
+- **`GET /v13/deployments/{id}` with Deployments: Read.** Fields used: `id`,
+  `projectId`, `target`.
 - **Which scope allows the checks-v2 calls.** The docs map the
   `deployment-check` scope to the v1 per-deployment endpoints only. If checks-v2
   or the check-run calls need more, change the scope and say so on the install

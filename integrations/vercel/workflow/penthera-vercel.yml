@@ -1,23 +1,15 @@
 # Example: Penthera as a Vercel Deployment Check.
 #
-# Vercel sends `vercel.deployment.ready` to your repo when a deployment is built
-# and before it is promoted. This workflow runs Penthera's passive URL scan on
-# that deployment and reports the result two ways:
+# When Vercel has built a deployment, before it is promoted, this workflow runs
+# Penthera's passive URL scan on it and reports the result:
+#   - to the Penthera integration's check, for production: only the deployment
+#     id, the project id and pass or fail, with a GitHub OIDC token. No findings.
+#   - as a commit status, for a GitHub check added by hand.
 #
-#   - to the Penthera integration's Deployment Check (vercel.penthera.org), for a
-#     production deployment: only the deployment id, the project id and pass or
-#     fail, signed by GitHub's OIDC token. No findings, no code. And
-#   - as a commit status, for anyone who adds the GitHub check by hand.
-#
-# Setup with the integration: install Penthera from the Vercel Marketplace, commit
-# this file as `.github/workflows/penthera-vercel.yml` on the default branch (Vercel's
-# dispatch only runs workflows from there, and the relay accepts only this path),
-# then turn on the check from the setup page.
-#
-# Setup by hand, without the integration: commit the file, deploy once, then in
-# Vercel: Project Settings > Build and Deployment > Deployment Checks > Add Checks >
-# GitHub, and pick "Penthera on Vercel | scan (<project> - <environment>)". The
-# last step then says the relay is not on for the project, and passes.
+# Commit it as `.github/workflows/penthera-vercel.yml` on the default branch: the
+# dispatch runs only from there, and the relay accepts only this path. Without the
+# integration, add the GitHub check "Penthera on Vercel | scan (<project> -
+# <environment>)" in Project Settings > Deployment Checks.
 #
 # Scan only your own deployments. The job refuses any URL that is not a
 # *.vercel.app deployment URL, and the scan contacts only that host.
@@ -43,7 +35,7 @@ jobs:
     permissions:
       actions: read   # the status action reads this job's step results
       statuses: write # and writes the commit status, for a GitHub check added by hand
-      id-token: write # a GitHub-signed token for vercel.penthera.org, to report pass or fail
+      id-token: write # a GitHub-signed token for vercel.penthera.org, to report pass or fail for one deployment
     steps:
       # Sets "pending" on the deployment's commit now, and the job's result at the end.
       - uses: vercel/repository-dispatch/actions/status@30f760c6640485cd92f8c785ef361382555fb712 # v1
@@ -88,9 +80,8 @@ jobs:
           name: penthera-vercel-${{ github.run_id }}
           path: ${{ steps.penthera.outputs.report-file }}
 
-      # Production only: tell the integration's check pass or fail. Runs also when an earlier
-      # step failed or the scan was incomplete, and then reports failed. Sends only the two ids
-      # and the result; the token proves to the server which repo and workflow sent it.
+      # Production only, also after a failed or incomplete scan (then: failed). Sends the two
+      # ids and the result; the token proves which repo, workflow and deployment it is for.
       - name: Report pass or fail to the Vercel check
         if: always() && github.event.client_payload.environment == 'production'
         env:
@@ -106,7 +97,7 @@ jobs:
             exit 1
           fi
           token=$(curl -sS --fail --max-time 20 -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
-            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=https%3A%2F%2Fvercel.penthera.org" | jq -r '.value // empty')
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=https%3A%2F%2Fvercel.penthera.org%2Freport%2F$DEPLOYMENT_ID" | jq -r '.value // empty')
           if [ -z "$token" ]; then
             echo "::error::GitHub gave no OIDC token, so nothing was reported. The job needs id-token: write."
             exit 1
