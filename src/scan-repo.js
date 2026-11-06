@@ -29,7 +29,7 @@ function refusedFileFinding(e, repoPath) {
   return {
     severity: "info",
     title: `File not read: ${name}`,
-    description: `\`${name}\` was not read because ${e.reason}, so what it holds was not checked. Make it a regular file inside the project.`,
+    description: `\`${name}\` was not read because ${e.reason}, so what it holds was not checked. The scan is incomplete and exits 2. Make it a regular file inside the project.`,
     url: name,
     file: name,
     category: "config",
@@ -184,13 +184,17 @@ export async function scanRepo(repoPath, opts = {}) {
   }
 
   // Files the route scan would have read but refused (a link out, a device, a
-  // FIFO, too large) become info findings, one per file: never a silent pass.
+  // FIFO, too large) become info findings, one per file, and make the scan
+  // incomplete (`incomplete`, exit 2): never a silent pass.
   const refused = [];
   const named = new Set();
   const reportRefused = () => {
     for (const e of refused.splice(0)) {
       const f = refusedFileFinding(e, repoPath);
-      if (!named.has(f.file)) { named.add(f.file); result.findings.push(f); }
+      if (named.has(f.file)) continue;
+      named.add(f.file);
+      result.findings.push(f);
+      (result.incomplete ||= []).push({ file: f.file, reason: e.reason || e.message });
     }
   };
 

@@ -93,7 +93,8 @@ export const TOOLS = [
       return buildResult({
         tool: "scan_repo", target: display, findings: merged.findings, limits: REPO_LIMITS, maxFindings: args.max_findings,
         extra: { routes: Array.isArray(raw.attackSurface) ? raw.attackSurface.length : 0, coverage: coverageOf(raw.coverage) },
-        scan: { mode: "repo", coverage: raw.coverage },
+        // incomplete: a refused route or server file; the brief then exits 2 and lists it as not checked.
+        scan: { mode: "repo", coverage: raw.coverage, ...(raw.incomplete ? { incomplete: raw.incomplete } : {}) },
       });
     },
   },

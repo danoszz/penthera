@@ -89,7 +89,10 @@ not read. The report lists it as an info finding, `File not read: <file>`, and
 the rest of the scan goes on. An `-r` include like that skips only the include:
 the other pins in the file that has it are still checked. Either way the scan
 is incomplete, so it exits 2, even when nothing else was found. A file Penthera
-could not read never passes CI as an empty tree.
+could not read never passes CI as an empty tree. A venv's `METADATA` or
+`PKG-INFO` that is not read (over the cap, a FIFO, no permission) keeps its
+package, named from its `.dist-info` or `.egg-info` folder and listed as
+unscanned, and the scan exits 2 as well.
 
 ```bash
 penthera deps                          # uv.lock + .venv
