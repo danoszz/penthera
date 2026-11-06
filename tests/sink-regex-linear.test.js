@@ -96,7 +96,9 @@ describe("code-sink regexes are linear (2.3.2)", () => {
       const parser = new RegExpParser();
       const bad = [];
       for (const re of built.values()) {
-        const ast = parser.parseLiteral("/" + re.source + "/" + re.flags.replace(/[yd]/g, ""));
+        // A sticky pattern is tried at one place only: analysed as anchored there.
+        const source = re.flags.includes("y") ? "^(?:" + re.source + ")" : re.source;
+        const ast = parser.parseLiteral("/" + source + "/" + re.flags.replace(/[yd]/g, ""));
         for (const rep of analyse(ast, { maxReports: 1 }).reports) bad.push(rep.type + ": " + re.source.slice(0, 120));
       }
       console.log(JSON.stringify({ n: built.size, bad }));`], { encoding: "utf-8", timeout: 60_000 });
@@ -105,4 +107,68 @@ describe("code-sink regexes are linear (2.3.2)", () => {
     expect(n).toBeGreaterThan(25);
     expect(bad).toEqual([]);
   });
+});
+
+// Vercel U: the import-length cap dropped a padded shell binding. Brace lists are read whole now.
+describe("brace lists are read whole: a padded binding is still bound (Vercel U, checklist row 1)", () => {
+  const pad = (n, f) => Array.from({ length: n }, (_, i) => f(i)).join(", ");
+  const H = '\napp.post("/x", (req, res) => { runTask(req.body.c); });\n';
+  const forms = (n) => ({
+    named: `import { ${pad(n, (i) => `spawn as s${i}`)}, exec as runTask } from "child_process";` + H,
+    combined: `import cp, { ${pad(n, (i) => `spawn as s${i}`)}, exec as runTask } from "child_process";` + H,
+    "destructured require": `const { ${pad(n, (i) => `spawn: s${i}`)}, exec: runTask } = require("child_process");` + H,
+    "destructured object": `const cp = require("child_process");\nconst { ${pad(n, (i) => `spawn: s${i}`)}, exec: runTask } = cp;` + H,
+    "object of tools": `const cp = require("child_process");\nconst tools = { ${pad(n, (i) => `k${i}: 1`)}, runTask: cp.exec };\napp.post("/x", (req, res) => { tools.runTask(req.body.c); });\n`,
+    "option object": `const cp = require("child_process");\nconst o = { ${pad(n, (i) => `k${i}: 1`)}, shell: true };\napp.post("/x", (req, res) => { cp.spawn(req.body.c, [], o); });\n`,
+  });
+
+  it("padded past the old caps (2,000 and 400 characters), each form still finds the sink", async () => {
+    const { findSinks } = await import(LIB);
+    for (const n of [0, 400, 20000]) for (const [k, src] of Object.entries(forms(n))) expect(findSinks(src).length, `${k}, ${n} padding entries`).toBe(1);
+  });
+
+  it("at the 4 MiB cap: one huge list, and a file of many small lists and lone braces, take under 5 s", () => {
+    const out = run(`
+      const pad = (n, f) => Array.from({ length: n }, (_, i) => f(i)).join(", ");
+      const big = 'import { ' + pad(230000, (i) => "spawn as s" + i) + ', exec as runTask } from "child_process";\\napp.post("/x", (req, res) => { runTask(req.body.c); });\\n';
+      const many = "const { a } = b;\\n".repeat(240000) + SINK;
+      const open = "{".repeat(4 * 1024 * 1024 - 256) + SINK;
+      const close = "} =      ".repeat(400000) + SINK;
+      console.log(JSON.stringify({ big: time(big), many: time(many), open: time(open), close: time(close), kib: big.length >> 10 }));`, 180_000);
+    expect(out.kib).toBeGreaterThan(3000);
+    for (const k of ["big", "many", "close"]) { expect(out[k].hits, k).toBe(1); expect(out[k].ms, k).toBeLessThan(5000); }
+    expect(out.open.ms).toBeLessThan(5000);
+  });
+
+  it.skipIf(spawnSync("git", ["cat-file", "-e", "origin/main:lib/whitebox/code-sinks.js"]).status !== 0)(
+    "differential against main: every sink main finds in a corpus of binding forms is found now", async () => {
+      const { mkdtempSync, writeFileSync } = await import("node:fs");
+      const { tmpdir } = await import("node:os");
+      const { join } = await import("node:path");
+      const d = mkdtempSync(join(tmpdir(), "penthera-sinks-main-"));
+      const src = spawnSync("git", ["show", "origin/main:lib/whitebox/code-sinks.js"], { encoding: "utf-8" }).stdout
+        .replace(/from "(\.{1,2}\/[^"]+)"/g, (_, f) => `from ${JSON.stringify(resolve("lib/whitebox", f))}`);
+      writeFileSync(join(d, "main-sinks.mjs"), src);
+      const main = await import(join(d, "main-sinks.mjs"));
+      const { findSinks } = await import(LIB);
+      const T = 'app.post("/x", (req, res) => { CALL(req.body.c); });';
+      const corpus = [
+        ['import { exec } from "child_process";', "exec"], ['import { exec as run } from "node:child_process";', "run"],
+        ['import cp, { execSync as run } from "child_process";', "run"], ['import cp from "child_process";', "cp.exec"],
+        ['import * as cp from "child_process";', "cp.exec"], ['const { exec: run } = require("child_process");', "run"],
+        ['const cp = require("child_process"); const { exec: run } = cp;', "run"], ['const cp = require("child_process");', "cp.execSync"],
+        ['const cp = require("child_process"); const t = { run: cp.exec };', "t.run"], ['const t = { run: require("child_process").exec };', "t.run"],
+        ['const run = require("util").promisify(require("child_process").exec);', "run"], ['const cp = __importStar(require("child_process"));', "cp.exec"],
+        ['const sh = require("shelljs");', "sh.exec"], ['import { exec } from "shelljs";', "exec"],
+        ['const { exec } = require("child_process");', "exec"], ['const cp = require("child_process"); const run = cp.exec;', "run"],
+      ];
+      let mainHits = 0;
+      for (const [bind, call] of corpus) {
+        const text = bind + "\n" + T.replace("CALL", call) + "\n";
+        const was = main.findSinks(text).length;
+        mainHits += was;
+        expect(findSinks(text).length, text).toBeGreaterThanOrEqual(was);
+      }
+      expect(mainHits).toBeGreaterThan(10);
+    });
 });
