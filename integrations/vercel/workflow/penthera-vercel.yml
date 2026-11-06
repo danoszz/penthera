@@ -1,0 +1,81 @@
+# Example: Penthera as a Vercel Deployment Check.
+#
+# Vercel sends `vercel.deployment.ready` to your repo when a deployment is built
+# and before it is promoted. This workflow runs Penthera's passive URL scan on
+# that deployment and reports the result as a commit status. Add the status as a
+# Deployment Check in Vercel, and a production deployment waits until it passes.
+#
+# Setup (docs/commands/action.md#as-a-vercel-deployment-check):
+#   1. Copy this file into YOUR app's repo as `.github/workflows/penthera-vercel.yml`,
+#      on the default branch. Vercel's dispatch only runs workflows from there.
+#   2. Deploy once. The status appears as "Penthera on Vercel | scan (<project> - <environment>)".
+#   3. In Vercel: Project Settings > Build and Deployment > Deployment Checks >
+#      Add Checks > GitHub, and pick that status.
+#
+# Scan only your own deployments. The job refuses any URL that is not a
+# *.vercel.app deployment URL, and the scan contacts only that host.
+#
+# Deployment Protection: with Vercel Authentication on (Standard Protection, the
+# usual setting), the deployment URL answers 401 to the scanner. The job then fails
+# and says so, instead of passing a scan that read nothing.
+
+name: Penthera on Vercel
+
+on:
+  repository_dispatch:
+    types:
+      - "vercel.deployment.ready"
+
+permissions: {}
+
+jobs:
+  scan:
+    if: github.event.action == 'vercel.deployment.ready'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      actions: read   # the status action reads this job's step results
+      statuses: write # and writes the commit status Vercel waits for
+    steps:
+      # Sets "pending" on the deployment's commit now, and the job's result at the end.
+      - uses: vercel/repository-dispatch/actions/status@30f760c6640485cd92f8c785ef361382555fb712 # v1
+
+      # The dispatch payload is input: it reaches the shell only through env,
+      # and only a plain *.vercel.app host goes on to the scan.
+      - name: Check the deployment URL
+        id: target
+        env:
+          DEPLOYMENT_URL: ${{ github.event.client_payload.url }}
+        run: |
+          host="${DEPLOYMENT_URL#https://}"
+          host="${host%/}"
+          if ! printf '%s' "$host" | grep -Eq '^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.vercel\.app$'; then
+            echo "::error::Not a Vercel deployment URL, so nothing was scanned: $host"
+            exit 2
+          fi
+          code=$(curl -s -o /dev/null -w '%{http_code}' --max-redirs 0 --max-time 20 "https://$host/" || true)
+          if [ "$code" = "401" ] || [ "$code" = "403" ]; then
+            echo "::error::https://$host answers $code: Deployment Protection is on, so Penthera cannot read the site. Turn it off for this check, or wait for the protection bypass support."
+            exit 2
+          fi
+          echo "url=https://$host" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: 22
+
+      - name: "Penthera: your open-source cyber security agent"
+        id: penthera
+        uses: danoszz/penthera@3b4c837aaae81966ad95645e0f84dc9f9353d0ab # v2.3.1
+        with:
+          mode: scan
+          url: ${{ steps.target.outputs.url }}
+          offline: "true" # contact only the deployment's host (2.4.0 and later; the default there)
+          fail-on: high   # a high or critical finding fails the check
+          sarif: "false"  # dispatch runs sit on the default branch, not the deployed commit
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always() && steps.penthera.outputs.report-file != ''
+        with:
+          name: penthera-vercel-${{ github.run_id }}
+          path: ${{ steps.penthera.outputs.report-file }}

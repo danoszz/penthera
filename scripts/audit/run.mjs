@@ -98,6 +98,7 @@ const PACK_DENY = [
   /^report[^/]*\.(json|md|sarif)$/,
   /(^|\/)(bench|audit|coverage)\//,
   /^site\//, // the website and its build (site/README.md); never part of the CLI
+  /^integrations\//, // separately deployed servers, such as the Vercel integration
   /\.test\.[cm]?[jt]s$/,
   /(^|\/)\.env(\.|$)/,
   /\.(pem|key|p12|pfx|tgz|sarif)$/,
