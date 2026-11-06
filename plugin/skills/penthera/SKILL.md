@@ -63,6 +63,14 @@ node bin/penthera.js --version   # from a Penthera checkout
 
 All examples below use `penthera`; substitute `npx -y penthera@2.3.2` or `node bin/penthera.js` when needed.
 
+This skill needs no MCP server: it runs the CLI, and the user approves each run. If the user wants Penthera's read-only MCP tools as well, they add the server themselves (the Penthera plugin doesn't start one):
+
+```bash
+claude mcp add penthera -- npx -y penthera@2.3.2 mcp
+```
+
+For other agents, see https://github.com/danoszz/penthera/blob/main/docs/commands/mcp.md.
+
 To try a release candidate in someone's project, run it with `npx penthera@next ...` rather than `npm install penthera@next`. An install pins the exact rc in the lockfile, so it never moves to the final release, and it adds a dependency the project did not ask for. If the user does want it installed, use `-D` and point out the pin.
 
 ## Decision tree

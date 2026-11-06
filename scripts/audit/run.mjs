@@ -698,6 +698,12 @@ function walkMarkdown(dir) {
   return out;
 }
 
+/** The one `penthera@x.y.z` a skill pins, or a note when its pins disagree. */
+function skillPin(text) {
+  const pins = [...new Set([...text.matchAll(/\bpenthera@(\d+\.\d+\.\d+[0-9A-Za-z.-]*)/g)].map((m) => m[1].replace(/\.$/, "")))];
+  return pins.length === 1 ? pins[0] : pins.length ? pins.join(" and ") : undefined;
+}
+
 /** 8. Versions in sync, CHANGELOG entry present, docs links resolve. */
 async function gateVersionsDocs() {
   const notes = [];
@@ -714,10 +720,10 @@ async function gateVersionsDocs() {
     // The plugin folder Anthropic's directory reads, and its copy of the skill.
     "plugin/.claude-plugin/plugin.json": readJson(join(ROOT, "plugin/.claude-plugin/plugin.json")).version,
     "plugin/skills/penthera/SKILL.md": readFileSync(join(ROOT, "plugin/skills/penthera/SKILL.md"), "utf-8").match(/^ {2}version:\s*"?([^"\s]+)"?/m)?.[1],
-    "plugin/.mcp.json (pin)": readJson(join(ROOT, "plugin/.mcp.json")).mcpServers?.penthera?.args?.find((x) => x.startsWith("penthera@"))?.slice("penthera@".length),
-    // The Agent Plugins manifests in the same folder, read by GitHub Copilot and Codex.
+    // The plugin is skill-only (no MCP server): its skill's `npx -y penthera@<pin>`.
+    "plugin/skills/penthera/SKILL.md (pin)": skillPin(readFileSync(join(ROOT, "plugin/skills/penthera/SKILL.md"), "utf-8")),
+    // The Agent Plugins manifest in the same folder, read by GitHub Copilot and Codex.
     "plugin/plugin.json": readJson(join(ROOT, "plugin/plugin.json")).version,
-    "plugin/mcp.json (pin)": readJson(join(ROOT, "plugin/mcp.json")).mcpServers?.penthera?.args?.find((x) => x.startsWith("penthera@"))?.slice("penthera@".length),
     "skills/penthera/SKILL.md": skill,
     "CITATION.cff": citation,
     "docs/METHODOLOGY.md (How to cite)": howToCite,
@@ -730,7 +736,7 @@ async function gateVersionsDocs() {
   // The plugin and repo MCP launch lines pin a stable release, so during a
   // release candidate they may stay on the newest stable one (ACTION_PIN).
   const stable = /-/.test(v) ? ACTION_PIN.tag.slice(1) : v;
-  const stablePins = new Set(["plugin/.mcp.json (pin)", "plugin/mcp.json (pin)", ".mcp.json (pin)"]);
+  const stablePins = new Set(["plugin/skills/penthera/SKILL.md (pin)", ".mcp.json (pin)"]);
   for (const [file, got] of Object.entries(found)) {
     if (got === v || (stablePins.has(file) && got === stable)) continue;
     notes.push(`Version drift: ${file} has ${got ?? "none"}, package.json has ${v}${stablePins.has(file) && stable !== v ? ` (or the stable ${stable})` : ""}`);

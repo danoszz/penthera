@@ -40,7 +40,7 @@ The commands below pin a version on purpose: an update never reaches you unless 
 claude mcp add --scope project penthera -- npx -y penthera@2.3.2 mcp
 ```
 
-Or install the plugin (the skill plus the pinned server) from Claude Code's prompt: `/plugin marketplace add danoszz/penthera`, then `/plugin install penthera@penthera`.
+Or install the plugin, which holds the skill and starts no MCP server, from Claude Code's prompt: `/plugin marketplace add danoszz/penthera`, then `/plugin install penthera@penthera`.
 
 ### Cursor, Windsurf, Cline, Antigravity, Kiro, Junie, JetBrains, VS Code (`.mcp.json`)
 
