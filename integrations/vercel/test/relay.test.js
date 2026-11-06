@@ -306,7 +306,7 @@ describe("POST /report relays pass or fail to our check run", () => {
 
   it("a Vercel 403 or 404 while relaying is a 502, so the workflow fails instead of passing", async () => {
     const ctx = await enabled();
-    const app = createApp({ env: ctx.env, store: ctx.store, now: () => T0, fetch: async (u, i) => (String(u).includes("/check-runs") ? new Response(JSON.stringify({ error: { code: "forbidden" } }), { status: 403 }) : ctx.vercel.fetch(u, i)) });
+    const app = createApp({ env: ctx.env, store: ctx.store, now: () => T0, fetch: async (u, i) => (new URL(String(u)).pathname.endsWith("/check-runs") ? new Response(JSON.stringify({ error: { code: "forbidden" } }), { status: 403 }) : ctx.vercel.fetch(u, i)) });
     expect((await app.report(report(jwt(claims())))).status).toBe(502);
     expect(ctx.vercel.runs.dpl_one[0].status).toBe("queued");
   });
@@ -518,7 +518,7 @@ describe("project links", () => {
     const ctx = await enabled();
     await second(ctx, { withCheck: true });
     const real = ctx.vercel.fetch;
-    const app = createApp({ env: ctx.env, store: ctx.store, now: () => T0, fetch: async (u, i) => (String(u).includes("/v2/projects/prj_one/checks") && (i?.method ?? "GET") === "GET" ? new Response("{}", { status: 503 }) : real(u, i)) });
+    const app = createApp({ env: ctx.env, store: ctx.store, now: () => T0, fetch: async (u, i) => (new URL(String(u)).pathname === "/v2/projects/prj_one/checks" && (i?.method ?? "GET") === "GET" ? new Response("{}", { status: 503 }) : real(u, i)) });
     const res = await app.setup(form("/setup", `csrf=${ctx.csrf}&action=enable&p=prj_one`, { cookie: ctx.cookie }));
     expect(res.status).toBe(409);
     expect(ctx.store.dumpLinks()).toEqual([{ projectId: "prj_one", configurationId: OTHER_CFG }]);
@@ -636,7 +636,7 @@ describe("anonymous daily totals", () => {
     const kv = [];
     const vercel = mock();
     const fetch = async (u, i) => {
-      if (String(u).startsWith("https://kv.example.test")) {
+      if (new URL(String(u)).origin === "https://kv.example.test") {
         const cmd = JSON.parse(i.body);
         kv.push(cmd);
         const value = cmd[0] === "GET" ? null : cmd[0] === "SCAN" ? ["0", []] : 1;
