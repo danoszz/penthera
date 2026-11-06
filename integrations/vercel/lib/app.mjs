@@ -16,7 +16,7 @@ import {
   ConfigError, cookieKey, mac, openToken, parseKeys, randomToken, safeEqual, sealToken, signValue, unsignValue,
   verifyWebhookSignature,
 } from "./crypto.mjs";
-import { FOOTER, clearCookie, esc, html, json, message, readBody, readCookie, readForm, redirect, safeNext, setCookie } from "./http.mjs";
+import { clearCookie, esc, html, json, message, readBody, readCookie, readForm, redirect, safeNext, setCookie } from "./http.mjs";
 import { logError } from "./log.mjs";
 import { VercelError, exchangeCode, vercelClient } from "./vercel.mjs";
 import { WORKFLOW_PATH, WORKFLOW_YAML, checkBody, checkName, githubNewFileUrl, isOurCheck } from "./workflow.mjs";
@@ -39,11 +39,11 @@ const INSTALLS_PER_MINUTE = 10;
 /** Reads and checks the env once per call. Throws ConfigError without echoing values. */
 
 // The page anyone sees who opens the bare domain. Static, no script, no data.
-const HOME = `<div class="void"><div>
-<pre class="shrug">¯\\_(ツ)_/¯</pre>
-<p>Not much to find here. Found something anyway?</p>
-<a class="btn" href="https://github.com/danoszz/penthera" rel="noopener noreferrer">Open a pull request</a>
-</div></div>`;
+const HOME = `<div>
+<p class="shrug" role="img" aria-label="Shrug">¯\\_(ツ)_/¯</p>
+<p class="line">Not much to find here. Found something anyway?</p>
+<a class="btn go" href="https://github.com/danoszz/penthera" rel="noopener noreferrer">Open a pull request</a>
+</div>`;
 
 export function readConfig(env) {
   const need = (name) => {
@@ -140,7 +140,7 @@ export function createApp({ env = process.env, store, fetch: fetchImpl = globalT
   // A form post must come from our own pages: same origin when the browser says, and the session's form token.
   function formAllowed(request, form, s, c) {
     const origin = request.headers.get("origin");
-    if (origin && origin !== c.origin) return false;
+    if (origin && origin !== "null" && origin !== c.origin) return false;
     return safeEqual(form.get("csrf"), formToken(s, c));
   }
 
@@ -231,29 +231,28 @@ export function createApp({ env = process.env, store, fetch: fetchImpl = globalT
     const anyOn = [...status.values()].some(Boolean);
     const token = formToken(s, c);
     const rows = page.projects.map((p, i) => {
-      if (!p.repo) return `<li class="off"><input type="checkbox" disabled aria-label="Not available"><span><span class="name" title="${esc(p.name)}">${esc(p.name)}</span><span class="muted">Needs a GitHub-connected project</span></span></li>`;
+      if (!p.repo) return `<li class="row off"><label class="pick"><input type="checkbox" disabled aria-label="Not available"><span class="grow"><span class="name" title="${esc(p.name)}">${esc(p.name)}</span><span class="meta">Needs a GitHub-connected project</span></span></label></li>`;
       const on = status.get(p.id);
       const checked = single || (!anyOn && i === page.projects.indexOf(eligible[0]));
       const box = single
         ? `<input type="checkbox" checked disabled aria-label="Selected"><input type="hidden" name="p" value="${esc(p.id)}">`
         : `<input type="checkbox" name="p" value="${esc(p.id)}"${checked ? " checked" : ""} aria-label="Select ${esc(p.name)}">`;
-      const state = on === true ? "Check on" : on === false ? "Check off" : "Check status unknown";
-      const remove = on ? `<button class="quiet" name="remove" value="${esc(p.id)}" formaction="/setup" type="submit">Remove check</button>` : "";
-      return `<li>${box}<span class="grow"><span class="name" title="${esc(p.name)}">${esc(p.name)}</span><span class="muted">${esc(p.repo)} · ${state}</span></span>${remove}</li>`;
+      const state = on === true ? '<span class="on">Check on</span>' : on === false ? "Check off" : "Check status unknown";
+      const remove = on ? `<button class="btn quiet" name="remove" value="${esc(p.id)}" formaction="/setup" type="submit">Remove check</button>` : "";
+      return `<li class="row"><label class="pick">${box}<span class="grow"><span class="name" title="${esc(p.name)}">${esc(p.name)}</span><span class="meta">${esc(p.repo)} · ${state}</span></span></label>${remove}</li>`;
     });
-    const more = page.next ? `<p><a href="/setup?from=${esc(page.next)}">More projects</a></p>` : "";
+    const more = page.next ? `<p class="more"><a href="/setup?from=${esc(page.next)}">More projects</a></p>` : "";
     return html(200, "Penthera: pick your projects", `
 <h1>Pick your projects</h1>
-<p>Penthera adds a Deployment Check to each project you pick. Your next production deploy then waits for Penthera's scan, which runs in your own GitHub Actions.</p>
+<p class="lede">Penthera adds a Deployment Check to each project you pick. Your next production deploy then waits for Penthera's scan, which runs in your own GitHub Actions.</p>
 <form method="post" action="/setup">
 <input type="hidden" name="csrf" value="${token}">
 <input type="hidden" name="action" value="workflow">
-<ul>${rows.join("") || '<li class="off">No projects are shared with this integration. Change the project access in Vercel and open Configure.</li>'}</ul>
+<ul class="list">${rows.join("") || '<li class="empty">No projects are shared with this integration. Change the project access in Vercel and open Configure.</li>'}</ul>
 ${more}
-<p><button type="submit">Next: add the workflow</button></p>
+<div class="act"><button class="btn go" type="submit">Next: add the workflow</button></div>
 </form>
-<p class="muted">The check blocks promotion to production when Penthera finds a high or critical issue. Previews are scanned too and never blocked.</p>
-${FOOTER}`);
+<p class="small">The check blocks promotion to production when Penthera finds a high or critical issue. Previews are scanned too and never blocked.</p>`, { step: "Step 1 of 2" });
   }
 
   async function setupPost(request) {
@@ -261,7 +260,7 @@ ${FOOTER}`);
     const s = await session(request, c);
     if (!s) return expired();
     const form = await readForm(request);
-    if (!form || !formAllowed(request, form, s, c)) return message(403, "Form check failed", "Reload the page and try again.");
+    if (!form || !formAllowed(request, form, s, c)) return message(403, "Form check failed", "Reload the page and try again.", { action: { href: "/setup", label: "Reload setup" } });
     const api = s.api;
 
     const removeId = form.get("remove");
@@ -301,34 +300,33 @@ ${FOOTER}`);
         }
       }
       if (!failed.length && s.next) return redirect(s.next, { cookies: [clearCookie(SESSION)] });
-      const back = s.next ? `<p><a class="button" href="${esc(s.next)}">Back to Vercel</a></p>` : "";
+      const back = s.next ? `<div class="act"><a class="btn go" href="${esc(s.next)}">Back to Vercel</a></div>` : "";
       const text = failed.length
-        ? `<p class="warn">Vercel did not accept the check for: ${failed.map((p) => esc(p.name)).join(", ")}. Try again from Configure, or add it by hand in Project Settings, Deployment Checks.</p>`
-        : "<p>The check is on. Your next production deploy waits for Penthera.</p>";
-      return html(failed.length ? 502 : 200, "Penthera: done", `<h1>${failed.length ? "Some checks failed" : "Done"}</h1>${text}${back}${FOOTER}`);
+        ? `<p class="callout">Vercel did not accept the check for: ${failed.map((p) => esc(p.name)).join(", ")}. Try again from Configure, or add it by hand in Project Settings, Deployment Checks.</p>`
+        : '<p class="lede">The check is on. Your next production deploy waits for Penthera.</p>';
+      return html(failed.length ? 502 : 200, "Penthera: done", `<h1>${failed.length ? "Some checks failed" : "Done"}</h1>${text}${back}`, { main: "one" });
     }
 
     const token = formToken(s, c);
     const items = projects.map((p) => {
       const link = githubNewFileUrl(p.repo, p.branch);
-      const button = link ? `<a class="button" href="${esc(link)}" target="_blank" rel="noopener noreferrer">Add penthera-vercel.yml on GitHub</a>` : "<span class=\"muted\">Copy the file below by hand.</span>";
-      return `<li><span class="grow"><span class="name" title="${esc(p.name)}">${esc(p.name)}</span><span class="muted">${esc(p.repo)}, branch ${esc(p.branch)}</span><p>${button}</p><p class="muted">Status name: <code>${esc(checkName(p.name))}</code></p></span><input type="hidden" name="p" value="${esc(p.id)}" form="enable"></li>`;
+      const button = link ? `<a class="btn" href="${esc(link)}" target="_blank" rel="noopener noreferrer">Add penthera-vercel.yml on GitHub <span aria-hidden="true">↗</span></a>` : '<span class="meta">Copy the file below by hand.</span>';
+      return `<li class="row stack"><span class="grow"><span class="name" title="${esc(p.name)}">${esc(p.name)}</span><span class="meta">${esc(p.repo)}, branch ${esc(p.branch)}</span><span class="meta">Status name: <code>${esc(checkName(p.name))}</code></span></span>${button}<input type="hidden" name="p" value="${esc(p.id)}" form="enable"></li>`;
     });
     return html(200, "Penthera: add the workflow", `
-<h1>Add the workflow (one commit)</h1>
-<p>Commit <code>${WORKFLOW_PATH}</code> on each repo's default branch. The button opens GitHub with the file filled in. It holds no secrets.</p>
-<ul>${items.join("")}</ul>
-<p><label for="yaml">Or copy it:</label></p>
-<textarea id="yaml" readonly>${esc(WORKFLOW_YAML)}</textarea>
-<p class="muted">If your deployments sit behind Vercel Authentication, the scan cannot read them yet and the check fails with a clear message. Penthera never sees or stores a bypass secret.</p>
+<h1>Add the workflow <span class="aside">(one commit)</span></h1>
+<p class="lede">Commit <code>${WORKFLOW_PATH}</code> on each repo's default branch. The button opens GitHub with the file filled in. It holds no secrets.</p>
+<ul class="list">${items.join("")}</ul>
+<label class="cap" for="yaml">Or copy it:</label>
+<textarea id="yaml" readonly spellcheck="false" wrap="off">${esc(WORKFLOW_YAML)}</textarea>
+<p class="small">If your deployments sit behind Vercel Authentication, the scan cannot read them yet and the check fails with a clear message. Penthera never sees or stores a bypass secret.</p>
 <form id="enable" method="post" action="/setup">
 <input type="hidden" name="csrf" value="${token}">
 <input type="hidden" name="action" value="enable">
-<p class="warn">Commit the workflow first. Once the check is on, a production deploy waits for it.</p>
-<p><button type="submit">Turn on the check</button></p>
+<p class="callout">Commit the workflow first. Once the check is on, a production deploy waits for it.</p>
+<div class="act"><button class="btn go" type="submit">Turn on the check</button></div>
 </form>
-<p class="muted">Your next production deploy will wait for Penthera's check. Findings show in the GitHub job summary. Nothing is sent to us.</p>
-${FOOTER}`);
+<p class="small">Your next production deploy will wait for Penthera's check. Findings show in the GitHub job summary. Nothing is sent to us.</p>`, { step: "Step 2 of 2" });
   }
 
   async function configure(request) {
@@ -340,12 +338,11 @@ ${FOOTER}`);
     // session this page shows only what is the same for everyone.
     return html(200, "Penthera: configure", `
 <h1>Penthera on Vercel</h1>
-<p>Penthera's check runs from the workflow in your repo, <code>${WORKFLOW_PATH}</code>. Copy it again here:</p>
-<textarea readonly aria-label="Workflow file">${esc(WORKFLOW_YAML)}</textarea>
-<p>To turn the check off for one project: Vercel, Project Settings, Deployment Checks, and remove the Penthera check. You can also delete the workflow file.</p>
-<p>To add projects: give the integration access to them in Vercel, then install again from <a href="/start" target="_blank" rel="noopener noreferrer">this link</a>. Changing projects from this page works for 30 minutes after an install.</p>
-<p>To uninstall: Vercel, Settings, Integrations, Penthera, Manage, Uninstall. We delete the stored token then. Remove the Penthera check from each project too, or production deploys keep waiting for it.</p>
-${FOOTER}`);
+<p class="lede">Penthera's check runs from the workflow in your repo, <code>${WORKFLOW_PATH}</code>. Copy it again here:</p>
+<textarea readonly spellcheck="false" wrap="off" aria-label="Workflow file">${esc(WORKFLOW_YAML)}</textarea>
+<p class="lede">To turn the check off for one project: Vercel, Project Settings, Deployment Checks, and remove the Penthera check. You can also delete the workflow file.</p>
+<p class="lede">To add projects: give the integration access to them in Vercel, then install again from <a href="/start" target="_blank" rel="noopener noreferrer">this link</a>. Changing projects from this page works for 30 minutes after an install.</p>
+<p class="lede">To uninstall: Vercel, Settings, Integrations, Penthera, Manage, Uninstall. We delete the stored token then. Remove the Penthera check from each project too, or production deploys keep waiting for it.</p>`);
   }
 
   async function webhook(request) {
@@ -490,12 +487,12 @@ ${FOOTER}`);
   }
 
   function expired() {
-    return message(401, "This setup page has expired", "It works for 30 minutes after an install. Open Configure from Vercel, or install again.");
+    return message(401, "This setup page has expired", "It works for 30 minutes after an install. Open Configure from Vercel, or install again.", { action: { href: "/start", label: "Install again" } });
   }
 
   function apiFailure(e, configurationId, event) {
     logError(event, { status: e.status ?? 0, code: e.code ?? "network", configurationId });
-    return message(502, "Vercel did not answer", "Try again in a minute. If it keeps failing, reinstall the integration.");
+    return message(502, "Vercel did not answer", "Try again in a minute. If it keeps failing, reinstall the integration.", { action: { href: "/setup", label: "Try again" } });
   }
 
   /** Wraps a route: config errors become a 500 with a code, never a stack or a value. */
@@ -520,7 +517,7 @@ ${FOOTER}`);
     configure: guard(method({ GET: configure })),
     webhook: guard(method({ POST: webhook })),
     sweep: guard(method({ GET: sweep })),
-    home: method({ GET: async () => html(200, "Penthera", HOME) }),
+    home: method({ GET: async () => html(200, "Penthera", HOME, { footer: false, main: "home" }) }),
     health: method({ GET: async () => json(200, { ok: true }) }),
   };
 }

@@ -281,6 +281,15 @@ describe("setup", () => {
     expect(vercel.checks.prj_one).toHaveLength(0);
   });
 
+  it("accepts a browser post that says Origin: null when the form token is right", async () => {
+    const { app, cookie } = await installed();
+    const page = await (await app.setup(get("/setup", { cookie }))).text();
+    const csrf = page.match(/name="csrf" value="([^"]+)"/)[1];
+    const res = await app.setup(post("/setup", `csrf=${csrf}&action=workflow&p=prj_one`, { cookie, origin: "null" }));
+    expect(res.status).not.toBe(403);
+    expect((await app.setup(post("/setup", `csrf=wrong&action=workflow&p=prj_one`, { cookie, origin: "null" }))).status).toBe(403);
+  });
+
   it("refuses posts without the form token, from another origin, or without a session", async () => {
     const { app, cookie, vercel } = await installed();
     const csrf = await csrfOf(await app.setup(get("/setup", { cookie })));
@@ -419,6 +428,50 @@ describe("headers", () => {
     expect(res.status).toBe(500);
     expect(await res.json()).toEqual({ error: "not_configured" });
     expect(() => readConfig({ ...env(), PUBLIC_BASE_URL: "http://example.test" })).toThrow(/https/);
+  });
+});
+
+describe("pages", () => {
+  it("load the font and the favicon from this server only, and both files ship in public/", async () => {
+    expect(CSP).toContain("font-src 'self'");
+    expect(CSP).toContain("img-src 'self'");
+    expect(CSP).not.toMatch(/https?:\/\/(?!vercel\.com\b)/);
+    const { app, cookie } = await installed();
+    const page = await (await app.setup(get("/setup", { cookie }))).text();
+    const refs = [...page.matchAll(/(?:url\(|href=")(\/[^)"?]+\.(?:woff2|svg))/g)].map((m) => m[1]);
+    expect(refs.sort()).toEqual(["/favicon.svg", "/fonts/DepartureMono-Regular.woff2"]);
+    for (const ref of refs) expect(existsSync(here(`../public${ref}`))).toBe(true);
+    // One font, two places: the copy here must stay the site's own file.
+    const font = (p) => readFileSync(here(p));
+    expect(font("../public/fonts/DepartureMono-Regular.woff2").equals(font("../../../src/ui/static/fonts/DepartureMono-Regular.woff2"))).toBe(true);
+    expect(existsSync(here("../public/fonts/DepartureMono-LICENSE.txt"))).toBe(true);
+    // Vercel serves public/ only, so lib/ and the README are not static files on the domain.
+    expect(JSON.parse(readFileSync(here("../vercel.json"), "utf8")).outputDirectory).toBe("public");
+  });
+
+  it("every page has the wordmark, one title and at most one blue button", async () => {
+    const { app, cookie } = await installed();
+    const csrf = await csrfOf(await app.setup(get("/setup", { cookie })));
+    const pages = [
+      await app.home(get("/")),
+      await app.setup(get("/setup", { cookie })),
+      await app.setup(post("/setup", `csrf=${csrf}&action=workflow&p=prj_one`, { cookie, origin: BASE })),
+      await app.configure(get(`/configure?configurationId=${CFG}`)),
+      await app.setup(get("/setup")),
+      await app.setup(post("/setup", `csrf=wrong&action=workflow&p=prj_one`, { cookie, origin: BASE })),
+    ];
+    for (const res of pages) {
+      const body = await res.text();
+      expect(body).toContain('class="mark"');
+      expect(body.match(/<h1>/g) ?? []).toHaveLength(body.includes('class="home"') ? 0 : 1);
+      expect((body.match(/class="btn go"/g) ?? []).length).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it("an expired session and a failed form check each offer a way out", async () => {
+    const { app, cookie } = await installed();
+    expect(await (await app.setup(get("/setup"))).text()).toContain('<a class="btn go" href="/start">Install again</a>');
+    expect(await (await app.setup(post("/setup", "csrf=wrong&action=workflow&p=prj_one", { cookie, origin: BASE }))).text()).toContain('href="/setup"');
   });
 });
 
