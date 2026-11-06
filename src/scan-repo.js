@@ -26,6 +26,17 @@ const SOURCE_MAX_BYTES = 5 * 1024 * 1024;
 /** A file the route scan would have read but refused: a link out, a device, a FIFO, too large. */
 function refusedFileFinding(e, repoPath) {
   const name = relative(resolve(repoPath), resolve(repoPath, e.path)).split(sep).join("/") || e.path;
+  if (e.partial) {
+    return {
+      severity: "info",
+      title: `File not fully checked: ${name}`,
+      description: `\`${name}\` was read, but ${e.reason}. The scan is incomplete and exits 2.`,
+      url: name,
+      file: name,
+      category: "config",
+      source: "repo-scan",
+    };
+  }
   return {
     severity: "info",
     title: `File not read: ${name}`,

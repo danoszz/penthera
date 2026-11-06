@@ -201,7 +201,7 @@ code-pattern analysis, runtime versions) it says how many files were read and
 why the others were not: file type not read, over the size limit, a language
 route analysis does not support, or no server routes found (a client-only app
 has none). Each file is read whole, up to a size limit: 64 MiB for the secret
-scan and 16 MiB for the eval and exec check. Minified code gives no
+scan and 12 MiB for the eval and exec check. Minified code gives no
 code-pattern findings, whatever its size; comments don't count toward minified,
 and Coverage lists minified files. A file over those limits, or one that
 can't be read at all (a FIFO, a device, no permission), is named and makes the
@@ -258,7 +258,10 @@ sealed test half was scored once ([results](https://github.com/danoszz/penthera/
 Limits. Only one helper call is followed, and only to a function the file
 calls by name. A field set from another field is not followed. Sanitizers are not recognized, so a
 correctly escaped command can still be reported; that is what `potential`
-means.
+means. Library mode reads the body of each exported function, so exported
+functions nested inside each other are read once per level. A file that would
+take more than 16 times its own length of reading (plus 4 MiB) is checked up to
+that point, named as `File not fully checked`, and the scan exits 2.
 
 ## CI integration
 
