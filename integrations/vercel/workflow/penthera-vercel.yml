@@ -66,7 +66,7 @@ jobs:
 
       - name: "Penthera: your open-source cyber security agent"
         id: penthera
-        uses: danoszz/penthera@3b4c837aaae81966ad95645e0f84dc9f9353d0ab # v2.3.1
+        uses: danoszz/penthera@f7dee0f4adef277e781cc0bd9c3902a2e6d1f4c4 # v2.3.2
         with:
           mode: scan
           url: ${{ steps.target.outputs.url }}
