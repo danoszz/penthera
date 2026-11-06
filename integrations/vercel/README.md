@@ -153,8 +153,9 @@ does not wait for a workflow that is not committed yet.
   `createdAt` changes nothing. Configuration ids are never reused (Vercel's
   docs), so a replay can only hit a record that a reinstall brought back.
 - **Headers on every answer:** a CSP with `default-src 'none'`, no scripts, the
-  one inline style allowed by hash, `form-action 'self' https://vercel.com`,
-  `frame-ancestors 'none'`; HSTS, `nosniff`, `X-Frame-Options: DENY`,
+  one inline style allowed by hash, fonts and images from this origin only
+  (`public/`: Departure Mono and the favicon), `form-action 'self'
+  https://vercel.com`, `frame-ancestors 'none'`; HSTS, `nosniff`, `X-Frame-Options: DENY`,
   `Referrer-Policy: same-origin` (with `no-referrer`, browsers send `Origin: null` on our own form posts), a closed `Permissions-Policy`,
   `Cache-Control: no-store`, and `Cross-Origin-Opener-Policy: unsafe-none`,
   which Vercel requires for the install popup.
