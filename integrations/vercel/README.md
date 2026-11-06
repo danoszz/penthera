@@ -155,7 +155,7 @@ does not wait for a workflow that is not committed yet.
 - **Headers on every answer:** a CSP with `default-src 'none'`, no scripts, the
   one inline style allowed by hash, `form-action 'self' https://vercel.com`,
   `frame-ancestors 'none'`; HSTS, `nosniff`, `X-Frame-Options: DENY`,
-  `Referrer-Policy: no-referrer`, a closed `Permissions-Policy`,
+  `Referrer-Policy: same-origin` (with `no-referrer`, browsers send `Origin: null` on our own form posts), a closed `Permissions-Policy`,
   `Cache-Control: no-store`, and `Cross-Origin-Opener-Policy: unsafe-none`,
   which Vercel requires for the install popup.
 - **Logs:** errors only, through one logger (`lib/log.mjs`) that keeps an

@@ -140,7 +140,7 @@ export function createApp({ env = process.env, store, fetch: fetchImpl = globalT
   // A form post must come from our own pages: same origin when the browser says, and the session's form token.
   function formAllowed(request, form, s, c) {
     const origin = request.headers.get("origin");
-    if (origin && origin !== c.origin) return false;
+    if (origin && origin !== "null" && origin !== c.origin) return false;
     return safeEqual(form.get("csrf"), formToken(s, c));
   }
 

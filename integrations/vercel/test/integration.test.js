@@ -281,6 +281,15 @@ describe("setup", () => {
     expect(vercel.checks.prj_one).toHaveLength(0);
   });
 
+  it("accepts a browser post that says Origin: null when the form token is right", async () => {
+    const { app, cookie } = await installed();
+    const page = await (await app.setup(get("/setup", { cookie }))).text();
+    const csrf = page.match(/name="csrf" value="([^"]+)"/)[1];
+    const res = await app.setup(post("/setup", `csrf=${csrf}&action=workflow&p=prj_one`, { cookie, origin: "null" }));
+    expect(res.status).not.toBe(403);
+    expect((await app.setup(post("/setup", `csrf=wrong&action=workflow&p=prj_one`, { cookie, origin: "null" }))).status).toBe(403);
+  });
+
   it("refuses posts without the form token, from another origin, or without a session", async () => {
     const { app, cookie, vercel } = await installed();
     const csrf = await csrfOf(await app.setup(get("/setup", { cookie })));
