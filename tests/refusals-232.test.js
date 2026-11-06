@@ -390,3 +390,81 @@ describe("a hook script padded past the old 5 MiB limit (Fact-checker, before 2.
     }
   });
 });
+
+describe.skipIf(!posix)("--repo: a route or server file that is there but not read is named, exit 2", () => {
+  const route = "export async function GET() { return Response.json({ ok: true }); }\n";
+  const next = (setup) => {
+    const d = tmp();
+    mkdirSync(join(d, "app", "api", "ok"), { recursive: true });
+    writeFileSync(join(d, "app", "api", "ok", "route.ts"), route);
+    mkdirSync(join(d, "app", "api", "x"), { recursive: true });
+    setup(d, join(d, "app", "api", "x", "route.ts"));
+    return d;
+  };
+  const cases = {
+    "a FIFO route.ts": (d, p) => execFileSync("mkfifo", [p]),
+    "a route.ts linked out of the project": (d, p) => { const out = join(tmp(), "route.ts"); writeFileSync(out, route); symlinkSync(out, p); },
+    "a route.ts linked to nothing": (d, p) => symlinkSync(join(d, "nope.ts"), p),
+  };
+  for (const [name, setup] of Object.entries(cases)) {
+    it(`${name}: named, incomplete, exit 2`, async () => {
+      const r = await scanRepo(next(setup), { offline: true });
+      expect(r.incomplete?.map((x) => x.file), name).toContain("app/api/x/route.ts");
+      expect(exitCodeOf(r), name).toBe(2);
+    });
+  }
+
+  it("a route folder linked out of the project: named, exit 2", async () => {
+    const d = tmp();
+    mkdirSync(join(d, "app", "api", "ok"), { recursive: true });
+    writeFileSync(join(d, "app", "api", "ok", "route.ts"), route);
+    const outside = tmp();
+    mkdirSync(join(outside, "y"));
+    writeFileSync(join(outside, "y", "route.ts"), route);
+    symlinkSync(outside, join(d, "app", "api", "ext"));
+    const r = await scanRepo(d, { offline: true });
+    expect(r.incomplete?.map((x) => x.file)).toContain("app/api/ext");
+    expect(exitCodeOf(r)).toBe(2);
+  });
+
+  it("a route.ts linked to a file inside the project is read, and the run is complete", async () => {
+    const d = next((dd, p) => { writeFileSync(join(dd, "app", "api", "x", "impl.ts"), route); symlinkSync("impl.ts", p); });
+    const r = await scanRepo(d, { offline: true });
+    expect(r.incomplete).toBeUndefined();
+    expect(r.attackSurface.map((x) => x.url).sort()).toEqual(["/api/ok", "/api/x"]);
+  });
+
+  it("an Express app with a FIFO server file and a linked-out one: both named, exit 2", async () => {
+    const d = tmp();
+    writeFileSync(join(d, "package.json"), JSON.stringify({ name: "x", dependencies: { express: "4.0.0" } }));
+    writeFileSync(join(d, "app.js"), "const app = require('express')();\napp.get('/ok', (req, res) => res.send('ok'));\n");
+    mkdirSync(join(d, "routes"));
+    execFileSync("mkfifo", [join(d, "routes", "admin.js")]);
+    const out = join(tmp(), "extra.js");
+    writeFileSync(out, "app.get('/x', (req, res) => res.send('x'));\n");
+    symlinkSync(out, join(d, "routes", "extra.js"));
+    symlinkSync(out, join(d, "server.js")); // a top-level entry file, linked out
+    const r = await scanRepo(d, { offline: true });
+    expect(r.incomplete?.map((x) => x.file)).toEqual(expect.arrayContaining(["routes/admin.js", "routes/extra.js", "server.js"]));
+    expect(exitCodeOf(r)).toBe(2);
+  });
+});
+
+describe.skipIf(!posix)("the sink check and links", () => {
+  it("a server file linked out of the project is named (exit 2); one linked inside is read", async () => {
+    const d = tmp();
+    mkdirSync(join(d, "lib"));
+    const out = join(tmp(), "out.js");
+    writeFileSync(out, "require('child_process').exec(process.argv[2]);\n");
+    symlinkSync(out, join(d, "lib", "out.js"));
+    writeFileSync(join(d, "lib", "real.js"), "const { exec } = require('child_process');\nmodule.exports = (req) => exec(req.body.cmd);\n");
+    symlinkSync("real.js", join(d, "lib", "alias.js"));
+    const refused = [];
+    const findings = scanCodeSinks(d, { refused });
+    expect(refused.map((r) => r.path.split("/").pop())).toEqual(["out.js"]);
+    expect(findings.map((f) => f.file).sort()).toEqual(["lib/alias.js", "lib/real.js"]);
+    const r = await scanRepo(d, { offline: true });
+    expect(r.incomplete?.map((x) => x.file)).toContain("lib/out.js");
+    expect(exitCodeOf(r)).toBe(2);
+  });
+});

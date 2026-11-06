@@ -205,7 +205,9 @@ to 512 MiB, and the eval and exec check up to 64 MiB, both in overlapping
 chunks, so a hit across a chunk edge is still found. Minified code gives no
 code-pattern findings, whatever its size. A file over those limits, or one that
 can't be read at all (a FIFO, a device, no permission), is named and makes the
-scan incomplete: it exits 2. Route analysis reads Next.js route handlers anywhere under `app/` or
+scan incomplete: it exits 2. A route or server file linked to another file in
+the project is read through the link. One linked out of the project or to
+nothing, or a linked folder outside it, is named the same way. Route analysis reads Next.js route handlers anywhere under `app/` or
 `src/app/` and a Worker's `export default { fetch }` entry, besides Express,
 Hono and Fastify routes. How many routes it found is part of Coverage, not a
 finding. Source files no code
