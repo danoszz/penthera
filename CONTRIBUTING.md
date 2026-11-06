@@ -350,8 +350,10 @@ live once a maintainer approves it with 2FA. **Do not run `npm publish` locally.
    - `.claude-plugin/plugin.json` (`version`)
    - `.claude-plugin/marketplace.json` (`metadata.version`)
    - `plugin/.claude-plugin/plugin.json` (`version`), `plugin/skills/penthera/SKILL.md`
-     (a copy of the skill) and `plugin/.mcp.json` (the pin), plus the Agent Plugins
-     copies `plugin/plugin.json` and `plugin/mcp.json`; a test keeps them equal
+     (a copy of the skill, whose `npx -y penthera@<version>` lines are the
+     plugin's pin), plus the Agent Plugins copy `plugin/plugin.json`; a test keeps
+     them equal. The plugin is skill-only: no `.mcp.json` or `mcp.json` in `plugin/`,
+     because Anthropic's directory refuses local MCP servers from unverified publishers
    - `CITATION.cff` (`version`)
    - `docs/METHODOLOGY.md` (the "How to cite" block)
    - `server.json` (`version` and `packages[0].version`) and the pins in
@@ -388,7 +390,7 @@ live once a maintainer approves it with 2FA. **Do not run `npm publish` locally.
    Once npm serves it as `latest`, two places follow:
    - **Anthropic's plugin directory follows the `plugin-claude-live` branch.** The
      `Plugin live` workflow moves that branch to the newest commit on `main`
-     whose `plugin/.mcp.json` pins the version npm serves, within the hour or
+     whose plugin skill pins the version npm serves, within the hour or
      on the next push to `main`, and only forward. Nothing to do by hand.
    - **The official MCP Registry** needs one publish from `main`:
      `mcp-publisher login github`, then `mcp-publisher publish`.

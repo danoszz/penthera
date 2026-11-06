@@ -24,8 +24,9 @@ newest on npm each time your agent starts, which is the risk that
 claude mcp add penthera -- npx -y penthera@2.3.2 mcp
 ```
 
-Add `--scope project` to write it to `.mcp.json` for the whole team. To get the
-skill and the MCP server together, install the plugin instead:
+Add `--scope project` to write it to `.mcp.json` for the whole team. The
+Penthera plugin holds only the skill, which runs the CLI, and starts no MCP
+server. Install it as well if you want the skill:
 
 ```bash
 claude plugin marketplace add danoszz/penthera
@@ -55,13 +56,16 @@ Checked against [Codex's MCP docs](https://learn.chatgpt.com/docs/extend/mcp?sur
 
 ### GitHub Copilot
 
-In Copilot CLI, install the plugin. It holds the skill and the MCP server, and
-Copilot reads the same marketplace file as Claude Code:
+In Copilot CLI, the plugin gives you the skill, which runs the CLI. It starts no
+MCP server. Copilot reads the same marketplace file as Claude Code:
 
 ```bash
 copilot plugin marketplace add danoszz/penthera
 copilot plugin install penthera@penthera
 ```
+
+For the MCP tools in Copilot CLI, add the server in its MCP settings with the
+same `npx -y penthera@2.3.2 mcp` launch line.
 
 In VS Code, add the server to your user profile:
 

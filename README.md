@@ -81,7 +81,7 @@ issues". The MCP lines pin the version.
 
 | Agent | Run this |
 |---|---|
-| Claude Code, plugin (skill and MCP server) | `claude plugin marketplace add danoszz/penthera`, then `claude plugin install penthera@penthera` |
+| Claude Code, plugin (skill only, runs the CLI) | `claude plugin marketplace add danoszz/penthera`, then `claude plugin install penthera@penthera` |
 | Claude Code, MCP server only | `claude mcp add penthera -- npx -y penthera@2.3.2 mcp` |
 | Codex | `codex mcp add penthera -- npx -y penthera@2.3.2 mcp` |
 | GitHub Copilot CLI | `copilot plugin marketplace add danoszz/penthera`, then `copilot plugin install penthera@penthera` |
