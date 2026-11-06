@@ -263,7 +263,7 @@ export function createRunManager(deps) {
     let allow = null;
     let loaded;
     try { loaded = loadPolicy(req.repo); } catch (e) { throw new RunError(cleanLine(e.message)); }
-    if (loaded.warning) throw new RunError(cleanLine(`${loaded.warning.replace(/ The default policy applies\.$/, "")} AI mode does not run until it can be read.`));
+    if (loaded.warning) throw new RunError(cleanLine(`${loaded.warning.replace(/ The scan used the default policy.*$/, "")} AI mode does not run until it can be read.`));
     allow = loaded.policy.ai?.allow ?? null;
     if (allow && allow.length === 0) throw new RunError("penthera.policy.json turns AI mode off for this project.", 403);
     if (model.route === "ollama-cloud" && req.ai.confirmHost !== CLOUD_HOST) {

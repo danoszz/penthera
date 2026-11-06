@@ -22,6 +22,11 @@ count is the scan's findings a recipe could take. `penthera fix` also checks coo
 flags, CORS and rate limits in your code, which do not change a scan's findings or
 exit code.
 
+`penthera fix` exits 2 when its run is incomplete: the repo scan, a report given
+with `-o`, or the cookie check left a file unread or not fully checked. It names
+those files, and `--json` lists them under `incomplete`. The plans it shows may
+then miss a fix.
+
 Ask your agent to fix what Penthera finds. It detects the issue, applies a framework-aware fix to your code (shown as a diff for you to approve), and re-scans to prove it is resolved.
 
 ```

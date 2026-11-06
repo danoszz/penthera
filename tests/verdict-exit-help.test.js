@@ -441,8 +441,10 @@ describe.skipIf(asRoot)("a named skill Penthera could not read in full", () => {
     shut(join(dir, ".claude/skills/demo/run.sh"), 0o000);
     const r = await scan(dir);
     expect(r.agents.skillTarget).toBe(false);
-    expect(r.findings.filter((x) => x.url.includes("run.sh"))).toEqual([]);
+    // 2.3.2: a file there but not read is named (info) and makes the run incomplete.
+    expect(r.findings.filter((x) => x.url.includes("run.sh")).map((x) => x.severity)).toEqual(["info"]);
     expect(r.findings.find((x) => x.url.includes("big.md")).severity).toBe("medium");
+    expect(r.incomplete.map((x) => x.file).sort()).toEqual([".claude/skills/demo/big.md", ".claude/skills/demo/run.sh"]);
   }, 60_000);
 
   it("lists node_modules under Not read and leaves the grade alone, as the docs say", async () => {

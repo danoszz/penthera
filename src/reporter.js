@@ -16,6 +16,7 @@ import { giantsTerminalLines, foundByText } from "./report/giants.js";
 import { exitCodeOf, exitNote, exitReason } from "./report/exit.js";
 import { toolById } from "../lib/giants/tools.js";
 import { colorOff } from "./cli/ansi.js";
+import { trimEndChars, trimStartChars } from "../lib/linear-text.js";
 
 const PKG_VERSION = JSON.parse(
   readFileSync(new URL("../package.json", import.meta.url), "utf-8"),
@@ -624,7 +625,7 @@ function toSarifUri(location) {
   if (!location) return undefined;
   try {
     const u = new URL(location);
-    const path = `${u.hostname}${u.pathname}`.replace(/\/+$/, "").replace(/^\/+/, "");
+    const path = trimStartChars(trimEndChars(`${u.hostname}${u.pathname}`, "/"), "/");
     return path || u.hostname;
   } catch {
     return String(location).replace(/^[a-z][a-z0-9+.-]*:\/\//i, "").replace(/^\/+/, "");

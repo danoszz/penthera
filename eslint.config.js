@@ -2,6 +2,7 @@
 // code). No style rules; dev-only, never shipped.
 import js from "@eslint/js";
 import globals from "globals";
+import regexp from "eslint-plugin-regexp";
 
 export default [
   { ignores: ["node_modules/", "audit/logs/", "reports/", "coverage/", "bench/out/", "**/fixtures/**", "site/dist/", "lib/vendor/"] },
@@ -21,6 +22,16 @@ export default [
       "no-sparse-arrays": "off",
       "preserve-caught-error": "off",
       "no-empty": ["error", { allowEmptyCatch: true }],
+    },
+  },
+  // Scanners run regexes on untrusted text: super-linear backtracking there is a
+  // denial of service (QA standard step 3a; Vercel Security Review M, 2.3.2).
+  {
+    files: ["lib/**/*.js", "lib/**/*.mjs", "src/**/*.js", "src/**/*.mjs"],
+    plugins: { regexp },
+    rules: {
+      "regexp/no-super-linear-backtracking": "error",
+      "regexp/no-super-linear-move": "error",
     },
   },
   { files: ["src/ui/static/**", "site/check/**", "site/theme.js", "site/track.js", "site/pro.js", "site/gopro.js"], languageOptions: { globals: { ...globals.browser } } },

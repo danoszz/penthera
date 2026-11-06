@@ -46,7 +46,7 @@ export const EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 /** Arguments that would make an allowed subcommand reach outside the repo. */
 const FORBIDDEN_ARGS = [
   /^-c$/, /^--config/, /^--git-dir/, /^--work-tree/, /^--exec-path/, /^--upload-pack/, /^--receive-pack/,
-  /^--exec\b/, /^--recurse-submodules/, /^--remote/, /:\/\//, /^[^/\s]+@[^/\s]+:/,
+  /^--exec\b/, /^--recurse-submodules/, /^--remote/, /:\/\//, /^[^/\s@]+@[^/\s]+:/,
 ];
 
 export class GitPolicyError extends Error {
