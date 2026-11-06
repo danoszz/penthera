@@ -27,8 +27,8 @@ const NEXT = "https://vercel.com/integrations/penthera/new/done?x=1";
 
 function env(extra = {}) {
   return {
-    VERCEL_CLIENT_ID: "oac_testclient",
-    VERCEL_CLIENT_SECRET: CLIENT_SECRET,
+    INTEGRATION_CLIENT_ID: "oac_testclient",
+    INTEGRATION_CLIENT_SECRET: CLIENT_SECRET,
     PENTHERA_TOKEN_KEYS: `v1:${b64key()}`,
     PUBLIC_BASE_URL: BASE,
     CRON_SECRET: `cron_${randomBytes(16).toString("hex")}`,
@@ -386,7 +386,7 @@ describe("no secrets in logs", () => {
   });
 
   it("redact() masks token shapes and env secrets but keeps ids and error codes", () => {
-    const e = { VERCEL_CLIENT_SECRET: CLIENT_SECRET };
+    const e = { INTEGRATION_CLIENT_SECRET: CLIENT_SECRET };
     expect(redact(`Bearer ${ACCESS_TOKEN}`, e)).not.toContain(ACCESS_TOKEN);
     expect(redact(`secret ${CLIENT_SECRET} here`, e)).not.toContain(CLIENT_SECRET);
     expect(redact(`${CFG} integration_configuration_disabled`, e)).toBe(`${CFG} integration_configuration_disabled`);

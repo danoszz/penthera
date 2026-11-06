@@ -182,12 +182,13 @@ code and the `configurationId` appear there. The privacy draft says so.
 ## Environment variables
 
 Set these yourself in the integration's Vercel project, as **Sensitive**, on
-Production only. Never paste their values into a chat, an issue or a log.
+Production only. Names starting with `VERCEL_` are reserved by Vercel, so the
+client id and secret use the `INTEGRATION_` prefix. Never paste their values into a chat, an issue or a log.
 
 | Name | What |
 |---|---|
-| `VERCEL_CLIENT_ID` | The integration's client id, from the Integrations Console |
-| `VERCEL_CLIENT_SECRET` | The integration's client secret. Also signs the webhooks |
+| `INTEGRATION_CLIENT_ID` | The integration's client id, from the Integrations Console |
+| `INTEGRATION_CLIENT_SECRET` | The integration's client secret. Also signs the webhooks |
 | `PENTHERA_TOKEN_KEYS` | `v1:<base64 of 32 random bytes>`. To rotate, prepend a new one: `v2:<new>,v1:<old>`. The first encrypts; all decrypt |
 | `PUBLIC_BASE_URL` | This server's origin, such as `https://vercel.penthera.org`. The Redirect URL is `<PUBLIC_BASE_URL>/install` |
 | `INTEGRATION_SLUG` | The integration's URL slug. Default `penthera` |
