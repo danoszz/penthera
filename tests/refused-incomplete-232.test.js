@@ -8,7 +8,8 @@
  * 16 MiB file.
  */
 import { describe, it, expect, vi } from "vitest";
-import { mkdtempSync, mkdirSync, writeFileSync, chmodSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, chmodSync, symlinkSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -99,5 +100,28 @@ describe("a route over the route cap makes --repo incomplete", () => {
     const other = { target: "x", mode: "deps", findings: [] };
     expect(mergeResults([r, other]).incomplete).toEqual(r.incomplete);
     expect(exitCodeOf(mergeResults([r, other]))).toBe(2);
+  });
+
+  it.skipIf(!posix)("a FIFO route.ts exits 2 and returns", async () => {
+    const d = tmp();
+    mkdirSync(join(d, "app/api/run"), { recursive: true });
+    mkdirSync(join(d, "app/api/ok"), { recursive: true });
+    writeFileSync(join(d, "app/api/ok/route.ts"), "export async function GET() { return Response.json({}); }\n");
+    execFileSync("mkfifo", [join(d, "app/api/run/route.ts")]);
+    const r = await scanRepo(d);
+    expect(r.incomplete).toEqual([expect.objectContaining({ file: "app/api/run/route.ts" })]);
+    expect(exitCodeOf(mergeResults([r]))).toBe(2);
+  });
+
+  it.skipIf(!posix)("an Express route file linked out of the repo exits 2", async () => {
+    const d = tmp();
+    const out = tmp();
+    writeFileSync(join(out, "evil.js"), "app.post(\"/run\", (req, res) => exec(req.body.code));\n");
+    mkdirSync(join(d, "routes"));
+    writeFileSync(join(d, "routes/ok.js"), "router.get(\"/ok\", (req, res) => res.send(\"ok\"));\n");
+    symlinkSync(join(out, "evil.js"), join(d, "routes/run.js"));
+    const r = await scanRepo(d);
+    expect(r.incomplete).toEqual([expect.objectContaining({ file: "routes/run.js" })]);
+    expect(exitCodeOf(mergeResults([r]))).toBe(2);
   });
 });
