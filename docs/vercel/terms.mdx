@@ -6,7 +6,7 @@ description: "The terms for Penthera's hosted Vercel integration."
 
 > **Project page.** For "what are the terms of the Penthera Vercel integration?"
 
-Last updated: 6 November 2026
+Last updated: 7 November 2026
 
 ## 1. Who provides it
 
@@ -22,11 +22,12 @@ Vercel Inc. is not a party to these terms.
 The integration connects your Vercel projects to Penthera's GitHub Action. It:
 
 - registers a Deployment Check on the projects you pick,
-- gives you a workflow file to commit to your own repository, and
+- gives you a workflow file to commit to your own repository,
+- passes each production scan's pass or fail on to that check, and
 - keeps an encrypted Vercel access token for your installation.
 
-Scans run in your own GitHub Actions. We do not run scans, and scan results
-never reach us.
+Scans run in your own GitHub Actions. We do not run scans, and findings never
+reach us: only pass or fail, which we hand to Vercel and do not keep.
 
 ## 3. Price
 

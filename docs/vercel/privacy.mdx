@@ -6,7 +6,7 @@ description: "What Penthera's hosted Vercel integration keeps, where, and for ho
 
 > **Project page.** For "what does the Penthera Vercel integration keep about me?"
 
-Last updated: 6 November 2026
+Last updated: 7 November 2026
 
 ## Who is responsible
 
@@ -21,14 +21,34 @@ For each installation, and nothing else:
 - Vercel's configuration id for the installation,
 - your team id, or your user or account id for a personal account,
 - a Vercel access token, encrypted (AES-256-GCM),
-- the date of the latest install or transfer, and
-- a random value that ends old setup sessions after an install or a transfer.
+- the date of the latest install or transfer,
+- a random value that ends old setup sessions after an install or a transfer,
+  and
+- for each project you turn the check on for, its project id and which
+  installation turned it on, so a scan result reaches the right check.
+
+## What reaches us for each production deploy
+
+When the scan in your GitHub Actions ends, the workflow sends us three things:
+the project id, the deployment id, and pass or fail. With them comes a token
+that GitHub signs for your repository. It names the repository, the workflow
+and its run, the commit, and the GitHub account that started the run. We use
+it only to check that the result comes from the Penthera workflow in the repo
+your project is connected to.
+
+We then set the Penthera check's result in Vercel, and keep none of it: not the
+ids, not the result, not the token. Our own logs hold an error code at most.
+
+To keep the service working, we count anonymous daily totals: how many results
+arrived that day, how many passed, failed, or were refused and why. The totals
+are numbers under a date. They hold no project, deployment, team or
+installation id and no IP address, so they cannot be tied to you. Each day's
+totals are deleted after 90 days.
 
 ## What never reaches us
 
-Your source code, deployment URLs, scan results, findings, GitHub tokens,
-Vercel protection bypass secrets, environment variables, names and email
-addresses.
+Your source code, deployment URLs, findings, GitHub access tokens, Vercel
+protection bypass secrets, environment variables and email addresses.
 
 To draw the setup pages, the server reads your shared projects' ids, names and
 linked GitHub repositories from Vercel. It shows them to you and does not
@@ -36,13 +56,14 @@ store them.
 
 ## Why, and on what basis
 
-To run the integration you asked for: register the check, and keep it working
-until you uninstall. The legal basis is the performance of a contract (GDPR
+To run the integration you asked for: register the check, pass each scan's
+result on to it, and keep it working until you uninstall. The legal basis is the performance of a contract (GDPR
 Art. 6(1)(b)).
 
 ## No tracking
 
-No analytics, no tracking, no profiling, no advertising. We do not sell or
+No analytics beyond the anonymous daily totals above, no tracking, no
+profiling, no advertising. We do not sell or
 share your data. During the install we set two strictly necessary cookies: a
 CSRF check (up to 15 minutes) and a setup session (30 minutes). Neither holds
 your token.
@@ -69,8 +90,10 @@ do not export or analyze them.
 
 ## How long
 
-Until you uninstall: Vercel tells us, and we delete the record. A weekly check
-also deletes any record whose token Vercel no longer accepts.
+The anonymous daily totals: 90 days. Everything else, until you uninstall: Vercel tells us, and we delete the record and its project
+links. Removing the check from a project deletes that project's link. A weekly
+check also deletes any record whose token Vercel no longer accepts, and any
+link whose installation is gone.
 
 ## Your rights
 

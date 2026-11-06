@@ -9,6 +9,7 @@
  *   POST /setup      action=workflow | enable | remove
  *   GET  /configure  Configuration URL
  *   POST /webhook    Webhook URL: signed integration-configuration events only
+ *   POST /report     the workflow's pass or fail, with a GitHub OIDC token: sets our check run's conclusion
  *   GET  /sweep      weekly cron: deletes records whose token no longer works
  *   GET  /health
  */
@@ -18,8 +19,10 @@ import {
 } from "./crypto.mjs";
 import { clearCookie, esc, html, json, message, readBody, readCookie, readForm, redirect, safeNext, setCookie } from "./http.mjs";
 import { logError } from "./log.mjs";
+import { OidcError, jwksCache, verifyGithubToken } from "./oidc.mjs";
+import { STAT_FIELDS } from "./store.mjs";
 import { VercelError, exchangeCode, vercelClient } from "./vercel.mjs";
-import { WORKFLOW_PATH, WORKFLOW_YAML, checkBody, checkName, githubNewFileUrl, isOurCheck } from "./workflow.mjs";
+import { WORKFLOW_PATH, WORKFLOW_YAML, checkBody, checkName, githubNewFileUrl, isIntegrationCheck, isOurCheck } from "./workflow.mjs";
 
 const SESSION = "pv_session";
 const STATE = "pv_state";
@@ -29,6 +32,19 @@ const MAX_PROJECTS_PER_POST = 20;
 const CONFIG_ID = /^icfg_[A-Za-z0-9]{1,64}$/;
 const TEAM_ID = /^team_[A-Za-z0-9]{1,64}$/;
 const PROJECT_ID = /^prj_[A-Za-z0-9]{1,64}$/;
+const DEPLOYMENT_ID = /^dpl_[A-Za-z0-9]{1,64}$/;
+const INTEGRATION_ID = /^oac_[A-Za-z0-9]{1,64}$/;
+const GITHUB_REPO = /^[A-Za-z0-9_.-]{1,100}\/[A-Za-z0-9_.-]{1,100}$/;
+/** The only body POST /report accepts, and the only conclusions. */
+const REPORT_FIELDS = ["conclusion", "deploymentId", "projectId"];
+const CONCLUSIONS = new Set(["succeeded", "failed"]);
+/** Reports per runner address per minute, per function instance. The firewall rule in README.md is the real limit. */
+const REPORTS_PER_MINUTE = 30;
+/** Unverified refusals are written to the counters at most this often, per instance. */
+const STATS_FLUSH_MS = 60_000;
+
+/** The OIDC audience the workflow asks GitHub for: this server's /report for one deployment. */
+export const reportAudience = (origin, deploymentId) => `${origin}/report/${deploymentId}`;
 /** Best-effort check cleanup on uninstall stays well inside the webhook's maxDuration (25 s). */
 const CLEANUP_MS = 15_000;
 /** How far Vercel's event clock may run ahead of ours before a stored time counts as tampered. */
@@ -45,6 +61,24 @@ const HOME = `<div>
 <a class="btn go" href="https://github.com/danoszz/penthera" rel="noopener noreferrer">Open a pull request</a>
 </div>`;
 
+// What the integration asks for, and why. Each line is checked against lib/ and workflow/penthera-vercel.yml.
+const SOURCE_URL = "https://github.com/danoszz/penthera/tree/main/integrations/vercel";
+const asks = ({ open = false } = {}) => `<details class="faq"${open ? " open" : ""}><summary>What Penthera asks for, and why</summary>
+<dl>
+<dt>Access to Vercel</dt>
+<dd>Deployment Checks, read and write, to add and remove the check and to set its result for each production deploy. Projects, read, to list your projects and their repos. Deployments, read, to confirm a result is for a production deploy of that project. Nothing else.</dd>
+<dt>What this server keeps</dt>
+<dd>One encrypted install token, with the installation id, your team or user id, the install date and a random value that ends old setup sessions. For each project with the check on, the project id and which installation turned it on. We delete all of it when you uninstall. Apart from that, anonymous daily totals with no ids, deleted after 90 days. No code, no deployment URLs, no results.</dd>
+<dt>What the workflow does</dt>
+<dd>It runs Penthera's passive scan on your deployment, in your own GitHub Actions, and holds no secrets. For a production deploy it then sends us three things: the deployment id, the project id, and pass or fail, with a token GitHub signs for your repo. We check the token, set the check's result in Vercel, and keep nothing about it, only anonymous daily totals to keep the service working. The findings stay in GitHub: the job summary and a run artifact.</dd>
+<dt>What it never does</dt>
+<dd>It never reads your code, never writes to your repo beyond one commit status, and never sends findings or code to us. It doesn't attack your site: it reads your pages and sends one login with obviously fake credentials, to check a wrong password is refused.</dd>
+<dt>Why you commit the workflow yourself</dt>
+<dd>We don't ask for write access to your repos, on purpose. One commit by you is the price.</dd>
+</dl>
+<ul class="links"><li><a href="https://docs.penthera.org/vercel/terms" target="_blank" rel="noopener noreferrer">Terms</a></li><li><a href="https://docs.penthera.org/vercel/privacy" target="_blank" rel="noopener noreferrer">Privacy</a></li><li><a href="${SOURCE_URL}" target="_blank" rel="noopener noreferrer">Source on GitHub</a></li></ul>
+</details>`;
+
 export function readConfig(env) {
   const need = (name) => {
     if (!env[name]) throw new ConfigError(`${name} is not set`);
@@ -59,6 +93,9 @@ export function readConfig(env) {
     origin: baseUrl.origin,
     redirectUri: `${baseUrl.origin}/install`,
     slug: /^[a-z0-9-]{1,32}$/.test(env.INTEGRATION_SLUG ?? "") ? env.INTEGRATION_SLUG : "penthera",
+    // The integration's id for the check's `source`. Vercel's integration ids and OAuth client ids
+    // both look like oac_...; INTEGRATION_ID overrides when the two differ (README, "Unverified").
+    integrationId: INTEGRATION_ID.test(env.INTEGRATION_ID ?? "") ? env.INTEGRATION_ID : INTEGRATION_ID.test(env.INTEGRATION_CLIENT_ID ?? "") ? env.INTEGRATION_CLIENT_ID : null,
     cronSecret: env.CRON_SECRET || null,
   };
 }
@@ -68,6 +105,8 @@ export function readConfig(env) {
  */
 export function createApp({ env = process.env, store, fetch: fetchImpl = globalThis.fetch, now = Date.now }) {
   const cfg = () => readConfig(env);
+  // GitHub's OIDC signing keys, cached for 10 minutes in this instance (lib/oidc.mjs).
+  const jwks = jwksCache({ fetch: fetchImpl, now });
 
   /**
    * A record from the store, only if it is the record for `id`: the id we looked up, which came
@@ -123,17 +162,23 @@ export function createApp({ env = process.env, store, fetch: fetchImpl = globalT
     return api ? { raw, configurationId: data.c, next: data.n ?? null, record, api } : null;
   }
 
-  // Each /install makes one outbound exchange, so a visitor gets a few a minute. Per instance only.
-  const installHits = new Map();
-  function installLimited(request) {
-    const who = (request.headers.get("x-real-ip") ?? request.headers.get("x-forwarded-for")?.split(",")[0] ?? "unknown").trim();
-    const t = now();
-    const recent = (installHits.get(who) ?? []).filter((x) => x > t - 60_000);
-    recent.push(t);
-    if (installHits.size > 10_000) installHits.clear();
-    installHits.set(who, recent);
-    return recent.length > INSTALLS_PER_MINUTE;
+  // Each /install makes one outbound exchange and each /report a few, so a visitor gets a few a
+  // minute. Per instance only; the firewall rule is the real limit.
+  function limiter(max) {
+    const hits = new Map();
+    return (request) => {
+      const who = (request.headers.get("x-real-ip") ?? request.headers.get("x-forwarded-for")?.split(",")[0] ?? "unknown").trim();
+      const t = now();
+      // A clock that moved backwards keeps no future-dated hit around (BYPASS-CHECKLIST row 11).
+      const recent = (hits.get(who) ?? []).filter((x) => x > t - 60_000 && x <= t);
+      recent.push(t);
+      if (hits.size > 10_000) hits.clear();
+      hits.set(who, recent);
+      return recent.length > max;
+    };
   }
+  const installLimited = limiter(INSTALLS_PER_MINUTE);
+  const reportLimited = limiter(REPORTS_PER_MINUTE);
 
   const formToken = (s, c) => mac(cookieKey(c.keys), `form:${s.raw}`);
 
@@ -225,7 +270,7 @@ export function createApp({ env = process.env, store, fetch: fetchImpl = globalT
     }
     const eligible = page.projects.filter((p) => p.repo);
     const status = new Map(
-      await Promise.all(eligible.map(async (p) => [p.id, await api.listChecks(p.id).then((list) => list.some((k) => isOurCheck(k, p.name)), () => null)])),
+      await Promise.all(eligible.map(async (p) => [p.id, await api.listChecks(p.id).then((list) => list.some((k) => isOurCheck(k, p.name, s.configurationId)), () => null)])),
     );
     const single = page.projects.length === 1 && !page.next && !from;
     const anyOn = [...status.values()].some(Boolean);
@@ -252,7 +297,8 @@ export function createApp({ env = process.env, store, fetch: fetchImpl = globalT
 ${more}
 <div class="act"><button class="btn go" type="submit">Next: add the workflow</button></div>
 </form>
-<p class="small">The check blocks promotion to production when Penthera finds a high or critical issue. Previews are scanned too and never blocked.</p>`, { step: "Step 1 of 2" });
+<p class="small">The check blocks promotion to production when Penthera finds a high or critical issue. Previews are scanned too and never blocked.</p>
+${asks()}`, { step: "Step 1 of 2" });
   }
 
   async function setupPost(request) {
@@ -269,8 +315,11 @@ ${more}
       try {
         const project = await api.getProject(removeId);
         for (const check of await api.listChecks(removeId)) {
-          if (isOurCheck(check, project.name)) await api.deleteCheck(removeId, check.id);
+          if (isOurCheck(check, project.name, s.configurationId)) await api.deleteCheck(removeId, check.id);
         }
+        // The relay stops for this project. A link that another installation set is left alone.
+        const link = await store.getLink(removeId);
+        if (link?.configurationId === s.configurationId) await store.deleteLink(removeId);
       } catch (e) {
         return apiFailure(e, s.configurationId, "remove_failed");
       }
@@ -290,21 +339,36 @@ ${more}
 
     if (form.get("action") === "enable") {
       const failed = [];
+      const taken = [];
       for (const p of projects) {
         try {
+          // A project's link belongs to the installation that owns a live Penthera check on it. If
+          // another installation's link is there and that installation's own token still sees its
+          // check, the link stays theirs and this one adds no second check (README, "Links").
+          const current = await store.getLink(p.id);
+          if (current && current.configurationId !== s.configurationId && (await ownsCheck(current.configurationId, p.id, c))) {
+            taken.push(p);
+            continue;
+          }
+          // The link first: a link with no check changes nothing, while a check with no link would
+          // hold production until Vercel times the run out.
+          await store.putLink({ projectId: p.id, configurationId: s.configurationId });
           const existing = await api.listChecks(p.id);
-          if (!existing.some((k) => isOurCheck(k, p.name))) await api.createCheck(p.id, checkBody(p.name));
+          if (!existing.some((k) => isIntegrationCheck(k, s.configurationId))) await api.createCheck(p.id, checkBody(s.configurationId, c.integrationId));
         } catch (e) {
           logError("check_failed", { status: e.status ?? 0, code: e.code ?? "network", configurationId: s.configurationId });
           failed.push(p);
         }
       }
-      if (!failed.length && s.next) return redirect(s.next, { cookies: [clearCookie(SESSION)] });
+      if (!failed.length && !taken.length && s.next) return redirect(s.next, { cookies: [clearCookie(SESSION)] });
       const back = s.next ? `<div class="act"><a class="btn go" href="${esc(s.next)}">Back to Vercel</a></div>` : "";
-      const text = failed.length
-        ? `<p class="callout">Vercel did not accept the check for: ${failed.map((p) => esc(p.name)).join(", ")}. Try again from Configure, or add it by hand in Project Settings, Deployment Checks.</p>`
-        : '<p class="lede">The check is on. Your next production deploy waits for Penthera.</p>';
-      return html(failed.length ? 502 : 200, "Penthera: done", `<h1>${failed.length ? "Some checks failed" : "Done"}</h1>${text}${back}`, { main: "one" });
+      const notes = [
+        failed.length ? `<p class="callout">Vercel did not accept the check for: ${failed.map((p) => esc(p.name)).join(", ")}. Try again from Configure, or add it by hand in Project Settings, Deployment Checks.</p>` : "",
+        taken.length ? `<p class="callout">Another Penthera installation already runs the check for: ${taken.map((p) => esc(p.name)).join(", ")}. Nothing changed there. Remove that check first to move it here.</p>` : "",
+      ].join("");
+      const text = notes || '<p class="lede">The check is on. Your next production deploy waits for Penthera.</p>';
+      const status = failed.length ? 502 : taken.length ? 409 : 200;
+      return html(status, "Penthera: done", `<h1>${status === 200 ? "Done" : "Some checks were not turned on"}</h1>${text}${back}`, { main: "one" });
     }
 
     const token = formToken(s, c);
@@ -326,7 +390,8 @@ ${more}
 <p class="callout">Commit the workflow first. Once the check is on, a production deploy waits for it.</p>
 <div class="act"><button class="btn go" type="submit">Turn on the check</button></div>
 </form>
-<p class="small">Your next production deploy will wait for Penthera's check. Findings show in the GitHub job summary. Nothing is sent to us.</p>`, { step: "Step 2 of 2" });
+<p class="small">Your next production deploy will wait for Penthera's check. Findings stay in the GitHub job summary. Only pass or fail reaches us, to pass on to Vercel.</p>
+${asks()}`, { step: "Step 2 of 2" });
   }
 
   async function configure(request) {
@@ -342,7 +407,8 @@ ${more}
 <textarea readonly spellcheck="false" wrap="off" aria-label="Workflow file">${esc(WORKFLOW_YAML)}</textarea>
 <p class="lede">To turn the check off for one project: Vercel, Project Settings, Deployment Checks, and remove the Penthera check. You can also delete the workflow file.</p>
 <p class="lede">To add projects: give the integration access to them in Vercel, then install again from <a href="/start" target="_blank" rel="noopener noreferrer">this link</a>. Changing projects from this page works for 30 minutes after an install.</p>
-<p class="lede">To uninstall: Vercel, Settings, Integrations, Penthera, Manage, Uninstall. We delete the stored token then. Remove the Penthera check from each project too, or production deploys keep waiting for it.</p>`);
+<p class="lede">To uninstall: Vercel, Settings, Integrations, Penthera, Manage, Uninstall. We delete the stored token and project links then. Remove the Penthera check from each project too, or production deploys keep waiting for it.</p>
+${asks({ open: true })}`);
   }
 
   async function webhook(request) {
@@ -374,9 +440,11 @@ ${more}
     const trusted = record && record.configurationId === id ? record : null;
     if (record && !trusted) logError("record_mismatch", { configurationId: id });
     if (!trusted) {
-      if (record && type === "integration-configuration.removed") {
+      if (type === "integration-configuration.removed") {
+        // Also when the record is already gone: a retry after a failed link cleanup lands here.
         try {
-          await store.delete(id);
+          if (record) await store.delete(id);
+          await dropLinks(id);
         } catch {
           logError("store_failed", { configurationId: id, route: "webhook" });
           return json(500, { error: "store_unavailable" });
@@ -407,16 +475,43 @@ ${more}
       return json(200, { ok: true });
     }
 
-    // Removed: open the token into memory, delete the record first, then tidy up best effort.
+    // Removed: open the token into memory, delete the record first, then its project links, then
+    // tidy up best effort. A failed link cleanup answers 500; Vercel's retry finds no record and
+    // runs the link cleanup again.
     const api = tryClient(record, id, c.keys);
     try {
       await store.delete(id);
+      await dropLinks(id);
     } catch {
       logError("store_failed", { configurationId: id, route: "webhook" });
       return json(500, { error: "store_unavailable" });
     }
-    if (api) await removeOurChecks(api, event.payload.configuration.projects);
+    if (api) await removeOurChecks(api, event.payload.configuration.projects, id);
     return json(200, { ok: true, deleted: true });
+  }
+
+  /**
+   * True when installation `configurationId` still owns a Penthera check on the project, read with
+   * its own token. A missing record, an unreadable token, or Vercel saying 401, 403 or 404 means it
+   * does not. Any other error keeps the current owner (true): a link is never taken over on a guess.
+   */
+  async function ownsCheck(configurationId, projectId, c) {
+    if (!CONFIG_ID.test(configurationId ?? "")) return false;
+    const record = await load(configurationId);
+    const api = record && tryClient(record, configurationId, c.keys);
+    if (!api) return false;
+    try {
+      return (await api.listChecks(projectId)).some((k) => isIntegrationCheck(k, configurationId));
+    } catch (e) {
+      return !(e instanceof VercelError && [401, 403, 404].includes(e.status));
+    }
+  }
+
+  /** Deletes every project link that names this installation, whatever key it sits under. */
+  async function dropLinks(configurationId) {
+    for (const { key, link } of await store.links()) {
+      if (link?.configurationId === configurationId) await store.deleteLink(key);
+    }
   }
 
   /** The event's creation time in ms, or null when it has none. */
@@ -439,7 +534,7 @@ ${more}
    * Best effort, inside the webhook's 30 seconds: Vercel probably revokes the token before it
    * sends `removed`, and then every call fails and we only delete the record.
    */
-  async function removeOurChecks(api, projectIds) {
+  async function removeOurChecks(api, projectIds, configurationId) {
     const ids = (Array.isArray(projectIds) ? projectIds : []).filter((p) => PROJECT_ID.test(p)).slice(0, 50);
     const signal = AbortSignal.timeout(CLEANUP_MS);
     const deadline = now() + CLEANUP_MS;
@@ -449,7 +544,7 @@ ${more}
         const project = await api.getProject(pid, { signal });
         for (const check of await api.listChecks(pid, { signal })) {
           if (signal.aborted || now() > deadline) return;
-          if (isOurCheck(check, project.name)) await api.deleteCheck(pid, check.id, { signal });
+          if (isOurCheck(check, project.name, configurationId)) await api.deleteCheck(pid, check.id, { signal });
         }
       } catch (e) {
         if (e instanceof VercelError && (e.status === 401 || e.status === 403)) return;
@@ -457,13 +552,192 @@ ${more}
     }
   }
 
+  /**
+   * POST /report, counted in anonymous daily totals (no id, no IP, nothing from the request).
+   *
+   * Only a relay that reached Vercel (200: succeeded or failed) is written at once, as received
+   * plus its result. Every refusal, also one with a valid GitHub token (anyone can mint one from
+   * their own repo), is added up in this instance's memory and written at most once a minute, so
+   * junk requests cannot spend the store's quota. Rate-limited requests are not counted at all.
+   * A store error while counting never changes the answer.
+   */
+  async function report(request) {
+    if (reportLimited(request)) return json(429, { error: "rate_limited" });
+    const res = await relay(request);
+    let field = null;
+    try {
+      const out = await res.clone().json();
+      field = res.status === 200 && (out?.conclusion === "succeeded" || out?.conclusion === "failed") ? out.conclusion : `rejected_${out?.error}`;
+    } catch {}
+    const day = today();
+    if (day && field && STAT_FIELDS.has(field)) {
+      if (res.status === 200) await writeStats(day, { received: 1, [field]: 1 });
+      else {
+        if (!pendingStats.has(day) && pendingStats.size >= 3) pendingStats.delete(pendingStats.keys().next().value);
+        const counts = pendingStats.get(day) ?? pendingStats.set(day, {}).get(day);
+        for (const f of ["received", field]) counts[f] = Math.min((counts[f] ?? 0) + 1, 1_000_000);
+      }
+    }
+    await flushStats();
+    return res;
+  }
+
+  // Unverified refusals, by day, waiting for the next flush. At most a few days and 15 names.
+  const pendingStats = new Map();
+  let flushedAt = -Infinity;
+
+  /** Writes the waiting counts if a minute has passed since the last flush (or the clock moved back). */
+  async function flushStats() {
+    const t = now();
+    if (!pendingStats.size || !(t - flushedAt >= STATS_FLUSH_MS || t < flushedAt)) return;
+    flushedAt = t;
+    const batch = [...pendingStats.entries()];
+    pendingStats.clear();
+    for (const [day, counts] of batch) await writeStats(day, counts);
+  }
+
+  /** Today's date in UTC, or null for a clock out of range. */
+  function today() {
+    try {
+      return new Date(now()).toISOString().slice(0, 10);
+    } catch {
+      return null;
+    }
+  }
+
+  async function writeStats(day, counts) {
+    try {
+      await store.countStats(day, counts);
+    } catch {
+      logError("stats_failed", { route: "report" });
+    }
+  }
+
+  /**
+   * POST /report: the workflow's pass or fail for one production deployment, relayed to our check.
+   *
+   * Body: exactly { deploymentId, projectId, conclusion: "succeeded" | "failed" }. Authorization: a
+   * GitHub Actions OIDC token for this server's origin (lib/oidc.mjs). Every id that decides
+   * anything is checked against Vercel with the token of the installation that turned the check on:
+   *
+   *   1. the token is GitHub's, for us and this one deployment (aud <origin>/report/<deploymentId>),
+   *      current, from the Penthera workflow file, run by a repository_dispatch, in some repo R;
+   *   2. the project's link names an installation, whose record and token we hold;
+   *   3. that installation's token reads the project live from Vercel, and the project is
+   *      connected to R (name and GitHub's repository id, both required; owner id when given),
+   *      and the deployment, read before any write, is a production deployment of the project;
+   *   4. the project has this installation's own check, and the deployment has a run of exactly
+   *      that check, which Vercel says belongs to this project and this deployment;
+   *   5. the run is not completed yet, so a result is never overwritten.
+   *
+   * Only then is the run's conclusion set. Nothing about the scan or the request is stored.
+   */
+  async function relay(request) {
+    const c = cfg();
+    const auth = /^Bearer ([A-Za-z0-9_.-]{1,8192})$/.exec(request.headers.get("authorization") ?? "");
+    if (!auth) return json(401, { error: "unauthorized" });
+    const raw = await readBody(request, 1024);
+    if (raw === null) return json(413, { error: "too_large" });
+    let body;
+    try {
+      body = JSON.parse(raw.toString("utf8"));
+    } catch {
+      return json(400, { error: "bad_json" });
+    }
+    const keys = body && typeof body === "object" && !Array.isArray(body) ? Object.keys(body).sort().join() : "";
+    if (keys !== REPORT_FIELDS.join()) return json(400, { error: "bad_body" });
+    const { deploymentId, projectId, conclusion } = body;
+    if (typeof deploymentId !== "string" || !DEPLOYMENT_ID.test(deploymentId)) return json(400, { error: "bad_deployment" });
+    if (typeof projectId !== "string" || !PROJECT_ID.test(projectId)) return json(400, { error: "bad_project" });
+    if (typeof conclusion !== "string" || !CONCLUSIONS.has(conclusion)) return json(400, { error: "bad_conclusion" });
+
+    // 1. GitHub's token, for us, from our workflow file.
+    let claims;
+    try {
+      // The audience names the deployment, so a token works for exactly one deployment.
+      claims = await verifyGithubToken(auth[1], { audience: reportAudience(c.origin, deploymentId), jwks, now });
+    } catch (e) {
+      const code = e instanceof OidcError ? e.code : "malformed";
+      if (code === "jwks_unavailable") {
+        logError("report_jwks_failed", { code });
+        return json(503, { error: "try_again" });
+      }
+      return json(401, { error: "bad_token" });
+    }
+    const repo = typeof claims.repository === "string" && GITHUB_REPO.test(claims.repository) ? claims.repository : null;
+    const repoId = typeof claims.repository_id === "string" && /^\d{1,20}$/.test(claims.repository_id) ? claims.repository_id : null;
+    const ownerId = typeof claims.repository_owner_id === "string" && /^\d{1,20}$/.test(claims.repository_owner_id) ? claims.repository_owner_id : null;
+    if (!repo || !repoId || !ownerId) return json(401, { error: "bad_token" });
+    if (claims.event_name !== "repository_dispatch" || typeof claims.workflow_ref !== "string" || !claims.workflow_ref.startsWith(`${repo}/${WORKFLOW_PATH}@`)) {
+      return json(403, { error: "workflow_not_allowed" });
+    }
+
+    // 2. The installation that turned the check on for this project.
+    let link, record;
+    try {
+      link = await store.getLink(projectId);
+      record = link && link.projectId === projectId && CONFIG_ID.test(link.configurationId ?? "") ? await load(link.configurationId) : null;
+    } catch {
+      logError("store_failed", { route: "report" });
+      return json(503, { error: "try_again" });
+    }
+    if (!record) return json(404, { error: "not_enabled" });
+    const configurationId = link.configurationId;
+    const api = tryClient(record, configurationId, c.keys);
+    if (!api) return json(404, { error: "not_enabled" });
+
+    try {
+      // 3. The project, read live with that installation's token, is connected to the token's repo:
+      //    the name, and GitHub's repository id, which must be there (a name can change hands). The
+      //    owner id is compared too when Vercel gives it.
+      const project = await api.getProject(projectId);
+      if (
+        project.id !== projectId || !project.repo || project.repo.toLowerCase() !== repo.toLowerCase() ||
+        !project.repoId || project.repoId !== repoId || (project.repoOwnerId && project.repoOwnerId !== ownerId)
+      ) {
+        return json(403, { error: "repository_mismatch" });
+      }
+      // 3b. The deployment belongs to this project and is a production deployment, before any write.
+      const deployment = await api.getDeployment(deploymentId);
+      if (deployment.id !== deploymentId || deployment.projectId !== projectId || deployment.target !== "production") {
+        return json(403, { error: "deployment_mismatch" });
+      }
+      // 4. This installation's check on the project, and its run on this deployment.
+      const check = (await api.listChecks(projectId)).find((k) => isIntegrationCheck(k, configurationId) && typeof k.id === "string" && k.id);
+      if (!check) return json(404, { error: "not_enabled" });
+      let run = (await api.listCheckRuns(deploymentId)).find((r) => r?.checkId === check.id);
+      run ??= await api.createCheckRun(deploymentId, check.id);
+      if (!run || typeof run.id !== "string" || !run.id || run.checkId !== check.id || run.projectId !== projectId || run.deploymentId !== deploymentId) {
+        return json(403, { error: "deployment_mismatch" });
+      }
+      // 5. A result is set once.
+      if (run.status === "completed") return json(409, { error: "already_completed" });
+      const runUrl = /^\d{1,20}$/.test(String(claims.run_id ?? "")) ? `https://github.com/${repo}/actions/runs/${claims.run_id}` : undefined;
+      await api.updateCheckRun(deploymentId, run.id, {
+        status: "completed",
+        conclusion,
+        conclusionText: conclusion === "succeeded"
+          ? "Penthera found no high or critical issue. Details in the GitHub job summary."
+          : "Penthera found a high or critical issue, or could not finish the scan. Details in the GitHub job summary.",
+        ...(runUrl ? { externalUrl: runUrl } : {}),
+      });
+      return json(200, { ok: true, conclusion });
+    } catch (e) {
+      // Every Vercel error is a 502, also a 403 or 404: the workflow then fails loudly instead of
+      // reading it as "the check is not on", and the run stays as it was.
+      logError("report_failed", { status: e.status ?? 0, code: e.code ?? "network", configurationId });
+      return json(502, { error: "vercel_unavailable" });
+    }
+  }
+
   async function sweep(request) {
     const c = cfg();
     const auth = request.headers.get("authorization") ?? "";
     if (!c.cronSecret || !safeEqual(auth, `Bearer ${c.cronSecret}`)) return json(401, { error: "unauthorized" });
-    let checked = 0, removed = 0;
+    let checked = 0, removed = 0, unlinked = 0;
     const deadline = now() + 50_000;
-    for (const id of await store.ids()) {
+    const ids = await store.ids();
+    for (const id of ids) {
       if (now() > deadline) break;
       const record = await load(id);
       if (!record) continue;
@@ -483,7 +757,15 @@ ${more}
         }
       }
     }
-    return json(200, { ok: true, checked, removed });
+    // Links whose installation is gone, or that do not match the key they sit under, are deleted.
+    const live = new Set(await store.ids());
+    for (const { key, link } of await store.links()) {
+      if (now() > deadline) break;
+      if (link?.projectId === key && live.has(link.configurationId) && Object.keys(link).length === 2) continue;
+      await store.deleteLink(key);
+      unlinked++;
+    }
+    return json(200, { ok: true, checked, removed, unlinked });
   }
 
   function expired() {
@@ -516,6 +798,7 @@ ${more}
     setup: guard(method({ GET: setupPage, POST: setupPost })),
     configure: guard(method({ GET: configure })),
     webhook: guard(method({ POST: webhook })),
+    report: guard(method({ POST: report })),
     sweep: guard(method({ GET: sweep })),
     home: method({ GET: async () => html(200, "Penthera", HOME, { footer: false, main: "home" }) }),
     health: method({ GET: async () => json(200, { ok: true }) }),

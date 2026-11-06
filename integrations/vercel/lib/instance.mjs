@@ -25,6 +25,12 @@ function lazyStore() {
     put: (r) => open().put(r),
     delete: (id) => open().delete(id),
     ids: () => open().ids(),
+    getLink: (id) => open().getLink(id),
+    putLink: (l) => open().putLink(l),
+    deleteLink: (id) => open().deleteLink(id),
+    links: () => open().links(),
+    countStats: (day, counts) => open().countStats(day, counts),
+    stats: (day) => open().stats(day),
   };
 }
 

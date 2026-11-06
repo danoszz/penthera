@@ -11,7 +11,7 @@ import { openToken, parseKeys, sealToken, signValue, unsignValue, verifyWebhookS
 import { CSP, safeNext } from "../lib/http.mjs";
 import { redact, setLogSink } from "../lib/log.mjs";
 import { memoryStore, redisStore } from "../lib/store.mjs";
-import { WORKFLOW_YAML, checkBody, checkName, githubNewFileUrl } from "../lib/workflow.mjs";
+import { WORKFLOW_YAML, checkBody, checkName, githubNewFileUrl, isOurCheck } from "../lib/workflow.mjs";
 
 const here = (p) => new URL(p, import.meta.url);
 const b64key = () => randomBytes(32).toString("base64");
@@ -68,7 +68,7 @@ function mockVercel({ checks = {}, fail = {}, token = ACCESS_TOKEN } = {}) {
       checks[m[1]] ??= [];
       if (method === "GET") return reply(200, { availableNativeChecks: [], checks: checks[m[1]] });
       const body = JSON.parse(init.body);
-      const created = { id: `chk_${nextId++}`, ...body, sourceKind: "git-provider", projectId: m[1] };
+      const created = { id: `chk_${nextId++}`, ...body, sourceKind: body.source?.kind, projectId: m[1] };
       checks[m[1]].push(created);
       return reply(200, created);
     }
@@ -272,7 +272,8 @@ describe("setup", () => {
     expect(done.status).toBe(303);
     expect(done.headers.get("location")).toBe(NEXT);
     expect(vercel.checks.prj_one).toHaveLength(1);
-    expect(vercel.checks.prj_one[0]).toMatchObject(checkBody("shop"));
+    expect(vercel.checks.prj_one[0]).toMatchObject(checkBody(CFG, "oac_testclient"));
+    expect(vercel.checks.prj_one[0].source).toEqual({ kind: "integration", integrationId: "oac_testclient", integrationConfigurationId: CFG });
 
     // Enabling again adds no duplicate; remove deletes ours.
     await app.setup(post("/setup", `csrf=${csrf}&action=enable&p=prj_one`, { cookie, origin: BASE }));
@@ -468,6 +469,22 @@ describe("pages", () => {
     }
   });
 
+  it("pick, workflow and configure say what Penthera asks for, and why, without a script", async () => {
+    const { app, cookie } = await installed();
+    const pick = await (await app.setup(get("/setup", { cookie }))).text();
+    const csrf = /name="csrf" value="([^"]+)"/.exec(pick)[1];
+    const workflow = await (await app.setup(post("/setup", `csrf=${csrf}&action=workflow&p=prj_one`, { cookie, origin: BASE }))).text();
+    const configure = await (await app.configure(get(`/configure?configurationId=${CFG}`))).text();
+    for (const page of [pick, workflow, configure]) {
+      expect(page).toContain("<summary>What Penthera asks for, and why</summary>");
+      expect(page).toContain("Deployment Checks, read and write");
+      expect(page).toContain('href="https://github.com/danoszz/penthera/tree/main/integrations/vercel"');
+      expect(page).not.toMatch(/<script/i);
+    }
+    expect(pick).toContain('<details class="faq">');
+    expect(configure).toContain('<details class="faq" open>');
+  });
+
   it("an expired session and a failed form check each offer a way out", async () => {
     const { app, cookie } = await installed();
     expect(await (await app.setup(get("/setup"))).text()).toContain('<a class="btn go" href="/start">Install again</a>');
@@ -518,7 +535,15 @@ describe("workflow and repo rules", () => {
 
   it("names the Vercel check after the status the workflow reports", () => {
     expect(checkName("shop")).toBe("Penthera on Vercel | scan (shop - production)");
-    expect(checkBody("shop")).toMatchObject({ blocks: "deployment-promotion", targets: ["production"], source: { kind: "git-provider", provider: "github" } });
+    expect(checkBody(CFG, "oac_x")).toMatchObject({ blocks: "deployment-promotion", targets: ["production"], isRerequestable: false, source: { kind: "integration", integrationId: "oac_x", integrationConfigurationId: CFG } });
+  });
+
+  it("counts our integration check and the old git-provider check as ours, and nobody else's", () => {
+    expect(isOurCheck({ source: { kind: "integration", integrationConfigurationId: CFG } }, "shop", CFG)).toBe(true);
+    expect(isOurCheck({ source: { kind: "git-provider", provider: "github", externalCheckName: checkName("shop") } }, "shop", CFG)).toBe(true);
+    expect(isOurCheck({ source: { kind: "integration", integrationConfigurationId: "icfg_Other" } }, "shop", CFG)).toBe(false);
+    expect(isOurCheck({ source: { kind: "integration" } }, "shop", undefined)).toBe(false);
+    expect(isOurCheck({ source: { kind: "git-provider", externalCheckName: "Lint" } }, "shop", CFG)).toBe(false);
   });
 
   it("builds the GitHub link only for plain owner/repo names, and keeps it short enough", () => {
@@ -767,6 +792,10 @@ describe("records are bound to the id they were looked up by", () => {
       put: async (r) => map.set(r.configurationId, { ...r }),
       delete: async (id) => map.delete(id),
       ids: async () => [...map.keys()],
+      getLink: async () => null,
+      putLink: async () => {},
+      deleteLink: async () => {},
+      links: async () => [],
     };
   }
 

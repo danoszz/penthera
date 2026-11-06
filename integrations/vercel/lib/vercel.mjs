@@ -8,6 +8,10 @@
  *   GET  /v2/projects/{id}/checks         list the project's checks
  *   POST /v2/projects/{id}/checks         register our check
  *   DELETE /v2/projects/{id}/checks/{cid} remove our check
+ *   GET  /v13/deployments/{id}            which project a deployment belongs to (POST /report)
+ *   GET  /v2/deployments/{id}/check-runs  find our check's run for one deployment (POST /report)
+ *   POST /v2/deployments/{id}/check-runs  start that run if Vercel has not
+ *   PATCH /v2/deployments/{id}/check-runs/{rid}  set its conclusion
  *
  * Which scope the three checks-v2 calls need is not documented (README.md,
  * "Unverified"). Errors carry the HTTP status and Vercel's error code only,
@@ -87,17 +91,40 @@ export function vercelClient({ token, teamId, fetch: f = globalThis.fetch }) {
     async deleteCheck(projectId, checkId, { signal } = {}) {
       return call("DELETE", `/v2/projects/${enc(projectId)}/checks/${enc(checkId)}`, { signal });
     },
+    /** Only the deployment's id, project and target. Everything else is dropped here. */
+    async getDeployment(deploymentId, { signal } = {}) {
+      const d = await call("GET", `/v13/deployments/${enc(deploymentId)}`, { signal });
+      return {
+        id: typeof d?.id === "string" ? d.id : typeof d?.uid === "string" ? d.uid : "",
+        projectId: typeof d?.projectId === "string" ? d.projectId : "",
+        target: typeof d?.target === "string" ? d.target : null,
+      };
+    },
+    async listCheckRuns(deploymentId, { signal } = {}) {
+      const json = await call("GET", `/v2/deployments/${enc(deploymentId)}/check-runs`, { signal });
+      return Array.isArray(json?.runs) ? json.runs : [];
+    },
+    async createCheckRun(deploymentId, checkId, { signal } = {}) {
+      return call("POST", `/v2/deployments/${enc(deploymentId)}/check-runs`, { body: { checkId }, signal });
+    },
+    async updateCheckRun(deploymentId, runId, body, { signal } = {}) {
+      return call("PATCH", `/v2/deployments/${enc(deploymentId)}/check-runs/${enc(runId)}`, { body, signal });
+    },
   };
 }
 
-/** Only the project fields the pages show. Everything else is dropped here. */
+/** Only the project fields the pages and the relay use. Everything else is dropped here. */
 export function projectView(p) {
   const link = p?.link;
   const github = link?.type === "github" && link.org && link.repo;
+  const repoId = github && (typeof link.repoId === "number" || typeof link.repoId === "string") ? String(link.repoId) : null;
+  const ownerId = github && (typeof link.repoOwnerId === "number" || typeof link.repoOwnerId === "string") ? String(link.repoOwnerId) : null;
   return {
     id: String(p?.id ?? ""),
     name: String(p?.name ?? ""),
     repo: github ? `${link.org}/${link.repo}` : null,
+    repoId: repoId && /^\d{1,20}$/.test(repoId) ? repoId : null,
+    repoOwnerId: ownerId && /^\d{1,20}$/.test(ownerId) ? ownerId : null,
     branch: github ? String(link.productionBranch || "main") : null,
   };
 }
