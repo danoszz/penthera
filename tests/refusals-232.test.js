@@ -784,6 +784,10 @@ describe("every child_process binding form, far from its call in a 3 MB file, gi
     "exports.cp": ['exports.cp = require("child_process");', "exports.cp.exec(req.body.c)"],
     "re-export": ['export { exec } from "child_process";\nimport { exec } from "child_process";', "exec(req.body.c)"],
     "promisify alias": ['const { exec } = require("child_process");\nconst { promisify } = require("util");\nconst run = promisify(exec);', "run(req.body.c)"],
+    // Missed in every version before 2.3.2 (Fact-checker): a promisified require called at once, and an object holding exec.
+    "promisify(require(...).exec)(...)": ['const { promisify } = require("util");', 'promisify(require("child_process").exec)(req.body.c)'],
+    "object holding exec": ['const tools = { run: require("child_process").exec };', "tools.run(req.body.c)"],
+    "object shorthand { exec }": ['const { exec } = require("child_process");\nconst tools = { exec, other: 1 };', "tools.exec(req.body.c)"],
   };
   const pad = Array.from({ length: 60000 }, (_, i) => `function f${i}(a, b) { return a + b + ${i}; }`).join("\n");
   const shape = (findings) => findings.filter((f) => f.category === "code-pattern").map((f) => ({ pattern: f.pattern, severity: f.severity, fromRequest: /from the request/.test(f.description) }));
@@ -820,5 +824,34 @@ describe("every child_process binding form, far from its call in a 3 MB file, gi
     const s = Date.now();
     expect(scanCodeSinks(d).some((f) => f.pattern === "eval")).toBe(true);
     expect(Date.now() - s).toBeLessThan(2000);
+  });
+});
+
+describe("line terminators and padding in the sink check (Fact-checker on 3e50514)", () => {
+  for (const [name, nl] of [["LF", "\n"], ["CRLF", "\r\n"], ["CR", "\r"], ["U+2028", "\u2028"], ["U+2029", "\u2029"]]) {
+    it(`a line comment ends at ${name}: the eval after it is found in a 60-byte file`, () => {
+      const d = tmp();
+      mkdirSync(join(d, "lib"));
+      writeFileSync(join(d, "lib", "h.js"), ["// a comment", "module.exports = (req) => eval(req.body.code);", ""].join(nl));
+      expect(scanCodeSinks(d).some((f) => f.pattern === "eval"), name).toBe(true);
+    });
+  }
+
+  it("a regex literal ends at a line terminator, and a string may hold U+2028", () => {
+    const d = tmp();
+    mkdirSync(join(d, "lib"));
+    writeFileSync(join(d, "lib", "h.js"), `const s = "a\u2028b"; const r = x / 2;\rconst t = /unterminated\rmodule.exports = (req) => eval(req.body.code);\r`);
+    expect(scanCodeSinks(d).some((f) => f.pattern === "eval")).toBe(true);
+  });
+
+  it("spaces inside one line do not make a file with an eval read as minified", () => {
+    const d = tmp();
+    mkdirSync(join(d, "lib"));
+    writeFileSync(join(d, "lib", "h.js"), `const x = 1;${" ".repeat(20000)}const y = 2;\nmodule.exports = (req) => eval(req.body.code);\n`);
+    expect(scanCodeSinks(d).some((f) => f.pattern === "eval")).toBe(true);
+    const m = tmp();
+    mkdirSync(join(m, "lib"));
+    writeFileSync(join(m, "lib", "b.js"), `${"var a=function(b){return eval(b)};".repeat(30000)}\n`);
+    expect(scanCodeSinks(m)).toEqual([]); // a real minified file still gives nothing
   });
 });
