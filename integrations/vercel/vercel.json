@@ -15,6 +15,10 @@
   },
   "rewrites": [
     {
+      "source": "/",
+      "destination": "/api/home"
+    },
+    {
       "source": "/start",
       "destination": "/api/start"
     },

@@ -37,6 +37,16 @@ const CLOCK_SKEW_MS = 10 * 60_000;
 const INSTALLS_PER_MINUTE = 10;
 
 /** Reads and checks the env once per call. Throws ConfigError without echoing values. */
+
+// The page anyone sees who opens the bare domain. Static, no script, no data.
+const HOME = `<div class="void"><div>
+<p class="oh">OH OH.</p>
+<h1>You're poking at Penthera's Vercel server.</h1>
+<p>Not much to find: it keeps one encrypted install token per Vercel install, and the scans run in your own GitHub Actions.</p>
+<p>Found a bug? <a href="https://github.com/danoszz/penthera" rel="noopener noreferrer">Send a pull request</a>. Found a hole? <a href="https://github.com/danoszz/penthera/security/policy" rel="noopener noreferrer">Tell us privately first</a>.</p>
+<p class="muted">Penthera: open source, offline, rules you can check.</p>
+</div></div>`;
+
 export function readConfig(env) {
   const need = (name) => {
     if (!env[name]) throw new ConfigError(`${name} is not set`);
@@ -512,6 +522,7 @@ ${FOOTER}`);
     configure: guard(method({ GET: configure })),
     webhook: guard(method({ POST: webhook })),
     sweep: guard(method({ GET: sweep })),
+    home: method({ GET: async () => html(200, "Penthera", HOME) }),
     health: method({ GET: async () => json(200, { ok: true }) }),
   };
 }
