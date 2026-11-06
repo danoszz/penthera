@@ -112,6 +112,8 @@
           "team-playbook",
           "funding/sponsor-tiers",
           "live-check-terms",
+    "vercel/terms",
+    "vercel/privacy",
           "voice"
         ]
       }

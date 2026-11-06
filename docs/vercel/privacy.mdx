@@ -1,16 +1,18 @@
-# DRAFT: Privacy notice for the Penthera Vercel integration
+---
+title: "Privacy notice for the Vercel integration"
+sidebarTitle: "Vercel privacy"
+description: "What Penthera's hosted Vercel integration keeps, where, and for how long."
+---
 
-> **DRAFT, not approved, not published.** For the maintainer's review, and a
-> legal reader of his choice. Placeholders are in [brackets]. Every statement
-> here must stay true to `../README.md`, "What it keeps".
+> **Project page.** For "what does the Penthera Vercel integration keep about me?"
 
-Last updated: [date]
+Last updated: 6 November 2026
 
 ## Who is responsible
 
-Daan van der Zwaag, [business address], [contact email], is the controller for
-the data the integration keeps. Vercel is a separate, independent controller
-for the data it handles on its own platform.
+Daan van der Zwaag, the Netherlands, `security@penthera.org`, is the controller
+for the data the integration keeps. Vercel is a separate, independent
+controller for the data it handles on its own platform.
 
 ## What we keep
 
@@ -45,19 +47,25 @@ share your data. During the install we set two strictly necessary cookies: a
 CSRF check (up to 15 minutes) and a setup session (30 minutes). Neither holds
 your token.
 
-## Who processes it for us
+## Where it runs, and who processes it for us
 
-- Vercel Inc. hosts the server and keeps its request logs. [Region; transfer
-  safeguards, such as the EU-US Data Privacy Framework or standard contractual
-  clauses.]
+The data stays in the EU. The server's functions run in Frankfurt, Germany
+(Vercel region `fra1`), and the records are stored in an EU region.
+
+- Vercel Inc. hosts the server and keeps its request logs. Vercel is a US
+  company, so its processing is covered by its own transfer safeguards, such as
+  the EU-US Data Privacy Framework or standard contractual clauses.
 - Upstash, through the Vercel Marketplace, stores the records listed above in
-  [region]. [Transfer safeguards.]
+  an EU region.
 
 Separately from the stored record, Vercel's request logs for the server record
 each request's path and query string. That includes the one-time install code
 (spent within seconds, usable once), the configuration id, your team id and
-Vercel's return address. These logs are kept by Vercel for its plan default of
-[period]. We do not export or analyze them.
+Vercel's return address. Vercel keeps these logs for the plan's default
+period. On the Pro plan that is 1 day, or 30 days if Observability Plus is on,
+as stated in Vercel's
+[runtime logs documentation](https://vercel.com/docs/logs/runtime#limits). We
+do not export or analyze them.
 
 ## How long
 
@@ -66,9 +74,10 @@ also deletes any record whose token Vercel no longer accepts.
 
 ## Your rights
 
-You can ask for access to or deletion of your data at [contact email]. We
-answer within 30 days. Uninstalling deletes it without asking. You can complain
-to the Autoriteit Persoonsgegevens, the Dutch data protection authority.
+You can ask for access to or deletion of your data at `security@penthera.org`.
+We answer within 30 days. Uninstalling deletes it without asking. You can
+complain to the Autoriteit Persoonsgegevens, the Dutch data protection
+authority.
 
 ## Security incidents
 
@@ -79,9 +88,12 @@ requires.
 ## The scan itself
 
 The scan runs in your GitHub Actions, not on our server. What it contacts is
-described in Penthera's [privacy and network use](https://penthera.org/docs/privacy)
-page. [Confirm the URL.]
+described in Penthera's [privacy and network use](/privacy) page.
 
 ## Changes
 
-We date every version and give notice of material changes on [where].
+We date every version. We give 30 days' notice of a material change on this
+page and in the repository's
+[changelog](https://github.com/danoszz/penthera/blob/main/CHANGELOG.md).
+
+See also the [terms of use](/vercel/terms).

@@ -284,5 +284,5 @@ or Upstash.
 
 ## Legal
 
-`legal/` holds DRAFT terms and a DRAFT privacy notice for the maintainer's
-review. They are not published and not approved.
+- [Terms of use](https://docs.penthera.org/vercel/terms)
+- [Privacy notice](https://docs.penthera.org/vercel/privacy)
