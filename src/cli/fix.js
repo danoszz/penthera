@@ -39,22 +39,36 @@ const HELP = `
   hardcoded secret to env var. Plans change after each apply: run --plan again.
 `;
 
-/** Findings for the repo: a report's findings, or a fresh scan plus recipe probes. */
+/**
+ * Findings for the repo: a report's findings, or a fresh scan plus recipe
+ * probes. `incomplete` lists what was not read or not checked (the scan's own
+ * list, and probe findings that say so): never dropped with the info notes,
+ * it makes the run exit 2.
+ */
 async function gatherFindings(repo, input) {
   if (input) {
     const report = JSON.parse(readFileSync(resolve(input), "utf-8"));
-    return { findings: report.findings || [], fresh: false };
+    return { findings: report.findings || [], fresh: false, incomplete: Array.isArray(report.incomplete) ? report.incomplete : [] };
   }
   const result = await scanRepo(repo, {});
+  const probes = probeRepo(repo);
+  const incomplete = [...(result.incomplete || []), ...probes.filter((f) => f.incomplete).map((f) => ({ ...f.incomplete, title: f.title }))];
   const seen = new Set();
-  const findings = [...result.findings, ...probeRepo(repo)].filter((f) => {
+  const findings = [...result.findings, ...probes].filter((f) => {
     if (f.severity === "info" && f.category === "config") return false;
     const k = findingKey(f);
     if (seen.has(k)) return false;
     seen.add(k);
     return true;
   });
-  return { findings, fresh: true };
+  return { findings, fresh: true, incomplete };
+}
+
+/** What was not read or checked, said on stderr; the caller exits 2. */
+function reportIncomplete(incomplete) {
+  if (!incomplete.length) return;
+  process.stderr.write(`\n  ${yellow("Incomplete")} ${incomplete.length} input${incomplete.length === 1 ? " was" : "s were"} not read or not fully checked, so this plan may miss fixes (exit 2):\n`);
+  for (const x of incomplete.slice(0, 20)) process.stderr.write(`    ${visible(x.file || x.title || "?")}${x.reason ? `: ${visible(x.reason)}` : ""}\n`);
 }
 
 const NAMED = { "\0": "\\0", "\b": "\\b", "\t": "\\t", "\n": "\\n", "\v": "\\v", "\f": "\\f", "\r": "\\r", "\x1b": "\\e" };
@@ -154,8 +168,8 @@ export async function runFix(argv) {
 
   if (!opts.apply) {
     if (opts.json) {
-      console.log(JSON.stringify({ repo, plans: plans.map(redactPlan), unmatched: unmatched.map((f) => ({ title: f.title, category: f.category, severity: f.severity, url: f.url || null })), refused: refused.map((r) => ({ title: r.finding.title, reason: r.reason })) }, null, 2));
-      process.exit(0);
+      console.log(JSON.stringify({ repo, plans: plans.map(redactPlan), unmatched: unmatched.map((f) => ({ title: f.title, category: f.category, severity: f.severity, url: f.url || null })), refused: refused.map((r) => ({ title: r.finding.title, reason: r.reason })), incomplete: gathered.incomplete.map((x) => ({ file: x.file || null, reason: x.reason || null })) }, null, 2));
+      process.exit(gathered.incomplete.length ? 2 : 0);
     }
     process.stdout.write(`\n  ${bold("penthera fix")} ${dim(repo)}\n`);
     process.stdout.write(`  ${plans.length} fix${plans.length === 1 ? "" : "es"} planned for ${gathered.findings.length} finding${gathered.findings.length === 1 ? "" : "s"}${gathered.fresh ? " (fresh repo scan)" : ` (from ${opts.input})`}\n`);
@@ -167,7 +181,8 @@ export async function runFix(argv) {
       for (const f of manual.slice(0, 20)) process.stdout.write(`    [${visible(f.severity)}] ${visible(f.title)}\n`);
     }
     if (plans.length) process.stdout.write(`\n  Apply one:  penthera fix --apply <id>${opts.repo ? ` --repo ${opts.repo}` : ""}${opts.input ? ` -o ${opts.input}` : ""}\n\n`);
-    process.exit(0);
+    reportIncomplete(gathered.incomplete);
+    process.exit(gathered.incomplete.length ? 2 : 0);
   }
 
   const plan = plans.find((p) => p.id === opts.apply);
@@ -196,7 +211,7 @@ export async function runFix(argv) {
   }
   const verb = result.applied ? "Applied" : "Dry run, would change";
   process.stdout.write(`\n  ${green(verb)} ${result.files.map((f) => f.path + (f.created ? " (new)" : "")).join(", ")}\n`);
-  if (!result.applied) process.exit(0);
+  if (!result.applied) { reportIncomplete(gathered.incomplete); process.exit(gathered.incomplete.length ? 2 : 0); }
 
   // Verify by re-scanning. Report findings came from a scan we can't repeat here.
   if (gathered.fresh) {
@@ -214,5 +229,6 @@ export async function runFix(argv) {
     for (const a of plan.ownerActions) process.stdout.write(`    - ${a}\n`);
   }
   process.stdout.write(`\n  Nothing was committed or pushed. Review with git diff, then commit it yourself.\n\n`);
-  process.exit(0);
+  reportIncomplete(gathered.incomplete);
+  process.exit(gathered.incomplete.length ? 2 : 0);
 }
