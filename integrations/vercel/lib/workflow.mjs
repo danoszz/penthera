@@ -24,20 +24,45 @@ export function checkName(projectName) {
   return `${WORKFLOW_NAME} | ${JOB_ID} (${projectName} - production)`;
 }
 
-/** The body of POST /v2/projects/{id}/checks for one project. */
-export function checkBody(projectName) {
+/**
+ * How long, in seconds, Vercel waits for the relay before the run ends as `timeout`. The job's own
+ * limit is 15 minutes; this leaves room for a queued runner. Vercel's default is 300.
+ */
+export const CHECK_TIMEOUT_SECONDS = 1200;
+
+/**
+ * The body of POST /v2/projects/{id}/checks for one project: a check this integration owns. Vercel
+ * refuses `source.kind: "git-provider"` from an integration's token (400 not_implemented, 7 Nov),
+ * so the workflow's result reaches the check through POST /report instead (README, "The relay").
+ */
+export function checkBody(configurationId, integrationId) {
   return {
     name: CHECK_LABEL,
     requires: "deployment-url",
     blocks: "deployment-promotion",
     targets: ["production"],
     isRerequestable: false,
-    source: { kind: "git-provider", provider: "github", externalCheckName: checkName(projectName) },
+    timeout: CHECK_TIMEOUT_SECONDS,
+    source: { kind: "integration", ...(integrationId ? { integrationId } : {}), integrationConfigurationId: configurationId },
   };
 }
 
-/** True for a check this integration registered on the project. */
-export function isOurCheck(check, projectName) {
+/** True for the integration-owned check that this installation registered. */
+export function isIntegrationCheck(check, configurationId) {
+  return (
+    check?.source?.kind === "integration" &&
+    typeof configurationId === "string" &&
+    configurationId.length > 0 &&
+    check.source.integrationConfigurationId === configurationId
+  );
+}
+
+/**
+ * True for a check this integration registered on the project: the integration-owned check of this
+ * installation, or the git-provider check that earlier server versions tried to register.
+ */
+export function isOurCheck(check, projectName, configurationId) {
+  if (isIntegrationCheck(check, configurationId)) return true;
   return check?.source?.kind === "git-provider" && check?.source?.externalCheckName === checkName(projectName);
 }
 

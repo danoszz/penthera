@@ -41,6 +41,10 @@
       "destination": "/api/webhook"
     },
     {
+      "source": "/report",
+      "destination": "/api/report"
+    },
+    {
       "source": "/health",
       "destination": "/api/health"
     }

@@ -6,9 +6,17 @@
  *   delete(configurationId)
  *   ids()                -> every stored configurationId (for the sweep)
  *
+ * and four for project links, which tell POST /report which installation turned the check on:
+ *
+ *   getLink(projectId) -> link | null
+ *   putLink(link)      -> overwrites the link for link.projectId
+ *   deleteLink(projectId)
+ *   links()            -> [{ key, link }] for every stored link, key being the projectId it is
+ *                         stored under and link the parsed value or null (uninstall, sweep)
+ *
  * A record is exactly { configurationId, ownerId, ciphertext, iv, tag,
- * keyVersion, createdAt, sessionNonce }. put() refuses anything else, so no other field can
- * reach the store by accident.
+ * keyVersion, createdAt, sessionNonce }, and a link exactly { projectId, configurationId }.
+ * put() and putLink() refuse anything else, so no other field can reach the store by accident.
  *
  * Two implementations: memoryStore() for tests, and redisStore() for
  * production, which speaks the Upstash Redis REST protocol with plain fetch
@@ -18,6 +26,8 @@
  */
 const FIELDS = ["configurationId", "ownerId", "ciphertext", "iv", "tag", "keyVersion", "createdAt", "sessionNonce"];
 const PREFIX = "pv:cfg:";
+const LINK_FIELDS = ["configurationId", "projectId"];
+const LINK_PREFIX = "pv:prj:";
 
 export function assertRecord(record) {
   const keys = Object.keys(record ?? {}).sort();
@@ -28,8 +38,17 @@ export function assertRecord(record) {
   return record;
 }
 
+export function assertLink(link) {
+  const keys = Object.keys(link ?? {}).sort();
+  if (keys.join() !== LINK_FIELDS.join()) throw new Error("store: a link has exactly the documented fields");
+  if (!/^prj_[A-Za-z0-9]{1,64}$/.test(link.projectId)) throw new Error("store: bad projectId");
+  if (!/^icfg_[A-Za-z0-9]{1,64}$/.test(link.configurationId)) throw new Error("store: bad configurationId");
+  return link;
+}
+
 export function memoryStore() {
   const map = new Map();
+  const linkMap = new Map();
   return {
     async get(id) {
       const v = map.get(id);
@@ -45,8 +64,25 @@ export function memoryStore() {
     async ids() {
       return [...map.keys()];
     },
+    async getLink(projectId) {
+      const v = linkMap.get(projectId);
+      return v ? { ...v } : null;
+    },
+    async putLink(link) {
+      assertLink(link);
+      linkMap.set(link.projectId, { ...link });
+    },
+    async deleteLink(projectId) {
+      linkMap.delete(projectId);
+    },
+    async links() {
+      return [...linkMap.entries()].map(([key, v]) => ({ key, link: v && typeof v === "object" ? { ...v } : null }));
+    },
     /** Tests only: the raw contents. */
     dump: () => [...map.values()].map((v) => ({ ...v })),
+    dumpLinks: () => [...linkMap.values()].map((v) => ({ ...v })),
+    /** Tests only: write a link without the field check, as someone with store access could. */
+    rawLink: (projectId, value) => linkMap.set(projectId, value),
   };
 }
 
@@ -66,6 +102,16 @@ export function redisStore({ url, token, fetch: fetchImpl = globalThis.fetch }) 
     if (json.error) throw new Error("store_command_failed");
     return json.result;
   }
+  async function scan(prefix) {
+    const out = [];
+    let cursor = "0";
+    do {
+      const [next, keys] = await command("SCAN", cursor, "MATCH", `${prefix}*`, "COUNT", "200");
+      cursor = String(next);
+      out.push(...keys);
+    } while (cursor !== "0" && out.length < 100_000);
+    return out;
+  }
   return {
     async get(id) {
       const raw = await command("GET", PREFIX + id);
@@ -79,13 +125,36 @@ export function redisStore({ url, token, fetch: fetchImpl = globalThis.fetch }) 
       await command("DEL", PREFIX + id);
     },
     async ids() {
+      return (await scan(PREFIX)).map((k) => k.slice(PREFIX.length));
+    },
+    async getLink(projectId) {
+      const raw = await command("GET", LINK_PREFIX + projectId);
+      return raw ? JSON.parse(raw) : null;
+    },
+    async putLink(link) {
+      assertLink(link);
+      await command("SET", LINK_PREFIX + link.projectId, JSON.stringify(link));
+    },
+    async deleteLink(projectId) {
+      await command("DEL", LINK_PREFIX + projectId);
+    },
+    async links() {
+      // One MGET per 100 keys, so an uninstall stays inside the webhook's time.
       const out = [];
-      let cursor = "0";
-      do {
-        const [next, keys] = await command("SCAN", cursor, "MATCH", `${PREFIX}*`, "COUNT", "200");
-        cursor = String(next);
-        out.push(...keys.map((k) => k.slice(PREFIX.length)));
-      } while (cursor !== "0" && out.length < 100_000);
+      const keys = await scan(LINK_PREFIX);
+      for (let i = 0; i < keys.length; i += 100) {
+        const batch = keys.slice(i, i + 100);
+        const values = await command("MGET", ...batch);
+        batch.forEach((key, j) => {
+          const raw = Array.isArray(values) ? values[j] : null;
+          if (!raw) return;
+          let link = null;
+          try {
+            link = JSON.parse(raw);
+          } catch {}
+          out.push({ key: key.slice(LINK_PREFIX.length), link: link && typeof link === "object" ? link : null });
+        });
+      }
       return out;
     },
   };

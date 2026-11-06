@@ -13,9 +13,10 @@ workflow file the user commits. The server only:
 1. exchanges the install code for a Vercel token,
 2. lists the projects the user shared, so they can pick some,
 3. hands them a GitHub "new file" link with the workflow filled in,
-4. registers a Vercel check on each picked project that waits for the
-   workflow's commit status, and
-5. deletes everything when the user uninstalls.
+4. registers a Vercel check on each picked project, owned by this integration,
+5. relays the workflow's pass or fail for each production deployment to that
+   check (`POST /report`, below), and
+6. deletes everything when the user uninstalls.
 
 ## What it keeps
 
@@ -30,12 +31,27 @@ One record per installation, and nothing else:
 | `createdAt` | when it was last installed or transferred. It moves forward, so a replayed older uninstall or transfer event is ignored |
 | `sessionNonce` | 192 random bits, made fresh on every install and every transfer. Setup sessions are bound to it |
 
-The store refuses a record with any other field (`lib/store.mjs`). Project
-names, repos, emails, deployment URLs and scan results are never stored. Project
-ids and names are read live from Vercel to draw the pages, then dropped.
+And one link per project the check is turned on for, so `POST /report` knows
+which installation's token to use:
+
+| Field | What it is |
+|---|---|
+| `projectId` | the Vercel project id (`prj_...`), also the key |
+| `configurationId` | the installation that turned the check on |
+
+The store refuses a record or a link with any other field (`lib/store.mjs`).
+Project names, repos, emails, deployment ids, deployment URLs and scan results
+are never stored. Project names and repos are read live from Vercel to draw the
+pages and to check a report, then dropped.
 
 So the stored data is: an installation id, a team or account id, an encrypted
-token, a date and a random value. No other data about you or your projects.
+token, a date, a random value, and the ids of the projects you turned the check
+on for. No other data about you or your projects.
+
+A link is deleted when you remove the check from the setup page, when the
+installation is removed (every link that names it, whatever key it sits under),
+and by the weekly sweep when its installation is gone or it does not match its
+key.
 
 Outside the store, Vercel's own request logs for this project record each
 request's path and query string. That includes `/install?code=...` (the code is
@@ -43,7 +59,7 @@ spent within seconds and works once), the `configurationId`, the `teamId` and
 Vercel's `next` URL. Those logs are Vercel's, kept for the plan's default
 retention, and we do not export them.
 
-The record is deleted:
+The record and its links are deleted:
 
 - when Vercel sends a signed `integration-configuration.removed` webhook. The
   record goes first, before any other call, so a slow Vercel API cannot stop
@@ -105,12 +121,111 @@ deleted when you uninstall") stays true either way.
 | `/setup` | none | Project list, then the workflow page with the GitHub link, then "Turn on the check", then back to Vercel's `next` URL |
 | `/configure` | Configuration URL | With the install session: back to `/setup`. Without it: the workflow file and how to remove the check, with nothing about the account |
 | `/webhook` | Webhook URL | Verifies `x-vercel-signature`; handles `integration-configuration.removed` and `.transferred` only |
+| `/report` | none | The workflow's pass or fail for one production deployment, with a GitHub OIDC token. Sets our check run's conclusion. Stores nothing |
 | `/start` | none | Starts an install from our own link: sets a CSRF state cookie and sends you to `vercel.com/integrations/<slug>/new?state=...` |
 | `/health` | none | `{"ok":true}` |
 | `/api/sweep` | none (cron) | Weekly. Needs `Authorization: Bearer $CRON_SECRET`, which Vercel's cron sends |
 
 The workflow page comes before the check is turned on, so a production deploy
 does not wait for a workflow that is not committed yet.
+
+## The check and the relay
+
+Read in Vercel's docs on 7 Nov 2026:
+[Checks API support for Marketplace integrations](https://vercel.com/changelog/checks-api-support-added-for-marketplace-integration-providers),
+[Checks API reference](https://vercel.com/docs/checks/checks-api),
+[Anatomy of the Checks API](https://vercel.com/docs/checks/creating-checks),
+[checks-v2 endpoints](https://vercel.com/docs/rest-api/checks-v2),
+[Create a check](https://vercel.com/docs/rest-api/checks-v2/create-a-check),
+[Create a check run](https://vercel.com/docs/rest-api/checks-v2/create-a-check-run),
+[Update a check run](https://vercel.com/docs/rest-api/checks-v2/update-a-check-run),
+[List check runs for a deployment](https://vercel.com/docs/rest-api/checks-v2/list-check-runs-for-a-deployment),
+[Deployment Checks](https://vercel.com/docs/deployment-checks),
+[Webhooks API](https://vercel.com/docs/webhooks/webhooks-api) and the
+[repository dispatch payload](https://github.com/vercel/repository-dispatch/blob/main/packages/repository-dispatch/src/data/deployment.ts).
+
+**Why not a GitHub check.** The first design registered
+`source: { kind: "git-provider", provider: "github", externalCheckName }`. On
+7 Nov Vercel answered our integration's token with `400 not_implemented`:
+users can import GitHub checks in the dashboard, integrations cannot.
+
+**The check.** `POST /v2/projects/{id}/checks` with
+`source: { kind: "integration", integrationId, integrationConfigurationId }`,
+`requires: "deployment-url"`, `blocks: "deployment-promotion"`,
+`targets: ["production"]`, `isRerequestable: false` and `timeout: 1200`
+(`lib/workflow.mjs`, `checkBody`). The source shape is the first `oneOf` branch
+of the create schema; `kind` defaults to `integration` there and none of its
+fields is marked required. `integrationId` is `INTEGRATION_ID` when set, or
+else the client id (both are `oac_...`). Vercel then makes a check run for each
+production deployment of the project.
+
+**The result.** `PATCH /v2/deployments/{deploymentId}/check-runs/{checkRunId}`
+with `status: "completed"`, `conclusion` (`succeeded` or `failed`; the schema
+also allows `canceled`, `skipped`, `timeout`, `neutral`), `conclusionText`,
+and `externalUrl` (the GitHub run). The run is found with
+`GET /v2/deployments/{id}/check-runs` (`runs[]`, each with `checkId`,
+`projectId`, `deploymentId`, `status`). If Vercel has made none yet, the server
+starts it with `POST /v2/deployments/{id}/check-runs` and `{ checkId }`.
+
+**No webhooks needed.** The Checks API's older flow (`deployment.created`, then
+`deployment.ready`, `/v1/deployments/{id}/checks`) registers a check per
+deployment from webhooks. The v2 flow defines the check once per project, and
+the run is found from the deployment id the workflow already has. So the
+integration still subscribes only to `integration-configuration.removed` and
+`.transferred`. `deployment.check-rerequested` is not needed because the check
+is not rerequestable: a re-run means a redeploy.
+
+### POST /report
+
+The workflow's last step runs on every outcome (`if: always()`), for production
+deployments only, and sends exactly
+`{ deploymentId, projectId, conclusion: "succeeded" | "failed" }`. It reports
+`failed` when the scan failed, was incomplete, or did not run. The ids come from
+Vercel's dispatch payload (`client_payload.id`, `client_payload.project.id`).
+
+It sends a GitHub Actions OIDC token as `Authorization: Bearer`, requested with
+`audience=https://vercel.penthera.org` (the job has `id-token: write`). The
+server (`lib/oidc.mjs`, `lib/app.mjs` `report`):
+
+1. **Token.** RS256 only, refused before any key lookup otherwise (`alg: none`,
+   HS256 with the public key, and the rest). The key comes by `kid` from
+   GitHub's JWKS at `https://token.actions.githubusercontent.com/.well-known/jwks`,
+   cached 10 minutes per instance, refetched at most once a minute for an
+   unknown `kid`, and refetched when the clock moves backwards. `iss` must be
+   `https://token.actions.githubusercontent.com` and `aud` exactly
+   `PUBLIC_BASE_URL`'s origin. `exp`, `nbf` and `iat` must all be numbers, with
+   30 seconds of leeway, and a token may live at most one hour.
+2. **Workflow.** `event_name` must be `repository_dispatch` (Vercel's) and
+   `workflow_ref` must be `<repository>/.github/workflows/penthera-vercel.yml@...`.
+   Another workflow in the repo, or a pull request run, cannot report.
+3. **Installation.** The project's link names the installation. Its record and
+   token are opened under that id, as everywhere else (a moved ciphertext does
+   not decrypt).
+4. **Repository.** With that token, the project is read live from Vercel. Its
+   connected repo must equal the token's `repository` (case-insensitive), and
+   its GitHub repository id the token's `repository_id` when Vercel gives one,
+   so a deleted and recreated repo of the same name cannot report.
+5. **Check and deployment.** The project must carry this installation's own
+   check (`source.integrationConfigurationId`). The run must be a run of exactly
+   that check, and Vercel's run must name this project and this deployment.
+   This needs no Deployments scope.
+6. **Once.** A run that is already `completed` is never changed (409), so a
+   replayed token cannot flip a result.
+
+Any failure leaves the run as it was, so the deploy stays held until Vercel's
+timeout. Nothing from the request is stored or logged beyond an error code.
+`/report` answers 404 when the check is not on for the project; the workflow
+then passes with a notice, for people who use the commit status alone.
+
+The commit status stays in the workflow, so a GitHub check added by hand still
+works.
+
+**Risk left (repo write access).** Anyone who can write to the repo can send
+the workflow a `repository_dispatch` of their own, with any deployment id and a
+URL that scans clean, and so pass the check for that deployment. That is the
+same trust a hand-added GitHub check already gives them: write access can post
+a commit status directly. The relay adds no new way in; it keeps the gate at
+"who can change this repo's default branch or send its dispatches".
 
 ### Security
 
@@ -169,9 +284,13 @@ does not wait for a workflow that is not committed yet.
   page shows nothing account-specific.
 - **No telemetry:** no analytics, no Speed Insights, no third-party scripts, no
   install counter. The server subscribes to no deployment events, so deployment
-  URLs never reach it.
+  URLs never reach it. Per production deploy it receives the project id, the
+  deployment id, pass or fail, and GitHub's signed token (which names the
+  repository, workflow, run, commit and the GitHub account that started the
+  run). It checks them, sets the result in Vercel, and keeps none of it.
 - **Rule 4:** the server runs no model and has no dependencies. The verdict is
-  the Action's exit code, from fixed rules with `fail-on: high`.
+  the Action's exit code, from fixed rules with `fail-on: high`. The relay only
+  carries it; it decides nothing.
 - **Rule 5:** the workflow is a constant of each server release
   (`workflow/penthera-vercel.yml`, a copy of
   `docs/examples/vercel-deployment-check.yml`; a test keeps them equal). The
@@ -193,6 +312,7 @@ client id and secret use the `INTEGRATION_` prefix. Never paste their values int
 | `PENTHERA_TOKEN_KEYS` | `v1:<base64 of 32 random bytes>`. To rotate, prepend a new one: `v2:<new>,v1:<old>`. The first encrypts; all decrypt |
 | `PUBLIC_BASE_URL` | This server's origin, such as `https://vercel.penthera.org`. The Redirect URL is `<PUBLIC_BASE_URL>/install` |
 | `INTEGRATION_SLUG` | The integration's URL slug. Default `penthera` |
+| `INTEGRATION_ID` | Optional. The integration's id (`oac_...`) for the check's `source`, if it differs from the client id |
 | `CRON_SECRET` | A long random string. Vercel's cron sends it to `/api/sweep` |
 | `KV_REST_API_URL`, `KV_REST_API_TOKEN` | Set by Vercel when you connect the Upstash store |
 
@@ -211,7 +331,7 @@ node -e "console.log('v1:' + require('crypto').randomBytes(32).toString('base64'
 | Webhook events | `integration-configuration.removed` and `integration-configuration.transferred`. No deployment events |
 | Configuration URL | `<PUBLIC_BASE_URL>/configure` |
 | API scopes | Deployment Checks: Read/Write. Projects: Read. Nothing else |
-| Checks API toggle | Off, unless the scope test below says it is needed |
+| Checks API toggle | On: the integration now owns its check. The v2 docs do not say the toggle is required; if "Turn on the check" still answers 400 or 403, this and the scope are the first two things to check |
 
 ### Firewall rate limit (dashboard only)
 
@@ -219,7 +339,7 @@ node -e "console.log('v1:' + require('crypto').randomBytes(32).toString('base64'
 Configure, New Rule:
 
 - **Name:** `install-webhook-rate-limit`
-- **If:** Request Path matches `^/(install|start|webhook)$`
+- **If:** Request Path matches `^/(install|start|webhook|report)$`
 - **Then:** Rate Limit, Fixed Window, 60 seconds, 30 requests, key IP, action
   Default (429)
 
@@ -253,16 +373,29 @@ fetch }` function format.
 
 Not verified, because it needs a live integration:
 
-- **Which scope allows `POST /v2/projects/{id}/checks`.** The docs map the
+- **That Vercel makes the run itself.** The docs list `POST
+  /v2/deployments/{id}/check-runs` but do not say whether a project check gets
+  its runs on its own. The server finds the run, or starts it, so both work.
+  Watch the first production deploy: the run should show up as queued.
+- **`integrationId`.** The server sends the client id unless `INTEGRATION_ID`
+  is set. If Vercel answers 400 on "Turn on the check", set `INTEGRATION_ID`
+  to the id the Integrations Console shows.
+- **`timeout: 1200`.** The default is 300 seconds; the job may take 15
+  minutes. The docs give no maximum. If Vercel refuses it, lower it in
+  `lib/workflow.mjs`.
+- **`link.repoId` on `GET /v9/projects/{id}`.** The relay compares it with the
+  token's `repository_id` when present, and falls back to the repo name.
+- **Which scope allows the checks-v2 calls.** The docs map the
   `deployment-check` scope to the v1 per-deployment endpoints only. If checks-v2
-  needs Projects Read/Write, change the scope and say so on the install page.
+  or the check-run calls need more, change the scope and say so on the install
+  page.
 - **Whether Vercel removes our checks on uninstall.** The webhook tries, but the
   token is probably revoked by then. If the checks stay, a production deploy
   waits for a status that never comes once the workflow is deleted. The
   Configure page tells users to remove the check.
-- **The status name.** The check waits for
-  `Penthera on Vercel | scan (<project> - production)`, the status action's
-  default as read from its source. Confirm it on a real deploy.
+- **The status name** (hand-added GitHub check only). The status is
+  `Penthera on Vercel | scan (<project> - production)`, confirmed on a real
+  deploy on 7 Nov.
 - **The GitHub prefill.** `github.com/<owner>/<repo>/new/<branch>?filename=&value=`
   works today but is not a documented GitHub API.
 - **That the code exchange always returns `installation_id`.** Vercel's example
@@ -272,13 +405,15 @@ Not verified, because it needs a live integration:
   owner.
 
 End-to-end check: install on your own project, commit the workflow from the
-link, turn on the check, push to production and see it held then released,
-then uninstall and confirm the record is gone (`/api/sweep` count, or the
-Upstash console).
+link, turn on the check, push to production and see it held then released
+(the workflow's last step says "Reported succeeded"), push a change with a
+high finding and see it held, then uninstall and confirm the record and the
+links are gone (`/api/sweep` count, or the Upstash console).
 
 ## Tests
 
-`npm test` at the repo root runs `test/integration.test.js` with the repo's
+`npm test` at the repo root runs `test/integration.test.js` and
+`test/relay.test.js` (the OIDC check against a local test key set) with the repo's
 vitest (the `unit` project includes `integrations/*/test`). The tests are
 offline: an in-memory store and a mocked `fetch`, no calls to Vercel, GitHub
 or Upstash.
