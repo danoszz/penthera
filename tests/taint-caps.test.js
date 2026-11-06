@@ -155,3 +155,59 @@ describe("library mode: no silent caps; past the budget the file is incomplete",
     expect(found).toBeGreaterThan(50); // names beyond the parameter itself
   });
 });
+
+// Function detection in library mode: a return type was read only 400 characters, parameters only 20,000,
+// and an arrow with a return type was skipped, so the function's parameters were never followed.
+describe("library mode: functions are found whatever the length of their types and parameters", () => {
+  const T = "Promise<{ " + Array.from({ length: 60 }, (_, i) => `f${i}: string`).join("; ") + " }>";
+  it("a long return type, a typed arrow, long parameters, a function type as the return type", () => {
+    const cases = {
+      "function, long return type": `export function run(cmd: string): ${T} { cp.exec(cmd); }`,
+      "method, long return type": `export class K { run(cmd: string): ${T} { cp.exec(cmd); } }`,
+      "typed arrow": "export const run = (cmd: string): void => { cp.exec(cmd); };",
+      "typed arrow, long type": `export const run = (cmd: string): ${T} => { cp.exec(cmd); };`,
+      "typed arrow, expression body": "export const run = (cmd: string): void => cp.exec(cmd);",
+      "long parameters": `export function run(${Array.from({ length: 3000 }, (_, i) => `a${i}: string`).join(", ")}, cmd: string) { cp.exec(cmd); }`,
+      "function type as return type": "export function run(cmd: string): () => void { cp.exec(cmd); return () => {}; }",
+      "type literal then union": "export function run(cmd: string): { a: 1 } | null { cp.exec(cmd); return null; }",
+    };
+    for (const [k, src] of Object.entries(cases)) expect(lib(src), k).toEqual({ hits: 1, incomplete: false });
+  });
+
+  it("return types that cost more than the file's budget: the file is incomplete, never a silent pass", () => {
+    const seg = "(a): " + "<".repeat(20000);
+    const r = lib("export function q(c) { cp.exec(c); }\n" + seg.repeat(100));
+    expect(r.incomplete).toBe(true);
+  });
+
+  it("at the 4 MiB cap: typed arrows, nested arrows, ternaries and `():` runs stay fast", () => {
+    const sinks = resolve("lib/whitebox/code-sinks.js");
+    const r = spawnSync(process.execPath, ["--input-type=module", "-e", `
+      const { findSinks } = await import(${JSON.stringify(sinks)});
+      const CP = 'const cp = require("child_process");\\nexport function q(c) { cp.exec(c); }\\n';
+      const N = 4 * 1024 * 1024;
+      const cases = { "():": "():".repeat(N / 3), "nested arrows": "a => ".repeat(N / 5) + "1", "typed arrows": "(a): T => ".repeat(N / 10) + "1",
+        "ternaries": "x = " + "f(a) ? g(b) : ".repeat(N / 14) + "1;", "long return type": "export function r(c): " + "A|".repeat(N / 2) + "B { cp.exec(c); }" };
+      const out = {};
+      for (const [k, t] of Object.entries(cases)) { const s = performance.now(); findSinks(CP + t, { library: true, onIncomplete: () => {} }); out[k] = performance.now() - s; }
+      console.log(JSON.stringify(out));`], { encoding: "utf-8", timeout: 180_000, maxBuffer: 1 << 24 });
+    expect(r.status, r.stderr || "timed out").toBe(0);
+    for (const [k, ms] of Object.entries(JSON.parse(r.stdout))) expect(ms, k).toBeLessThan(10_000);
+  });
+
+  it.skipIf(!hasMain("lib/whitebox/library.js"))("differential against main: every function main's functionRanges finds is found (3,000 seeded texts)", async () => {
+    const main = await fromMain("lib/whitebox/library.js");
+    const { functionRanges } = await import("../lib/whitebox/library.js");
+    let seed = 0xf00d;
+    const rnd = (n) => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed % n; };
+    const parts = ["function ", "f", "(", ")", "a", ": ", "T", "<", ">", "{", "}", " => ", "=", ";", ",", "async ", "\n", " ", "x ", "?", "|", "run", "() => void"];
+    let found = 0;
+    for (let n = 0; n < 3000; n++) {
+      let t = "";
+      for (let k = 1 + rnd(16); k > 0; k--) t += parts[rnd(parts.length)];
+      const now = new Set(functionRanges(t).map((f) => `${f.bodyStart}:${f.bodyEnd}`));
+      for (const f of main.functionRanges(t)) { found++; expect(now.has(`${f.bodyStart}:${f.bodyEnd}`), `${JSON.stringify(t)} ${f.bodyStart}`).toBe(true); }
+    }
+    expect(found).toBeGreaterThan(100);
+  });
+});

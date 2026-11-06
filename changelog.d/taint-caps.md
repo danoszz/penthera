@@ -14,3 +14,8 @@ docs: none, the command-injection check finds more; no flag or output changes, a
   instruction file, `it's` or `don't` before `curl … | sudo -u root bash` read
   as an open quote, and the rest of the line was skipped. Both readings are
   checked now.
+- **Library mode finds functions with long TypeScript types.** A return type
+  longer than 400 characters, a parameter list longer than 20,000, and any
+  arrow function with a return type (`(cmd: string): void => …`) were skipped,
+  so their parameters were never followed. They are read whole now; a file
+  that would cost more than the check allows exits 2.
