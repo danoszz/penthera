@@ -43,13 +43,14 @@ For full policy, see [references/authorization.md](references/authorization.md).
 
 ## Preflight
 
-Run before the first scan:
+Check before the first scan, from the user's project folder:
 
-```bash
-bash <this skill's folder>/scripts/preflight.sh [URL]
-```
+1. `node --version` prints v22 or later. If not, ask the user to install Node.js 22+ from https://nodejs.org/ and stop.
+2. One of the commands under "Resolve CLI command" below prints a version.
+3. `mkdir -p reports`: reports go there.
+4. The target is `localhost`, `127.0.0.1` or `[::1]`, or the user has confirmed they own it or have written authorization (see Authorization above). If not, stop.
 
-Run it from the user's project folder: it creates `reports/` there. The skill's folder is where this SKILL.md is (in a Penthera checkout, `skills/penthera`). Give it the target URL to warn on non-localhost targets. Fix any errors before proceeding.
+Fix anything that fails before you scan.
 
 ## Resolve CLI command
 
@@ -417,7 +418,7 @@ User: "Scan my localhost app on port 3000"
 
 Actions:
 1. Confirm localhost, authorization satisfied.
-2. `bash <this skill's folder>/scripts/preflight.sh http://localhost:3000`
+2. Run the preflight checks above.
 3. `penthera http://localhost:3000 --profile quick -o reports/scan.json`
 4. Reply with the brief.
 

@@ -11,7 +11,7 @@
     "skill:skills/penthera": {
       "kind": "skill",
       "scope": "repo",
-      "sha256": "f63586270d62efdda5d6420d7d4c04488ab70186f7ea747e69849c2de7daca1f"
+      "sha256": "72379d831e7b99c14c17883b2b9311e2ea8a1292aeda5eb7930775d42f917283"
     }
   }
 }
