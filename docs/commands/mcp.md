@@ -166,7 +166,9 @@ cap, or an `-r` include like that). Its brief then has `exit_code` 2, a verdict
 of Review, and an `exit_reason` that names the file, and the findings list it
 as `File not read: <file>`. Never read that as clean. `scan_repo` and
 `audit_ai_tooling` work the same way for a source or agent config file they
-could not read, such as a route file over 5 MiB.
+could not read, such as a route file over 5 MiB. Each tool reads a file whole
+under a size limit and matches it in linear time, so a padded file or a crafted
+header can't stall the server.
 
 Arguments: `path` and `max_findings` on the file tools, `prod` on
 `check_dependencies`, `url` and `profile` (`quick` or `standard`) on `scan_url`,

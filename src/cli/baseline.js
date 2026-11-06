@@ -34,7 +34,7 @@ function sitesOf(f) {
     return { count: Array.isArray(f.lines) && f.lines.length ? f.lines.length : 1, values: [value], tags };
   }
   if (isSink(f)) {
-    const calls = [...String(f.description || "").matchAll(/([\w.$]+) on line \d+((?: \([^)]*\))?)/g)].map((m) => `${m[1]}${m[2]}`);
+    const calls = [...String(f.description || "").matchAll(/(?<![\w.$])([\w.$]+) on line \d+((?: \([^)]*\))?)/g)].map((m) => `${m[1]}${m[2]}`);
     return { count: Math.max(1, calls.length), values: calls };
   }
   return null;

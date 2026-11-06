@@ -90,7 +90,12 @@ export function bucketOf(f, { skillTarget = false } = {}) {
 function genericTitle(f) {
   const p = pathOf(f);
   let t = String(f.title || "Finding");
-  if (p && t.includes(p)) t = t.replace(p, "").replace(/\s+(?:in|at|from)\s*$/i, "").trim();
+  if (p && t.includes(p)) {
+    t = t.replace(p, "").trimEnd();
+    const tail = /\s(?:in|at|from)$/i.exec(t); // a dangling "in", "at" or "from", found without a regex that rescans the run
+    if (tail) t = t.slice(0, tail.index);
+    t = t.trim();
+  }
   return t;
 }
 

@@ -2,6 +2,7 @@
  * What a run reached and what it did not, in a line or two, so a quiet result
  * is never read as a full check. Printed on every scan.
  */
+import { trimEndChars } from "../../lib/linear-text.js";
 
 /** Why a live scan read nothing, for a target that didn't answer or answered with a server error. */
 export function unreachableText({ httpStatus }, url) {
@@ -10,7 +11,7 @@ export function unreachableText({ httpStatus }, url) {
 
 /** Does a discovered path answer a route such as /api/users/:id? */
 function matches(route, path) {
-  const bare = path.split("?")[0].replace(/\/+$/, "") || "/";
+  const bare = trimEndChars(path.split("?")[0], "/") || "/";
   const pattern = route.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/:[^/]+/g, "[^/]+").replace(/\*/g, ".*");
   return new RegExp(`^${pattern}$`).test(bare);
 }

@@ -14,6 +14,7 @@ import {
   buildOverview, buildFindings, locateFinding, findingDetail, buildDeps, buildAi, loopSummary,
   explainFinding, buildScanHistory, latestScan, slug, buildGiantsCoverage,
 } from "./summarize.js";
+import { trimEndChars } from "../../../lib/linear-text.js";
 
 const DAY = 86_400_000;
 const HOUR = 3_600_000;
@@ -467,7 +468,7 @@ export function demoRunDeps({ pace = 1 } = {}) {
 
   // The demo folders do not exist: same rule as confineDir, on the path string.
   function confineDir(input) {
-    const p = String(input).trim().replace(/\/+$/, "");
+    const p = trimEndChars(String(input).trim(), "/");
     if (!p.startsWith("/Users/demo/code/") || p.includes("..")) {
       throw new Error("That folder is outside the project folders this dashboard was started with. In the demo, try /Users/demo/code/acme-shop.");
     }
