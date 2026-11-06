@@ -343,6 +343,26 @@ describe("POST /report relays pass or fail to our check run", () => {
     }
   });
 
+  it("stops reading a chunked body the moment it passes the cap, before the token is looked at", async () => {
+    const ctx = await enabled();
+    let pulled = 0;
+    const chunk = new Uint8Array(256).fill(0x20);
+    const body = new ReadableStream({
+      pull(controller) {
+        pulled += chunk.byteLength;
+        controller.enqueue(chunk);
+        if (pulled >= 64 * 1024 * 1024) controller.close();
+      },
+    });
+    const req = new Request(`${BASE}/report`, { method: "POST", body, duplex: "half", headers: { authorization: `Bearer ${jwt(claims())}`, "x-real-ip": "198.51.100.9" } });
+    expect(req.headers.get("content-length")).toBeNull();
+    const res = await ctx.app.report(req);
+    expect(res.status).toBe(413);
+    // 1 KiB cap: at most a few 256-byte chunks are pulled (plus the stream's own read-ahead), never 64 MiB.
+    expect(pulled).toBeLessThan(4 * 1024);
+    expect(ctx.vercel.calls.filter((c) => c.url.href === GITHUB_JWKS_URL)).toHaveLength(0);
+  });
+
   it("rate-limits one runner address", async () => {
     const ctx = await enabled({ queued: false });
     let last;
@@ -381,6 +401,60 @@ describe("GitHub's key set", () => {
     expect(v.calls).toHaveLength(2);
   });
 
+  it("while GitHub's keys fail, refetches at most once a minute, with one fetch for concurrent callers", async () => {
+    let t = T0;
+    let calls = 0;
+    const fetch = async () => {
+      calls++;
+      await new Promise((r) => setTimeout(r, 5));
+      return new Response("{}", { status: 500 });
+    };
+    const jwks = jwksCache({ fetch, now: () => t });
+    const results = await Promise.allSettled(Array.from({ length: 5 }, () => jwks.get(KID)));
+    expect(results.every((r) => r.status === "rejected" && /jwks_unavailable/.test(r.reason.message))).toBe(true);
+    expect(calls).toBe(1);
+    for (let i = 0; i < 20; i++) {
+      t += 2_000;
+      await expect(jwks.get(KID)).rejects.toThrow(/jwks_unavailable/);
+    }
+    expect(calls).toBe(1);
+    t += 61_000;
+    await expect(jwks.get(KID)).rejects.toThrow(/jwks_unavailable/);
+    expect(calls).toBe(2);
+  });
+
+  it("concurrent callers on a cold cache share one slow fetch, and all get the key", async () => {
+    let calls = 0;
+    const fetch = async () => {
+      calls++;
+      await new Promise((r) => setTimeout(r, 10));
+      return new Response(JSON.stringify(JWKS), { status: 200 });
+    };
+    const jwks = jwksCache({ fetch, now: () => T0 });
+    const keys = await Promise.all(Array.from({ length: 5 }, () => jwks.get(KID)));
+    expect(keys.every((k) => k !== null)).toBe(true);
+    expect(calls).toBe(1);
+  });
+
+  it("asks for no redirects and reads at most 64 KiB of the key set", async () => {
+    const seen = [];
+    let pulled = 0;
+    const fetch = async (url, init) => {
+      seen.push(init);
+      const body = new ReadableStream({
+        pull(c) {
+          pulled += 1024;
+          c.enqueue(new Uint8Array(1024).fill(0x20));
+          if (pulled > 10 * 1024 * 1024) c.close();
+        },
+      });
+      return new Response(body, { status: 200 });
+    };
+    await expect(jwksCache({ fetch, now: () => T0 }).get(KID)).rejects.toThrow(/jwks_unavailable/);
+    expect(seen[0].redirect).toBe("error");
+    expect(pulled).toBeLessThan(80 * 1024);
+  });
+
   it("answers 503 and changes nothing when GitHub's keys cannot be read", async () => {
     const vercel = mock({ jwksStatus: 500 });
     const ctx = await enabled({ vercel });
@@ -409,6 +483,51 @@ describe("GitHub's key set", () => {
 });
 
 describe("project links", () => {
+  /** A second installation, OTHER_CFG, in the same team, with a working token. */
+  async function second(ctx, { withCheck }) {
+    await ctx.store.put({ configurationId: OTHER_CFG, ownerId: TEAM, ...sealToken(ACCESS_TOKEN, OTHER_CFG, ctx.keys), createdAt: new Date(T0).toISOString(), sessionNonce: "o".repeat(32) });
+    await ctx.store.putLink({ projectId: "prj_one", configurationId: OTHER_CFG });
+    ctx.vercel.checks.prj_one = withCheck ? [{ id: "chk_other", name: "Penthera", projectId: "prj_one", source: { kind: "integration", integrationConfigurationId: OTHER_CFG } }] : [];
+  }
+
+  it("a second installation never takes a link from one whose own check is live", async () => {
+    const ctx = await enabled();
+    await second(ctx, { withCheck: true });
+    const res = await ctx.app.setup(form("/setup", `csrf=${ctx.csrf}&action=enable&p=prj_one`, { cookie: ctx.cookie }));
+    expect(res.status).toBe(409);
+    expect(await res.text()).toContain("Another Penthera installation already runs the check for: shop");
+    expect(ctx.store.dumpLinks()).toEqual([{ projectId: "prj_one", configurationId: OTHER_CFG }]);
+    // No second check was added next to theirs.
+    expect(ctx.vercel.checks.prj_one.map((k) => k.id)).toEqual(["chk_other"]);
+  });
+
+  it("takes the link over when the other installation's check is gone, or its record is", async () => {
+    const ctx = await enabled();
+    await second(ctx, { withCheck: false });
+    expect((await ctx.app.setup(form("/setup", `csrf=${ctx.csrf}&action=enable&p=prj_one`, { cookie: ctx.cookie }))).status).toBe(200);
+    expect(ctx.store.dumpLinks()).toEqual([{ projectId: "prj_one", configurationId: CFG }]);
+    expect(ctx.vercel.checks.prj_one.some((k) => k.source.integrationConfigurationId === CFG)).toBe(true);
+
+    await second(ctx, { withCheck: true });
+    await ctx.store.delete(OTHER_CFG);
+    expect((await ctx.app.setup(form("/setup", `csrf=${ctx.csrf}&action=enable&p=prj_one`, { cookie: ctx.cookie }))).status).toBe(200);
+    expect(ctx.store.dumpLinks()).toEqual([{ projectId: "prj_one", configurationId: CFG }]);
+  });
+
+  it("keeps the other installation's link when Vercel cannot say (a 5xx), and re-enabling its own link is fine", async () => {
+    const ctx = await enabled();
+    await second(ctx, { withCheck: true });
+    const real = ctx.vercel.fetch;
+    const app = createApp({ env: ctx.env, store: ctx.store, now: () => T0, fetch: async (u, i) => (String(u).includes("/v2/projects/prj_one/checks") && (i?.method ?? "GET") === "GET" ? new Response("{}", { status: 503 }) : real(u, i)) });
+    const res = await app.setup(form("/setup", `csrf=${ctx.csrf}&action=enable&p=prj_one`, { cookie: ctx.cookie }));
+    expect(res.status).toBe(409);
+    expect(ctx.store.dumpLinks()).toEqual([{ projectId: "prj_one", configurationId: OTHER_CFG }]);
+    // Its own link: enable again is a no-op success.
+    const own = await enabled();
+    expect((await own.app.setup(form("/setup", `csrf=${own.csrf}&action=enable&p=prj_one`, { cookie: own.cookie }))).status).toBe(200);
+    expect(own.vercel.checks.prj_one).toHaveLength(1);
+  });
+
   it("removing the check deletes the project's link", async () => {
     const ctx = await enabled();
     expect((await ctx.app.setup(form("/setup", `csrf=${ctx.csrf}&remove=prj_one`, { cookie: ctx.cookie }))).status).toBe(303);

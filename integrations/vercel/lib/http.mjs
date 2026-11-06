@@ -212,6 +212,32 @@ export async function readForm(request, limit = 16_384) {
 export async function readBody(request, limit) {
   const declared = Number(request.headers.get("content-length") ?? 0);
   if (declared > limit) return null;
-  const buf = Buffer.from(await request.arrayBuffer());
-  return buf.length > limit ? null : buf;
+  return readCapped(request.body, limit);
+}
+
+/**
+ * Reads a byte stream into a Buffer, counting as it goes, and stops reading the moment it passes
+ * `limit`: a chunked body with no or a false Content-Length is never read past the cap. Returns
+ * null when it is over. A null stream is an empty body.
+ */
+export async function readCapped(stream, limit) {
+  if (!stream) return Buffer.alloc(0);
+  const reader = stream.getReader();
+  const chunks = [];
+  let size = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > limit) {
+        reader.cancel().catch(() => {});
+        return null;
+      }
+      chunks.push(Buffer.from(value.buffer, value.byteOffset, value.byteLength));
+    }
+  } finally {
+    reader.releaseLock?.();
+  }
+  return Buffer.concat(chunks, size);
 }

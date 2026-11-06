@@ -6,8 +6,10 @@
  * - RS256 only. `alg: none`, HS256 and every other algorithm are refused before any key is
  *   looked up, so a public key can never be used as an HMAC secret.
  * - The key comes from GitHub's JWKS at a fixed URL, by `kid`. The key set is cached for
- *   10 minutes in this function instance; an unknown `kid` refetches at most once a minute. A
- *   clock that moves backwards counts as a stale cache.
+ *   10 minutes in this function instance. Any refetch beyond that (an unknown `kid`, or a retry
+ *   after a failed fetch) happens at most once a minute; in between, a stale cache answers
+ *   jwks_unavailable without fetching. One fetch at a time (callers share it), 3 seconds, no
+ *   redirects, at most 64 KiB read. A clock that moves backwards counts as a stale cache.
  * - `iss` must be GitHub's issuer and `aud` this server's origin, exactly.
  * - `exp`, `nbf` and `iat` must all be there, as numbers. `exp` is in the future, `nbf` and `iat` are not, with
  *   30 seconds of leeway, and a token may live at most one hour, so a token with a far-future
@@ -16,12 +18,14 @@
  * Which repository and workflow the token is for is checked by the caller (lib/app.mjs).
  */
 import { createPublicKey, verify } from "node:crypto";
+import { readCapped } from "./http.mjs";
 
 export const GITHUB_ISSUER = "https://token.actions.githubusercontent.com";
 export const GITHUB_JWKS_URL = `${GITHUB_ISSUER}/.well-known/jwks`;
 
 const JWKS_TTL_MS = 10 * 60_000;
 const JWKS_RETRY_MS = 60_000;
+const JWKS_TIMEOUT_MS = 3_000;
 const JWKS_MAX_BYTES = 64 * 1024;
 const MAX_TOKEN_CHARS = 8 * 1024;
 const LEEWAY_S = 30;
@@ -47,13 +51,14 @@ export function jwksCache({ fetch: fetchImpl = globalThis.fetch, now = Date.now,
     triedAt = now();
     let res;
     try {
-      res = await fetchImpl(url, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(5_000) });
+      res = await fetchImpl(url, { headers: { accept: "application/json" }, redirect: "error", signal: AbortSignal.timeout(JWKS_TIMEOUT_MS) });
     } catch {
       throw new OidcError("jwks_unavailable");
     }
     if (!res.ok) throw new OidcError("jwks_unavailable");
-    const text = await res.text().catch(() => "");
-    if (!text || text.length > JWKS_MAX_BYTES) throw new OidcError("jwks_unavailable");
+    const raw = await readCapped(res.body, JWKS_MAX_BYTES).catch(() => null);
+    const text = raw ? raw.toString("utf8") : "";
+    if (!text) throw new OidcError("jwks_unavailable");
     let json;
     try {
       json = JSON.parse(text);
@@ -79,10 +84,18 @@ export function jwksCache({ fetch: fetchImpl = globalThis.fetch, now = Date.now,
 
   return {
     async get(kid) {
+      // A fetch already under way is shared, whatever it finds.
+      if (pending) await pending.catch(() => {});
       const t = now();
       const fresh = keys !== null && t >= fetchedAt && t - fetchedAt < JWKS_TTL_MS;
-      if (!fresh) await refresh();
-      else if (!keys.has(kid) && (t < triedAt || t - triedAt >= JWKS_RETRY_MS)) await refresh();
+      const mayFetch = t < triedAt || t - triedAt >= JWKS_RETRY_MS;
+      if (!fresh) {
+        // Stale and fetched (and failed) less than a minute ago: refuse without another fetch.
+        if (!mayFetch) throw new OidcError("jwks_unavailable");
+        await refresh();
+      } else if (!keys.has(kid) && mayFetch) {
+        await refresh();
+      }
       return keys?.get(kid) ?? null;
     },
   };

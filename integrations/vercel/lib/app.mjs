@@ -339,8 +339,17 @@ ${asks()}`, { step: "Step 1 of 2" });
 
     if (form.get("action") === "enable") {
       const failed = [];
+      const taken = [];
       for (const p of projects) {
         try {
+          // A project's link belongs to the installation that owns a live Penthera check on it. If
+          // another installation's link is there and that installation's own token still sees its
+          // check, the link stays theirs and this one adds no second check (README, "Links").
+          const current = await store.getLink(p.id);
+          if (current && current.configurationId !== s.configurationId && (await ownsCheck(current.configurationId, p.id, c))) {
+            taken.push(p);
+            continue;
+          }
           // The link first: a link with no check changes nothing, while a check with no link would
           // hold production until Vercel times the run out.
           await store.putLink({ projectId: p.id, configurationId: s.configurationId });
@@ -351,12 +360,15 @@ ${asks()}`, { step: "Step 1 of 2" });
           failed.push(p);
         }
       }
-      if (!failed.length && s.next) return redirect(s.next, { cookies: [clearCookie(SESSION)] });
+      if (!failed.length && !taken.length && s.next) return redirect(s.next, { cookies: [clearCookie(SESSION)] });
       const back = s.next ? `<div class="act"><a class="btn go" href="${esc(s.next)}">Back to Vercel</a></div>` : "";
-      const text = failed.length
-        ? `<p class="callout">Vercel did not accept the check for: ${failed.map((p) => esc(p.name)).join(", ")}. Try again from Configure, or add it by hand in Project Settings, Deployment Checks.</p>`
-        : '<p class="lede">The check is on. Your next production deploy waits for Penthera.</p>';
-      return html(failed.length ? 502 : 200, "Penthera: done", `<h1>${failed.length ? "Some checks failed" : "Done"}</h1>${text}${back}`, { main: "one" });
+      const notes = [
+        failed.length ? `<p class="callout">Vercel did not accept the check for: ${failed.map((p) => esc(p.name)).join(", ")}. Try again from Configure, or add it by hand in Project Settings, Deployment Checks.</p>` : "",
+        taken.length ? `<p class="callout">Another Penthera installation already runs the check for: ${taken.map((p) => esc(p.name)).join(", ")}. Nothing changed there. Remove that check first to move it here.</p>` : "",
+      ].join("");
+      const text = notes || '<p class="lede">The check is on. Your next production deploy waits for Penthera.</p>';
+      const status = failed.length ? 502 : taken.length ? 409 : 200;
+      return html(status, "Penthera: done", `<h1>${status === 200 ? "Done" : "Some checks were not turned on"}</h1>${text}${back}`, { main: "one" });
     }
 
     const token = formToken(s, c);
@@ -476,6 +488,23 @@ ${asks({ open: true })}`);
     }
     if (api) await removeOurChecks(api, event.payload.configuration.projects, id);
     return json(200, { ok: true, deleted: true });
+  }
+
+  /**
+   * True when installation `configurationId` still owns a Penthera check on the project, read with
+   * its own token. A missing record, an unreadable token, or Vercel saying 401, 403 or 404 means it
+   * does not. Any other error keeps the current owner (true): a link is never taken over on a guess.
+   */
+  async function ownsCheck(configurationId, projectId, c) {
+    if (!CONFIG_ID.test(configurationId ?? "")) return false;
+    const record = await load(configurationId);
+    const api = record && tryClient(record, configurationId, c.keys);
+    if (!api) return false;
+    try {
+      return (await api.listChecks(projectId)).some((k) => isIntegrationCheck(k, configurationId));
+    } catch (e) {
+      return !(e instanceof VercelError && [401, 403, 404].includes(e.status));
+    }
   }
 
   /** Deletes every project link that names this installation, whatever key it sits under. */

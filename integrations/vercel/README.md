@@ -69,6 +69,15 @@ token, a date, a random value, and the ids of the projects you turned the check
 on for. No other data about you or your projects. Beside it, anonymous daily
 totals that name nobody.
 
+**Who owns a link.** The installation whose own token still sees its own
+Penthera check on the project. When another installation turns the check on for
+a project that is already linked, the server first asks Vercel, with the
+current owner's token, whether that owner's check is still there. If it is, the
+link stays and no second check is added (the page says so, 409). If the
+owner's record is gone, or Vercel answers 401, 403 or 404, or the check is
+gone, the link moves. On any other error the link stays: it is never taken over
+on a guess.
+
 A link is deleted when you remove the check from the setup page, when the
 installation is removed (every link that names it, whatever key it sits under),
 and by the weekly sweep when its installation is gone or it does not match its
@@ -212,8 +221,11 @@ It sends a GitHub Actions OIDC token as `Authorization: Bearer`, requested with
 1. **Token.** RS256 only, refused before any key lookup otherwise (`alg: none`,
    HS256 with the public key, and the rest). The key comes by `kid` from
    GitHub's JWKS at `https://token.actions.githubusercontent.com/.well-known/jwks`,
-   cached 10 minutes per instance, refetched at most once a minute for an
-   unknown `kid`, and refetched when the clock moves backwards. `iss` must be
+   cached 10 minutes per instance. Any other fetch (an unknown `kid`, or a retry
+   after GitHub failed) happens at most once a minute; in between a stale cache
+   answers 503 at once. Concurrent callers share one fetch, which has a
+   3-second timeout, follows no redirect and reads at most 64 KiB. A clock that
+   moves backwards counts as stale. `iss` must be
    `https://token.actions.githubusercontent.com` and `aud` exactly
    `<PUBLIC_BASE_URL origin>/report/<deploymentId>` for the body's deployment. `exp`, `nbf` and `iat` must all be numbers, with
    30 seconds of leeway, and a token may live at most one hour.
@@ -290,6 +302,9 @@ a commit status directly. The relay adds no new way in; it keeps the gate at
   `state` on every flow.
 - **Open redirect:** the `next` URL is followed only if it is `https://` on
   exactly `vercel.com`, the one host the CSP's `form-action` allows.
+- **Body caps:** every body (`/report` 1 KiB, `/webhook` 64 KiB, `/setup`
+  16 KiB) is read as a stream with a running byte count and abandoned the moment
+  it passes the cap, also when there is no `Content-Length` (chunked).
 - **Rate limits:** each `/install` makes one outbound call to Vercel, so a
   visitor gets 10 a minute per function instance. Instances count on their
   own, so the real limit is a Firewall rule (below).
