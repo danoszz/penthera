@@ -184,11 +184,42 @@ export async function scanRepo(repoPath, opts = {}) {
   result.findings.push(...scanWorkflows(repoPath));
   result.executedProbes.push("ci-workflows");
 
+  // Files a check would have read but refused (a link out, a device, a FIFO,
+  // too large) become info findings, one per file, and make the scan
+  // incomplete (`incomplete`, exit 2): never a silent pass.
+  const refused = [];
+  const named = new Set();
+  const reportRefused = () => {
+    for (const e of refused.splice(0)) {
+      const f = refusedFileFinding(e, repoPath);
+      if (named.has(f.file)) continue;
+      named.add(f.file);
+      result.findings.push(f);
+      (result.incomplete ||= []).push({ file: f.file, reason: e.reason || e.message });
+    }
+  };
+
   // ── Phase 1e: the fix planner's static checks ─────────────────────────
   // Headers, cookie flags, CORS and login rate limits, read from the code. The
   // fix plan reads the same findings from this scan, so both count the same.
   progress("Checking headers, cookies, CORS and login rate limits...");
   settings = probeRepoDetailed(repoPath);
+  // A code file this check could not read, or never reached past its cap, was
+  // not checked: the run is incomplete (exit 2), as for the route scan's files.
+  for (const n of settings.notRead) refused.push({ path: n.file, reason: n.reason });
+  reportRefused();
+  if (settings.coverage.over) {
+    const { over, firstOver, cap } = settings.coverage;
+    const first = String(firstOver).split(sep).join("/");
+    result.findings.push({
+      severity: "info",
+      title: `Settings check stopped at ${cap.toLocaleString("en-US")} code files`,
+      description: `${over} more code ${over === 1 ? "file was" : "files were"} not checked for headers, cookie flags, CORS or login rate limits, starting with \`${first}\`. The scan is incomplete and exits 2. Scan each app folder on its own with \`--repo <folder>\`.`,
+      category: "config",
+      source: "repo-scan",
+    });
+    (result.incomplete ||= []).push({ file: first, reason: `past the settings check's ${cap}-file limit (${over} not read)` });
+  }
   // Kept off the JSON report (it lists every file read); the ledger reads it.
   Object.defineProperty(result, "settingsCoverage", { value: settings.coverage, enumerable: false });
   result.executedProbes.push("app-settings");
@@ -218,21 +249,6 @@ export async function scanRepo(repoPath, opts = {}) {
     });
     return finish();
   }
-
-  // Files the route scan would have read but refused (a link out, a device, a
-  // FIFO, too large) become info findings, one per file, and make the scan
-  // incomplete (`incomplete`, exit 2): never a silent pass.
-  const refused = [];
-  const named = new Set();
-  const reportRefused = () => {
-    for (const e of refused.splice(0)) {
-      const f = refusedFileFinding(e, repoPath);
-      if (named.has(f.file)) continue;
-      named.add(f.file);
-      result.findings.push(f);
-      (result.incomplete ||= []).push({ file: f.file, reason: e.reason || e.message });
-    }
-  };
 
   if (apiRoot) {
     // ── Phase 2: Discover attack surface ───────────────────────────────────

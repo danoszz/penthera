@@ -8,14 +8,14 @@
  * before lost.
  */
 import { describe, it, expect, afterAll } from "vitest";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, symlinkSync, realpathSync } from "node:fs";
-import { execFileSync } from "node:child_process";
-import { join, dirname } from "node:path";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, symlinkSync, realpathSync, readFileSync, chmodSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
+import { join, dirname, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { probeRepoDetailed, planFixes, findingKey } from "../lib/fix/index.js";
 import { fallbackSites, probeCors } from "../lib/fix/recipes/cors.js";
 import { probeCookies } from "../lib/fix/recipes/cookies.js";
-import { PROBE_CAP } from "../lib/fix/probe-cap.js";
+import { PROBE_CAP, keepWorst, worstKeeper } from "../lib/fix/probe-cap.js";
 import { scanRepo } from "../src/scan-repo.js";
 import { mulberry32 } from "../bench/prng.js";
 
@@ -39,7 +39,7 @@ describe("the CORS fallback finder (row 16: a rewrite is checked against the old
   // The regex it replaces, as it stood in lib/fix/recipes/cors.js.
   const OLD = /([\w$.]+(?:\.get\(\s*['"]origin['"]\s*\))?)\s*\|\|\s*(['"])\*\2/g;
   const old = (s) => [...s.matchAll(OLD)].map((m) => ({ index: m.index, length: m[0].length, expr: m[1] }));
-  const PIECES = ["a", "b", "$", ".", "_", "1", " ", "\n", "\t", "|", "||", "'", "\"", "*", "\"*\"", "'*'", "(", ")", ".get(", "\"origin\"", "'origin'", "origin", "x.get(\"origin\")", "headers", "=", ";", ",", "-"];
+  const PIECES = ["a", "b", "$", ".", "_", "1", " ", "\n", "\t", "|", "||", "'", "\"", "*", "\"*\"", "'*'", "(", ")", ".get(", "\"origin\"", "'origin'", "origin", "x.get(\"origin\")", "headers", "=", ";", ",", "-", " ".repeat(20), "\n\t ".repeat(9)];
 
   it("finds the same sites as the old regex on 20,000 random inputs", () => {
     const rand = mulberry32(0x0c0de);
@@ -56,10 +56,26 @@ describe("the CORS fallback finder (row 16: a rewrite is checked against the old
       'const o = request.headers.get("origin") || "*";',
       "headers: { 'Access-Control-Allow-Origin': origin || '*' }",
       'x.get( "origin" ) || "*"',
+      `res.set("Access-Control-Allow-Origin", req.get(${" ".repeat(20)}"origin") || "*")`,
+      `req.get(${" ".repeat(40)}'origin'${"\n".repeat(40)}) || '*'`,
+      '.get("origin") || "*"',
       'a||"*"b||"*"',
       'a || "*" || "*"',
       '|| "*"',
     ]) expect(fallbackSites(s)).toEqual(old(s));
+  });
+
+  it("reads any number of blanks inside .get( \"origin\" ), as the old regex did (review, 7 Nov)", () => {
+    const src = `res.set("Access-Control-Allow-Origin", req.get(${" ".repeat(20)}"origin") || "*");`;
+    expect(fallbackSites(src)).toEqual([expect.objectContaining({ expr: `req.get(${" ".repeat(20)}"origin")` })]);
+    expect(probeCors("a.js", src)).toHaveLength(1);
+  });
+
+  it("takes linear time on blanks inside .get( ... ) too", () => {
+    const t = Date.now();
+    const src = `x.get(${" ".repeat(1024 * 1024)}"origin") || "*" `.repeat(4);
+    expect(fallbackSites(src)).toHaveLength(4);
+    expect(Date.now() - t).toBeLessThan(2000);
   });
 
   it("takes linear time: 5 MiB of letters, where the old regex needed hours (row 15)", () => {
@@ -92,6 +108,25 @@ describe("work per file is bounded at the size cap (rows 4, 15)", () => {
   }
 });
 
+describe("memory per file is bounded (row 4; review, 7 Nov)", () => {
+  // 5 MiB of one hit per line: the checks used to collect every hit (about
+  // 200,000) before keeping 25, and peaked at 350 to 460 MB. Run in a child
+  // with a 128 MB heap: collecting them all runs out of memory there.
+  const run = (code) => spawnSync(process.execPath, ["--max-old-space-size=128", "--input-type=module", "-e", code], { encoding: "utf-8", timeout: 60_000 });
+  const lib = (f) => JSON.stringify(resolve("lib/fix/recipes", f));
+  const MiB = 1024 * 1024;
+  it("a cookie-dense 5 MiB file", () => {
+    const r = run(`const { probeCookies } = await import(${lib("cookies.js")}); console.log(probeCookies("a.js", 'res.cookie("session", v);\\n'.repeat(${Math.floor((5 * MiB) / 26)})).length);`);
+    expect(r.stderr).not.toMatch(/heap out of memory/);
+    expect(r.stdout.trim()).toBe(String(PROBE_CAP));
+  }, 60_000);
+  it("a 5 MiB file of wildcard fallbacks", () => {
+    const r = run(`const { probeCors } = await import(${lib("cors.js")}); console.log(probeCors("a.js", 'a || "*";\\n'.repeat(${Math.floor((5 * MiB) / 10)})).length);`);
+    expect(r.stderr).not.toMatch(/heap out of memory/);
+    expect(r.stdout.trim()).toBe(String(PROBE_CAP));
+  }, 60_000);
+});
+
 describe("the per-file cap keeps the worst (row 13)", () => {
   it("a session cookie after 100 harmless ones is still reported", () => {
     const decoys = Array.from({ length: 100 }, (_, i) => `res.cookie("pref${i}", v);`).join("\n");
@@ -105,6 +140,39 @@ describe("the per-file cap keeps the worst (row 13)", () => {
     const src = 'import cors from "cors"; app.use(cors({ origin: true }));\nconst o = { origin: true };\napp.use(cors({ origin: "*" }))';
     expect(probeCors("a.js", src).map((f) => f.line)).toEqual([1, 3]);
     expect(probeCors("b.js", `${src}\n`).map((f) => f.line)).toEqual([1, 3]);
+  });
+
+  it("a cookie set through a 21st cookies() store is still reported (review, 7 Nov: no cap on stores)", () => {
+    const decl = Array.from({ length: 20 }, (_, i) => `const s${i} = cookies();`).join("\n");
+    const found = probeCookies("app.ts", `${decl}\nconst jar = cookies();\njar.set("session", token);\n`);
+    expect(found).toEqual([expect.objectContaining({ title: 'Cookie "session" missing HttpOnly, missing Secure, missing SameSite', line: 22 })]);
+    // Any number of stores, and a .set( on a name that is not a store is not a cookie.
+    const many = Array.from({ length: 500 }, (_, i) => `const s${i} = await cookies();`).join("\n");
+    expect(probeCookies("b.ts", `${many}\nmap.set("session", 1);\ns499.set("sid", v);\n`).map((f) => f.title)).toEqual(['Cookie "sid" missing HttpOnly, missing Secure, missing SameSite']);
+  });
+
+  it("a store named cookieStore is reported once, and its fix edits the call once", async () => {
+    const src = 'const cookieStore = await cookies();\ncookieStore.set("session", t);\n';
+    expect(probeCookies("a.ts", src)).toHaveLength(1);
+    const root = repo({ ...NEXT, "app/api/login/route.ts": src });
+    const { plans } = await planFixes(root, probeRepoDetailed(root).findings.filter((f) => f.category === "cookie"));
+    const diff = plans.find((p) => p.recipe === "cookie-flags").diff;
+    expect(diff.match(/^\+.*httpOnly/gm)).toHaveLength(1);
+    expect(diff).toContain('cookieStore.set("session", t, { httpOnly: true, secure: true, sameSite: "lax" });');
+  });
+
+  it("the running keeper keeps what keepWorst keeps, in the same order", () => {
+    const rand = mulberry32(0xbeef);
+    const sevs = ["critical", "high", "medium", "low", "info"];
+    for (let n = 0; n < 500; n++) {
+      const len = Math.floor(rand() * 60);
+      const fs = Array.from({ length: len }, (_, i) => ({ severity: sevs[Math.floor(rand() * 5)], title: `t${i}`, description: "d" }));
+      const w = worstKeeper("f.js");
+      // Added out of order, as the cookie and CORS checks add them: the order key decides ties.
+      const order = fs.map((_, i) => i).sort(() => rand() - 0.5);
+      for (const i of order) w.add(fs[i], i);
+      expect(w.result()).toEqual(keepWorst(fs, "f.js"));
+    }
   });
 
   it("a short list is left as it is", () => {
@@ -126,18 +194,65 @@ describe("refused and linked files (row 2)", () => {
     expect(findings.filter((f) => f.category !== "headers").map((f) => f.file)).toEqual(["app.js"]);
   });
 
-  it("puts what it did not read in the scan's coverage, so the brief names it", async () => {
+  it("puts what it did not read in the scan's coverage, and makes the scan incomplete (exit 2)", async () => {
     const root = repo({ ...EXPRESS, "big.js": "x".repeat(5 * 1024 * 1024 + 1) });
     const r = await scanRepo(root);
     const fam = r.coverage.families.find((f) => f.id === "app-settings");
     expect(fam.skipped["too-large"]).toBe(1);
+    expect(r.incomplete).toEqual([{ file: "big.js", reason: expect.stringMatching(/over the \d+-byte limit/) }]);
+    expect(r.findings).toContainEqual(expect.objectContaining({ title: "File not read: big.js", severity: "info" }));
   });
+
+  it("a FIFO among the code files makes the scan incomplete; a file two checks refuse is named once", async () => {
+    const root = repo({ ...EXPRESS, "server.js": "const express = require('express');\nconst app = express();\napp.listen(3000);\n" });
+    execFileSync("mkfifo", [join(root, "pipe.js")]);
+    const r = await scanRepo(root);
+    expect(r.incomplete.filter((x) => x.file === "pipe.js")).toHaveLength(1);
+    expect(r.findings.filter((f) => f.title === "File not read: pipe.js")).toHaveLength(1);
+  });
+
+  it.skipIf(process.getuid?.() === 0)("a folder or file it cannot read is named; an unreadable file makes the scan incomplete", async () => {
+    const root = repo({ ...EXPRESS, "locked/server.js": 'res.cookie("session", v);\n', "secret.js": 'res.cookie("sid", v);\n' });
+    chmodSync(join(root, "secret.js"), 0o000);
+    chmodSync(join(root, "locked"), 0o000);
+    try {
+      const { notRead, coverage } = probeRepoDetailed(root);
+      expect(notRead).toEqual([
+        { file: "locked", reason: expect.stringMatching(/folder that could not be read \(EACCES\)/) },
+        { file: "secret.js", reason: expect.stringMatching(/could not be read \(EACCES\)/) },
+      ]);
+      expect(coverage.skipped).toEqual({ unreadable: 2 });
+      // The scan as a whole (its sink check lists folders too) on the unreadable file alone.
+      chmodSync(join(root, "locked"), 0o755);
+      const r = await scanRepo(root);
+      expect(r.incomplete).toEqual([{ file: "secret.js", reason: expect.stringMatching(/could not be read/) }]);
+    } finally {
+      chmodSync(join(root, "locked"), 0o755);
+      chmodSync(join(root, "secret.js"), 0o644);
+    }
+  });
+
+  it("2,000 decoy files ahead of the real server: incomplete, exit 2, and the first file not read is named (review, 7 Nov)", () => {
+    const files = { ...EXPRESS };
+    for (let i = 0; i < 2001; i++) files[`aaa/f${String(i).padStart(4, "0")}.js`] = "";
+    files["zserver.js"] = 'const cors = require("cors");\napp.use(cors({ origin: "*" }));\nres.cookie("session", "x");\n';
+    const root = repo(files);
+    const report = join(root, "..", `${root.split("/").pop()}.json`);
+    temps.push(report);
+    const out = spawnSync(process.execPath, [resolve("bin/penthera.js"), "--repo", root, "-o", report], { encoding: "utf-8", env: { ...process.env, HOME: root, NO_COLOR: "1", CI: "1" }, timeout: 120_000 });
+    expect(out.status).toBe(2);
+    expect(out.stdout + out.stderr).toMatch(/aaa\/f2000\.js/);
+    const json = JSON.parse(readFileSync(report, "utf-8"));
+    expect(json.incomplete).toEqual([{ file: "aaa/f2000.js", reason: "past the settings check's 2000-file limit (2 not read)" }]);
+    expect(json.findings).toContainEqual(expect.objectContaining({ title: "Settings check stopped at 2,000 code files", severity: "info" }));
+  }, 120_000);
 
   it("counts code files past the 2,000-file walk", () => {
     const files = { ...EXPRESS };
     for (let i = 0; i < 2003; i++) files[`src/f${String(i).padStart(4, "0")}.js`] = "";
     const { coverage } = probeRepoDetailed(repo(files));
     expect(coverage.over).toBe(3);
+    expect(coverage.firstOver).toBe("src/f2000.js");
     expect(coverage.examined).toHaveLength(2000);
   });
 });

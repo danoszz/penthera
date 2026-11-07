@@ -157,7 +157,7 @@ baseline after the upgrade.
 |------|---------|
 | `0` | No critical or high rule fired. This run does not prove login, access rules or payments are right |
 | `1` | Critical or high findings detected (other tools' too, with `--giants`) |
-| `2` | Scan failed or is incomplete (unreachable target, missing path, bad config, a tool the policy requires did not run, a dependency input `penthera deps` or a route or server file `--repo` refused to read) |
+| `2` | Scan failed or is incomplete (unreachable target, missing path, bad config, a tool the policy requires did not run, a dependency input `penthera deps` or a route, server or code file `--repo` refused to read, or code files past the headers, cookies, CORS and login rate limit check's 2,000-file limit) |
 
 A firewall that refuses the scan isn't a failed scan. The verdict is `Site not read`,
 with no grade, and the exit code follows the findings Penthera could still make, such
@@ -229,7 +229,10 @@ analysis read are listed as blind spots, up to 200. A file that was not read
 is unchecked, not clean. Headers read from code are marked `potential`: your
 host or CDN may still add them, and a scan of the live address shows what it
 sends. The headers check reads `next.config.*`, `middleware.*` and `vercel.json`
-for a Next.js app, and every code file for Express, Hono and Fastify. Dependency behaviour and agent config have their own
+for a Next.js app, and every code file for Express, Hono and Fastify. That
+check reads up to 2,000 code files of up to 5 MiB each. A file it refused, or
+one past the 2,000, makes the scan incomplete (exit 2) and is named in the
+report; scan each app folder on its own with `--repo <folder>`. Dependency behaviour and agent config have their own
 commands (`penthera deps`, `penthera agents`) and are listed as not part of a
 repo scan.
 
