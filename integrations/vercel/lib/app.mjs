@@ -102,7 +102,7 @@ const asks = ({ open = false } = {}) => `<details class="faq"${open ? " open" : 
 <dt>What this server keeps</dt>
 <dd>One encrypted install token, with the installation id, your team or user id, the install date and a random value that ends old setup sessions. For each project with the check on, the project id and which installation turned it on. We delete all of it when you uninstall. Apart from that, anonymous daily totals with no ids, deleted after 90 days. No code, no deployment URLs, no results.</dd>
 <dt>What the workflow does</dt>
-<dd>It runs Penthera's passive scan on your deployment, in your own GitHub Actions, and holds no secrets. For a production deploy it then sends us the deployment id, the project id, pass or fail, a fingerprint (SHA-256) of the host it scanned and, if it couldn't read the site, a reason code, with a token GitHub signs for your repo. We check the token, pass only a scan of that deployment's own host, set the check's result in Vercel, and keep nothing about it, only anonymous daily totals to keep the service working. The findings stay in GitHub: the job summary and a run artifact.</dd>
+<dd>It runs Penthera's passive scan on your deployment, in your own GitHub Actions. The file holds no secrets; behind Vercel Authentication it reads one from your repo's secrets, the bypass secret, and sends it only to your deployment. For a production deploy it then sends us the deployment id, the project id, pass or fail, a fingerprint (SHA-256) of the host it scanned and, if it couldn't read the site, a reason code, with a token GitHub signs for your repo. We check the token, pass only a scan of that deployment's own host, set the check's result in Vercel, and keep nothing about it, only anonymous daily totals to keep the service working. The findings stay in GitHub: the job summary and a run artifact.</dd>
 <dt>What it never does</dt>
 <dd>It never reads your code, never writes to your repo beyond one commit status, and never sends findings or code to us. It doesn't attack your site: it reads your pages and sends one login with obviously fake credentials, to check a wrong password is refused.</dd>
 <dt>Why you commit the workflow yourself</dt>
@@ -540,7 +540,7 @@ ${asks()}`);
 <ul class="list">${items.join("")}</ul>
 <label class="cap" for="yaml">Or copy it:</label>
 <textarea id="yaml" readonly spellcheck="false" wrap="off">${esc(WORKFLOW_YAML)}</textarea>
-<p class="small">If your deployments sit behind Vercel Authentication, the scan cannot read them yet and the check fails with a clear message. Penthera never sees or stores a bypass secret.</p>
+<p class="small" data-reason="deployment_protection">Behind Vercel Authentication? Create Vercel's Protection Bypass for Automation secret (Project Settings, Deployment Protection) and add it to the repo as the Actions secret <code>VERCEL_AUTOMATION_BYPASS_SECRET</code>. The workflow sends it to your deployment only. It never reaches us. <a href="https://docs.penthera.org/vercel#deployment-protection" target="_blank" rel="noopener noreferrer">How</a></p>
 <form id="enable" method="post" action="/setup">
 <input type="hidden" name="csrf" value="${token}">
 <input type="hidden" name="action" value="enable">

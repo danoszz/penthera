@@ -55,7 +55,7 @@ async function journey({ entry, origin, autoRuns = true, publicView = false }) {
   // 3. Pick.
   const pick = await page(await h.app.setup(get("/setup", browser)), 200, "Pick your projects", "gaia-web", "notes", "Needs a GitHub-connected project", "What Penthera asks for, and why");
   // 4. Workflow (a browser's form post says Origin: null under our Referrer-Policy).
-  const wf = await page(await h.app.setup(post("/setup", `csrf=${csrfOf(pick)}&action=workflow&p=prj_gaiaweb`, browser, "null")), 200, "Add the workflow", "Turn on the check", "github.com/daan/gaia-web/new/main");
+  const wf = await page(await h.app.setup(post("/setup", `csrf=${csrfOf(pick)}&action=workflow&p=prj_gaiaweb`, browser, "null")), 200, "Add the workflow", "Turn on the check", "github.com/daan/gaia-web/new/main", 'data-reason="deployment_protection"', "VERCEL_AUTOMATION_BYPASS_SECRET");
   // 5. Turn on the check.
   const on = browser.take(await h.app.setup(post("/setup", `csrf=${csrfOf(wf)}&action=enable&p=prj_gaiaweb`, browser, origin)));
   expect(on.status, await on.clone().text()).toBe(303);

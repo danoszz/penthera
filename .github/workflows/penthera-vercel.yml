@@ -14,9 +14,11 @@
 # Scan only your own deployments. The job refuses any URL that is not a
 # *.vercel.app deployment URL, and the scan contacts only that host.
 #
-# Deployment Protection: with Vercel Authentication on (Standard Protection, the
-# usual setting), the deployment URL answers 401 to the scanner. The job then fails
-# and says so, instead of passing a scan that read nothing.
+# Deployment Protection (Vercel Authentication): add Vercel's Protection Bypass for
+# Automation secret as the repo secret VERCEL_AUTOMATION_BYPASS_SECRET. It is masked,
+# sent only to the deployment host, and never to Penthera's server. Without it a
+# protected deployment answers 401 and the job fails, never passing a scan that read
+# nothing.
 
 name: Penthera on Vercel
 
@@ -33,9 +35,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
-      actions: read   # the status action reads this job's step results
-      statuses: write # and writes the commit status, for a GitHub check added by hand
-      id-token: write # a GitHub-signed token for vercel.penthera.org, to report pass or fail for one deployment
+      actions: read   # the status action reads the step results
+      statuses: write # and sets the commit status
+      id-token: write # a GitHub-signed token to report pass or fail
     steps:
       # Sets "pending" on the deployment's commit now, and the job's result at the end.
       - uses: vercel/repository-dispatch/actions/status@30f760c6640485cd92f8c785ef361382555fb712 # v1
@@ -46,6 +48,7 @@ jobs:
         id: target
         env:
           DEPLOYMENT_URL: ${{ github.event.client_payload.url }}
+          BYPASS: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
         run: |
           host="${DEPLOYMENT_URL#https://}"
           host="${host%/}"
@@ -53,9 +56,13 @@ jobs:
             echo "::error::Not a Vercel deployment URL, so nothing was scanned: $host"
             exit 2
           fi
-          code=$(curl -s -o /dev/null -w '%{http_code}' --max-redirs 0 --max-time 20 "https://$host/" || true)
-          if [ "$code" = "401" ] || [ "$code" = "403" ]; then
-            echo "::error::https://$host answers $code: Deployment Protection is on, so Penthera cannot read the site. Turn it off for this check, or wait for the protection bypass support."
+          if [ -n "$BYPASS" ]; then
+            echo "::add-mask::$BYPASS"
+            [[ "$BYPASS" =~ ^[A-Za-z0-9._~-]{16,128}$ ]] || { echo "::error::VERCEL_AUTOMATION_BYPASS_SECRET: 16-128 of A-Za-z0-9._~-"; exit 2; }
+          fi
+          code=$(printf '%s' "${BYPASS:+x-vercel-protection-bypass: $BYPASS}" | curl -s -o /dev/null -w '%{http_code}' --max-redirs 0 --max-time 20 -H @- "https://$host/" || true)
+          if [ "$code" = 401 ] || [ "$code" = 403 ]; then
+            echo "::error::https://$host answers $code: Deployment Protection. Add the repo secret VERCEL_AUTOMATION_BYPASS_SECRET: docs.penthera.org/vercel#deployment-protection"
             exit 2
           fi
           echo "url=https://$host" >> "$GITHUB_OUTPUT"
@@ -70,9 +77,10 @@ jobs:
         with:
           mode: scan
           url: ${{ steps.target.outputs.url }}
-          offline: "true" # contact only the deployment's host (2.4.0 and later; the default there)
+          offline: "true" # only the deployment's host (2.4.0 and later)
           fail-on: high   # a high or critical finding fails the check
-          sarif: "false"  # dispatch runs sit on the default branch, not the deployed commit
+          sarif: "false"  # dispatch runs are on the default branch
+          vercel-bypass-secret: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
 
       # A pass needs proof in the report that the site was read: a 2xx home page, no challenge,
       # no block page, no rate limiting, and the app scan done. Anything else fails, with the reason.
@@ -92,7 +100,7 @@ jobs:
           if [ "$why" != read ]; then
             why=${why:-unreadable}
             echo "reason=$why" >> "$GITHUB_OUTPUT"
-            echo "::error::Site not read ($why), so this deploy fails the check."
+            echo "::error::Site not read ($why): this deploy fails the check."
             exit 1
           fi
 

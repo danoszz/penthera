@@ -52,7 +52,7 @@ like that), so the packages it lists were not checked. The CLI exits 2. The PR
 comment says `Incomplete:` and names the file, SARIF is still uploaded, and
 then the step "Fail on an incomplete scan" fails the job. Any other exit 2 (a
 crash, a bad input) fails the job at once, with no comment or SARIF. Inputs: `mode`, `path`, `base-ref`, `url`,
-`fail-on`, `comment`, `footer`, `sarif`, `penthera-version`, `github-token`. Copy the full workflow, with
+`fail-on`, `comment`, `footer`, `sarif`, `penthera-version`, `vercel-bypass-secret`, `github-token`. Copy the full workflow, with
 permissions and a lockfile paths filter, from
 [`docs/examples/pr-dependency-review.yml`](https://github.com/danoszz/penthera/blob/main/docs/examples/pr-dependency-review.yml).
 
@@ -95,6 +95,15 @@ because their token is read-only.
 To scan a preview URL and upload SARIF, see
 [scan in CI](scan.md#ci-integration) and the example
 [`docs/examples/github-actions-scan.yml`](https://github.com/danoszz/penthera/blob/main/docs/examples/github-actions-scan.yml).
+For a Vercel deployment behind Vercel Authentication, pass Vercel's Protection
+Bypass for Automation secret from a repository secret:
+`vercel-bypass-secret: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}`. The
+action masks it in the log and hands it to the scan as
+`PENTHERA_VERCEL_BYPASS`, never as an argument, in scan mode only. Pass it from
+`secrets.*` only: a value from `vars`, a step output or plain text is printed
+with the step's environment before the action can mask it
+([scan](scan.md#behind-vercel-deployment-protection)).
+
 Pin the Penthera version, so every run is checked by the same rules, and use
 `--baseline` for counts of what is new, or `--baseline ... -q` to report and
 gate on new findings only. `penthera --repo .`

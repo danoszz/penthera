@@ -45,6 +45,16 @@ inputs:
       a different version.
     required: false
     default: ""
+  vercel-bypass-secret:
+    description: >-
+      Scan mode only. Vercel's Protection Bypass for Automation secret, for a
+      deployment behind Vercel Authentication. Pass it from a repository secret
+      (secrets.*), never from vars, a step output or plain text: GitHub prints a
+      step's env before the action can mask it. It is masked in the log, sent as the
+      x-vercel-protection-bypass header to the scanned https *.vercel.app host
+      only, and replaced with [redacted] anywhere in the report.
+    required: false
+    default: ""
   github-token:
     description: Token for the PR comment. The default GITHUB_TOKEN is enough.
     required: false
@@ -76,9 +86,17 @@ runs:
         INPUT_URL: ${{ inputs.url }}
         INPUT_VERSION: ${{ inputs.penthera-version }}
         INPUT_FOOTER: ${{ inputs.footer }}
+        INPUT_VERCEL_BYPASS: ${{ inputs.vercel-bypass-secret }}
         PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
       run: |
         set -euo pipefail
+        # The bypass secret is masked before anything can print it, and reaches the
+        # CLI as PENTHERA_VERCEL_BYPASS in scan mode only, never as an argument.
+        if [ -n "${INPUT_VERCEL_BYPASS:-}" ]; then
+          echo "::add-mask::$INPUT_VERCEL_BYPASS"
+          if [ "$INPUT_MODE" = "scan" ]; then export PENTHERA_VERCEL_BYPASS="$INPUT_VERCEL_BYPASS"; fi
+        fi
+        unset INPUT_VERCEL_BYPASS
         out="$RUNNER_TEMP/penthera"
         mkdir -p "$out"
         node_major=$(node -p 'process.versions.node.split(".")[0]')

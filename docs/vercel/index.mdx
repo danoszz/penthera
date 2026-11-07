@@ -14,7 +14,7 @@ It is free and open source. The scan runs in your GitHub Actions, not on our ser
 
 - A Vercel project that deploys from a GitHub repository. Projects without one show as "Needs a GitHub-connected project" and cannot be picked.
 - Permission to commit a file to that repository's default branch.
-- Deployment Protection that lets the scanner read the deployment. See [Troubleshooting](#troubleshooting).
+- If your deployments sit behind Vercel Authentication: Vercel's Protection Bypass for Automation secret, stored as a GitHub repository secret. See [Deployment Protection](#deployment-protection).
 
 ## Install
 
@@ -85,9 +85,19 @@ Everything is in the [privacy notice](/vercel/privacy) and the [terms](/vercel/t
 
 ## Troubleshooting
 
-### The check fails with a Deployment Protection message
+### Deployment Protection
 
-With Vercel Authentication on (Standard Protection, the usual setting), the deployment URL answers 401 to the scanner. The job then fails and says so, instead of passing a scan that read nothing. Turn the protection off for the deployments you want checked. Penthera never sees or stores a bypass secret.
+With Vercel Authentication on (Standard Protection, which Vercel turns on for new projects), a deployment URL answers 401 to anyone who is not logged in to Vercel, the scanner too. The job then fails with "answers 401: Deployment Protection", instead of passing a scan that read nothing. To let the scan in:
+
+1. In Vercel, open the project's **Settings**, **Deployment Protection**, **Protection Bypass for Automation**, and create a secret. Copy it.
+2. In GitHub, open the repository's **Settings**, **Secrets and variables**, **Actions**, and add a repository secret named `VERCEL_AUTOMATION_BYPASS_SECRET` with that value.
+3. Deploy again.
+
+Vercel generates the secret from letters and digits. Penthera accepts 16 to 128 characters of `A-Z a-z 0-9 . _ ~ -`, so no encoded copy of it can slip past the redaction; any other value stops the scan with a message.
+
+The workflow sends the secret as the `x-vercel-protection-bypass` header, and only to the `*.vercel.app` deployment host it scans: Penthera checks the host, and the header never goes to another host, also not after a redirect. GitHub masks the secret in the log, and Penthera replaces it with `[redacted]` anywhere in its report, job summary and artifact. It never reaches Penthera's server. If you rotate the secret in Vercel, update the repository secret too; until then the job fails with the same message.
+
+The bypass needs a version of the Penthera action that has the `vercel-bypass-secret` input, newer than 2.3.2. With an older version in your workflow, the job fails with "Site not read (denied)". Copy the workflow again from Penthera's setup page or Configure.
 
 ### The check fails with "Site not read"
 

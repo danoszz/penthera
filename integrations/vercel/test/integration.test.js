@@ -689,8 +689,10 @@ describe("workflow and repo rules", () => {
     expect(parseYaml(PREFILL_YAML)).toEqual(parseYaml(WORKFLOW_YAML));
     // So stripping comments never touches a script: no run block holds a comment line.
     for (const st of parseYaml(WORKFLOW_YAML).jobs.scan.steps) if (st.run) expect(st.run, st.name).not.toMatch(/^\s*#/m);
-    expect(PREFILL_YAML.split("\n")[0]).toMatch(/^# Penthera on Vercel\. The file with its comments: https:\/\/github\.com\/danoszz\/penthera\/blob\/main\/integrations\/vercel\/workflow\/penthera-vercel\.yml$/);
+    expect(PREFILL_YAML.split("\n")[0]).toBe("# With comments: github.com/danoszz/penthera/blob/main/integrations/vercel/workflow/penthera-vercel.yml");
     expect(PREFILL_YAML.split("\n").slice(1).filter((l) => /^\s*#/.test(l))).toEqual([]);
+    // Dependabot's version comments on pinned actions stay.
+    for (const line of WORKFLOW_YAML.split("\n").filter((l) => /^\s*-?\s*uses:.*#/.test(l))) expect(PREFILL_YAML).toContain(line);
   });
 
   it("pins every action by full SHA, triggers on deployment.ready, and sets no AI input", () => {

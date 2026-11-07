@@ -259,6 +259,26 @@ integration still subscribes only to `integration-configuration.removed` and
 `.transferred`. `deployment.check-rerequested` is not needed because the check
 is not rerequestable: a re-run means a redeploy.
 
+### Deployment Protection
+
+Vercel Authentication (Standard Protection, on by default for new projects)
+answers 401 on deployment URLs, so the scan would read a login page. The
+workflow handles it without the secret ever reaching this server:
+
+- The user creates Vercel's Protection Bypass for Automation secret and stores
+  it as the GitHub repository secret `VERCEL_AUTOMATION_BYPASS_SECRET`.
+- The URL check step masks it and sends it, from a temp file rather than the
+  command line, as `x-vercel-protection-bypass` to the checked `*.vercel.app`
+  host. A 401 or 403 fails the job with the steps to add or renew the secret.
+- The Penthera action takes it as `vercel-bypass-secret`, masks it, and hands it
+  to the CLI as `PENTHERA_VERCEL_BYPASS`. The CLI sends it only to an https
+  `*.vercel.app` target's own origin, on every redirect hop again, and replaces
+  it with `[redacted]` anywhere in the report (`src/scan-url.js`,
+  `src/utils/http.js`, `tests/vercel-bypass.test.js`).
+- "Check the scan read the site" fails the job on a report whose `httpStatus`
+  is 401 or 403 (reason `denied`), so an action too old to send the secret
+  fails instead of passing a scan of the login page.
+
 ### POST /report
 
 The workflow's last step runs on every outcome (`if: always()`), for production
@@ -770,6 +790,10 @@ These stay unproven until Daan's live run:
   the way it refused the git-provider check.
 - The workflow itself on a real runner: the dispatch payload, the OIDC token
   request, `jq` and `curl`.
+- That a deployment behind Vercel Authentication answers 200 to the
+  `x-vercel-protection-bypass` header on every path the scan reads, and that
+  the read check fails as `denied` with an action older than the
+  `vercel-bypass-secret` input.
 - That the check holds a production deployment off the domain with
   `blocks: "deployment-alias"`, and that with automatic production aliasing
   off the dispatch still comes and the scan still runs. Vercel's docs tie
