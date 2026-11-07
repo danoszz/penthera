@@ -106,7 +106,7 @@ export function vercelClient({ token, teamId, fetch: f = globalThis.fetch }) {
     async deleteCheck(projectId, checkId, { signal } = {}) {
       return call("DELETE", `/v2/projects/${enc(projectId)}/checks/${enc(checkId)}`, { signal });
     },
-    /** Only the deployment's id, project and target. Everything else is dropped here. */
+    /** Only the deployment's id, project, target and host. Everything else is dropped here. */
     async getDeployment(deploymentId, { signal } = {}) {
       const d = await call("GET", `/v13/deployments/${enc(deploymentId)}`, { signal });
       // Vercel answers one of three views (OpenAPI, GET /v13/deployments/{idOrUrl}): the owner's view
@@ -116,6 +116,8 @@ export function vercelClient({ token, teamId, fetch: f = globalThis.fetch }) {
         id: typeof d?.id === "string" ? d.id : typeof d?.uid === "string" ? d.uid : "",
         projectId,
         target: typeof d?.target === "string" ? d.target : null,
+        // The deployment's own host, as Vercel names it: what a scan of this deployment must have read.
+        url: typeof d?.url === "string" ? d.url.toLowerCase().replace(/^https:\/\//, "").replace(/\/$/, "") : "",
       };
     },
     async listCheckRuns(deploymentId, { signal } = {}) {
