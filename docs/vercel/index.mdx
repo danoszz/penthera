@@ -32,9 +32,9 @@ Commit the workflow before you turn the check on. Until the file is committed, a
 3. If the scan passes, the check in Vercel passes and the deployment can go live.
 4. If the scan finds a high or critical problem, the check fails and the deployment stays out of production. The check links to the GitHub run.
 
-The scan is the standard URL scan of [`penthera <url>`](../commands/scan): TLS, security headers, cookies, CORS, exposed files and known-vulnerable libraries. Rules decide every finding. It reads your pages and sends one login attempt with obviously fake credentials, to check that a wrong password is refused. It contacts only the deployment's host.
+The scan is the standard URL scan of [`penthera <url>`](/commands/scan): TLS, security headers, cookies, CORS, exposed files and known-vulnerable libraries. Rules decide every finding. It reads your pages and sends one login attempt with obviously fake credentials, to check that a wrong password is refused. It contacts only the deployment's host.
 
-A scan that fails, times out or finds nothing it could read also fails the check. A failed check is not a pass by silence.
+A scan that fails or does not finish also fails the check. Silence is never a pass.
 
 ## Read the findings
 
@@ -50,7 +50,7 @@ To ship anyway, use Vercel's Force Promote on the deployment, remove the check, 
 
 ## False positives
 
-The workflow scans a URL and does not check out your code, so a `penthera.suppress.json` file in your repository is not read there, and `penthera memory suppress` writes to a machine's local memory, which a fresh GitHub runner does not have. Both work for repository scans. See [the learning store](../local-loop) and [`penthera scan`](../commands/scan).
+The workflow scans a URL and does not check out your code, so a `penthera.suppress.json` file in your repository is not read there, and `penthera memory suppress` writes to a machine's local memory, which a fresh GitHub runner does not have. Both work for repository scans. See [the learning store](/local-loop) and [`penthera scan`](/commands/scan).
 
 For a finding you have judged safe, you can:
 
