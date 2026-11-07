@@ -94,7 +94,8 @@ const NEXT_STEPS = `<h2>What happens on your next deploy</h2>
 <li><span class="n" aria-hidden="true">1</span><span><strong>Vercel builds it</strong> and asks your repo's workflow to scan it.</span></li>
 <li><span class="n" aria-hidden="true">2</span><span><strong>Penthera scans the live deployment</strong> in your GitHub Actions. That usually takes under a minute, and the deploy waits for it.</span></li>
 <li><span class="n" aria-hidden="true">3</span><span><strong>A pass goes live.</strong> A fail stays out of production, and the check in Vercel links to the findings in the GitHub job summary.</span></li>
-</ol>`;
+</ol>
+<p class="small" data-reason="auto_alias">The check holds a deploy only while automatic production aliasing is on, which is Vercel's default: Project Settings, Environments, Production. With it off, Vercel never moves your domain by itself, so there is nothing to hold.</p>`;
 
 // What a refused install leaves behind. Vercel makes the installation before it sends the browser to
 // /install, so it probably still lists Penthera; we stopped before the code exchange (README, "A refused install").

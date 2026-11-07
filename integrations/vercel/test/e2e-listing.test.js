@@ -42,6 +42,8 @@ describe("the listing journey, step by step, against the strict fake Vercel", ()
     expect(res.status).toBe(200);
     expect(s.wf).toContain("github.com/daan/gaia-web/new/main");
     expect(s.wf).toContain("Turn on the check");
+    // The check holds a deploy only while automatic production aliasing is on (Vercel, Deployment Checks).
+    expect(s.wf).toContain('data-reason="auto_alias"');
   });
 
   it("4. Turn on adds one integration check that blocks the production alias, and returns to Vercel", async () => {
