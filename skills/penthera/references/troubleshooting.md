@@ -43,21 +43,10 @@ cd /path/to/penthera && npm link
 penthera --version
 ```
 
-## Auth failures / empty authenticated findings
+## Pages behind a login were not checked
 
-**Symptoms:** Scan completes but misses protected endpoints
-
-**Causes:** Expired token, wrong cookie format, missing Bearer prefix
-
-**Solutions:**
-
-```bash
-# Bearer, prefix added automatically if missing
-penthera https://myapp.com --auth-bearer "<token>"
-
-# Cookie, full header value
-penthera https://myapp.com --auth-cookie "<cookie header>"
-```
+The skill does not handle logins. See [the scan docs](https://docs.penthera.org/commands/scan) for scanning
+behind a login.
 
 ## Site not read
 

@@ -61,6 +61,15 @@ describe("plugin/ folder", () => {
     for (const t of ["const k = process.env.KEY", "PENTHERA_BEARER=x", "${user_config.token}", "${API_KEY}"]) expect(t).toMatch(READS);
   });
 
+  // The hold came back on 7 Nov for credential-shaped instructions: login flags, the
+  // home config files --home reads, a signing key path, a request's auth header.
+  // The plugin links to docs.penthera.org for those; the CLI and docs keep them.
+  it("passes no credential: no login flags, home secrets, key paths or auth headers", () => {
+    const SHAPES = /--auth-(?:bearer|cookie)|\.claude\.json|~\/\.ssh\/|--sign-key|headers\.authorization|cookies\.get\(|"secrets?"|"secret-scanning"/i;
+    for (const f of files(PLUGIN).filter((f) => !f.endsWith(".png"))) expect(readFileSync(f, "utf-8"), f).not.toMatch(SHAPES);
+    for (const t of ["--auth-bearer x", "~/.claude.json", "--sign-key ~/.ssh/id", "req.headers.authorization", "\"secret-scanning\","]) expect(t).toMatch(SHAPES);
+  });
+
   it("has a skill that calls no script", () => {
     for (const f of files(join(PLUGIN, "skills/penthera"))) expect(readFileSync(f, "utf-8"), f).not.toMatch(/scripts\/[\w.-]+\.(?:sh|mjs|js|py)/);
   });
