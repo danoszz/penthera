@@ -542,7 +542,8 @@ describe("turning the check on", () => {
     });
     expect(res.status).toBe(502);
     const line = lines.find((l) => l.includes('"event":"check_failed"'));
-    expect(JSON.parse(line)).toMatchObject({ status: 400, code: "bad_request", configurationId: CFG });
+    expect(JSON.parse(line)).toMatchObject({ status: 400, code: "bad_request" });
+    expect(JSON.parse(line)).not.toHaveProperty("configurationId");
     expect(JSON.parse(line).message).toMatch(/^Invalid request: source\.integrationId is not ours/);
     expect(lines.join("\n")).not.toContain(ACCESS_TOKEN);
   });

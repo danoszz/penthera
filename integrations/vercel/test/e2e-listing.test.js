@@ -7,11 +7,19 @@
 // → a repeated report refused → Configure → uninstall (record, links and our check gone).
 import { readFileSync } from "node:fs";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { INFO_EVENTS, logInfo, setLogSink } from "../lib/log.mjs";
+import { ID_PREFIXES, INFO_EVENTS, logInfo, setLogSink } from "../lib/log.mjs";
 import { CHECK_TIMEOUT_SECONDS } from "../lib/workflow.mjs";
 import { ALLOWED } from "./vercel-allowed.mjs";
 import { ACCESS_TOKEN, BASE, CFG, CLIENT_SECRET, CODE, NEXT, get, harness, jar, listingInstallUrl, post, removedWebhook, reportRequest } from "./journey-harness.mjs";
 
+/** No id of any kind, no repo, run id, install code or token in any log line, error or info. */
+function expectNoIds(lines, h, extra = []) {
+  const all = lines.map((l) => l.line).join("\n");
+  expect(all).not.toMatch(new RegExp(`\\b(${ID_PREFIXES.join("|")})_`));
+  for (const secret of [ACCESS_TOKEN, CLIENT_SECRET, CODE, "gaia-web", "daan/", h.env.PENTHERA_TOKEN_KEYS.split(":")[1], ...extra]) {
+    expect(all, secret).not.toContain(secret);
+  }
+}
 const csrfOf = (html) => /name="csrf" value="([^"]+)"/.exec(html)[1];
 const runOf = (h, deploymentId, checkId) => (h.vercel.runs[deploymentId] ?? []).find((r) => r.checkId === checkId);
 
@@ -114,7 +122,7 @@ describe("the listing journey, step by step, against the strict fake Vercel", ()
     expect(h.outside).toEqual([]);
   });
 
-  it("12. The logs name each good event, and no id, repo, code or token reaches any line", () => {
+  it("12. The logs name each good event, and no id, repo, code or token reaches any line, error or info", () => {
     // Only good events on this journey: the refused repeat (step 8) is an answer, not an error.
     expect(lines.filter((l) => l.level !== "info")).toEqual([]);
     expect(lines.map((l) => JSON.parse(l.line))).toEqual([
@@ -124,11 +132,54 @@ describe("the listing journey, step by step, against the strict fake Vercel", ()
       { level: "info", event: "report_ok", conclusion: "failed" },
       { level: "info", event: "uninstall_ok" },
     ]);
-    const all = lines.map((l) => l.line).join("\n");
-    expect(all).not.toMatch(/\b(icfg|team|prj|dpl|oac|chk|crun|user)_/);
-    for (const secret of [ACCESS_TOKEN, CLIENT_SECRET, CODE, "gaia-web", "daan", "9001", "700", "701", h.env.PENTHERA_TOKEN_KEYS.split(":")[1]]) {
-      expect(all, secret).not.toContain(secret);
-    }
+    expectNoIds(lines, h, ["9001", "700", "701"]);
+  });
+});
+
+describe("error log lines carry no id either, also when Vercel's message is full of them", () => {
+  // Vercel's answers here name every kind of id, the way a real error message might.
+  const IDS = "prj_gaiaweb of team_JourneyTeam1 for icfg_JourneyConfig1 by user_daan on dpl_prod1 (oac_PentheraIntegration, chk_1, crun_1)";
+  const lines = [];
+  let previousSink;
+  beforeAll(() => { previousSink = setLogSink((line, level = "error") => lines.push({ line, level })); });
+  afterAll(() => setLogSink(previousSink));
+
+  it("a refused install, a spent code, a failed lookup, a refused check and a failed report all log without ids", async () => {
+    const h = harness();
+    const strict = h.vercel.fetch;
+    h.vercel.fetch = async (input, init = {}) => {
+      const url = new URL(String(input));
+      const method = init.method ?? "GET";
+      const fail = (status, code) => new Response(JSON.stringify({ error: { code, message: `Cannot do this: ${IDS}` } }), { status, headers: { "content-type": "application/json" } });
+      if (url.pathname.startsWith("/v1/integrations/configuration/")) return fail(403, "forbidden");
+      if (method === "POST" && url.pathname.endsWith("/checks")) return fail(400, "bad_request");
+      if (url.pathname.endsWith("/check-runs")) return fail(500, "internal_server_error");
+      return strict(input, init);
+    };
+
+    // A state that doesn't match this browser: refused before the exchange.
+    await h.app.install(new Request(`${listingInstallUrl()}&state=abc`, { headers: { cookie: "__Host-pv_state=xyz" } }));
+    // A code Vercel won't exchange.
+    await h.app.install(new Request(listingInstallUrl().replace(CODE, "a1b2c3d4e5f6a7b8")));
+    // A real install, then a Turn on that Vercel refuses with a message full of ids.
+    const browser = jar();
+    browser.take(await h.app.install(new Request(listingInstallUrl(), { headers: { cookie: browser.header() } })));
+    const pick = await (await h.app.setup(get("/setup", browser))).text();
+    const wf = await (await h.app.setup(post("/setup", `csrf=${csrfOf(pick)}&action=workflow&p=prj_gaiaweb`, browser, "null"))).text();
+    const on = await h.app.setup(post("/setup", `csrf=${csrfOf(wf)}&action=enable&p=prj_gaiaweb`, browser, "null"));
+    expect(on.status).toBe(502);
+    // A report while Vercel is failing. The check is not on, so turn it on behind the server's back.
+    h.vercel.checks.prj_gaiaweb = [{ id: "chk_9", name: "Penthera", source: { kind: "integration", integrationId: "oac_PentheraIntegration", integrationConfigurationId: CFG } }];
+    await h.store.putLink({ projectId: "prj_gaiaweb", configurationId: CFG });
+    expect((await h.app.report(reportRequest("dpl_prod1", "succeeded"))).status).toBe(502);
+
+    const events = lines.filter((l) => l.level === "error").map((l) => JSON.parse(l.line).event);
+    for (const e of ["install_refused", "exchange_failed", "integration_lookup_failed", "check_failed", "report_failed"]) expect(events).toContain(e);
+    // Vercel's text is kept, its ids are not.
+    const failed = lines.map((l) => JSON.parse(l.line)).find((l) => l.event === "check_failed");
+    expect(failed).toMatchObject({ status: 400, code: "bad_request", message: "Cannot do this: [id] of [id] for [id] by [id] on [id] ([id], [id], [id])" });
+    for (const l of lines) expect(Object.keys(JSON.parse(l.line)).every((k) => ["level", "event", "status", "code", "message", "route", "count", "source", "projects", "conclusion"].includes(k)), l.line).toBe(true);
+    expectNoIds(lines, h);
   });
 });
 

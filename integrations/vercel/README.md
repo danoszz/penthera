@@ -412,12 +412,16 @@ a commit status directly. The relay adds no new way in; it keeps the gate at
 - **Logs:** one logger (`lib/log.mjs`); ESLint bans `console` everywhere else
   in this folder.
   - **Errors** (`logError`, stderr) keep an allow-list of fields: the event,
-    an error code, the HTTP status, a route, the installation's
-    `configurationId`, and for a failed check create or integration lookup
-    Vercel's error message (at most 200 characters), so a failure explains
-    itself. Token shapes and the secret env values are masked. A test runs
-    install, setup, failures and a broken config with random fake credentials
-    and checks none appears in the output.
+    an error code, the HTTP status, a route, and for a failed check create or
+    integration lookup Vercel's error message (at most 200 characters), so a
+    failure explains itself. No ids: no field holds one, and any id inside a
+    string (`icfg_`, `team_`, `prj_`, `dpl_`, `oac_`, `user_`, `chk_`,
+    `crun_`, the list in `ID_PREFIXES`) becomes `[id]`. Token shapes and the
+    secret env values are masked. A test runs install, setup, failures and a
+    broken config with random fake credentials and checks none appears in the
+    output. Until 8 Nov, error lines carried the installation's
+    `configurationId`; the privacy notice promised an error code at most, so
+    the code now keeps that promise.
   - **Good events** (`logInfo`, stdout, `"level": "info"`) have the counters'
     privacy: an event name from a fixed list and only fields with fixed values
     or a count, never an id, a repo, a code or a token.
@@ -431,10 +435,14 @@ a commit status directly. The relay adds no new way in; it keeps the gate at
     | `uninstall_ok` | none | the `removed` webhook deleted the record and links |
 
     Any other field or value is dropped, and an event outside the list logs
-    nothing. `test/e2e-listing.test.js` captures every line of the whole
-    journey and checks that the five good events appear and that no id
-    (`icfg_`, `team_`, `prj_`, `dpl_`, `oac_`, `user_`), repo, run id, install
-    code or token is in any of them.
+    nothing.
+
+  `test/e2e-listing.test.js` captures every log line, error and info: on the
+  whole journey (the five good events, in order) and on a second run where
+  Vercel refuses with messages full of ids (a refused install, a spent code, a
+  failed lookup, a refused check, a failed report). No line may hold an id, a
+  repo, a run id, an install code or a token, and the check failure keeps
+  Vercel's text with each id as `[id]`.
 - **Configure:** Vercel's Configure button carries only a `configurationId`,
   which proves nothing about who clicked. So without the install session the
   page shows nothing account-specific.
