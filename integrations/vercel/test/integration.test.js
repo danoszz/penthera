@@ -404,7 +404,13 @@ describe("setup", () => {
     const ctx = setup({ now: () => t });
     const res = await ctx.app.install(get(installUrl()));
     t += 31 * 60_000;
-    expect((await ctx.app.setup(get("/setup", { cookie: cookieJar(res) }))).status).toBe(401);
+    const closed = await ctx.app.setup(get("/setup", { cookie: cookieJar(res) }));
+    expect(closed.status).toBe(401);
+    // The same page follows an uninstall, so it never claims Penthera is still installed.
+    const body = await closed.text();
+    expect(body).toContain("If you uninstalled it");
+    expect(body).not.toContain("stays installed");
+    expect(body).toContain('href="/start"');
   });
 
   it("configure without the install session reveals nothing about the configuration", async () => {

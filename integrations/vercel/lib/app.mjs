@@ -95,7 +95,7 @@ const NEXT_STEPS = `<h2>What happens on your next deploy</h2>
 <li><span class="n" aria-hidden="true">2</span><span><strong>Penthera scans the live deployment</strong> in your GitHub Actions. That usually takes under a minute, and the deploy waits for it.</span></li>
 <li><span class="n" aria-hidden="true">3</span><span><strong>A pass goes live.</strong> A fail stays out of production, and the check in Vercel links to the findings in the GitHub job summary.</span></li>
 </ol>
-<p class="small" data-reason="auto_alias">The check holds a deploy only while automatic production aliasing is on, which is Vercel's default: Project Settings, Environments, Production. With it off, Vercel never moves your domain by itself, so there is nothing to hold.</p>`;
+<p class="small" data-reason="auto_alias"><strong>One Vercel setting matters:</strong> automatic production aliasing, which is on unless you turned it off (Project Settings, Environments, Production). The check holds a deploy only while it's on. With it off, Vercel never moves your domain by itself, so there's nothing to hold back, and the scan still runs.</p>`;
 
 // What a refused install leaves behind. Vercel makes the installation before it sends the browser to
 // /install, so it probably still lists Penthera; we stopped before the code exchange (README, "A refused install").
@@ -939,8 +939,10 @@ ${asks({ open: true })}`);
     return json(200, { ok: true, checked, removed, unlinked });
   }
 
+  // Every way a setup session ends lands here: no cookie (a later Configure click, another browser),
+  // 30 minutes passed, an uninstall, a reinstall or a transfer. The copy must be true for all of them.
   function expired() {
-    return message(401, "Your setup page closed after 30 minutes", "Your install and any checks you turned on keep running. To change projects, restart from Vercel.", { left: { penthera: "Your install and checks are as you left them.", vercel: "Penthera stays installed." }, action: { href: "/start", label: "Restart on Vercel" }, why: "Setup closes after 30 minutes, so a page left open can't change your projects later." });
+    return message(401, "This setup page has closed", "Setup stays open for 30 minutes after an install, in the browser you installed from. It also closes when Penthera is uninstalled or installed again. To change projects, restart from Vercel.", { left: { penthera: "Nothing changed. If Penthera is still installed, your checks run as you left them. If you uninstalled it, we already deleted its token and project links.", vercel: "Nothing changed. Settings, Integrations shows whether Penthera is installed." }, action: { href: "/start", label: "Restart on Vercel" }, why: "Setup can change which deploys Penthera holds, so only the browser that just installed can use it, and only for 30 minutes." });
   }
 
   function apiFailure(e, configurationId, event) {
