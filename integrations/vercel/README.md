@@ -198,6 +198,40 @@ If Vercel answers the create with a 400 whose message names `timeout`, the
 server tries once more without it (Vercel's default, 300 s). The docs give
 `timeout` a default and no maximum.
 
+**An old check on a re-install.** Vercel's docs do not say whether an
+integration's checks go when its installation is removed. If one stays, it
+holds production forever, because no installation finishes its runs. So before
+creating its check, "Turn on" looks at the project's checks:
+
+- A check whose `source.integrationId` is ours, from a configuration this server
+  holds no live record for, is a leftover of an earlier install. It is deleted
+  with the current token.
+- If that configuration is still live (its own token still sees its check), the
+  project counts as taken (409), and nothing is deleted.
+- Nothing that is not ours by source is ever deleted: not a hand-added GitHub
+  check, not another integration's check, and nothing at all when the
+  integration id is unknown. A check named like ours that this installation
+  cannot vouch for gets a note on the Done page with a link to Deployment
+  Checks.
+
+**When Turn on fails,** the Done page says per project what Vercel answered, in
+plain words, what to do, a link to the right place in Vercel, and the code in
+small print, for example `Vercel 403 forbidden: …`. It offers "Try again" only
+when trying again can help.
+
+| Vercel's answer | Page (`data-reason`) | What it says to do |
+|---|---|---|
+| 401 | `revoked` | install again (`/start`) |
+| 403 `integration_configuration_disabled` | `disabled` | a team owner transfers it, or install again |
+| 403 | `forbidden` | accept the pending permission update; check the project is shared |
+| 404 | `not_found` | give Penthera access to the project |
+| 409, or a 400 saying the check already exists | `conflict` | remove the old Penthera check in Deployment Checks |
+| other 400 | `rejected` | on our side: send us the code |
+| deleting a leftover refused | `leftover` | remove the old Penthera check in Deployment Checks |
+| 429 | `rate_limited` | wait a minute, then Try again |
+| 5xx, no answer | `vercel_down`, `network` | Try again |
+| our store failed | `store` | Try again |
+
 **The result.** `PATCH /v2/deployments/{deploymentId}/check-runs/{checkRunId}`
 with `status: "completed"`, `conclusion` (`succeeded` or `failed`; the schema
 also allows `canceled`, `skipped`, `timeout`, `neutral`), `conclusionText`,

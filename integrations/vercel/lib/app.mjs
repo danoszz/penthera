@@ -22,7 +22,7 @@ import { logError } from "./log.mjs";
 import { OidcError, jwksCache, verifyGithubToken } from "./oidc.mjs";
 import { STAT_FIELDS } from "./store.mjs";
 import { VercelError, exchangeCode, vercelClient } from "./vercel.mjs";
-import { WORKFLOW_PATH, WORKFLOW_YAML, checkBody, githubNewFileUrl, isIntegrationCheck, isOurCheck } from "./workflow.mjs";
+import { WORKFLOW_PATH, WORKFLOW_YAML, checkBody, githubNewFileUrl, isIntegrationCheck, isOurCheck, isOurIntegrationsCheck } from "./workflow.mjs";
 
 const SESSION = "pv_session";
 const STATE = "pv_state";
@@ -50,6 +50,14 @@ export const reportAudience = (origin, deploymentId) => `${origin}/report/${depl
 const CLEANUP_MS = 15_000;
 /** How far Vercel's event clock may run ahead of ours before a stored time counts as tampered. */
 const CLOCK_SKEW_MS = 10 * 60_000;
+/** Vercel's dashboard links that pick the team (and project) for the user. */
+const VERCEL_INTEGRATIONS = "https://vercel.com/d?to=%2F%5Bteam%5D%2F%7E%2Fintegrations&title=Open+Integrations";
+const VERCEL_CHECKS = "https://vercel.com/d?to=%2F%5Bteam%5D%2F%5Bproject%5D%2Fsettings%2Fbuild-and-deployment%23deployment-checks&title=Open+Deployment+Checks";
+const ISSUES_URL = "https://github.com/danoszz/penthera/issues/new?title=Vercel+integration%3A+Turn+on+failed";
+
+/** Our own store failed while turning a check on (not Vercel). */
+class StoreProblem extends Error {}
+
 /** Install exchanges per visitor per minute, per function instance. The firewall rule in README.md is the real limit. */
 const INSTALLS_PER_MINUTE = 10;
 
@@ -383,6 +391,7 @@ ${asks()}`, { step: "Step 1 of 2: pick" });
     if (form.get("action") === "enable") {
       const failed = [];
       const taken = [];
+      const lookalikes = [];
       const integrationId = await integrationIdFor(api, s.configurationId, c);
       for (const p of projects) {
         try {
@@ -396,17 +405,47 @@ ${asks()}`, { step: "Step 1 of 2: pick" });
           }
           // The link first: a link with no check changes nothing, while a check with no link would
           // hold production until Vercel times the run out.
-          await store.putLink({ projectId: p.id, configurationId: s.configurationId });
+          try {
+            await store.putLink({ projectId: p.id, configurationId: s.configurationId });
+          } catch {
+            throw new StoreProblem();
+          }
           const existing = await api.listChecks(p.id);
-          if (!existing.some((k) => isIntegrationCheck(k, s.configurationId))) await createOurCheck(api, p.id, s.configurationId, integrationId);
+          if (!existing.some((k) => isIntegrationCheck(k, s.configurationId))) {
+            // A check our own integration made under an earlier installation that this server no
+            // longer holds (an uninstall and reinstall) would keep holding production with nobody to
+            // finish its runs. It is ours by source, so it is removed first. A live installation's
+            // check is left alone, and nothing that is not ours by source is ever deleted.
+            const leftovers = existing.filter((k) => isOurIntegrationsCheck(k, integrationId) && k.source.integrationConfigurationId !== s.configurationId);
+            let skip = false;
+            for (const k of leftovers) {
+              if (await ownsCheck(k.source.integrationConfigurationId, p.id, c)) {
+                taken.push(p);
+                skip = true;
+                break;
+              }
+              try {
+                await api.deleteCheck(p.id, k.id);
+              } catch (e) {
+                throw Object.assign(e, { leftover: true });
+              }
+            }
+            if (skip) continue;
+            await createOurCheck(api, p.id, s.configurationId, integrationId);
+          }
+          // A check named like ours that this installation cannot vouch for: say so, delete nothing.
+          const others = existing.filter((k) => /^penthera\b/i.test(String(k?.name ?? "")) && !isIntegrationCheck(k, s.configurationId) && !isOurIntegrationsCheck(k, integrationId));
+          if (others.length) lookalikes.push(p);
         } catch (e) {
-          logError("check_failed", { status: e.status ?? 0, code: e.code ?? "network", message: e.detail ?? "", configurationId: s.configurationId });
-          failed.push(p);
+          const problem = turnOnProblem(e);
+          logError("check_failed", { status: e.status ?? 0, code: e.code ?? problem.kind, message: e.detail ?? "", route: problem.kind, configurationId: s.configurationId });
+          failed.push({ ...p, problem });
         }
       }
       // Vercel's install ends on its `next` address, which closes the popup; Turn on already said what comes next.
-      if (!failed.length && !taken.length && s.next) return redirect(s.next, { cookies: [clearCookie(SESSION)] });
-      return donePage(projects.filter((p) => !failed.includes(p) && !taken.includes(p)), failed, taken, s);
+      if (!failed.length && !taken.length && !lookalikes.length && s.next) return redirect(s.next, { cookies: [clearCookie(SESSION)] });
+      const failedIds = new Set(failed.map((p) => p.id));
+      return donePage(projects.filter((p) => !failedIds.has(p.id) && !taken.includes(p)), failed, taken, s, lookalikes);
     }
 
     const token = formToken(s, c);
@@ -439,17 +478,19 @@ ${asks()}`, { step: "Step 2 of 2: commit, turn on" });
    * After "Turn on the check": what is on, what happens on the next deploy and where the result
    * shows. Also when Vercel gave a `next` address: its one blue button finishes the install there.
    */
-  function donePage(on, failed, taken, s) {
+  function donePage(on, failed, taken, s, lookalikes = []) {
     const names = (list) => list.map((p) => esc(p.name)).join(", ");
     const notes = [
-      failed.length ? `<p class="note">Vercel did not accept the check for ${names(failed)}. Try again in a minute.</p>` : "",
+      ...failed.map((p) => problemNote(p, p.problem)),
       taken.length ? `<p class="note">Another Penthera installation already runs the check for ${names(taken)}. Nothing changed there. Remove that check first to move it here.</p>` : "",
+      lookalikes.length ? `<div class="note" data-reason="lookalike_check"><p>${names(lookalikes)} also has a check named Penthera that this installation did not add. If it is from an earlier install, remove it, or production deploys keep waiting for it.</p><p><a href="${VERCEL_CHECKS}" target="_blank" rel="noopener noreferrer">Open Deployment Checks in Vercel <span aria-hidden="true">↗</span></a></p></div>` : "",
     ].join("");
     const status = failed.length ? 502 : taken.length ? 409 : 200;
     const next = on.length ? `
 ${NEXT_STEPS}
 <ul class="links col">${on.map((p) => `<li><a href="https://github.com/${esc(p.repo)}/actions/workflows/penthera-vercel.yml" target="_blank" rel="noopener noreferrer">${esc(p.name)} on GitHub Actions <span aria-hidden="true">↗</span></a></li>`).join("")}<li><a href="${SOURCE_URL}#readme" target="_blank" rel="noopener noreferrer">How it works <span aria-hidden="true">↗</span></a></li></ul>` : "";
-    const retry = failed.length ? '<a class="btn" href="/setup">Try again</a>' : "";
+    // Try again only when trying again can help: Vercel or our store was busy, not a refusal.
+    const retry = failed.some((p) => p.problem.transient) ? '<a class="btn" href="/setup">Try again</a>' : "";
     const finish = s.next || retry ? `<div class="act">${s.next ? `<a class="btn go" href="${esc(s.next)}">Back to Vercel</a>` : ""}${retry}</div>` : "";
     const title = status === 200 ? "The check is on" : on.length ? "Some checks were not turned on" : "The check was not turned on";
     const lede = on.length ? `<p class="lede">Penthera now checks each production deploy of ${names(on)} before it goes live.</p>` : "";
@@ -567,6 +608,35 @@ ${asks({ open: true })}`);
       logError("integration_lookup_failed", { status: e.status ?? 0, code: e.code ?? "network", message: e.detail ?? "", configurationId });
       return null;
     }
+  }
+
+  /**
+   * What Vercel's answer to "Turn on" means, in plain words: what happened, what to do, where, and
+   * the code to send us. `transient` is true only when trying again can help (429, 5xx, network,
+   * our store). Vercel's own message goes in the small print, escaped.
+   */
+  function turnOnProblem(e) {
+    const vercel = e instanceof VercelError;
+    const code = vercel ? `Vercel ${e.status} ${e.code}${e.detail ? `: ${e.detail}` : ""}` : e instanceof StoreProblem ? "penthera store_unavailable" : "network";
+    const base = { code, link: null, linkLabel: null, transient: false };
+    if (e instanceof StoreProblem) return { ...base, kind: "store", what: "Our server could not save this setting. Nothing changed in Vercel.", todo: "Try again in a minute. If it keeps failing, send us the code below.", transient: true };
+    if (!vercel) return { ...base, kind: "network", what: "Vercel did not answer in time.", todo: "Try again in a minute.", transient: true };
+    if (e.leftover) return { ...base, kind: "leftover", what: "This project still has a Penthera check from an earlier install, and Vercel did not let this installation remove it.", todo: "Remove the old Penthera check in the project's Deployment Checks, then turn the check on again.", link: VERCEL_CHECKS, linkLabel: "Open Deployment Checks in Vercel" };
+    if (e.status === 429) return { ...base, kind: "rate_limited", what: "Vercel is limiting requests right now.", todo: "Wait a minute, then try again.", transient: true };
+    if (e.status >= 500) return { ...base, kind: "vercel_down", what: "Vercel had a problem on its side.", todo: "Try again in a minute.", transient: true };
+    if (e.status === 401) return { ...base, kind: "revoked", what: "Vercel no longer accepts this installation's access. It was uninstalled, or its access was taken back.", todo: "Install Penthera again from Vercel.", link: "/start", linkLabel: "Install again" };
+    if (e.status === 403 && e.code === "integration_configuration_disabled") return { ...base, kind: "disabled", what: "Vercel has disabled this installation, usually because the person who installed it left the team.", todo: "A team owner can transfer it in Vercel, Settings, Integrations, or install Penthera again.", link: VERCEL_INTEGRATIONS, linkLabel: "Open Integrations in Vercel" };
+    if (e.status === 403) return { ...base, kind: "forbidden", what: "Vercel says this installation may not add Deployment Checks to this project.", todo: "In Vercel, open Settings, Integrations, Penthera, and accept any pending permission update. If there is none, check that the project is shared with Penthera under Manage.", link: VERCEL_INTEGRATIONS, linkLabel: "Open Integrations in Vercel" };
+    if (e.status === 404) return { ...base, kind: "not_found", what: "Vercel cannot find this project for this installation. Penthera may no longer have access to it.", todo: "Give Penthera access to the project in Vercel, Settings, Integrations, Penthera, Manage. Then turn the check on again.", link: VERCEL_INTEGRATIONS, linkLabel: "Open Integrations in Vercel" };
+    if (e.status === 409 || /\b(exist|duplicate|already|unique)/i.test(e.detail ?? "")) return { ...base, kind: "conflict", what: "Vercel says this project already has a check like this one.", todo: "Open the project's Deployment Checks. Remove an old Penthera check if there is one, then turn the check on again.", link: VERCEL_CHECKS, linkLabel: "Open Deployment Checks in Vercel" };
+    return { ...base, kind: "rejected", what: "Vercel did not accept the check's settings. That is on our side, not yours.", todo: "Send us the code below and we will fix it. Your project is unchanged.", link: ISSUES_URL, linkLabel: "Tell us on GitHub" };
+  }
+
+  /** One project's failure on the Done page. */
+  function problemNote(p, problem) {
+    const local = problem.link?.startsWith("/");
+    const link = problem.link ? `<p><a href="${esc(problem.link)}"${local ? "" : ' target="_blank" rel="noopener noreferrer"'}>${esc(problem.linkLabel)}${local ? "" : ' <span aria-hidden="true">↗</span>'}</a></p>` : "";
+    return `<div class="note" data-reason="${esc(problem.kind)}"><p><strong>${esc(p.name)}</strong>: ${esc(problem.what)}</p><p>${esc(problem.todo)}</p>${link}<p class="small">Code: <code>${esc(problem.code)}</code></p></div>`;
   }
 
   /**
