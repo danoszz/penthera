@@ -34,8 +34,6 @@ Override or extend profile defaults:
 | `--markdown <file>` | Explicit Markdown report path |
 | `--sarif <file>` | SARIF for GitHub Security tab |
 | `--baseline <file>` | Compare against previous JSON report |
-| `--auth-cookie <value>` | Cookie header for authenticated scans |
-| `--auth-bearer <value>` | Bearer token for authenticated scans |
 | `--json` | JSON to stdout |
 | `--timeout <ms>` | Request timeout (default: 10000) |
 | `--concurrency <n>` | Concurrent requests (default: 15) |
