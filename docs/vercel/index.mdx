@@ -34,7 +34,7 @@ Commit the workflow before you turn the check on. Until the file is committed, a
 
 The scan is the standard URL scan of [`penthera <url>`](/commands/scan): TLS, security headers, cookies, CORS, exposed files and known-vulnerable libraries. Rules decide every finding. It reads your pages and sends one login attempt with obviously fake credentials, to check that a wrong password is refused. It contacts only the deployment's host.
 
-A scan that fails or does not finish also fails the check. Silence is never a pass. A pass also needs proof in Penthera's report that the site was read: no firewall challenge or block page, no 401 or 403, and the app scan finished. And it counts only for the deployment's own address in Vercel's record, so a scan of any other URL fails the check.
+A scan that fails or does not finish also fails the check. Silence is never a pass. A pass also needs proof in Penthera's report that the site was read: the home page answered 2xx, no firewall challenge or block page, no rate limiting, and the app scan finished. A deployment that redirects its `vercel.app` address to your own domain is not read, so it fails. And it counts only for the deployment's own address in Vercel's record, so a scan of any other URL fails the check.
 
 ## Read the findings
 
@@ -89,7 +89,7 @@ With Vercel Authentication on (Standard Protection, the usual setting), the depl
 
 ### The check fails with "Site not read"
 
-The scan did not read your app: a firewall served a bot challenge or a block page, the deployment answered 401 or 403, nothing answered, or the scan stopped early. The check says which, and the GitHub job summary has the details. A challenge on your own deployment usually means Vercel's Bot Protection or Attack Challenge Mode is on for it; allow the scanner, or scan a preview. For 401 or 403, see Deployment Protection below.
+The scan did not read your app: a firewall served a bot challenge or a block page, the deployment answered 401 or 403 or redirected elsewhere, requests were rate limited, nothing answered, or the scan stopped early. If your app redirects its `vercel.app` address to your own domain, exempt the deployment URL from that redirect. The check says which, and the GitHub job summary has the details. A challenge on your own deployment usually means Vercel's Bot Protection or Attack Challenge Mode is on for it; allow the scanner, or scan a preview. For 401 or 403, see Deployment Protection below.
 
 ### The check fails with "Scanned URL is not this deployment"
 

@@ -359,19 +359,28 @@ describe("gate", () => {
           [{ reachable: false }, "unreachable"],
           [{ reachable: true, httpStatus: 401 }, "denied"],
           [{ reachable: true, httpStatus: 403 }, "denied"],
+          [{ reachable: true, httpStatus: 308, executedProbes: ["endpoint-discovery"] }, "redirected"],
+          [{ reachable: true, httpStatus: 429, executedProbes: ["endpoint-discovery"] }, "status"],
+          [{ reachable: true, httpStatus: 200, executedProbes: ["endpoint-discovery"], findings: [{ source: "waf-challenge" }] }, "blocked"],
+          [{ reachable: true, httpStatus: 200, executedProbes: ["endpoint-discovery"], endpoints: { byStatus: { 429: 2 } } }, "rate_limited"],
+          [{ reachable: true, httpStatus: 200, executedProbes: "endpoint-discovery" }, "incomplete"],
+          [{ reachable: true }, "incomplete"],
         ]) {
           errs.length = 0;
           const r = run(report);
           expect(r.res, JSON.stringify(report)).toMatchObject({ fail: true, incomplete: true, unread });
           expect(r.errs[0]).toMatch(new RegExp(`^::error::Site not read \\(${unread}\\)`));
         }
-        expect(run({ reachable: true, httpStatus: 200 }).res).toEqual({ fail: false, count: 0 });
+        const clean = { reachable: true, httpStatus: 200, executedProbes: ["endpoint-discovery"] };
+        expect(run(clean).res).toEqual({ fail: false, count: 0 });
+        // A deps or agents report is no URL scan: the gate decides on its findings alone.
+        expect(run({ mode: "deps" }).res).toEqual({ fail: false, count: 0 });
         failOn = "none";
         const refused = run({ challenge: { provider: "Cloudflare" } });
         expect(refused.res.fail).toBe(false);
         expect(refused.logs[0]).toMatch(/^::warning::Site not read/);
         expect(run({ reachable: false }).logs[0]).toMatch(/^::warning::/);
-        expect(run({ reachable: true }).logs).toEqual([]);
+        expect(run(clean).logs).toEqual([]);
       } finally {
         err.mockRestore();
       }
@@ -391,8 +400,9 @@ describe("gate", () => {
       };
       expect(exit({ challenge: { provider: "Vercel", action: "challenge" } })).toBe(2);
       expect(exit({ reachable: false })).toBe(2);
-      expect(exit({ reachable: true, httpStatus: 200, findings: [{ severity: "high" }] })).toBe(1);
-      expect(exit({ reachable: true, httpStatus: 200 })).toBe(0);
+      expect(exit({ reachable: true, httpStatus: 308, executedProbes: ["endpoint-discovery"] })).toBe(2);
+      expect(exit({ reachable: true, httpStatus: 200, executedProbes: ["endpoint-discovery"], findings: [{ severity: "high" }] })).toBe(1);
+      expect(exit({ reachable: true, httpStatus: 200, executedProbes: ["endpoint-discovery"] })).toBe(0);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

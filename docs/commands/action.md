@@ -38,9 +38,11 @@ code scanning. Penthera runs from the action's own checkout: no npx and no
 install from npm. Penthera has no runtime dependencies, so no mode runs `npm ci`. On fork PRs the
 token is read-only, so the diff goes to the job summary instead.
 
-In `mode: scan` with a `fail-on` gate, a run that did not read the site fails
-as incomplete (exit 2), whatever it found: nothing answered, a firewall served
-a bot challenge, or the site answered 401 or 403. The log says
+In `mode: scan` with a `fail-on` gate, a run fails as incomplete (exit 2),
+whatever it found, unless its report proves the site was read: the home page
+answered 2xx, no firewall served a bot challenge or block page, no request was
+rate limited, and the app scan ran. A redirect to another address, a 401 or
+403, or no answer all count as not read. The log says
 `Site not read (<reason>)`. With `fail-on: none` it is a warning.
 
 The job fails when the scan is incomplete, even with `fail-on: none`. That

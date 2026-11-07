@@ -13,5 +13,8 @@ section: Security
   record. A workflow from before this change reports failed, "Scanned URL is
   not this deployment", until you copy it again.
 - **The Action fails a gated scan that did not read the site.** With `fail-on`
-  set, a URL scan that met a bot challenge, a 401 or 403, or no answer exits 2
-  (incomplete), as the CLI does for an input it could not read.
+  set, a URL scan exits 2 (incomplete), as the CLI does for an input it could
+  not read, unless its report proves a read: a 2xx home page, no bot challenge
+  or block page, no rate limiting, and the app scan done. This reaches the
+  Vercel workflow with the next release of the Action; until then the
+  workflow's own report check covers it.

@@ -59,8 +59,10 @@ const PROJECTS = {
   prj_two: { id: "prj_two", name: "blog", link: { type: "github", org: "acme", repo: "blog", repoId: 5151, repoOwnerId: 77, productionBranch: "main" } },
 };
 // Which project each deployment belongs to, and its target, as Vercel knows it.
-const DEPLOYMENTS = { dpl_one: "prj_one", dpl_two: "prj_two", dpl_preview: "prj_one" };
-const TARGETS = { dpl_one: "production", dpl_two: "production", dpl_preview: null };
+const DEPLOYMENTS = { dpl_one: "prj_one", dpl_two: "prj_two", dpl_preview: "prj_one", dpl_three: "prj_one", dpl_nourl: "prj_one", dpl_caps: "prj_one" };
+const TARGETS = { dpl_one: "production", dpl_two: "production", dpl_preview: null, dpl_three: "production", dpl_nourl: "production", dpl_caps: "production" };
+// Each deployment's own host in Vercel's record. dpl_nourl has none; dpl_caps comes back in another form.
+const URLS = { dpl_three: "shop-three.vercel.app", dpl_nourl: undefined, dpl_caps: "HTTPS://Shop-Caps.vercel.app/" };
 
 function mock({ jwksStatus = 200 } = {}) {
   const calls = [];
@@ -91,7 +93,7 @@ function mock({ jwksStatus = 200 } = {}) {
       return reply(204);
     }
     if ((m = /^\/v13\/deployments\/([^/]+)$/.exec(url.pathname))) {
-      return DEPLOYMENTS[m[1]] ? reply(200, { id: m[1], projectId: DEPLOYMENTS[m[1]], target: TARGETS[m[1]], url: "x.vercel.app" }) : reply(404, { error: { code: "not_found" } });
+      return DEPLOYMENTS[m[1]] ? reply(200, { id: m[1], projectId: DEPLOYMENTS[m[1]], target: TARGETS[m[1]], url: Object.hasOwn(URLS, m[1]) ? URLS[m[1]] : "x.vercel.app" }) : reply(404, { error: { code: "not_found" } });
     }
     if ((m = /^\/v2\/deployments\/([^/]+)\/check-runs$/.exec(url.pathname))) {
       if (!DEPLOYMENTS[m[1]]) return reply(404, { error: { code: "not_found" } });
@@ -199,14 +201,23 @@ describe("a pass counts only for a scan of this deployment, that read the site",
     expect((await ctx.app.report(report(jwt(claims()), body({ hostSha256: X_HOST, findings: [] })))).status).toBe(400);
   });
 
-  it("the deployment's host comes from Vercel's record, read with the installation's token, never from the body", async () => {
-    // The fake Vercel answers url: "x.vercel.app" for dpl_one; a report claiming that hash for
-    // another deployment of the project is compared with that deployment's own record instead.
-    const ctx = await enabled();
-    const res = await ctx.app.report(report(jwt(claims(T0, { aud: `${BASE}/report/dpl_one` })), body({ hostSha256: X_HOST })));
-    expect((await res.json()).conclusion).toBe("succeeded");
-    const reads = ctx.vercel.calls.filter((c) => c.url.pathname === "/v13/deployments/dpl_one");
-    expect(reads).toHaveLength(1);
+  it("the host comes from that deployment's own record: another deployment's host, no host on record, or the empty string's hash fail", async () => {
+    const sha = (v) => createHash("sha256").update(v).digest("hex");
+    const send = async (deploymentId, hostSha256) => {
+      const ctx = await enabled();
+      const res = await ctx.app.report(report(jwt(claims(T0, { aud: `${BASE}/report/${deploymentId}` })), { deploymentId, projectId: "prj_one", conclusion: "succeeded", hostSha256 }));
+      expect(ctx.vercel.calls.filter((c) => c.url.pathname === `/v13/deployments/${deploymentId}`)).toHaveLength(1);
+      return (await res.json()).conclusion;
+    };
+    // dpl_one's host, reported for dpl_three of the same project: not this deployment.
+    expect(await send("dpl_three", X_HOST)).toBe("failed");
+    expect(await send("dpl_three", sha("shop-three.vercel.app"))).toBe("succeeded");
+    // Vercel's record has no url: nothing to bind to, also not the hash of an empty string.
+    expect(await send("dpl_nourl", sha(""))).toBe("failed");
+    expect(await send("dpl_nourl", X_HOST)).toBe("failed");
+    // Vercel's url in another case or with a scheme still names the same host.
+    expect(await send("dpl_caps", sha("shop-caps.vercel.app"))).toBe("succeeded");
+    expect(await send("dpl_caps", sha("HTTPS://Shop-Caps.vercel.app/"))).toBe("failed");
   });
 });
 

@@ -142,11 +142,24 @@ export async function runComment(opts, env = process.env, api = null) {
   }
 }
 
-/** Why a URL scan's report says nothing about the site, or null: nothing answered, a firewall's challenge, or a 401 or 403. */
+/**
+ * Why a URL scan's report does not prove the site was read, or null. An allow-list, the same as
+ * the Vercel workflow's: a 2xx home page, no challenge or block page, no rate limiting, and the app
+ * scan done. A report with no `reachable` and no URL mode is not a URL scan (deps, agents).
+ */
 export function siteNotRead(report) {
-  if (report?.reachable === false) return "unreachable";
-  if (report?.challenge) return "challenge";
-  if (report?.httpStatus === 401 || report?.httpStatus === 403) return "denied";
+  const url = report && (report.mode === "url" || (report.modes || []).includes("url") || "reachable" in report || "challenge" in report);
+  if (!url) return null;
+  const s = typeof report.httpStatus === "number" ? report.httpStatus : 0;
+  if (report.reachable === false) return "unreachable";
+  if (report.challenge) return "challenge";
+  if (s === 0) return "incomplete";
+  if (s === 401 || s === 403) return "denied";
+  if (s >= 300 && s < 400) return "redirected";
+  if (s < 200 || s >= 300) return "status";
+  if ((Array.isArray(report.findings) ? report.findings : []).some((f) => f?.source === "waf-challenge")) return "blocked";
+  if (report.endpoints?.byStatus && Object.hasOwn(report.endpoints.byStatus, "429")) return "rate_limited";
+  if (!Array.isArray(report.executedProbes) || !report.executedProbes.includes("endpoint-discovery")) return "incomplete";
   return null;
 }
 

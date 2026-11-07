@@ -74,19 +74,23 @@ jobs:
           fail-on: high   # a high or critical finding fails the check
           sarif: "false"  # dispatch runs sit on the default branch, not the deployed commit
 
-      # A pass needs proof in the report that the site was read: no challenge, no block page, no
-      # 401 or 403, and the app scan done. Anything else fails, with the reason.
+      # A pass needs proof in the report that the site was read: a 2xx home page, no challenge,
+      # no block page, no rate limiting, and the app scan done. Anything else fails, with the reason.
       - name: Check the scan read the site
         id: read
         if: steps.penthera.outcome == 'success'
         env:
           REPORT: ${{ steps.penthera.outputs.report-file }}
         run: |
-          why=$(jq -r 'if .reachable == false then "unreachable" elif .challenge then "challenge"
-            elif .httpStatus == 401 or .httpStatus == 403 then "denied"
-            elif any(.findings[]?; .source == "waf-challenge") then "blocked"
-            elif (.executedProbes // [] | index("endpoint-discovery")) == null then "incomplete" else "" end' "$REPORT" || echo unreadable)
-          if [ -n "$why" ]; then
+          why=$(jq -r '(.httpStatus | if type == "number" then . else 0 end) as $s
+            | if .reachable == false then "unreachable" elif .challenge then "challenge" elif $s == 0 then "incomplete"
+            elif $s == 401 or $s == 403 then "denied" elif $s >= 300 and $s < 400 then "redirected"
+            elif $s < 200 or $s >= 300 then "status" elif any(.findings[]?; .source == "waf-challenge") then "blocked"
+            elif (.endpoints.byStatus // {} | has("429")) then "rate_limited"
+            elif (.executedProbes | type) != "array" or (.executedProbes | index("endpoint-discovery")) == null then "incomplete"
+            else "read" end' "$REPORT" || echo unreadable)
+          if [ "$why" != read ]; then
+            why=${why:-unreadable}
             echo "reason=$why" >> "$GITHUB_OUTPUT"
             echo "::error::Site not read ($why), so this deploy fails the check."
             exit 1

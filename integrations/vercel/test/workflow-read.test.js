@@ -132,7 +132,16 @@ describe("the workflow reports succeeded only when the report proves the site wa
   });
 
   it("every other report that does not prove a read fails, also one that is missing or not JSON", () => {
+    const read = ["endpoint-discovery"];
     const cases = [
+      // A production app that redirects its *.vercel.app host to its own domain: nothing of this deployment was read.
+      [{ reachable: true, httpStatus: 308, executedProbes: read, findings: [] }, "redirected"],
+      [{ reachable: true, httpStatus: 301, executedProbes: read, findings: [] }, "redirected"],
+      [{ reachable: true, httpStatus: 429, executedProbes: read, findings: [] }, "status"],
+      [{ reachable: true, httpStatus: 410, executedProbes: read, findings: [] }, "status"],
+      [{ reachable: true, httpStatus: "200", executedProbes: read, findings: [] }, "incomplete"],
+      [{ reachable: true, httpStatus: 200, executedProbes: read, findings: [], endpoints: { byStatus: { 200: 3, 429: 40 } } }, "rate_limited"],
+      [{ reachable: true, httpStatus: 200, executedProbes: "x-endpoint-discovery", findings: [] }, "incomplete"],
       [{ reachable: true, httpStatus: 401, executedProbes: ["endpoint-discovery"], findings: [] }, "denied"],
       [{ reachable: true, httpStatus: 403, executedProbes: ["endpoint-discovery"], findings: [] }, "denied"],
       [{ reachable: true, httpStatus: 403, executedProbes: ["endpoint-discovery"], findings: [{ source: "waf-challenge" }] }, "denied"],
@@ -140,6 +149,8 @@ describe("the workflow reports succeeded only when the report proves the site wa
       [{ reachable: true, httpStatus: 200, executedProbes: ["reachability"], findings: [] }, "incomplete"],
       [{ reachable: true, httpStatus: 200 }, "incomplete"],
       [{}, "incomplete"],
+      [[1], "unreadable"],
+      ["text", "unreadable"],
     ];
     for (const [report, reason] of cases) {
       const file = join(dir, "r.json");

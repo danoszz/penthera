@@ -267,12 +267,14 @@ deployments only, and sends
 and nothing else. The ids come from Vercel's dispatch payload
 (`client_payload.id`, `client_payload.project.id`). It reports `succeeded` only
 when the step "Check the scan read the site" passed: that step runs only after a
-successful scan and reads the report JSON with jq. The site counts as read only
-with `reachable` not false, no `challenge`, no `httpStatus` 401 or 403, no
-`waf-challenge` finding (a block page), and `endpoint-discovery` in
-`executedProbes` (the app scan ran). Otherwise it fails with a reason
-(`unreachable`, `challenge`, `denied`, `blocked`, `incomplete`, or `unreadable`
-for a missing or broken report), which the relay turns into "Site not read:
+successful scan and reads the report JSON with jq. It is an allow-list: the
+site counts as read only with `reachable` not false, no `challenge`, a numeric
+`httpStatus` from 200 to 299 (a redirect to a custom domain reads nothing of
+this deployment), no `waf-challenge` finding (a block page), no 429 among the
+discovered endpoints, and `executedProbes` an array with `endpoint-discovery`
+(the app scan ran). Otherwise it fails with a reason (`unreachable`,
+`challenge`, `denied`, `redirected`, `status`, `blocked`, `rate_limited`,
+`incomplete`, or `unreadable` for a missing or broken report), which the relay turns into "Site not read:
 ...". Neither the exit code nor the URL check's own `curl` decides it.
 `hostSha256` is the SHA-256 of the host the workflow scanned: never the host,
 because no deployment URL reaches this server (privacy notice).
@@ -332,12 +334,14 @@ then passes with a notice, for people who use the commit status alone.
 The commit status stays in the workflow, so a GitHub check added by hand still
 works.
 
-**Risk left (repo write access).** Anyone who can write to the repo can send
-the workflow a `repository_dispatch` of their own, with any deployment id and a
-URL that scans clean, and so pass the check for that deployment. That is the
-same trust a hand-added GitHub check already gives them: write access can post
-a commit status directly. The relay adds no new way in; it keeps the gate at
-"who can change this repo's default branch or send its dispatches".
+**Risk left (repo write access).** Since 8 Nov a dispatch can no longer pass the
+integration's check with a URL of its choosing: the scanned host must be the
+deployment's own (5b), and the report must prove the site was read. Anyone who
+can write to the repo can still change the workflow on the default branch, so
+the gate stays at "who can change this repo's default branch". On the
+commit-status route (a GitHub check added by hand, without the integration) the
+dispatch URL is not bound: the job's own status decides, and write access can
+post a commit status directly anyway.
 
 ### Security
 
