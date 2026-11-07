@@ -47,13 +47,6 @@ Override or extend profile defaults:
 | `--templates <dir>` | Load extra YAML templates |
 | `--rules <dir>` | Add a signed rule pack (repeatable) |
 
-## Auth environment variables
-
-| Variable | Maps to |
-|----------|---------|
-| `PENTHERA_COOKIE` | Cookie header |
-| `PENTHERA_BEARER` | Authorization Bearer token |
-
 ## URL scan coverage (black-box)
 
 TLS, fingerprinting, endpoint discovery, built-in templates, CORS, cookies, Retire.js (JS CVEs), param discovery, OpenAPI/FastAPI probes, security headers, auth hardening, JWT probes, provider keys in same-site scripts.

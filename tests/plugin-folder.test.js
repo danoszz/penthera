@@ -52,6 +52,15 @@ describe("plugin/ folder", () => {
       .toEqual(["p/s/x.sh", "p/s/y.mjs", "p/z.js", "p/run"]);
   });
 
+  // Anthropic's directory held the plugin on 7 Nov 2026 (MCP_FORWARDS_CREDENTIAL_ENV):
+  // nothing in it may read a credential from the user's environment or files.
+  // The skill gives the --auth-* command for the user to run; env-var ways stay in docs/.
+  it("reads no credential from the user's environment", () => {
+    const READS = /process\.env\.|PENTHERA_BEARER|PENTHERA_COOKIE|\$\{\s*user_config|\$\{[A-Z_][A-Z0-9_]*\}/;
+    for (const f of files(PLUGIN).filter((f) => !f.endsWith(".png"))) expect(readFileSync(f, "utf-8"), f).not.toMatch(READS);
+    for (const t of ["const k = process.env.KEY", "PENTHERA_BEARER=x", "${user_config.token}", "${API_KEY}"]) expect(t).toMatch(READS);
+  });
+
   it("has a skill that calls no script", () => {
     for (const f of files(join(PLUGIN, "skills/penthera"))) expect(readFileSync(f, "utf-8"), f).not.toMatch(/scripts\/[\w.-]+\.(?:sh|mjs|js|py)/);
   });
