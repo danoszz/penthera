@@ -27,7 +27,7 @@ const LINK = ["type", "org", "repo", "repoId", "repoOwnerId", "productionBranch"
 export const OPERATIONS = [
   ["get", "/v10/projects", ["projects[].id", "projects[].name", ...LINK.map((f) => `projects[].link.${f}`), "pagination.next"]],
   ["get", "/v9/projects/{idOrName}", ["id", "name", ...LINK.map((f) => `link.${f}`)]],
-  ["get", "/v13/deployments/{idOrUrl}", ["id", "projectId", "project.id", "target"]],
+  ["get", "/v13/deployments/{idOrUrl}", ["id", "projectId", "project.id", "target", "url"]],
   ["get", "/v1/integrations/configuration/{id}", ["id", "integrationId"]],
   ["get", "/v2/projects/{projectIdOrName}/checks", ["checks[].id", "checks[].source.kind", "checks[].source.integrationConfigurationId", "checks[].source.externalCheckName"]],
   ["post", "/v2/projects/{projectIdOrName}/checks", ["id"]],

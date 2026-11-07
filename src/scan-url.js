@@ -94,6 +94,7 @@ const SERVER_STATUS_RE = /Apache Server Status for|Server uptime:|Total accesses
  */
 export async function scanUrl(rawTarget, opts = {}) {
   const target = normalizeBaseUrl(rawTarget);
+  const bypass = vercelBypass(target, opts);
   // Every request in this scan goes through one egress context: it enforces
   // --offline or the MCP scope, sets the User-Agent, applies --rate, and records hosts contacted and probe errors.
   const ctx = createEgressContext({
@@ -103,11 +104,34 @@ export async function scanUrl(rawTarget, opts = {}) {
     userAgent: opts.userAgent,
     allowHosts: opts.allowHosts,
     rateLimit: opts.rateLimit,
+    targetHeaders: bypass.header ? { [VERCEL_BYPASS_HEADER]: bypass.header } : {},
   });
   const result = await runWithEgress(ctx, () => scanUrlInContext(target, opts));
   result.egress = egressSummary(ctx);
   result.errors = probeErrors(ctx);
-  return result;
+  if (bypass.note) result.egress.vercelBypass = bypass.note;
+  return bypass.secret ? scrubSecret(result, bypass.secret) : result;
+}
+
+/** PENTHERA_VERCEL_BYPASS: sent only to an https *.vercel.app target, never from MCP. */
+export const VERCEL_BYPASS_HEADER = "x-vercel-protection-bypass";
+export function vercelBypass(target, opts = {}, env = process.env) {
+  const secret = env.PENTHERA_VERCEL_BYPASS ?? "";
+  if (!secret) return { secret, header: "", note: null };
+  // URL-safe: no header injection or encoded copy.
+  if (!/^[\w.~-]{16,128}$/.test(secret)) throw new Error("PENTHERA_VERCEL_BYPASS: 16-128 of A-Za-z0-9._~- only; nothing scanned");
+  const u = new URL(target);
+  const no = opts.scoped ? "MCP scan" : u.protocol !== "https:" || !/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.vercel\.app$/.test(u.hostname) ? "not *.vercel.app" : "";
+  return { secret, header: no ? "" : secret, note: no ? `not sent: ${no}` : "sent to target only" };
+}
+
+/** Deep copy, every `secret` redacted. */
+export function scrubSecret(v, secret) {
+  const s = (x) => scrubSecret(x, secret);
+  if (!secret) return v;
+  if (typeof v === "string") return v.split(secret).join("[redacted]");
+  if (Array.isArray(v)) return v.map(s);
+  return v && [Object.prototype, null].includes(Object.getPrototypeOf(v)) ? Object.fromEntries(Object.entries(v).map(([k, x]) => [s(k), s(x)])) : v;
 }
 
 async function scanUrlInContext(target, opts) {

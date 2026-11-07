@@ -105,6 +105,26 @@ penthera https://myapp.com --auth-cookie "session=abc123"
 Writing to `-o reports/scan.json` also drops a human-readable `reports/scan.md`
 next to it. `penthera init` can add `reports/` to your `.gitignore`.
 
+### Behind Vercel Deployment Protection
+
+A Vercel deployment behind Vercel Authentication answers 401 to the scanner.
+Set Vercel's Protection Bypass for Automation secret in `PENTHERA_VERCEL_BYPASS`:
+
+```bash
+PENTHERA_VERCEL_BYPASS="$VERCEL_AUTOMATION_BYPASS_SECRET" penthera https://myapp-git-main-team.vercel.app
+```
+
+Penthera sends it as the `x-vercel-protection-bypass` header, and only to an
+`https://*.vercel.app` target's own origin: not to another host, not after a
+redirect to one, not to any other target, and never in an MCP scan, where the
+report notes "not sent". It must be 16 to 128 characters of `A-Z a-z 0-9 . _ ~ -`,
+as Vercel generates it, so no encoded copy of it can slip past the redaction.
+Set it only for a scan of your own deployment. It is read from the environment only, so it is never in the command
+line, and it is replaced with `[redacted]` anywhere in the report. A scan that
+still gets 401 or 403 on the home page records it as `httpStatus`; treat that
+as a scan that read nothing. The [Vercel integration](https://docs.penthera.org/vercel#deployment-protection)
+and the [Action](action.md) pass it for you.
+
 ### What `--baseline` counts as new
 
 A finding is new when the baseline report has no finding with the same

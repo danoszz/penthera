@@ -1,7 +1,7 @@
 // POST /report: the GitHub OIDC check, the binding to the Vercel project and deployment, and
 // the cleanup of project links. Offline: a local RSA key stands in for GitHub's JWKS, and a mock
 // stands in for Vercel. No call reaches GitHub, Vercel or Upstash.
-import { createHmac, generateKeyPairSync, randomBytes, sign } from "node:crypto";
+import { createHash, createHmac, generateKeyPairSync, randomBytes, sign } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { createApp } from "../lib/app.mjs";
 import { parseKeys, sealToken } from "../lib/crypto.mjs";
@@ -59,8 +59,10 @@ const PROJECTS = {
   prj_two: { id: "prj_two", name: "blog", link: { type: "github", org: "acme", repo: "blog", repoId: 5151, repoOwnerId: 77, productionBranch: "main" } },
 };
 // Which project each deployment belongs to, and its target, as Vercel knows it.
-const DEPLOYMENTS = { dpl_one: "prj_one", dpl_two: "prj_two", dpl_preview: "prj_one" };
-const TARGETS = { dpl_one: "production", dpl_two: "production", dpl_preview: null };
+const DEPLOYMENTS = { dpl_one: "prj_one", dpl_two: "prj_two", dpl_preview: "prj_one", dpl_three: "prj_one", dpl_nourl: "prj_one", dpl_caps: "prj_one" };
+const TARGETS = { dpl_one: "production", dpl_two: "production", dpl_preview: null, dpl_three: "production", dpl_nourl: "production", dpl_caps: "production" };
+// Each deployment's own host in Vercel's record. dpl_nourl has none; dpl_caps comes back in another form.
+const URLS = { dpl_three: "shop-three.vercel.app", dpl_nourl: undefined, dpl_caps: "HTTPS://Shop-Caps.vercel.app/" };
 
 function mock({ jwksStatus = 200 } = {}) {
   const calls = [];
@@ -91,7 +93,7 @@ function mock({ jwksStatus = 200 } = {}) {
       return reply(204);
     }
     if ((m = /^\/v13\/deployments\/([^/]+)$/.exec(url.pathname))) {
-      return DEPLOYMENTS[m[1]] ? reply(200, { id: m[1], projectId: DEPLOYMENTS[m[1]], target: TARGETS[m[1]], url: "x.vercel.app" }) : reply(404, { error: { code: "not_found" } });
+      return DEPLOYMENTS[m[1]] ? reply(200, { id: m[1], projectId: DEPLOYMENTS[m[1]], target: TARGETS[m[1]], url: Object.hasOwn(URLS, m[1]) ? URLS[m[1]] : "x.vercel.app" }) : reply(404, { error: { code: "not_found" } });
     }
     if ((m = /^\/v2\/deployments\/([^/]+)\/check-runs$/.exec(url.pathname))) {
       if (!DEPLOYMENTS[m[1]]) return reply(404, { error: { code: "not_found" } });
@@ -117,7 +119,8 @@ const cookieJar = (res) => res.headers.getSetCookie().map((c) => c.split(";")[0]
 const get = (path, headers = {}) => new Request(`${BASE}${path}`, { headers });
 const form = (path, body, headers = {}) =>
   new Request(`${BASE}${path}`, { method: "POST", body, headers: { "content-type": "application/x-www-form-urlencoded", origin: BASE, ...headers } });
-const report = (token, body = { deploymentId: "dpl_one", projectId: "prj_one", conclusion: "succeeded" }, headers = {}) =>
+const X_HOST = createHash("sha256").update("x.vercel.app").digest("hex");
+const report = (token, body = { deploymentId: "dpl_one", projectId: "prj_one", conclusion: "succeeded", hostSha256: X_HOST }, headers = {}) =>
   new Request(`${BASE}/report`, {
     method: "POST",
     body: typeof body === "string" ? body : JSON.stringify(body),
@@ -151,6 +154,72 @@ async function enabled({ clock, store = memoryStore(), vercel = mock(), queued =
 }
 
 const patches = (vercel) => vercel.calls.filter((c) => c.method === "PATCH");
+
+describe("a pass counts only for a scan of this deployment, that read the site", () => {
+  const body = (extra) => ({ deploymentId: "dpl_one", projectId: "prj_one", conclusion: "succeeded", ...extra });
+  const relay = async (b) => {
+    const ctx = await enabled();
+    const res = await ctx.app.report(report(jwt(claims()), b));
+    return { res, out: await res.json(), run: ctx.vercel.runs.dpl_one[0] };
+  };
+
+  it("the hash of this deployment's own host: succeeded", async () => {
+    const { res, out, run } = await relay(body({ hostSha256: X_HOST }));
+    expect(res.status).toBe(200);
+    expect(out).toEqual({ ok: true, conclusion: "succeeded" });
+    expect(run).toMatchObject({ conclusion: "succeeded", conclusionText: expect.stringMatching(/^Penthera found no high or critical issue/) });
+  });
+
+  it("another host, a missing host (a workflow from before) or a malformed hash: the pass becomes failed, Scanned URL is not this deployment", async () => {
+    const other = createHash("sha256").update("someone-else.vercel.app").digest("hex");
+    for (const extra of [{ hostSha256: other }, {}, { hostSha256: "x.vercel.app" }, { hostSha256: X_HOST.toUpperCase() }]) {
+      const { res, out, run } = await relay(body(extra));
+      expect(res.status, JSON.stringify(extra)).toBe(200);
+      expect(out).toEqual({ ok: true, conclusion: "failed", note: "scanned_url_not_this_deployment" });
+      expect(run).toMatchObject({ status: "completed", conclusion: "failed", conclusionText: expect.stringMatching(/^Scanned URL is not this deployment/) });
+    }
+  });
+
+  it("a fail stays a fail with any host; with a reason, the check says why the site was not read", async () => {
+    const cases = [
+      [{ conclusion: "failed", hostSha256: X_HOST, reason: "challenge" }, /^Site not read: a firewall served a bot challenge instead of the site\./],
+      [{ conclusion: "failed", reason: "unreachable" }, /^Site not read: nothing answered at the deployment\./],
+      [{ conclusion: "failed", reason: "incomplete" }, /^Site not read: the scan did not finish reading the site\./],
+      [{ conclusion: "failed", reason: "made-up" }, /^Penthera found a high or critical issue, or could not finish the scan/],
+      [{ conclusion: "failed" }, /^Penthera found a high or critical issue, or could not finish the scan/],
+    ];
+    for (const [extra, text] of cases) {
+      const { out, run } = await relay(body(extra));
+      expect(out.conclusion, JSON.stringify(extra)).toBe("failed");
+      expect(run.conclusionText, JSON.stringify(extra)).toMatch(text);
+    }
+  });
+
+  it("accepts no field beyond the ids, the conclusion, hostSha256 and reason: not the host itself, not findings", async () => {
+    const ctx = await enabled();
+    expect((await ctx.app.report(report(jwt(claims()), body({ hostSha256: X_HOST, host: "x.vercel.app" })))).status).toBe(400);
+    expect((await ctx.app.report(report(jwt(claims()), body({ hostSha256: X_HOST, findings: [] })))).status).toBe(400);
+  });
+
+  it("the host comes from that deployment's own record: another deployment's host, no host on record, or the empty string's hash fail", async () => {
+    const sha = (v) => createHash("sha256").update(v).digest("hex");
+    const send = async (deploymentId, hostSha256) => {
+      const ctx = await enabled();
+      const res = await ctx.app.report(report(jwt(claims(T0, { aud: `${BASE}/report/${deploymentId}` })), { deploymentId, projectId: "prj_one", conclusion: "succeeded", hostSha256 }));
+      expect(ctx.vercel.calls.filter((c) => c.url.pathname === `/v13/deployments/${deploymentId}`)).toHaveLength(1);
+      return (await res.json()).conclusion;
+    };
+    // dpl_one's host, reported for dpl_three of the same project: not this deployment.
+    expect(await send("dpl_three", X_HOST)).toBe("failed");
+    expect(await send("dpl_three", sha("shop-three.vercel.app"))).toBe("succeeded");
+    // Vercel's record has no url: nothing to bind to, also not the hash of an empty string.
+    expect(await send("dpl_nourl", sha(""))).toBe("failed");
+    expect(await send("dpl_nourl", X_HOST)).toBe("failed");
+    // Vercel's url in another case or with a scheme still names the same host.
+    expect(await send("dpl_caps", sha("shop-caps.vercel.app"))).toBe("succeeded");
+    expect(await send("dpl_caps", sha("HTTPS://Shop-Caps.vercel.app/"))).toBe("failed");
+  });
+});
 
 describe("POST /report relays pass or fail to our check run", () => {
   it("sets the run's conclusion with the installation's token, and stores nothing about the scan", async () => {
@@ -542,7 +611,8 @@ describe("turning the check on", () => {
     });
     expect(res.status).toBe(502);
     const line = lines.find((l) => l.includes('"event":"check_failed"'));
-    expect(JSON.parse(line)).toMatchObject({ status: 400, code: "bad_request", configurationId: CFG });
+    expect(JSON.parse(line)).toMatchObject({ status: 400, code: "bad_request" });
+    expect(JSON.parse(line)).not.toHaveProperty("configurationId");
     expect(JSON.parse(line).message).toMatch(/^Invalid request: source\.integrationId is not ours/);
     expect(lines.join("\n")).not.toContain(ACCESS_TOKEN);
   });
@@ -956,11 +1026,13 @@ describe("the workflow reports to the relay", () => {
     expect(step).toMatch(/if: always\(\) && github\.event\.client_payload\.environment == 'production'/);
     expect(step).toContain("audience=https%3A%2F%2Fvercel.penthera.org%2Freport%2F$DEPLOYMENT_ID");
     // The id is checked against its shape before it goes into the token request.
-    expect(step.indexOf("grep -Eq '^dpl_")).toBeLessThan(step.indexOf("ACTIONS_ID_TOKEN_REQUEST_URL"));
+    expect(step.indexOf("=~ ^dpl_")).toBeGreaterThan(-1);
+    expect(step.indexOf("=~ ^dpl_")).toBeLessThan(step.indexOf("ACTIONS_ID_TOKEN_REQUEST_URL"));
     expect(step).toContain('if [ "$SCAN_OUTCOME" = "success" ]; then conclusion=succeeded; fi');
     expect(step).toContain("conclusion=failed");
     // Untrusted dispatch values reach the shell only through env.
     expect(step).not.toMatch(/run: \|[\s\S]*\$\{\{/);
-    expect(step).toContain("{deploymentId: $d, projectId: $p, conclusion: $c}");
+    expect(step).toContain("{deploymentId: $d, projectId: $p, conclusion: $c, hostSha256: $h}");
+    expect(step).toContain(`h=$(printf '%s' "\${SCANNED#https://}" | sha256sum | cut -c1-64)`);
   });
 });

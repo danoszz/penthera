@@ -29,15 +29,21 @@ For each installation, and nothing else:
 
 ## What reaches us for each production deploy
 
-When the scan in your GitHub Actions ends, the workflow sends us three things:
-the project id, the deployment id, and pass or fail. With them comes a token
+When the scan in your GitHub Actions ends, the workflow sends us the project id,
+the deployment id, pass or fail, a SHA-256 fingerprint of the host it scanned
+(not the host itself) and, when the scan could not read the site, a short reason
+code such as `challenge`. We compare the fingerprint with Vercel's own record of
+the deployment, to pass only a scan of that deployment. With them comes a token
 that GitHub signs for your repository. It names the repository, the workflow
 and its run, the commit, and the GitHub account that started the run. We use
 it only to check that the result comes from the Penthera workflow in the repo
 your project is connected to.
 
 We then set the Penthera check's result in Vercel, and keep none of it: not the
-ids, not the result, not the token. Our own logs hold an error code at most.
+ids, not the result, not the fingerprint, not the token. Our own logs hold an
+error code and Vercel's error text at most, with no ids: not your installation,
+team, project or deployment id. For things that went well they hold only the
+event, such as a result arriving and whether it passed.
 
 To keep the service working, we count anonymous daily totals: how many results
 arrived that day, how many passed, failed, or were refused and why. The totals
