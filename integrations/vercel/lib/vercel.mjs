@@ -109,9 +109,12 @@ export function vercelClient({ token, teamId, fetch: f = globalThis.fetch }) {
     /** Only the deployment's id, project and target. Everything else is dropped here. */
     async getDeployment(deploymentId, { signal } = {}) {
       const d = await call("GET", `/v13/deployments/${enc(deploymentId)}`, { signal });
+      // Vercel answers one of three views (OpenAPI, GET /v13/deployments/{idOrUrl}): the owner's view
+      // has `projectId`; the reduced public view has only `project.id`. Both are Vercel's own data.
+      const projectId = typeof d?.projectId === "string" ? d.projectId : typeof d?.project?.id === "string" ? d.project.id : "";
       return {
         id: typeof d?.id === "string" ? d.id : typeof d?.uid === "string" ? d.uid : "",
-        projectId: typeof d?.projectId === "string" ? d.projectId : "",
+        projectId,
         target: typeof d?.target === "string" ? d.target : null,
       };
     },
