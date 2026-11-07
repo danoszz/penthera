@@ -288,11 +288,17 @@ a commit status directly. The relay adds no new way in; it keeps the gate at
   the redirect names one. Otherwise nothing is stored. An existing record is
   never given to a different owner (409).
 - **CSRF:** installs started from `/start` must return the `state` we set in an
-  HttpOnly `__Host-` cookie, and a browser that holds that cookie must send the
-  matching state. Installs started on vercel.com carry no state (Vercel's
-  docs), so they must say `source=marketplace` or `source=deploy-button`, and
-  the session is set only after the exchange proves the configuration and its
-  owner. Form posts need the session cookie (SameSite=Lax), a form token bound
+  HttpOnly `__Host-` cookie, which lasts 30 minutes, as long as Vercel's install
+  code. Installs started on vercel.com carry no state (Vercel's docs), so they
+  must say `source=marketplace` or `source=deploy-button`, and the session is
+  set only after the exchange proves the configuration and its owner. A leftover
+  state cookie from an earlier `/start` does not block such an install: the
+  browser takes the same path as one without the cookie, and the cookie is
+  cleared. Until 7 Nov a browser holding the cookie had to send the matching
+  state on every install. That blocked Daan's own Marketplace install after an
+  earlier `/start`, and it protected only a browser in the middle of a `/start`
+  install from the login CSRF below, which every other browser is open to
+  anyway. Form posts need the session cookie (SameSite=Lax), a form token bound
   to it, and a same-origin `Origin` header when the browser sends one.
 - **Session binding:** the 30-minute setup cookie carries the configuration id,
   the owner and the record's `sessionNonce` when it was issued, signed. Every
@@ -303,6 +309,25 @@ a commit status directly. The relay adds no new way in; it keeps the gate at
   reinstall of the same id; a random nonce does not come back.
   The new owner gets a session only by installing. Uninstall deletes the
   record, which ends sessions too.
+- **A refused install** (`/install`, 403) names one of three reasons on the
+  page (`data-reason`): `state_cookie_missing` (the state came back, but this
+  browser no longer has the cookie: more than 30 minutes passed, or the install
+  started in another browser or on another device), `state_mismatch` (the
+  state does not match this browser's cookie), or `external_without_state` (our
+  own link, with no state). Each is refused before the code is exchanged, so
+  nothing is stored and no check is added; each clears the cookie and offers
+  "Install again" (`/start`).
+
+  What it leaves behind: Vercel makes the installation before it sends the
+  browser to our Redirect URL, because the `configurationId` is already in that
+  URL. So after a refusal Vercel probably still lists Penthera under Settings,
+  Integrations, with no token on our side and nothing on any project. Its code
+  expires after 30 minutes unused. Vercel's docs do not say what
+  `/integrations/<slug>/new` does for a team that already has an unfinished
+  installation: open it again, add a second one, or refuse. They do say a
+  configuration id is never reused. The page therefore says: install again, and
+  if Vercel shows Penthera as already installed, remove it there first. Only a
+  live test can show which of the three Vercel does.
 - **Risk left (login CSRF):** an attacker can send someone a link with the
   attacker's own fresh install code and `source=marketplace`. The victim's
   browser then opens the attacker's setup page, for the attacker's own

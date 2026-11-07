@@ -27,7 +27,8 @@ import { WORKFLOW_PATH, WORKFLOW_YAML, checkBody, githubNewFileUrl, isIntegratio
 const SESSION = "pv_session";
 const STATE = "pv_state";
 const SESSION_MS = 30 * 60_000;
-const STATE_SECONDS = 15 * 60;
+/** The /start state cookie lasts as long as Vercel's install code: 30 minutes. */
+const STATE_SECONDS = 30 * 60;
 const MAX_PROJECTS_PER_POST = 20;
 const CONFIG_ID = /^icfg_[A-Za-z0-9]{1,64}$/;
 const TEAM_ID = /^team_[A-Za-z0-9]{1,64}$/;
@@ -220,16 +221,25 @@ export function createApp({ env = process.env, store, fetch: fetchImpl = globalT
     if (q.get("next") && !next) return message(400, "This install link points elsewhere", "Its return address is not on vercel.com. Start the install again from Vercel.", { action: { href: "/start", label: "Install again" } });
 
     // CSRF: an install we started (/start) must come back with the state we set in the cookie, and
-    // a browser that holds that cookie must send the matching state. Installs started on vercel.com
-    // (marketplace, deploy button) carry no state; they must say so in `source`, and the session is
-    // bound only after the exchange proves the configuration and its owner (README, "Security").
+    // the browser must still hold that cookie. Installs started on vercel.com (marketplace, deploy
+    // button) carry no state; they must say so in `source`, and the session is bound only after the
+    // exchange proves the configuration and its owner (README, "Security"). A leftover state cookie
+    // from an earlier /start does not block them: such a browser takes the same path as one without
+    // the cookie, and the cookie is cleared.
     const cookies = [];
     const stateCookie = readCookie(request, STATE);
-    if (state || stateCookie || source === "external") {
-      if (!safeEqual(state, stateCookie)) return message(403, "This install timed out", "An install must finish within 15 minutes of starting here. Start it again.", { cookies: [clearCookie(STATE)], action: { href: "/start", label: "Install again" } });
+    const fromVercel = source === "marketplace" || source === "deploy-button";
+    if (state || source === "external") {
+      const reason = !state ? "external_without_state" : !stateCookie ? "state_cookie_missing" : !safeEqual(state, stateCookie) ? "state_mismatch" : null;
+      if (reason) {
+        logError("install_refused", { code: reason, configurationId });
+        return installRefused(reason);
+      }
       cookies.push(clearCookie(STATE));
-    } else if (source !== "marketplace" && source !== "deploy-button") {
-      return message(403, "Start the install from Vercel", "Penthera installs from its page on Vercel.", { action: { href: "/start", label: "Install again" } });
+    } else if (fromVercel) {
+      if (stateCookie) cookies.push(clearCookie(STATE));
+    } else {
+      return message(403, "Start the install from Vercel", "Penthera installs from its page on Vercel.", { cookies: stateCookie ? [clearCookie(STATE)] : [], action: { href: "/start", label: "Install again" }, reason: "no_source" });
     }
     if (installLimited(request)) return message(429, "Too many tries", "Wait a minute, then start the install again from Vercel.", { cookies });
 
@@ -262,6 +272,23 @@ export function createApp({ env = process.env, store, fetch: fetchImpl = globalT
     const value = signValue({ c: configurationId, o: ownerId, s: sessionNonce, n: next, e: now() + SESSION_MS }, cookieKey(c.keys));
     cookies.push(setCookie(SESSION, value, SESSION_MS / 1000));
     return redirect("/setup", { cookies });
+  }
+
+  /**
+   * The three ways an install from our own link can fail its state check, each with its own page.
+   * Each is refused before the code is exchanged, so nothing is stored and no check is added.
+   * Vercel has already made the installation by then; README, "A refused install", says what that
+   * leaves behind. Placeholder copy: the Designer owns these pages.
+   */
+  function installRefused(reason) {
+    const left = "Nothing was added to your projects, and we kept nothing. Vercel may still list Penthera under Settings, Integrations: install again, and if Vercel shows it as already installed, remove it there first.";
+    const pages = {
+      state_cookie_missing: ["This install lost its place", `This browser no longer has the check we set when the install started: more than 30 minutes passed, or it started in another browser or on another device. ${left}`],
+      state_mismatch: ["This install link is not from this browser", `It does not match the install this browser started. ${left}`],
+      external_without_state: ["This install link is incomplete", `It came from our install link but lost its check on the way. ${left}`],
+    };
+    const [title, text] = pages[reason];
+    return message(403, title, text, { cookies: [clearCookie(STATE)], action: { href: "/start", label: "Install again" }, reason });
   }
 
   async function setupPage(request) {

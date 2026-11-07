@@ -161,9 +161,11 @@ export function redirect(location, { cookies, status = 303 } = {}) {
 }
 
 /** A short message page, for errors and dead ends. `action` is an optional way out: { href, label }, same origin. */
-export function message(status, title, text, { cookies, action } = {}) {
+export function message(status, title, text, { cookies, action, reason } = {}) {
   const out = action ? `<div class="act"><a class="btn go" href="${esc(action.href)}">${esc(action.label)}</a></div>` : "";
-  return html(status, title, `<h1>${esc(title)}</h1><p class="lede">${esc(text)}</p>${out}`, { cookies, main: "one" });
+  // A stable, machine-readable reason for pages that share a status, for the Designer and tests.
+  const r = reason ? ` data-reason="${esc(reason)}"` : "";
+  return html(status, title, `<h1${r}>${esc(title)}</h1><p class="lede">${esc(text)}</p>${out}`, { cookies, main: "one" });
 }
 
 /** The wordmark, drawn: one path in brushed metal, lit from above. */
