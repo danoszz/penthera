@@ -7,10 +7,11 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSyn
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { parse } from "yaml";
+// The repo's vendored YAML parser: no package to install.
+import YAML from "../../../lib/vendor/yaml/index.js";
 import { WORKFLOW_YAML } from "../lib/workflow.mjs";
 
-const steps = parse(WORKFLOW_YAML).jobs.scan.steps;
+const steps = YAML.parse(WORKFLOW_YAML).jobs.scan.steps;
 const step = (id) => steps.find((s) => s.id === id);
 // Made at run time, so no secret-shaped string sits in the source.
 const SECRET = randomBytes(16).toString("hex");

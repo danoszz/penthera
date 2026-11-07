@@ -9,7 +9,8 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { parse } from "yaml";
+// The repo's vendored YAML parser: no package to install.
+import YAML from "../lib/vendor/yaml/index.js";
 
 vi.mock("node:dns/promises", () => {
   const fail = async () => { throw Object.assign(new Error("dns disabled in tests"), { code: "ENOTFOUND" }); };
@@ -185,7 +186,7 @@ describe("a scan of a protected deployment", () => {
 });
 
 describe("the Action's vercel-bypass-secret input", () => {
-  const action = parse(readFileSync(new URL("../action.yml", import.meta.url), "utf-8"));
+  const action = YAML.parse(readFileSync(new URL("../action.yml", import.meta.url), "utf-8"));
   const run = action.runs.steps.find((s) => s.id === "run").run;
 
   function runStep(mode, secret) {
