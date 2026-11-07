@@ -58,6 +58,14 @@ export function isIntegrationCheck(check, configurationId) {
 }
 
 /**
+ * True for a check this integration made under any of its installations: Vercel's source names
+ * our integration id. `integrationId` must be known; without it, nothing counts.
+ */
+export function isOurIntegrationsCheck(check, integrationId) {
+  return check?.source?.kind === "integration" && typeof integrationId === "string" && /^oac_/.test(integrationId) && check.source.integrationId === integrationId;
+}
+
+/**
  * True for a check this integration registered on the project: the integration-owned check of this
  * installation, or the git-provider check that earlier server versions tried to register.
  */

@@ -482,9 +482,10 @@ describe("GitHub's key set", () => {
   });
 });
 
+let enableWithShared;
 describe("turning the check on", () => {
   /** enabled(), with Vercel's configuration lookup and the check create answered by `routes`. */
-  async function enableWith(routes, env = {}) {
+  async function enableWith(routes, env = {}, before = null) {
     const vercel = mock();
     const lines = [];
     const previous = setLogSink((l) => lines.push(l));
@@ -503,12 +504,14 @@ describe("turning the check on", () => {
       const app = createApp({ env: e, store, fetch, now: () => T0 });
       const cookie = cookieJar(await app.install(get(`/install?code=${CODE}&configurationId=${CFG}&teamId=${TEAM}&source=marketplace`)));
       const csrf = /name="csrf" value="([^"]+)"/.exec(await (await app.setup(get("/setup", { cookie }))).text())[1];
+      if (before) await before({ vercel, store, keys: parseKeys(e.PENTHERA_TOKEN_KEYS) });
       const res = await app.setup(form("/setup", `csrf=${csrf}&action=enable&p=prj_one`, { cookie }));
-      return { res, vercel, lines, posts: vercel.calls.filter((c) => c.method === "POST" && c.url.pathname === "/v2/projects/prj_one/checks").map((c) => JSON.parse(c.body)) };
+      return { res, vercel, store, lines, posts: vercel.calls.filter((c) => c.method === "POST" && c.url.pathname === "/v2/projects/prj_one/checks").map((c) => JSON.parse(c.body)) };
     } finally {
       setLogSink(previous);
     }
   }
+  enableWithShared = enableWith;
   const CONFIG = `GET /v1/integrations/configuration/${CFG}`;
 
   it("uses the integration id from Vercel's record of the installation", async () => {
@@ -559,6 +562,149 @@ describe("turning the check on", () => {
     expect(other.res.status).toBe(502);
     expect(m).toBe(1);
   });
+});
+
+describe("when Turn on meets an old check or a refusal", () => {
+  // Same helper as "turning the check on", with Vercel's configuration lookup naming our integration.
+  const OURS = "oac_fromvercel";
+  const config = { [`GET /v1/integrations/configuration/${CFG}`]: () => ({ status: 200, body: { id: CFG, integrationId: OURS } }) };
+  const leftover = (extra = {}) => ({ id: "chk_old", name: "Penthera", projectId: "prj_one", source: { kind: "integration", integrationId: OURS, integrationConfigurationId: "icfg_OldInstall9" }, ...extra });
+  const enable = (routes, before) => turnOn({ ...config, ...routes }, before);
+  let turnOn;
+
+  it("removes our own integration's check left by an earlier, uninstalled installation, then adds ours", async () => {
+    const { res, vercel } = await enable({}, ({ vercel: v }) => (v.checks.prj_one = [leftover()]));
+    expect(res.status).toBe(200);
+    expect(vercel.checks.prj_one.map((k) => k.id)).not.toContain("chk_old");
+    expect(vercel.checks.prj_one).toHaveLength(1);
+    expect(vercel.checks.prj_one[0].source).toMatchObject({ kind: "integration", integrationConfigurationId: CFG });
+  });
+
+  it("leaves a live installation's check alone, and adds no second one", async () => {
+    const { res, vercel } = await enable({}, async ({ vercel: v, store, keys }) => {
+      v.checks.prj_one = [leftover()];
+      await store.put({ configurationId: "icfg_OldInstall9", ownerId: TEAM, ...sealToken(ACCESS_TOKEN, "icfg_OldInstall9", keys), createdAt: new Date(T0).toISOString(), sessionNonce: "l".repeat(32) });
+    });
+    expect(res.status).toBe(409);
+    expect(vercel.checks.prj_one.map((k) => k.id)).toEqual(["chk_old"]);
+  });
+
+  const oldRecord = async (store, keys, token = ACCESS_TOKEN) =>
+    store.put({ configurationId: "icfg_OldInstall9", ownerId: TEAM, ...sealToken(token, "icfg_OldInstall9", keys), createdAt: new Date(T0).toISOString(), sessionNonce: "l".repeat(32) });
+
+  it("fails closed when the old installation's record is there but its token does not decrypt", async () => {
+    const { res, vercel } = await enable({}, async ({ vercel: v, store }) => {
+      v.checks.prj_one = [leftover()];
+      // Sealed under a key this server no longer has (a rotation gone wrong, a config error).
+      await oldRecord(store, parseKeys(`v1:${randomBytes(32).toString("base64")}`));
+    });
+    expect(res.status).toBe(409);
+    expect(vercel.calls.filter((c) => c.method === "DELETE")).toHaveLength(0);
+    expect(vercel.checks.prj_one.map((k) => k.id)).toEqual(["chk_old"]);
+  });
+
+  it("a 403 for the old installation counts as taken, as in the sweep: nothing is deleted", async () => {
+    const { res, vercel } = await enable(
+      { "GET /v2/projects/prj_one/checks": (i) => (i?.headers?.Authorization === "Bearer at_old_install" ? { status: 403, body: { error: { code: "integration_configuration_disabled" } } } : null) },
+      async ({ vercel: v, store, keys }) => {
+        v.checks.prj_one = [leftover()];
+        await oldRecord(store, keys, "at_old_install");
+      },
+    );
+    expect(res.status).toBe(409);
+    expect(vercel.calls.filter((c) => c.method === "DELETE")).toHaveLength(0);
+    expect(vercel.checks.prj_one.map((k) => k.id)).toEqual(["chk_old"]);
+  });
+
+  it("a 401 or 404 for the old installation's token means it is gone: our leftover is removed", async () => {
+    for (const status of [401, 404]) {
+      const { res, vercel } = await enable(
+        { "GET /v2/projects/prj_one/checks": (i) => (i?.headers?.Authorization === "Bearer at_old_install" ? { status, body: { error: { code: "gone" } } } : null) },
+        async ({ vercel: v, store, keys }) => {
+          v.checks.prj_one = [leftover()];
+          await oldRecord(store, keys, "at_old_install");
+        },
+      );
+      expect(res.status, String(status)).toBe(200);
+      expect(vercel.checks.prj_one.map((k) => k.id)).not.toContain("chk_old");
+    }
+  });
+
+  it("never deletes a check that is not ours by source, and says it is there", async () => {
+    const theirs = [
+      { id: "chk_gh", name: "Penthera", projectId: "prj_one", source: { kind: "git-provider", provider: "github", externalCheckName: "Penthera on Vercel | scan (shop - production)" } },
+      { id: "chk_other", name: "Penthera scan", projectId: "prj_one", source: { kind: "integration", integrationId: "oac_someoneelse", integrationConfigurationId: "icfg_Theirs1" } },
+    ];
+    const { res, vercel } = await enable({}, ({ vercel: v }) => (v.checks.prj_one = [...theirs]));
+    expect(vercel.calls.filter((c) => c.method === "DELETE")).toHaveLength(0);
+    expect(vercel.checks.prj_one.map((k) => k.id)).toEqual(expect.arrayContaining(["chk_gh", "chk_other"]));
+    expect(vercel.checks.prj_one).toHaveLength(3);
+    const text = await res.text();
+    expect(text).toContain('data-reason="lookalike_check"');
+    expect(text).toContain("did not add");
+  });
+
+  it("without a known integration id, deletes nothing", async () => {
+    const { vercel } = await turnOn({ [`GET /v1/integrations/configuration/${CFG}`]: () => ({ status: 403, body: { error: { code: "forbidden" } } }) }, ({ vercel: v }) => (v.checks.prj_one = [leftover()]));
+    expect(vercel.calls.filter((c) => c.method === "DELETE")).toHaveLength(0);
+    expect(vercel.checks.prj_one.map((k) => k.id)).toContain("chk_old");
+  });
+
+  it("when Vercel refuses to remove the old check, the page says how to remove it, and offers no retry", async () => {
+    const { res } = await enable({ "DELETE /v2/projects/prj_one/checks/chk_old": () => ({ status: 403, body: { error: { code: "forbidden", message: "not your check" } } }) }, ({ vercel: v }) => (v.checks.prj_one = [leftover()]));
+    const text = await res.text();
+    expect(text).toContain('data-reason="leftover"');
+    expect(text).toContain("Remove the old Penthera check");
+    expect(text).toContain("deployment-checks");
+    expect(text).not.toContain('href="/setup">Try again');
+  });
+
+  const answers = [
+    // [Vercel's answer to the create, reason, try again offered, words, link]
+    [403, { code: "forbidden", message: "Missing scope deployment-check" }, "forbidden", false, "accept any pending permission update", "integrations"],
+    [403, { code: "integration_configuration_disabled" }, "disabled", false, "disabled this installation", "integrations"],
+    [404, { code: "not_found" }, "not_found", false, "cannot find this project", "integrations"],
+    [401, { code: "unauthorized" }, "revoked", false, "Install Penthera again", 'href="/start"'],
+    [409, { code: "conflict", message: "A check named Penthera already exists" }, "conflict", false, "already has a check like this", "deployment-checks"],
+    [400, { code: "bad_request", message: "name already exists on this project" }, "conflict", false, "already has a check like this", "deployment-checks"],
+    [400, { code: "bad_request", message: "source.integrationId <script>alert(1)</script> is invalid" }, "rejected", false, "on our side, not yours", "github.com/danoszz/penthera/issues"],
+    [429, { code: "rate_limited" }, "rate_limited", true, "Wait a minute", null],
+    [503, { code: "unavailable" }, "vercel_down", true, "problem on its side", null],
+  ];
+  for (const [status, error, reason, retry, words, link] of answers) {
+    it(`Vercel ${status} ${error.code}: a page that says ${reason}${retry ? ", with Try again" : ", without a bare retry"}`, async () => {
+      const { res } = await enable({ "POST /v2/projects/prj_one/checks": () => ({ status, body: { error } }) });
+      const text = await res.text();
+      expect(text).toContain(`data-reason="${reason}"`);
+      expect(text).toContain(words);
+      if (link) expect(text).toContain(link);
+      expect(text.includes('href="/setup">Try again')).toBe(retry);
+      // The code in small print, so the user can send it to us; Vercel's text escaped.
+      expect(text).toContain(`Code: <code>Vercel ${status} ${error.code}`);
+      expect(text).not.toContain("<script>alert(1)</script>");
+      expect(text).not.toContain("Vercel did not accept the check for");
+    });
+  }
+
+  it("our own store failing is its own page, with Try again", async () => {
+    const { res } = await enable({}, ({ store }) => {
+      store.putLink = async () => {
+        throw new Error("store down");
+      };
+    });
+    const text = await res.text();
+    expect(text).toContain('data-reason="store"');
+    expect(text).toContain('href="/setup">Try again');
+    expect(text).toContain("Code: <code>penthera store_unavailable</code>");
+  });
+
+  it("no page says only Vercel did not accept the check", async () => {
+    const { res } = await enable({ "POST /v2/projects/prj_one/checks": () => ({ status: 400, body: { error: { code: "bad_request" } } }) });
+    expect(await res.text()).not.toContain("Vercel did not accept the check for");
+  });
+
+  // Reuses the helper from "turning the check on".
+  turnOn = (routes, before) => enableWithShared(routes, {}, before);
 });
 
 describe("project links", () => {
