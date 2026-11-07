@@ -90,8 +90,8 @@ async def security_headers(request, call_next):
 ```ts
 import { NextResponse } from "next/server";
 export function middleware(req) {
-  const token = req.cookies.get("session")?.value;
-  if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // verifySession: your auth library's check on the request
+  if (!verifySession(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 }
 export const config = { matcher: ["/api/:path*"] };
 ```
@@ -99,8 +99,8 @@ export const config = { matcher: ["/api/:path*"] };
 **Express:**
 ```js
 function requireAuth(req, res, next) {
-  const token = req.headers.authorization?.replace("Bearer ", "");
-  if (!token || !verify(token)) return res.status(401).json({ error: "Unauthorized" });
+  // verifySession: your auth library's check on the request
+  if (!verifySession(req)) return res.status(401).json({ error: "Unauthorized" });
   next();
 }
 app.use("/api/admin", requireAuth);
@@ -109,14 +109,14 @@ app.use("/api/admin", requireAuth);
 **FastAPI:**
 ```python
 from fastapi import Depends, HTTPException
-def require_auth(token: str = Depends(oauth2_scheme)):
-    if not valid(token): raise HTTPException(status_code=401)
+def require_auth(user = Depends(current_user)):  # your auth library's dependency
+    if user is None: raise HTTPException(status_code=401)
 
 @app.get("/api/admin", dependencies=[Depends(require_auth)])
 def admin(): ...
 ```
 
-**Verify:** re-scan; the route returns 401 without a valid token and the "Unauthenticated endpoint" finding clears.
+**Verify:** re-scan; the route returns 401 when not signed in and the "Unauthenticated endpoint" finding clears.
 
 ---
 
