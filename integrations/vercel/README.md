@@ -474,11 +474,82 @@ links are gone (`/api/sweep` count, or the Upstash console).
 
 ## Tests
 
-`npm test` at the repo root runs `test/integration.test.js` and
-`test/relay.test.js` (the OIDC check against a local test key set) with the repo's
-vitest (the `unit` project includes `integrations/*/test`). The tests are
-offline: an in-memory store and a mocked `fetch`, no calls to Vercel, GitHub
-or Upstash.
+`npm test` at the repo root runs `test/integration.test.js`,
+`test/relay.test.js` (the OIDC check against a local test key set) and
+`test/e2e-journey.test.js` with the repo's vitest (the `unit` project includes
+`integrations/*/test`). The tests are offline: an in-memory store and a mocked
+`fetch`, no calls to Vercel, GitHub or Upstash.
+
+### The install journey against Vercel's API spec
+
+`test/e2e-journey.test.js` walks the whole install through the real app:
+`/start`, `/install` (from our link with `state`, and from the Marketplace),
+Pick, Workflow and Turn on (a browser's `Origin: null` and our own origin), a
+production deploy's `POST /report` with an OIDC token from a local key set, the
+check run's conclusion, a preview deploy refused before any write, `/configure`,
+the signed `removed` webhook, and an empty store. Each page is checked for the
+words a user should see, and against the error pages' words.
+
+Every call the server makes to Vercel goes to a fake (`test/vercel-contract.mjs`)
+that holds it to Vercel's published contract:
+
+- the method and path name a real operation;
+- path parameters are filled, and every query parameter is declared, with a
+  value that fits its type or enum;
+- `Authorization: Bearer` is present;
+- the JSON body validates against the request schema (ajv), so required
+  fields, enums, types, patterns and `additionalProperties` are all checked.
+
+A check's `source` is checked against the one `oneOf` branch its `kind` names,
+because the spec's branches overlap: the webhook branch accepts any object with
+a `kind`. The fake's own answers are checked against the response schemas too,
+so it cannot answer in a shape Vercel does not promise. It also refuses a
+git-provider check from an integration (`not_implemented`), as live Vercel did
+on 7 Nov. A mismatch fails the test and names the field, for example
+`/blocks: must be equal to one of the allowed values`.
+
+The OAuth code exchange (`POST /v2/oauth/access_token`) is not in the OpenAPI
+spec. It is checked by hand: form-encoded, with `client_id`, `client_secret`,
+`code` and `redirect_uri`.
+
+The contract is `test/fixtures/vercel-openapi.json`, a trimmed copy of
+[Vercel's OpenAPI spec](https://vercel.com/openapi.json), fetched on 7 Nov 2026.
+It keeps whole request schemas for the 10 operations in `lib/vercel.mjs`, and
+response schemas cut down to the fields the server reads. Refresh it by hand
+(never at run time, rule 5), then review the diff:
+
+```bash
+node integrations/vercel/scripts/refresh-openapi.mjs
+```
+
+The refresh fails if the spec drops an operation, or no longer has a response
+field the server reads.
+
+The journey test also runs `actionlint` on `workflow/penthera-vercel.yml`.
+actionlint runs shellcheck on the run scripts when shellcheck is installed. CI
+installs a pinned actionlint, checked against its SHA-256. Locally the test
+skips when actionlint is not installed; in CI it never skips.
+
+What the contract caught on 7 Nov: `GET /v13/deployments/{idOrUrl}` answers one
+of three views. Only the owner's view has `projectId`; the reduced public view
+has `project.id` instead. The relay read only `projectId`, so it would have
+refused every report and held production. It now reads either.
+
+### What only a live test proves
+
+These stay unproven until Daan's live run:
+
+- That Vercel makes the check run itself. The journey covers both cases.
+- That a real GitHub OIDC token carries the claims the relay reads
+  (`repository_id`, `repository_owner_id`, `workflow_ref`, `event_name`,
+  `run_id`) in the shapes GitHub documents.
+- That the install token is accepted on each call: the scopes, and whether
+  Vercel answers the owner's deployment view.
+- Behaviour the spec does not describe: limits such as `timeout`'s maximum,
+  error messages, rate limits, and anything Vercel refuses beyond its schema,
+  the way it refused the git-provider check.
+- The workflow itself on a real runner: the dispatch payload, the OIDC token
+  request, `jq` and `curl`.
 
 ## Legal
 
