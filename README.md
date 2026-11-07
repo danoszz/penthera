@@ -234,66 +234,11 @@ flowchart LR
     class U,APP,DEP,AI,F,FIX,R,E box
 ```
 
-For the full black-box and white-box view, see [Under the hood](#under-the-hood).
+<details>
+<summary><b>Advanced view</b>: black box, white box and the engine, for developers and security specialists</summary>
 
-### Before you deploy
-
-| Job | What Penthera does | Command |
-|---|---|---|
-| Test the app | Scans your localhost or preview URL (TLS, headers, CORS, cookies, auth, JWT, IDOR, OAuth, OpenAPI; injection and fuzzing only when you ask, after a confirmation) and your repository (routes, trust boundaries, code-execution sinks, secrets including AI keys) | [`penthera <url> --repo .`](docs/commands/scan.md) |
-| Check your runtimes | Whether the PHP, nginx, Apache, Node.js, Python, OpenSSL or MongoDB version you run is affected by a known advisory, from the signed advisories pack | [Runtime advisories](docs/runtime-advisories.md) |
-| Fix and verify | Applies deterministic fix recipes on a local branch, re-scans to prove they worked, and remembers the result. Never pushes | [`penthera agent --loop`](docs/commands/fix.md) |
-| Block it at commit time | Stops secrets, risky agent config and dependency changes before they are committed | [`penthera hook install`](docs/commands/hook.md) |
-
-### What you build with
-
-| Job | What Penthera does | Command |
-|---|---|---|
-| Vet dependencies | Shows what every npm and Python package can do (install scripts, shell, network, env, obfuscation), what an upgrade added, lookalike names and licenses | [`penthera deps --base main`](docs/commands/deps.md) |
-| Guard installs | Shows what a new package brings before any install script runs, and stops it under your policy | [`penthera install <pkg>`](docs/commands/install.md) |
-| Review pull requests | Comments the dependency capability diff on every PR that touches the lockfile | [GitHub Action](docs/commands/action.md) |
-| Audit your AI tooling | Checks skills, MCP servers, hooks, plugins and rule files for hidden instructions, unpinned servers, over-broad permissions and silent updates | [`penthera agents --home`](docs/commands/agents.md) |
-| Work from your agent | Six read-only MCP tools: scan the repo, check dependencies, audit AI tooling, runtime advisories, explain a finding, a passive URL scan | [`penthera mcp`](docs/commands/mcp.md) |
-
-### After you ship
-
-| Job | What Penthera does | Command |
-|---|---|---|
-| Report and prove | Writes reports for developers, owners and auditors; a hashed, signable evidence bundle; NIS2 and CRA readiness reports and drafts | [`penthera <url> --audience auditor --evidence out/`](docs/evidence.md) |
-| See it all | A local dashboard on 127.0.0.1. Simple mode for non-programmers: a one-sentence verdict, problems in plain words, and a check-and-fix mode with Apply, Skip and Stop per change. Advanced adds dependencies, AI tooling, history and evidence | [`penthera ui`](docs/dashboard.md) |
-| Keep watching | Scheduled checks of production for drift: certificates, headers, new endpoints, keys in bundles, new CVEs in your SBOM | on the [roadmap](ROADMAP.md) |
-
-Every finding carries a severity, a confidence label (`confirmed`, `likely`,
-`potential`, `needs-human-review`), its evidence and the research behind it.
-Reports come out as Markdown, JSON and SARIF for GitHub code scanning. Exit
-code `1` means critical or high findings. Every command and flag is in
-[docs/commands/](docs/commands/README.md). Compliance output is readiness
-tooling, not a certification and not legal advice.
-
-**AI mode (opt-in).** `penthera --repo . --ai` lets a local model
-propose problems no rule describes. Penthera checks each proposal with its
-rules, and anything unconfirmed is labelled "model-proposed, unverified" and
-never fails CI. Whether it finds more than the rules alone is not measured yet
-([AI mode](docs/ai-mode.md)).
-
-### How far each part has been taken
-
-| Part | Status |
-|---|---|
-| Scans: URL, repo, dependencies, AI tooling, installs, pre-commit hook | **Stable**: in every release since 1.x, covered by the tests and the release gate |
-| Fix loop and local dashboard (`penthera ui`) | **Stable**; the dashboard was redesigned in 1.9.0 |
-| MCP server, Agent Skill, Claude Code plugin | **Stable**, since 1.9.0 |
-| Gemini CLI extension | **Stable**: it installs the newest release (2.3.2) |
-| Evidence bundles, NIS2 and CRA drafts | **Stable** as readiness tooling, not a certification |
-| AI mode (`--ai`) | **Experimental**: whether it finds more than the rules alone is not measured yet ([AI mode](docs/ai-mode.md)) |
-| Live check on [penthera.org](https://penthera.org) | **Beta**: passive only, [terms](docs/live-check-terms.md) |
-
-### Under the hood
-
-For developers and security specialists: the diagram above, as the code runs
-it. Black box tests the running app over HTTP. White box reads the code and
-config. Opt-in items say so. The limits of each part, such as what IDOR/BOLA
-or taint-lite can and cannot tell, are in
+Black box tests the running app over HTTP. White box reads the code and
+config. Opt-in items say so. The limits of each part are in
 [METHODOLOGY.md](docs/METHODOLOGY.md#under-the-hood).
 
 ```mermaid
@@ -388,6 +333,60 @@ flowchart LR
     style ENG fill:none,stroke:#0000ed,stroke-width:2px
     style OUT fill:none,stroke:#0000ed,stroke-width:2px
 ```
+
+</details>
+
+### Before you deploy
+
+| Job | What Penthera does | Command |
+|---|---|---|
+| Test the app | Scans your localhost or preview URL (TLS, headers, CORS, cookies, auth, JWT, IDOR, OAuth, OpenAPI; injection and fuzzing only when you ask, after a confirmation) and your repository (routes, trust boundaries, code-execution sinks, secrets including AI keys) | [`penthera <url> --repo .`](docs/commands/scan.md) |
+| Check your runtimes | Whether the PHP, nginx, Apache, Node.js, Python, OpenSSL or MongoDB version you run is affected by a known advisory, from the signed advisories pack | [Runtime advisories](docs/runtime-advisories.md) |
+| Fix and verify | Applies deterministic fix recipes on a local branch, re-scans to prove they worked, and remembers the result. Never pushes | [`penthera agent --loop`](docs/commands/fix.md) |
+| Block it at commit time | Stops secrets, risky agent config and dependency changes before they are committed | [`penthera hook install`](docs/commands/hook.md) |
+
+### What you build with
+
+| Job | What Penthera does | Command |
+|---|---|---|
+| Vet dependencies | Shows what every npm and Python package can do (install scripts, shell, network, env, obfuscation), what an upgrade added, lookalike names and licenses | [`penthera deps --base main`](docs/commands/deps.md) |
+| Guard installs | Shows what a new package brings before any install script runs, and stops it under your policy | [`penthera install <pkg>`](docs/commands/install.md) |
+| Review pull requests | Comments the dependency capability diff on every PR that touches the lockfile | [GitHub Action](docs/commands/action.md) |
+| Audit your AI tooling | Checks skills, MCP servers, hooks, plugins and rule files for hidden instructions, unpinned servers, over-broad permissions and silent updates | [`penthera agents --home`](docs/commands/agents.md) |
+| Work from your agent | Six read-only MCP tools: scan the repo, check dependencies, audit AI tooling, runtime advisories, explain a finding, a passive URL scan | [`penthera mcp`](docs/commands/mcp.md) |
+
+### After you ship
+
+| Job | What Penthera does | Command |
+|---|---|---|
+| Report and prove | Writes reports for developers, owners and auditors; a hashed, signable evidence bundle; NIS2 and CRA readiness reports and drafts | [`penthera <url> --audience auditor --evidence out/`](docs/evidence.md) |
+| See it all | A local dashboard on 127.0.0.1. Simple mode for non-programmers: a one-sentence verdict, problems in plain words, and a check-and-fix mode with Apply, Skip and Stop per change. Advanced adds dependencies, AI tooling, history and evidence | [`penthera ui`](docs/dashboard.md) |
+| Keep watching | Scheduled checks of production for drift: certificates, headers, new endpoints, keys in bundles, new CVEs in your SBOM | on the [roadmap](ROADMAP.md) |
+
+Every finding carries a severity, a confidence label (`confirmed`, `likely`,
+`potential`, `needs-human-review`), its evidence and the research behind it.
+Reports come out as Markdown, JSON and SARIF for GitHub code scanning. Exit
+code `1` means critical or high findings. Every command and flag is in
+[docs/commands/](docs/commands/README.md). Compliance output is readiness
+tooling, not a certification and not legal advice.
+
+**AI mode (opt-in).** `penthera --repo . --ai` lets a local model
+propose problems no rule describes. Penthera checks each proposal with its
+rules, and anything unconfirmed is labelled "model-proposed, unverified" and
+never fails CI. Whether it finds more than the rules alone is not measured yet
+([AI mode](docs/ai-mode.md)).
+
+### How far each part has been taken
+
+| Part | Status |
+|---|---|
+| Scans: URL, repo, dependencies, AI tooling, installs, pre-commit hook | **Stable**: in every release since 1.x, covered by the tests and the release gate |
+| Fix loop and local dashboard (`penthera ui`) | **Stable**; the dashboard was redesigned in 1.9.0 |
+| MCP server, Agent Skill, Claude Code plugin | **Stable**, since 1.9.0 |
+| Gemini CLI extension | **Stable**: it installs the newest release (2.3.2) |
+| Evidence bundles, NIS2 and CRA drafts | **Stable** as readiness tooling, not a certification |
+| AI mode (`--ai`) | **Experimental**: whether it finds more than the rules alone is not measured yet ([AI mode](docs/ai-mode.md)) |
+| Live check on [penthera.org](https://penthera.org) | **Beta**: passive only, [terms](docs/live-check-terms.md) |
 
 ## How it is measured
 
