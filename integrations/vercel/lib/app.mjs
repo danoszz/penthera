@@ -19,7 +19,7 @@ import {
   verifyWebhookSignature,
 } from "./crypto.mjs";
 import { clearCookie, esc, html, json, message, readBody, readCookie, readForm, redirect, safeNext, setCookie } from "./http.mjs";
-import { logError } from "./log.mjs";
+import { logError, logInfo } from "./log.mjs";
 import { OidcError, jwksCache, verifyGithubToken } from "./oidc.mjs";
 import { STAT_FIELDS } from "./store.mjs";
 import { VercelError, exchangeCode, vercelClient } from "./vercel.mjs";
@@ -117,7 +117,8 @@ const NEXT_STEPS = `<h2>What happens on your next deploy</h2>
 <li><span class="n" aria-hidden="true">1</span><span><strong>Vercel builds it</strong> and asks your repo's workflow to scan it.</span></li>
 <li><span class="n" aria-hidden="true">2</span><span><strong>Penthera scans the live deployment</strong> in your GitHub Actions. That usually takes under a minute, and the deploy waits for it.</span></li>
 <li><span class="n" aria-hidden="true">3</span><span><strong>A pass goes live.</strong> A fail stays out of production, and the check in Vercel links to the findings in the GitHub job summary.</span></li>
-</ol>`;
+</ol>
+<p class="small" data-reason="auto_alias"><strong>One Vercel setting matters:</strong> automatic production aliasing, which is on unless you turned it off (Project Settings, Environments, Production). The check holds a deploy only while it's on. With it off, Vercel never moves your domain by itself, so there's nothing to hold back, and the scan still runs.</p>`;
 
 // What a refused install leaves behind. Vercel makes the installation before it sends the browser to
 // /install, so it probably still lists Penthera; we stopped before the code exchange (README, "A refused install").
@@ -164,7 +165,7 @@ export function createApp({ env = process.env, store, fetch: fetchImpl = globalT
     const record = await store.get(id);
     if (!record) return null;
     if (record.configurationId !== id) {
-      logError("record_mismatch", { configurationId: id });
+      logError("record_mismatch");
       return null;
     }
     return record;
@@ -186,7 +187,7 @@ export function createApp({ env = process.env, store, fetch: fetchImpl = globalT
     try {
       return client(record, id, keys);
     } catch (e) {
-      logError("token_unreadable", { configurationId: id, code: e instanceof ConfigError ? "config" : "decrypt" });
+      logError("token_unreadable", { code: e instanceof ConfigError ? "config" : "decrypt" });
       return null;
     }
   }
@@ -272,7 +273,7 @@ export function createApp({ env = process.env, store, fetch: fetchImpl = globalT
     if (state) {
       const reason = !stateCookie ? "state_cookie_missing" : !safeEqual(state, stateCookie) ? "state_mismatch" : null;
       if (reason) {
-        logError("install_refused", { code: reason, configurationId });
+        logError("install_refused", { code: reason });
         return installRefused(reason);
       }
       cookies.push(clearCookie(STATE));
@@ -287,12 +288,12 @@ export function createApp({ env = process.env, store, fetch: fetchImpl = globalT
     try {
       token = await exchangeCode({ code, clientId: c.clientId, clientSecret: c.clientSecret, redirectUri: c.redirectUri, fetch: fetchImpl });
     } catch (e) {
-      logError("exchange_failed", { status: e.status ?? 0, code: e.code ?? "network", configurationId });
+      logError("exchange_failed", { status: e.status ?? 0, code: e.code ?? "network" });
       return message(502, "Vercel's one-time code had already run out", "Each code lasts 30 minutes and works once. Restarting gets you a fresh one.", { cookies, left: LEFT_REFUSED, action: { href: "/start", label: "Restart on Vercel" }, why: "Vercel's code proves the install is yours, and we can't go on without it." });
     }
     // The exchange must name the configuration this redirect claims, and the team, or we store nothing.
     if (token.configurationId !== configurationId || (teamId && token.teamId !== teamId)) {
-      logError("configuration_mismatch", { configurationId });
+      logError("configuration_mismatch");
       return message(400, "Vercel named a different install", "The link and Vercel disagree about which install this is, so we stopped and stored nothing.", { cookies, left: LEFT_REFUSED, action: { href: "/start", label: "Restart on Vercel" }, why: "We store an install only once Vercel confirms whose it is." });
     }
     const ownerId = token.teamId ?? token.userId ?? teamId;
@@ -302,7 +303,7 @@ export function createApp({ env = process.env, store, fetch: fetchImpl = globalT
     // never duplicate, and never hand a record to another owner.
     const previous = await load(configurationId);
     if (previous && previous.ownerId !== ownerId) {
-      logError("owner_mismatch", { configurationId });
+      logError("owner_mismatch");
       return message(409, "This install belongs to another Vercel team", "Restart, and Vercel asks which team to install on. Pick the one you want Penthera on.", { cookies, left: { penthera: "Nothing changed, here or in the other team's setup.", vercel: "The install stays with the team that made it." }, action: { href: "/start", label: "Choose a team on Vercel" }, why: "One team can never take over another team's install, or see its projects." });
     }
     // createdAt is the latest install, so a replayed older uninstall event cannot delete it.
@@ -311,6 +312,7 @@ export function createApp({ env = process.env, store, fetch: fetchImpl = globalT
     await store.put({ configurationId, ownerId, ...sealToken(token.accessToken, configurationId, c.keys), createdAt, sessionNonce });
     const value = signValue({ c: configurationId, o: ownerId, s: sessionNonce, n: next, e: now() + SESSION_MS }, cookieKey(c.keys));
     cookies.push(setCookie(SESSION, value, SESSION_MS / 1000));
+    logInfo("install_ok", { source });
     return redirect("/setup", { cookies });
   }
 
@@ -398,6 +400,7 @@ ${asks()}`, { step: "Step 1 of 2: pick" });
       } catch (e) {
         return apiFailure(e, s.configurationId, "remove_failed");
       }
+      logInfo("check_off", { projects: 1 });
       return redirect("/setup");
     }
 
@@ -462,10 +465,12 @@ ${asks()}`, { step: "Step 1 of 2: pick" });
           if (others.length) lookalikes.push(p);
         } catch (e) {
           const problem = turnOnProblem(e);
-          logError("check_failed", { status: e.status ?? 0, code: e.code ?? problem.kind, message: e.detail ?? "", route: problem.kind, configurationId: s.configurationId });
+          logError("check_failed", { status: e.status ?? 0, code: e.code ?? problem.kind, message: e.detail ?? "", route: problem.kind });
           failed.push({ ...p, problem });
         }
       }
+      const turnedOn = projects.filter((p) => !failed.some((f) => f.id === p.id) && !taken.includes(p)).length;
+      if (turnedOn) logInfo("check_on", { projects: turnedOn });
       // Vercel's install ends on its `next` address, which closes the popup; Turn on already said what comes next.
       if (!failed.length && !taken.length && !lookalikes.length && s.next) return redirect(s.next, { cookies: [clearCookie(SESSION)] });
       const failedIds = new Set(failed.map((p) => p.id));
@@ -559,13 +564,13 @@ ${asks({ open: true })}`);
     try {
       record = await store.get(id);
     } catch {
-      logError("store_failed", { configurationId: id, route: "webhook" });
+      logError("store_failed", { route: "webhook" });
       return json(500, { error: "store_unavailable" });
     }
     // A record whose own id is not the one Vercel signed for was tampered with: for `removed` the key
     // is still deleted, with no call to Vercel; a transfer leaves it alone.
     const trusted = record && record.configurationId === id ? record : null;
-    if (record && !trusted) logError("record_mismatch", { configurationId: id });
+    if (record && !trusted) logError("record_mismatch");
     if (!trusted) {
       if (type === "integration-configuration.removed") {
         // Also when the record is already gone: a retry after a failed link cleanup lands here.
@@ -573,7 +578,7 @@ ${asks({ open: true })}`);
           if (record) await store.delete(id);
           await dropLinks(id);
         } catch {
-          logError("store_failed", { configurationId: id, route: "webhook" });
+          logError("store_failed", { route: "webhook" });
           return json(500, { error: "store_unavailable" });
         }
       }
@@ -610,10 +615,11 @@ ${asks({ open: true })}`);
       await store.delete(id);
       await dropLinks(id);
     } catch {
-      logError("store_failed", { configurationId: id, route: "webhook" });
+      logError("store_failed", { route: "webhook" });
       return json(500, { error: "store_unavailable" });
     }
     if (api) await removeOurChecks(api, event.payload.configuration.projects, id);
+    logInfo("uninstall_ok");
     return json(200, { ok: true, deleted: true });
   }
 
@@ -626,10 +632,10 @@ ${asks({ open: true })}`);
     if (c.integrationId) return c.integrationId;
     try {
       const id = await api.getIntegrationId(configurationId);
-      if (!id) logError("integration_lookup_failed", { code: "no_integration_id", configurationId });
+      if (!id) logError("integration_lookup_failed", { code: "no_integration_id" });
       return id;
     } catch (e) {
-      logError("integration_lookup_failed", { status: e.status ?? 0, code: e.code ?? "network", message: e.detail ?? "", configurationId });
+      logError("integration_lookup_failed", { status: e.status ?? 0, code: e.code ?? "network", message: e.detail ?? "" });
       return null;
     }
   }
@@ -674,7 +680,7 @@ ${asks({ open: true })}`);
       return await api.createCheck(projectId, body);
     } catch (e) {
       if (!(e instanceof VercelError && e.status === 400 && /timeout/i.test(e.detail ?? ""))) throw e;
-      logError("check_timeout_refused", { status: e.status, code: e.code, message: e.detail, configurationId });
+      logError("check_timeout_refused", { status: e.status, code: e.code, message: e.detail });
       const { timeout: _dropped, ...rest } = body;
       return api.createCheck(projectId, rest);
     }
@@ -928,11 +934,12 @@ ${asks({ open: true })}`);
         conclusionText: text,
         ...(runUrl ? { externalUrl: runUrl } : {}),
       });
+      logInfo("report_ok", { conclusion: result });
       return json(200, { ok: true, conclusion: result, ...(result !== conclusion ? { note: "scanned_url_not_this_deployment" } : {}) });
     } catch (e) {
       // Every Vercel error is a 502, also a 403 or 404: the workflow then fails loudly instead of
       // reading it as "the check is not on", and the run stays as it was.
-      logError("report_failed", { status: e.status ?? 0, code: e.code ?? "network", configurationId });
+      logError("report_failed", { status: e.status ?? 0, code: e.code ?? "network" });
       return json(502, { error: "vercel_unavailable" });
     }
   }
@@ -960,7 +967,7 @@ ${asks({ open: true })}`);
           await store.delete(id);
           removed++;
         } else if (!(e instanceof VercelError)) {
-          logError("sweep_failed", { configurationId: id, code: e instanceof ConfigError ? "config" : "network" });
+          logError("sweep_failed", { code: e instanceof ConfigError ? "config" : "network" });
         }
       }
     }
@@ -975,12 +982,14 @@ ${asks({ open: true })}`);
     return json(200, { ok: true, checked, removed, unlinked });
   }
 
+  // Every way a setup session ends lands here: no cookie (a later Configure click, another browser),
+  // 30 minutes passed, an uninstall, a reinstall or a transfer. The copy must be true for all of them.
   function expired() {
-    return message(401, "Your setup page closed after 30 minutes", "Your install and any checks you turned on keep running. To change projects, restart from Vercel.", { left: { penthera: "Your install and checks are as you left them.", vercel: "Penthera stays installed." }, action: { href: "/start", label: "Restart on Vercel" }, why: "Setup closes after 30 minutes, so a page left open can't change your projects later." });
+    return message(401, "This setup page has closed", "Setup stays open for 30 minutes after an install, in the browser you installed from. It also closes when Penthera is uninstalled or installed again. To change projects, restart from Vercel.", { left: { penthera: "Nothing changed. If Penthera is still installed, your checks run as you left them. If you uninstalled it, we already deleted its token and project links.", vercel: "Nothing changed. Settings, Integrations shows whether Penthera is installed." }, action: { href: "/start", label: "Restart on Vercel" }, why: "Setup can change which deploys Penthera holds, so only the browser that just installed can use it, and only for 30 minutes." });
   }
 
   function apiFailure(e, configurationId, event) {
-    logError(event, { status: e.status ?? 0, code: e.code ?? "network", configurationId });
+    logError(event, { status: e.status ?? 0, code: e.code ?? "network" });
     return message(502, "Vercel didn't answer just now", "Your projects are as they were. Vercel is usually back within a minute, and this page tries again by itself.", { left: { penthera: "Nothing changed.", vercel: "Nothing changed." }, action: { href: "/setup", label: "Try again" }, refresh: { seconds: 30, url: "/setup" } });
   }
 

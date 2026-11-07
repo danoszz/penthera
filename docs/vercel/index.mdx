@@ -36,6 +36,8 @@ The scan is the standard URL scan of [`penthera <url>`](/commands/scan): TLS, se
 
 A scan that fails or does not finish also fails the check. Silence is never a pass. A pass also needs proof in Penthera's report that the site was read: the home page answered 2xx, no firewall challenge or block page, no rate limiting, and the app scan finished. A deployment that redirects its `vercel.app` address to your own domain is not read, so it fails. And it counts only for the deployment's own address in Vercel's record, so a scan of any other URL fails the check.
 
+The check holds a deploy only while automatic production aliasing is on, which is Vercel's default. You find it under the project's **Settings**, **Environments**, **Production**. With it off, Vercel never moves your production domain by itself, so the check has nothing to hold: it still runs and shows pass or fail on the deployment.
+
 ## Read the findings
 
 The findings stay in GitHub:
