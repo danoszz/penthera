@@ -37,7 +37,9 @@ it only to check that the result comes from the Penthera workflow in the repo
 your project is connected to.
 
 We then set the Penthera check's result in Vercel, and keep none of it: not the
-ids, not the result, not the token. Our own logs hold an error code at most.
+ids, not the result, not the token. Our own logs record that a result arrived
+and whether it passed, with no id. When something fails, the log line holds an
+error code and your installation id, so we can find the failure.
 
 To keep the service working, we count anonymous daily totals: how many results
 arrived that day, how many passed, failed, or were refused and why. The totals

@@ -6,10 +6,11 @@
 // deployment → the workflow's POST /report, success → a second production deployment → failure
 // → a repeated report refused → Configure → uninstall (record, links and our check gone).
 import { readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { INFO_EVENTS, logInfo, setLogSink } from "../lib/log.mjs";
 import { CHECK_TIMEOUT_SECONDS } from "../lib/workflow.mjs";
 import { ALLOWED } from "./vercel-allowed.mjs";
-import { BASE, CFG, NEXT, get, harness, jar, listingInstallUrl, post, removedWebhook, reportRequest } from "./journey-harness.mjs";
+import { ACCESS_TOKEN, BASE, CFG, CLIENT_SECRET, CODE, NEXT, get, harness, jar, listingInstallUrl, post, removedWebhook, reportRequest } from "./journey-harness.mjs";
 
 const csrfOf = (html) => /name="csrf" value="([^"]+)"/.exec(html)[1];
 const runOf = (h, deploymentId, checkId) => (h.vercel.runs[deploymentId] ?? []).find((r) => r.checkId === checkId);
@@ -18,6 +19,10 @@ describe("the listing journey, step by step, against the strict fake Vercel", ()
   const h = harness();
   const browser = jar();
   const s = {};
+  const lines = [];
+  let previousSink;
+  beforeAll(() => { previousSink = setLogSink((line, level = "error") => lines.push({ line, level })); });
+  afterAll(() => setLogSink(previousSink));
 
   it("1. Vercel sends the browser back from the listing link with source=external and no state: a session, no refusal", async () => {
     const res = browser.take(await h.app.install(new Request(listingInstallUrl(), { headers: { cookie: browser.header() } })));
@@ -108,6 +113,23 @@ describe("the listing journey, step by step, against the strict fake Vercel", ()
     expect(h.vercel.violations).toEqual([]);
     expect(h.outside).toEqual([]);
   });
+
+  it("12. The logs name each good event, and no id, repo, code or token reaches any line", () => {
+    // Only good events on this journey: the refused repeat (step 8) is an answer, not an error.
+    expect(lines.filter((l) => l.level !== "info")).toEqual([]);
+    expect(lines.map((l) => JSON.parse(l.line))).toEqual([
+      { level: "info", event: "install_ok", source: "external" },
+      { level: "info", event: "check_on", projects: 1 },
+      { level: "info", event: "report_ok", conclusion: "succeeded" },
+      { level: "info", event: "report_ok", conclusion: "failed" },
+      { level: "info", event: "uninstall_ok" },
+    ]);
+    const all = lines.map((l) => l.line).join("\n");
+    expect(all).not.toMatch(/\b(icfg|team|prj|dpl|oac|chk|crun|user)_/);
+    for (const secret of [ACCESS_TOKEN, CLIENT_SECRET, CODE, "gaia-web", "daan", "9001", "700", "701", h.env.PENTHERA_TOKEN_KEYS.split(":")[1]]) {
+      expect(all, secret).not.toContain(secret);
+    }
+  });
 });
 
 describe("the strict fake answers as live Vercel did", () => {
@@ -181,4 +203,49 @@ describe("the README lists every row of the table of what Vercel accepts", () =>
       expect(line).toContain(row.live);
     });
   }
+});
+
+describe("logInfo keeps the counters' privacy", () => {
+  const capture = (fn) => {
+    const out = [];
+    const previous = setLogSink((line, level) => out.push({ line, level }));
+    try { fn(); } finally { setLogSink(previous); }
+    return out;
+  };
+
+  it("drops every field that is not allowed for the event, and every value outside its list", () => {
+    const out = capture(() => {
+      logInfo("install_ok", { source: "external", configurationId: CFG, teamId: "team_x" });
+      logInfo("install_ok", { source: "icfg_JourneyConfig1" });
+      logInfo("check_on", { projects: 2, projectId: "prj_gaiaweb", name: "gaia-web" });
+      logInfo("check_on", { projects: "prj_gaiaweb" });
+      logInfo("check_on", { projects: 5000 });
+      logInfo("report_ok", { conclusion: "succeeded", deploymentId: "dpl_1", repo: "daan/gaia-web" });
+      logInfo("report_ok", { conclusion: "dpl_1" });
+      logInfo("uninstall_ok", { configurationId: CFG });
+    });
+    expect(out.every((l) => l.level === "info")).toBe(true);
+    expect(out.map((l) => JSON.parse(l.line))).toEqual([
+      { level: "info", event: "install_ok", source: "external" },
+      { level: "info", event: "install_ok" },
+      { level: "info", event: "check_on", projects: 2 },
+      { level: "info", event: "check_on" },
+      { level: "info", event: "check_on" },
+      { level: "info", event: "report_ok", conclusion: "succeeded" },
+      { level: "info", event: "report_ok" },
+      { level: "info", event: "uninstall_ok" },
+    ]);
+  });
+
+  it("logs nothing for an event outside the fixed list, also one named like an id", () => {
+    expect(capture(() => { logInfo("icfg_JourneyConfig1"); logInfo("toString"); logInfo("__proto__"); })).toEqual([]);
+  });
+
+  it("no allowed field can carry free text: every rule is a fixed list or a count", () => {
+    for (const fields of Object.values(INFO_EVENTS)) {
+      for (const rule of Object.values(fields)) {
+        expect(rule === "count" || (Array.isArray(rule) && rule.every((v) => /^[a-z-]+$/.test(v)))).toBe(true);
+      }
+    }
+  });
 });

@@ -409,13 +409,32 @@ a commit status directly. The relay adds no new way in; it keeps the gate at
   `Referrer-Policy: same-origin` (with `no-referrer`, browsers send `Origin: null` on our own form posts), a closed `Permissions-Policy`,
   `Cache-Control: no-store`, and `Cross-Origin-Opener-Policy: unsafe-none`,
   which Vercel requires for the install popup.
-- **Logs:** errors only, through one logger (`lib/log.mjs`) that keeps an
-  allow-list of fields and masks token shapes and the secret env values. For a
-  failed check create or integration lookup, that includes Vercel's error code
-  and message (at most 200 characters), so a failure explains itself. ESLint
-  bans `console` everywhere else in this folder. A test runs install, setup,
-  failures and a broken config with random fake credentials and checks none
-  appears in the output.
+- **Logs:** one logger (`lib/log.mjs`); ESLint bans `console` everywhere else
+  in this folder.
+  - **Errors** (`logError`, stderr) keep an allow-list of fields: the event,
+    an error code, the HTTP status, a route, the installation's
+    `configurationId`, and for a failed check create or integration lookup
+    Vercel's error message (at most 200 characters), so a failure explains
+    itself. Token shapes and the secret env values are masked. A test runs
+    install, setup, failures and a broken config with random fake credentials
+    and checks none appears in the output.
+  - **Good events** (`logInfo`, stdout, `"level": "info"`) have the counters'
+    privacy: an event name from a fixed list and only fields with fixed values
+    or a count, never an id, a repo, a code or a token.
+
+    | Event | Fields | When |
+    |---|---|---|
+    | `install_ok` | `source`: `marketplace`, `deploy-button` or `external` | an install was stored and its setup session started |
+    | `check_on` | `projects`: how many | Turn on added or kept this installation's check |
+    | `check_off` | `projects`: 1 | Remove check |
+    | `report_ok` | `conclusion`: `succeeded` or `failed` | a workflow's result reached Vercel |
+    | `uninstall_ok` | none | the `removed` webhook deleted the record and links |
+
+    Any other field or value is dropped, and an event outside the list logs
+    nothing. `test/e2e-listing.test.js` captures every line of the whole
+    journey and checks that the five good events appear and that no id
+    (`icfg_`, `team_`, `prj_`, `dpl_`, `oac_`, `user_`), repo, run id, install
+    code or token is in any of them.
 - **Configure:** Vercel's Configure button carries only a `configurationId`,
   which proves nothing about who clicked. So without the install session the
   page shows nothing account-specific.

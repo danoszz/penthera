@@ -1,5 +1,5 @@
 section: Changed
-docs: none, tests and a local script for the integration server; its README covers them, and nothing in the CLI, MCP tools, rules or Action changed
+docs: none, the integration server only: tests, a local script and its logs; its README and privacy notice cover them, and nothing in the CLI, MCP tools, rules or Action changed
 
 - **The Vercel integration's tests hold every request to what Vercel accepts.**
   Twice a value passed Vercel's published spec and was refused live. Each field
@@ -8,3 +8,8 @@ docs: none, tests and a local script for the integration server; its README cove
   anything else the way Vercel does. A new test walks the whole journey from the
   listing page to uninstall, and a local script runs the real server against the
   same fakes, so the pages can be clicked through by hand.
+- **The Vercel integration's runtime logs show the good events too:** an
+  install, a check turned on or off, a result passed on, an uninstall. Each
+  line is an event name with at most a count or pass/fail, never an id, a
+  repo or a token. The privacy notice now says what the logs hold, including
+  the installation id on error lines, which it had left out.

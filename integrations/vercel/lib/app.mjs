@@ -18,7 +18,7 @@ import {
   verifyWebhookSignature,
 } from "./crypto.mjs";
 import { clearCookie, esc, html, json, message, readBody, readCookie, readForm, redirect, safeNext, setCookie } from "./http.mjs";
-import { logError } from "./log.mjs";
+import { logError, logInfo } from "./log.mjs";
 import { OidcError, jwksCache, verifyGithubToken } from "./oidc.mjs";
 import { STAT_FIELDS } from "./store.mjs";
 import { VercelError, exchangeCode, vercelClient } from "./vercel.mjs";
@@ -289,6 +289,7 @@ export function createApp({ env = process.env, store, fetch: fetchImpl = globalT
     await store.put({ configurationId, ownerId, ...sealToken(token.accessToken, configurationId, c.keys), createdAt, sessionNonce });
     const value = signValue({ c: configurationId, o: ownerId, s: sessionNonce, n: next, e: now() + SESSION_MS }, cookieKey(c.keys));
     cookies.push(setCookie(SESSION, value, SESSION_MS / 1000));
+    logInfo("install_ok", { source });
     return redirect("/setup", { cookies });
   }
 
@@ -376,6 +377,7 @@ ${asks()}`, { step: "Step 1 of 2: pick" });
       } catch (e) {
         return apiFailure(e, s.configurationId, "remove_failed");
       }
+      logInfo("check_off", { projects: 1 });
       return redirect("/setup");
     }
 
@@ -444,6 +446,8 @@ ${asks()}`, { step: "Step 1 of 2: pick" });
           failed.push({ ...p, problem });
         }
       }
+      const turnedOn = projects.filter((p) => !failed.some((f) => f.id === p.id) && !taken.includes(p)).length;
+      if (turnedOn) logInfo("check_on", { projects: turnedOn });
       // Vercel's install ends on its `next` address, which closes the popup; Turn on already said what comes next.
       if (!failed.length && !taken.length && !lookalikes.length && s.next) return redirect(s.next, { cookies: [clearCookie(SESSION)] });
       const failedIds = new Set(failed.map((p) => p.id));
@@ -592,6 +596,7 @@ ${asks({ open: true })}`);
       return json(500, { error: "store_unavailable" });
     }
     if (api) await removeOurChecks(api, event.payload.configuration.projects, id);
+    logInfo("uninstall_ok");
     return json(200, { ok: true, deleted: true });
   }
 
@@ -892,6 +897,7 @@ ${asks({ open: true })}`);
           : "Penthera found a high or critical issue, or could not finish the scan. Details in the GitHub job summary.",
         ...(runUrl ? { externalUrl: runUrl } : {}),
       });
+      logInfo("report_ok", { conclusion });
       return json(200, { ok: true, conclusion });
     } catch (e) {
       // Every Vercel error is a 502, also a 403 or 404: the workflow then fails loudly instead of
