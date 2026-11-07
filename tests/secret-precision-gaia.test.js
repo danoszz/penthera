@@ -143,6 +143,28 @@ describe("a test account's password goes to Check first, still high", () => {
     expect(ok.confidence).toBe("potential");
   });
 
+  // Vercel Security Review on PR 310 (Low, 01M6W3PH0NW0YNDY626BYEC9VB): account-like text
+  // inside a string literal kept its quotes through the filter and matched as a field.
+  it("account-looking text inside a diagnostic string does not count, in verify and smoke scripts", () => {
+    const P = ["Kx9!", "mQ2#vL7pR"].join("");
+    const line = `const password = "${P}";`;
+    for (const file of ["scripts/verify-login.js", "scripts/smoke-login.js"]) {
+      for (const text of [
+        `console.log(" email: \\"a@example.com\\", ok");\n${line}\n`,
+        `const msg = ' email: "a@example.com",';\n${line}\n`,
+        `log(\`user = "a@example.com";\`);\n${line}\n`,
+        `throw new Error("login: 'a@example.com', failed");\n${line}\n`,
+      ]) {
+        const [f] = pw(repo({ [file]: text }));
+        expect(f.confidence, `${file}: ${text}`).toBeUndefined();
+        expect(bucketOf(f).bucket).toBe("act");
+      }
+    }
+    // A quoted key in code is still a field.
+    const [ok] = pw(repo({ "tests/login.test.js": `login({ "email": "a@example.com", password: "${P}" });\n` }));
+    expect(ok.confidence).toBe("potential");
+  });
+
   it("near misses stay in Act on", () => {
     const cases = {
       "a real domain beside it": { "scripts/verify-login.js": script("ops@gaia.computer") },
