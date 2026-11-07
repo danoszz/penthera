@@ -262,6 +262,9 @@ describe("setup", () => {
 
     const workflow = await app.setup(post("/setup", `csrf=${csrf}&action=workflow&p=prj_one&p=prj_two`, { cookie, origin: BASE }));
     const wtext = await workflow.text();
+    // What a deploy does comes before the button that ends the install.
+    expect(wtext.indexOf("What happens on your next deploy")).toBeGreaterThan(0);
+    expect(wtext.indexOf("What happens on your next deploy")).toBeLessThan(wtext.indexOf("Turn on the check and finish"));
     const link = /href="(https:\/\/github\.com\/[^"]+)"/.exec(wtext)[1].replaceAll("&amp;", "&");
     const u = new URL(link);
     expect(u.pathname).toBe("/acme/shop/new/main");
@@ -270,13 +273,9 @@ describe("setup", () => {
     expect(vercel.calls.some((c) => c.method === "POST" && c.url.pathname.endsWith("/checks"))).toBe(false);
 
     const done = await app.setup(post("/setup", `csrf=${csrf}&action=enable&p=prj_one`, { cookie, origin: BASE }));
-    // Done says what happens next, and its one blue button finishes the install in Vercel.
-    expect(done.status).toBe(200);
-    const dtext = await done.text();
-    expect(dtext).toContain("<h1>The check is on</h1>");
-    expect(dtext).toContain("What happens on your next deploy");
-    expect(dtext).toContain(`<a class="btn go" href="${NEXT.replaceAll("&", "&amp;")}">Finish in Vercel</a>`);
-    expect(dtext).toContain('href="https://github.com/acme/shop/actions/workflows/penthera-vercel.yml"');
+    // Turn on ends the install on Vercel's next address, which closes the popup.
+    expect(done.status).toBe(303);
+    expect(done.headers.get("location")).toBe(NEXT);
     expect(done.headers.getSetCookie().some((c) => c.startsWith("__Host-pv_session=;"))).toBe(true);
     expect(vercel.checks.prj_one).toHaveLength(1);
     expect(vercel.checks.prj_one[0]).toMatchObject(checkBody(CFG, "oac_realintegration"));

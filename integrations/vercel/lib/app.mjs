@@ -79,6 +79,14 @@ const asks = ({ open = false } = {}) => `<details class="faq"${open ? " open" : 
 <ul class="links"><li><a href="https://docs.penthera.org/vercel/terms" target="_blank" rel="noopener noreferrer">Terms</a></li><li><a href="https://docs.penthera.org/vercel/privacy" target="_blank" rel="noopener noreferrer">Privacy</a></li><li><a href="${SOURCE_URL}" target="_blank" rel="noopener noreferrer">Source on GitHub</a></li></ul>
 </details>`;
 
+// What a production deploy does once the check is on: shown before Turn on, and on Done.
+const NEXT_STEPS = `<h2>What happens on your next deploy</h2>
+<ol class="steps">
+<li><span class="n" aria-hidden="true">1</span><span><strong>Vercel builds it</strong> and asks your repo's workflow to scan it.</span></li>
+<li><span class="n" aria-hidden="true">2</span><span><strong>Penthera scans the live deployment</strong> in your GitHub Actions. That usually takes under a minute, and the deploy waits for it.</span></li>
+<li><span class="n" aria-hidden="true">3</span><span><strong>A pass goes live.</strong> A fail stays out of production, and the check in Vercel links to the findings in the GitHub job summary.</span></li>
+</ol>`;
+
 export function readConfig(env) {
   const need = (name) => {
     if (!env[name]) throw new ConfigError(`${name} is not set`);
@@ -361,6 +369,8 @@ ${asks()}`, { step: "Step 1 of 2: pick" });
           failed.push(p);
         }
       }
+      // Vercel's install ends on its `next` address, which closes the popup; Turn on already said what comes next.
+      if (!failed.length && !taken.length && s.next) return redirect(s.next, { cookies: [clearCookie(SESSION)] });
       return donePage(projects.filter((p) => !failed.includes(p) && !taken.includes(p)), failed, taken, s);
     }
 
@@ -382,7 +392,9 @@ ${asks()}`, { step: "Step 1 of 2: pick" });
 <input type="hidden" name="action" value="enable">
 <h2>Then turn on the check</h2>
 <p class="lede">Back from GitHub? Turn it on here. From then on, each production deploy waits for Penthera's scan.</p>
-<div class="act"><button class="btn go" type="submit">Turn on the check</button></div>
+${NEXT_STEPS}
+<div class="act"><button class="btn go" type="submit">${s.next ? "Turn on the check and finish" : "Turn on the check"}</button></div>
+${s.next ? '<p class="small">This takes you back to Vercel, and the install is done.</p>' : ""}
 </form>
 <p class="small">Your next production deploy will wait for Penthera's check. Findings stay in the GitHub job summary. Only pass or fail reaches us, to pass on to Vercel.</p>
 ${asks()}`, { step: "Step 2 of 2: commit, turn on" });
@@ -400,19 +412,13 @@ ${asks()}`, { step: "Step 2 of 2: commit, turn on" });
     ].join("");
     const status = failed.length ? 502 : taken.length ? 409 : 200;
     const next = on.length ? `
-<h2>What happens on your next deploy</h2>
-<ol class="steps">
-<li><span class="n" aria-hidden="true">1</span><span><strong>Vercel builds it</strong> and asks your repo's workflow to scan it.</span></li>
-<li><span class="n" aria-hidden="true">2</span><span><strong>Penthera scans the live deployment</strong> in your GitHub Actions. That usually takes under a minute, and the deploy waits for it.</span></li>
-<li><span class="n" aria-hidden="true">3</span><span><strong>A pass goes live.</strong> A fail stays out of production, and the check in Vercel links to the findings in the GitHub job summary.</span></li>
-</ol>
+${NEXT_STEPS}
 <ul class="links col">${on.map((p) => `<li><a href="https://github.com/${esc(p.repo)}/actions/workflows/penthera-vercel.yml" target="_blank" rel="noopener noreferrer">${esc(p.name)} on GitHub Actions <span aria-hidden="true">↗</span></a></li>`).join("")}<li><a href="${SOURCE_URL}#readme" target="_blank" rel="noopener noreferrer">How it works <span aria-hidden="true">↗</span></a></li></ul>` : "";
     const retry = failed.length ? '<a class="btn" href="/setup">Try again</a>' : "";
-    const finish = s.next || retry ? `<div class="act">${s.next ? `<a class="btn go" href="${esc(s.next)}">Finish in Vercel</a>` : ""}${retry}</div>` : "";
-    const cookies = status === 200 && s.next ? [clearCookie(SESSION)] : [];
+    const finish = s.next || retry ? `<div class="act">${s.next ? `<a class="btn go" href="${esc(s.next)}">Back to Vercel</a>` : ""}${retry}</div>` : "";
     const title = status === 200 ? "The check is on" : on.length ? "Some checks were not turned on" : "The check was not turned on";
     const lede = on.length ? `<p class="lede">Penthera now checks each production deploy of ${names(on)} before it goes live.</p>` : "";
-    return html(status, "Penthera: done", `<h1>${title}</h1>${notes}${lede}${finish}${next}`, { main: "one", cookies });
+    return html(status, "Penthera: done", `<h1>${title}</h1>${notes}${lede}${finish}${next}`, { main: "one" });
   }
 
   async function configure(request) {

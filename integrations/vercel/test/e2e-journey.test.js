@@ -135,13 +135,10 @@ async function journey({ entry, origin, autoRuns = true, publicView = false }) {
   const pick = await page(await h.app.setup(get("/setup", browser)), 200, "Pick your projects", "gaia-web", "notes", "Needs a GitHub-connected project", "What Penthera asks for, and why");
   // 4. Workflow (a browser's form post says Origin: null under our Referrer-Policy).
   const wf = await page(await h.app.setup(post("/setup", `csrf=${csrfOf(pick)}&action=workflow&p=prj_gaiaweb`, browser, "null")), 200, "Add the workflow", "Turn on the check", "github.com/daan/gaia-web/new/main");
-  // 5. Turn on the check. Done says what happens next; its one blue button finishes the install in Vercel.
+  // 5. Turn on the check.
   const on = browser.take(await h.app.setup(post("/setup", `csrf=${csrfOf(wf)}&action=enable&p=prj_gaiaweb`, browser, origin)));
-  const done = await on.clone().text();
-  expect(on.status, done).toBe(200);
-  expect(done).toContain("<h1>The check is on</h1>");
-  expect(done).toContain("What happens on your next deploy");
-  expect(done).toContain(`<a class="btn go" href="${NEXT.replaceAll("&", "&amp;")}">Finish in Vercel</a>`);
+  expect(on.status, await on.clone().text()).toBe(303);
+  expect(on.headers.get("location")).toBe(NEXT);
 
   const [check] = h.vercel.checks.prj_gaiaweb;
   expect(check).toMatchObject({
