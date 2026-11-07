@@ -94,6 +94,15 @@ The skill tells your agent how to run Penthera; the MCP server gives it six
 read-only tools. More routes: [skill.md](docs/commands/skill.md),
 [mcp.md](docs/commands/mcp.md).
 
+**Where AI fits.** Rules decide every finding and every exit code. A model may
+only propose:
+
+| Role | Who | How |
+|---|---|---|
+| Decides | Penthera's rules, always | Every finding, every exit code |
+| Looks further (optional) | A model, with `--ai` | Proposes problems no rule describes; the rules check each one, and unchecked ones are listed apart and never fail CI ([AI mode](docs/ai-mode.md)) |
+| Fixes | Your own coding agent | Through the MCP server, the skill or `penthera fix --plan` |
+
 To run it in a container:
 `docker build -t penthera . && docker run --rm penthera https://your-app.example`.
 

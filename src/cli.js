@@ -132,8 +132,12 @@ const HELP = `
                                TruffleHog key verification, osv-scanner via its API)
         --giants-timeout <s>    Seconds per tool (default 300)
 
-  ${dim("AI mode")}  ${dim("(with --repo; opt-in, asks every run; docs/ai-mode.md)")}
-        --ai                    A model reads your code for what rules can't see; Penthera checks its findings
+  ${dim("AI, optional")}  ${dim("(rules decide every finding; a model may only propose; docs/ai-mode.md)")}
+        --ai                    Look further: a model proposes problems no rule describes, and the rules check
+                               each one. Unchecked ones are listed apart and never fail CI. With --repo;
+                               local Ollama by default; asks every run. It finds; it does not fix.
+                               To have your coding agent fix findings: penthera mcp, the Agent Skill,
+                               or penthera fix --plan
         --ai-model <name>       An Ollama model on 127.0.0.1 (penthera ai models lists them)
         --ai-budget <spec>      Hard caps, e.g. units=200,tokens=2M,time=20m (the default)
         --ai-consent <route>    Consent for a run that cannot ask: local, or ollama-cloud
