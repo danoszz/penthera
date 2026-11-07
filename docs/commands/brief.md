@@ -70,10 +70,11 @@ The first matching rule wins:
    checked** if it says something was not found or not run.
 3. **Check first:** confidence `potential` or `needs-human-review`, severity
    low, or a dependency capability. A hardcoded password stays high but goes
-   here when it is in a test or verify script and an address at a test domain
-   (`example.com`, `.test`, `.invalid`) is within three lines; the finding says
-   so. A real domain next to it, or one other password in the file, keeps it in
-   Act on.
+   here when it is in a test location (a test folder, a `*.test.*` or `*.spec.*`
+   file, or a `scripts/verify-*` or `scripts/smoke-*` script) and, within three
+   lines, an email, user or login field is set to an address at a test domain
+   (`example.com`, `.test`, `.invalid`) in code, not in a comment. The finding
+   says so. Anything else, or one other password in the file, keeps it in Act on.
 4. **Act on:** everything else.
 
 The design is in [docs/research/spec-agent-brief.md](https://github.com/danoszz/penthera/blob/main/docs/research/spec-agent-brief.md).

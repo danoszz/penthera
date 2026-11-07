@@ -66,15 +66,60 @@ describe("a test account's password goes to Check first, still high", () => {
   const pw = (d) => scanSecrets(d).filter((f) => f.title === "Hardcoded password in source");
 
   it("the gaia script: high, potential, Check first, and says why", () => {
-    const [f] = pw(repo({ "scripts/verify-firebase-storage-security.js": script("security-check-${now}@example.com") }));
+    const [f] = pw(repo({ "frontend/scripts/verify-firebase-storage-security.js": script("security-check-${now}@example.com") }));
     expect(f).toMatchObject({ severity: "high", confidence: "potential" });
-    expect(f.description).toMatch(/example\.com is on a nearby line, in a test or verify script/);
+    expect(f.description).toMatch(/`testEmail` is set to an address at example\.com on a nearby line, in a test location/);
     expect(bucketOf(f).bucket).toBe("check");
   });
 
   it("other reserved test domains count too", () => {
     for (const email of ["qa@test.example.org", "a@foo.test", "x@app.invalid"]) {
       expect(pw(repo({ "e2e/login.spec.ts": script(email) }))[0].confidence, email).toBe("potential");
+    }
+  });
+
+  it("a username field in the same call counts", () => {
+    const [f] = pw(repo({ "tests/login.test.js": `await login({ username: "qa@example.com", password: "${TEMP}" });\n` }));
+    expect(f.confidence).toBe("potential");
+  });
+
+  // The blind review of bf88323 (8 Nov 2026): real passwords in these files went to
+  // Check first on a nearby example.com comment. Each must stay in Act on.
+  it("the reviewer's six reproductions stay in Act on", () => {
+    const P = ["Kx9!", "mQ2#vL7pR"].join("");
+    const comment = (pre = "") => `// contact ops@example.com\n${pre}const password = "${P}";\n`;
+    const files = {
+      "scripts/deploy.js": comment(),
+      "scripts/seed-prod.js": `const admin = { email: "admin@example.com", password: "${P}" };\n`,
+      "src/payments/verify.ts": comment(),
+      "src/auth/check.js": comment(),
+      "src/health-check.js": comment(),
+      "src/verify-email.ts": `const from = "noreply@example.com"; const password = "${P}";\n`,
+      // A proper test-account field does not help outside a test location either.
+      "scripts/migrate.js": script("a@example.com"),
+      "app/spec/config.js": script("a@example.com"),
+      "src/lib/smoke.js": script("a@example.org"),
+    };
+    for (const [file, text] of Object.entries(files)) {
+      const [f] = pw(repo({ [file]: text }));
+      expect(f, file).toBeDefined();
+      expect(f.confidence, file).toBeUndefined();
+      expect(bucketOf(f).bucket, file).toBe("act");
+    }
+  });
+
+  it("in a test location, an address only counts as an email, user or login value in code", () => {
+    const P = ["Kx9!", "mQ2#vL7pR"].join("");
+    for (const text of [
+      `// contact ops@example.com\nconst password = "${P}";\n`,
+      `// testEmail = "ops@example.com"\nconst password = "${P}";\n`,
+      `const x = 1; // user: "ops@example.com"\nconst password = "${P}";\n`,
+      `/* email = "ops@example.com" */\nconst password = "${P}";\n`,
+      `const note = "ops@example.com";\nconst password = "${P}";\n`,
+      `const testEmail = "ops@example.com.evil.io";\nconst password = "${P}";\n`,
+    ]) {
+      const [f] = pw(repo({ "tests/login.test.js": text }));
+      expect(f.confidence, text).toBeUndefined();
     }
   });
 
