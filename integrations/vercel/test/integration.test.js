@@ -262,6 +262,9 @@ describe("setup", () => {
 
     const workflow = await app.setup(post("/setup", `csrf=${csrf}&action=workflow&p=prj_one&p=prj_two`, { cookie, origin: BASE }));
     const wtext = await workflow.text();
+    // What a deploy does comes before the button that ends the install.
+    expect(wtext.indexOf("What happens on your next deploy")).toBeGreaterThan(0);
+    expect(wtext.indexOf("What happens on your next deploy")).toBeLessThan(wtext.indexOf("Turn on the check and finish"));
     const link = /href="(https:\/\/github\.com\/[^"]+)"/.exec(wtext)[1].replaceAll("&amp;", "&");
     const u = new URL(link);
     expect(u.pathname).toBe("/acme/shop/new/main");
@@ -270,8 +273,10 @@ describe("setup", () => {
     expect(vercel.calls.some((c) => c.method === "POST" && c.url.pathname.endsWith("/checks"))).toBe(false);
 
     const done = await app.setup(post("/setup", `csrf=${csrf}&action=enable&p=prj_one`, { cookie, origin: BASE }));
+    // Turn on ends the install on Vercel's next address, which closes the popup.
     expect(done.status).toBe(303);
     expect(done.headers.get("location")).toBe(NEXT);
+    expect(done.headers.getSetCookie().some((c) => c.startsWith("__Host-pv_session=;"))).toBe(true);
     expect(vercel.checks.prj_one).toHaveLength(1);
     expect(vercel.checks.prj_one[0]).toMatchObject(checkBody(CFG, "oac_realintegration"));
     // The integration id comes from Vercel's record of the installation, not the client id.
@@ -486,6 +491,19 @@ describe("pages", () => {
     }
     expect(pick).toContain('<details class="faq">');
     expect(configure).toContain('<details class="faq" open>');
+  });
+
+  it("draws no thin left line on any page: no border-left, no blockquote bar", () => {
+    const style = readFileSync(here("../lib/http.mjs"), "utf8");
+    expect(style).not.toMatch(/border-left|border-inline-start|<blockquote/);
+  });
+
+  it("every install error says what to do and offers the way out", async () => {
+    const { app } = setup();
+    for (const url of ["/install", `/install?code=${CODE}`, `/install?code=${CODE}&configurationId=${CFG}&teamId=bad`, `/install?code=${CODE}&configurationId=${CFG}&state=x`]) {
+      const body = await (await app.install(get(url))).text();
+      expect(body).toContain('<a class="btn go" href="/start">Install again</a>');
+    }
   });
 
   it("an expired session and a failed form check each offer a way out", async () => {

@@ -22,7 +22,7 @@ import { logError } from "./log.mjs";
 import { OidcError, jwksCache, verifyGithubToken } from "./oidc.mjs";
 import { STAT_FIELDS } from "./store.mjs";
 import { VercelError, exchangeCode, vercelClient } from "./vercel.mjs";
-import { WORKFLOW_PATH, WORKFLOW_YAML, checkBody, checkName, githubNewFileUrl, isIntegrationCheck, isOurCheck } from "./workflow.mjs";
+import { WORKFLOW_PATH, WORKFLOW_YAML, checkBody, githubNewFileUrl, isIntegrationCheck, isOurCheck } from "./workflow.mjs";
 
 const SESSION = "pv_session";
 const STATE = "pv_state";
@@ -78,6 +78,14 @@ const asks = ({ open = false } = {}) => `<details class="faq"${open ? " open" : 
 </dl>
 <ul class="links"><li><a href="https://docs.penthera.org/vercel/terms" target="_blank" rel="noopener noreferrer">Terms</a></li><li><a href="https://docs.penthera.org/vercel/privacy" target="_blank" rel="noopener noreferrer">Privacy</a></li><li><a href="${SOURCE_URL}" target="_blank" rel="noopener noreferrer">Source on GitHub</a></li></ul>
 </details>`;
+
+// What a production deploy does once the check is on: shown before Turn on, and on Done.
+const NEXT_STEPS = `<h2>What happens on your next deploy</h2>
+<ol class="steps">
+<li><span class="n" aria-hidden="true">1</span><span><strong>Vercel builds it</strong> and asks your repo's workflow to scan it.</span></li>
+<li><span class="n" aria-hidden="true">2</span><span><strong>Penthera scans the live deployment</strong> in your GitHub Actions. That usually takes under a minute, and the deploy waits for it.</span></li>
+<li><span class="n" aria-hidden="true">3</span><span><strong>A pass goes live.</strong> A fail stays out of production, and the check in Vercel links to the findings in the GitHub job summary.</span></li>
+</ol>`;
 
 export function readConfig(env) {
   const need = (name) => {
@@ -206,10 +214,10 @@ export function createApp({ env = process.env, store, fetch: fetchImpl = globalT
     const state = q.get("state");
     const source = q.get("source");
     const next = q.get("next") ? safeNext(q.get("next")) : null;
-    if (!code || !/^[A-Za-z0-9]{8,128}$/.test(code)) return message(400, "Missing install code", "Start the install from Vercel.");
-    if (!CONFIG_ID.test(configurationId ?? "")) return message(400, "Missing configuration", "Start the install from Vercel.");
-    if (teamId && !TEAM_ID.test(teamId)) return message(400, "Bad team id", "Start the install from Vercel.");
-    if (q.get("next") && !next) return message(400, "Bad return address", "The return address does not point at vercel.com.");
+    if (!code || !/^[A-Za-z0-9]{8,128}$/.test(code)) return message(400, "This install link is incomplete", "Start the install again from Vercel.", { action: { href: "/start", label: "Install again" } });
+    if (!CONFIG_ID.test(configurationId ?? "")) return message(400, "This install link is incomplete", "Start the install again from Vercel.", { action: { href: "/start", label: "Install again" } });
+    if (teamId && !TEAM_ID.test(teamId)) return message(400, "This install link is incomplete", "Start the install again from Vercel.", { action: { href: "/start", label: "Install again" } });
+    if (q.get("next") && !next) return message(400, "This install link points elsewhere", "Its return address is not on vercel.com. Start the install again from Vercel.", { action: { href: "/start", label: "Install again" } });
 
     // CSRF: an install we started (/start) must come back with the state we set in the cookie, and
     // a browser that holds that cookie must send the matching state. Installs started on vercel.com
@@ -218,34 +226,34 @@ export function createApp({ env = process.env, store, fetch: fetchImpl = globalT
     const cookies = [];
     const stateCookie = readCookie(request, STATE);
     if (state || stateCookie || source === "external") {
-      if (!safeEqual(state, stateCookie)) return message(403, "Install check failed", "This install did not start here, or took longer than 15 minutes. Start it again from Vercel.", { cookies: [clearCookie(STATE)] });
+      if (!safeEqual(state, stateCookie)) return message(403, "This install timed out", "An install must finish within 15 minutes of starting here. Start it again.", { cookies: [clearCookie(STATE)], action: { href: "/start", label: "Install again" } });
       cookies.push(clearCookie(STATE));
     } else if (source !== "marketplace" && source !== "deploy-button") {
-      return message(403, "Install check failed", "Start the install from Vercel.");
+      return message(403, "Start the install from Vercel", "Penthera installs from its page on Vercel.", { action: { href: "/start", label: "Install again" } });
     }
-    if (installLimited(request)) return message(429, "Too many installs", "Wait a minute and start the install again from Vercel.", { cookies });
+    if (installLimited(request)) return message(429, "Too many tries", "Wait a minute, then start the install again from Vercel.", { cookies });
 
     let token;
     try {
       token = await exchangeCode({ code, clientId: c.clientId, clientSecret: c.clientSecret, redirectUri: c.redirectUri, fetch: fetchImpl });
     } catch (e) {
       logError("exchange_failed", { status: e.status ?? 0, code: e.code ?? "network", configurationId });
-      return message(502, "Vercel did not accept the install", "The code may have expired (it lasts 30 minutes) or been used already. Start the install again from Vercel.", { cookies });
+      return message(502, "Vercel did not accept the install", "Its code lasts 30 minutes and works once. Start the install again.", { cookies, action: { href: "/start", label: "Install again" } });
     }
     // The exchange must name the configuration this redirect claims, and the team, or we store nothing.
     if (token.configurationId !== configurationId || (teamId && token.teamId !== teamId)) {
       logError("configuration_mismatch", { configurationId });
-      return message(400, "Install mismatch", "Start the install again from Vercel.", { cookies });
+      return message(400, "This install does not match", "Vercel named a different installation. Start the install again.", { cookies, action: { href: "/start", label: "Install again" } });
     }
     const ownerId = token.teamId ?? token.userId ?? teamId;
-    if (!ownerId) return message(502, "Vercel sent no owner", "Start the install again from Vercel.", { cookies });
+    if (!ownerId) return message(502, "Vercel sent no account", "Start the install again from Vercel.", { cookies, action: { href: "/start", label: "Install again" } });
 
     // One record per configuration. A deploy-button install may reuse an existing id: we overwrite it,
     // never duplicate, and never hand a record to another owner.
     const previous = await load(configurationId);
     if (previous && previous.ownerId !== ownerId) {
       logError("owner_mismatch", { configurationId });
-      return message(409, "Install mismatch", "This installation belongs to another account. Install again from Vercel.", { cookies });
+      return message(409, "This installation belongs to another account", "Install Penthera again from the account you want it on.", { cookies, action: { href: "/start", label: "Install again" } });
     }
     // createdAt is the latest install, so a replayed older uninstall event cannot delete it.
     const createdAt = new Date(now()).toISOString();
@@ -298,7 +306,7 @@ ${more}
 <div class="act"><button class="btn go" type="submit">Next: add the workflow</button></div>
 </form>
 <p class="small">The check blocks promotion to production when Penthera finds a high or critical issue. Previews are scanned too and never blocked.</p>
-${asks()}`, { step: "Step 1 of 2" });
+${asks()}`, { step: "Step 1 of 2: pick" });
   }
 
   async function setupPost(request) {
@@ -306,12 +314,12 @@ ${asks()}`, { step: "Step 1 of 2" });
     const s = await session(request, c);
     if (!s) return expired();
     const form = await readForm(request);
-    if (!form || !formAllowed(request, form, s, c)) return message(403, "Form check failed", "Reload the page and try again.", { action: { href: "/setup", label: "Reload setup" } });
+    if (!form || !formAllowed(request, form, s, c)) return message(403, "That page was out of date", "Reload it and try again.", { action: { href: "/setup", label: "Reload" } });
     const api = s.api;
 
     const removeId = form.get("remove");
     if (removeId) {
-      if (!PROJECT_ID.test(removeId)) return message(400, "Bad project", "Reload the page and try again.");
+      if (!PROJECT_ID.test(removeId)) return message(400, "That project is not in your list", "Reload the page and pick again.", { action: { href: "/setup", label: "Reload" } });
       try {
         const project = await api.getProject(removeId);
         for (const check of await api.listChecks(removeId)) {
@@ -327,7 +335,7 @@ ${asks()}`, { step: "Step 1 of 2" });
     }
 
     const ids = [...new Set(form.getAll("p"))].filter((id) => PROJECT_ID.test(id)).slice(0, MAX_PROJECTS_PER_POST);
-    if (!ids.length) return message(400, "No project picked", "Go back and pick at least one project.");
+    if (!ids.length) return message(400, "Pick a project first", "Tick at least one project, then go on.", { action: { href: "/setup", label: "Back to your projects" } });
     // Names and repos come from Vercel, never from the form.
     let projects;
     try {
@@ -335,7 +343,7 @@ ${asks()}`, { step: "Step 1 of 2" });
     } catch (e) {
       return apiFailure(e, s.configurationId, "project_failed");
     }
-    if (!projects.length) return message(400, "No GitHub project", "Penthera needs a project connected to a GitHub repository.");
+    if (!projects.length) return message(400, "Connect a GitHub repo first", "Penthera scans projects that deploy from a GitHub repository.", { action: { href: "/setup", label: "Back to your projects" } });
 
     if (form.get("action") === "enable") {
       const failed = [];
@@ -361,26 +369,20 @@ ${asks()}`, { step: "Step 1 of 2" });
           failed.push(p);
         }
       }
+      // Vercel's install ends on its `next` address, which closes the popup; Turn on already said what comes next.
       if (!failed.length && !taken.length && s.next) return redirect(s.next, { cookies: [clearCookie(SESSION)] });
-      const back = s.next ? `<div class="act"><a class="btn go" href="${esc(s.next)}">Back to Vercel</a></div>` : "";
-      const notes = [
-        failed.length ? `<p class="callout">Vercel did not accept the check for: ${failed.map((p) => esc(p.name)).join(", ")}. Try again from Configure, or add it by hand in Project Settings, Deployment Checks.</p>` : "",
-        taken.length ? `<p class="callout">Another Penthera installation already runs the check for: ${taken.map((p) => esc(p.name)).join(", ")}. Nothing changed there. Remove that check first to move it here.</p>` : "",
-      ].join("");
-      const text = notes || '<p class="lede">The check is on. Your next production deploy waits for Penthera.</p>';
-      const status = failed.length ? 502 : taken.length ? 409 : 200;
-      return html(status, "Penthera: done", `<h1>${status === 200 ? "Done" : "Some checks were not turned on"}</h1>${text}${back}`, { main: "one" });
+      return donePage(projects.filter((p) => !failed.includes(p) && !taken.includes(p)), failed, taken, s);
     }
 
     const token = formToken(s, c);
     const items = projects.map((p) => {
       const link = githubNewFileUrl(p.repo, p.branch);
-      const button = link ? `<a class="btn" href="${esc(link)}" target="_blank" rel="noopener noreferrer">Add penthera-vercel.yml on GitHub <span aria-hidden="true">↗</span></a>` : '<span class="meta">Copy the file below by hand.</span>';
-      return `<li class="row stack"><span class="grow"><span class="name" title="${esc(p.name)}">${esc(p.name)}</span><span class="meta">${esc(p.repo)}, branch ${esc(p.branch)}</span><span class="meta">Status name: <code>${esc(checkName(p.name))}</code></span></span>${button}<input type="hidden" name="p" value="${esc(p.id)}" form="enable"></li>`;
+      const button = link ? `<a class="btn" href="${esc(link)}" target="_blank" rel="noopener noreferrer">Commit it on GitHub <span aria-hidden="true">↗</span></a>` : '<span class="meta">Copy the file below by hand.</span>';
+      return `<li class="row stack"><span class="grow"><span class="name" title="${esc(p.name)}">${esc(p.name)}</span><span class="meta">${esc(p.repo)}, branch ${esc(p.branch)}</span></span>${button}<input type="hidden" name="p" value="${esc(p.id)}" form="enable"></li>`;
     });
     return html(200, "Penthera: add the workflow", `
 <h1>Add the workflow <span class="aside">(one commit)</span></h1>
-<p class="lede">Commit <code>${WORKFLOW_PATH}</code> on each repo's default branch. The button opens GitHub with the file filled in. It holds no secrets.</p>
+<p class="lede">Commit <code>${WORKFLOW_PATH}</code> on each repo's default branch. The button opens GitHub in a new tab with the file filled in. It holds no secrets.</p>
 <ul class="list">${items.join("")}</ul>
 <label class="cap" for="yaml">Or copy it:</label>
 <textarea id="yaml" readonly spellcheck="false" wrap="off">${esc(WORKFLOW_YAML)}</textarea>
@@ -388,11 +390,35 @@ ${asks()}`, { step: "Step 1 of 2" });
 <form id="enable" method="post" action="/setup">
 <input type="hidden" name="csrf" value="${token}">
 <input type="hidden" name="action" value="enable">
-<p class="callout">Commit the workflow first. Once the check is on, a production deploy waits for it.</p>
-<div class="act"><button class="btn go" type="submit">Turn on the check</button></div>
+<h2>Then turn on the check</h2>
+<p class="lede">Back from GitHub? Turn it on here. From then on, each production deploy waits for Penthera's scan.</p>
+${NEXT_STEPS}
+<div class="act"><button class="btn go" type="submit">${s.next ? "Turn on the check and finish" : "Turn on the check"}</button></div>
+${s.next ? '<p class="small">This takes you back to Vercel, and the install is done.</p>' : ""}
 </form>
 <p class="small">Your next production deploy will wait for Penthera's check. Findings stay in the GitHub job summary. Only pass or fail reaches us, to pass on to Vercel.</p>
-${asks()}`, { step: "Step 2 of 2" });
+${asks()}`, { step: "Step 2 of 2: commit, turn on" });
+  }
+
+  /**
+   * After "Turn on the check": what is on, what happens on the next deploy and where the result
+   * shows. Also when Vercel gave a `next` address: its one blue button finishes the install there.
+   */
+  function donePage(on, failed, taken, s) {
+    const names = (list) => list.map((p) => esc(p.name)).join(", ");
+    const notes = [
+      failed.length ? `<p class="note">Vercel did not accept the check for ${names(failed)}. Try again in a minute.</p>` : "",
+      taken.length ? `<p class="note">Another Penthera installation already runs the check for ${names(taken)}. Nothing changed there. Remove that check first to move it here.</p>` : "",
+    ].join("");
+    const status = failed.length ? 502 : taken.length ? 409 : 200;
+    const next = on.length ? `
+${NEXT_STEPS}
+<ul class="links col">${on.map((p) => `<li><a href="https://github.com/${esc(p.repo)}/actions/workflows/penthera-vercel.yml" target="_blank" rel="noopener noreferrer">${esc(p.name)} on GitHub Actions <span aria-hidden="true">↗</span></a></li>`).join("")}<li><a href="${SOURCE_URL}#readme" target="_blank" rel="noopener noreferrer">How it works <span aria-hidden="true">↗</span></a></li></ul>` : "";
+    const retry = failed.length ? '<a class="btn" href="/setup">Try again</a>' : "";
+    const finish = s.next || retry ? `<div class="act">${s.next ? `<a class="btn go" href="${esc(s.next)}">Back to Vercel</a>` : ""}${retry}</div>` : "";
+    const title = status === 200 ? "The check is on" : on.length ? "Some checks were not turned on" : "The check was not turned on";
+    const lede = on.length ? `<p class="lede">Penthera now checks each production deploy of ${names(on)} before it goes live.</p>` : "";
+    return html(status, "Penthera: done", `<h1>${title}</h1>${notes}${lede}${finish}${next}`, { main: "one" });
   }
 
   async function configure(request) {
@@ -804,12 +830,12 @@ ${asks({ open: true })}`);
   }
 
   function expired() {
-    return message(401, "This setup page has expired", "It works for 30 minutes after an install. Open Configure from Vercel, or install again.", { action: { href: "/start", label: "Install again" } });
+    return message(401, "This page has expired", "It works for 30 minutes after an install. Install again to change your projects.", { action: { href: "/start", label: "Install again" } });
   }
 
   function apiFailure(e, configurationId, event) {
     logError(event, { status: e.status ?? 0, code: e.code ?? "network", configurationId });
-    return message(502, "Vercel did not answer", "Try again in a minute. If it keeps failing, reinstall the integration.", { action: { href: "/setup", label: "Try again" } });
+    return message(502, "Vercel did not answer", "Try again in a minute. If it keeps failing, install again.", { action: { href: "/setup", label: "Try again" } });
   }
 
   /** Wraps a route: config errors become a 500 with a code, never a stack or a value. */
