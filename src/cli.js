@@ -244,11 +244,12 @@ function initArgs(argv) {
   return null;
 }
 
-/** The scan's "N may be fixable" line. It never fails a scan: without it the report is still complete. */
+/** How many of the scan's problems a fix recipe matches. It never fails a scan: without it the report is still complete. */
 async function fixLine(repo, findings) {
   try {
     const { fixSummary } = await import("../lib/fix/index.js");
-    return { count: fixSummary(findings), command: `penthera fix --plan --repo ${repo}` };
+    const { isProblem } = await import("./report/counts.js");
+    return { count: fixSummary(findings.filter((f) => isProblem(f))), command: `penthera fix --plan --repo ${repo}` };
   } catch {
     return null;
   }

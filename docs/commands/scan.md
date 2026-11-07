@@ -13,7 +13,7 @@ Black-box scans of a running app (localhost, preview, or staging) and white-box 
 | Mode | Command | Coverage |
 |------|---------|----------|
 | **URL scan** | `penthera https://example.com` | TLS, fingerprinting, endpoint discovery, templates, CORS, cookies, JS CVEs, param discovery, OpenAPI/FastAPI probes, security headers, auth hardening |
-| **Repo scan** | `penthera --repo ./my-app` | API route discovery (Next.js, Express, Hono, Fastify), trust-boundary mapping, hardcoded-secret scanning (including Anthropic, OpenAI, Gemini, Groq, Hugging Face and other AI provider keys), and your GitHub Actions workflows ([below](#github-actions-workflows)) |
+| **Repo scan** | `penthera --repo ./my-app` | API route discovery (Next.js, Express, Hono, Fastify), trust-boundary mapping, hardcoded-secret scanning (including Anthropic, OpenAI, Gemini, Groq, Hugging Face and other AI provider keys), security headers, cookie flags, CORS and login rate limits as your code sets them (the checks [`penthera fix`](fix.md) fixes), and your GitHub Actions workflows ([below](#github-actions-workflows)) |
 | **Combined** | `penthera https://staging.app --repo .` | Black-box and white-box in one run |
 | **Interactive** | `penthera` *(no args)* | Setup wizard: detects the project, runs the offline checks, offers the hook and workflow ([init.md](init.md)) |
 | **Machine audit** | `penthera --machine` | macOS checks (keyloggers, persistence, rootkits) |
@@ -217,7 +217,8 @@ Each finding points to the file and line. `explain_finding` knows all four ids. 
 
 Every `--repo` scan adds a **Coverage** section to the terminal, Markdown and
 JSON (`coverage`) reports. For each check (the secret scan, route and
-code-pattern analysis, runtime versions) it says how many files were read and
+code-pattern analysis, runtime versions, and headers, cookies, CORS and login
+rate limits) it says how many files were read and
 why the others were not: file type not read, over the size limit, a language
 route analysis does not support, or no server routes found (a client-only app
 has none). Route analysis reads Next.js route handlers anywhere under `app/` or
@@ -225,7 +226,10 @@ has none). Route analysis reads Next.js route handlers anywhere under `app/` or
 Hono and Fastify routes. How many routes it found is part of Coverage, not a
 finding. Source files no code
 analysis read are listed as blind spots, up to 200. A file that was not read
-is unchecked, not clean. Dependency behaviour and agent config have their own
+is unchecked, not clean. Headers read from code are marked `potential`: your
+host or CDN may still add them, and a scan of the live address shows what it
+sends. The headers check reads `next.config.*`, `middleware.*` and `vercel.json`
+for a Next.js app, and every code file for Express, Hono and Fastify. Dependency behaviour and agent config have their own
 commands (`penthera deps`, `penthera agents`) and are listed as not part of a
 repo scan.
 

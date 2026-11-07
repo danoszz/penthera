@@ -13,8 +13,9 @@ import { parseArgs } from "node:util";
 import { resolve } from "node:path";
 import { readFileSync, existsSync, statSync } from "node:fs";
 import { scanRepo } from "../scan-repo.js";
-import { planFixes, probeRepo, redactPlan, applyDiff, assertCleanTree, findingKey, createModelFixer } from "../../lib/fix/index.js";
+import { planFixes, redactPlan, applyDiff, assertCleanTree, findingKey, createModelFixer } from "../../lib/fix/index.js";
 import { bold, dim, green, red, yellow, cyan } from "./ansi.js";
+import { isProblem, fixesText, plural } from "../report/counts.js";
 
 const HELP = `
   ${bold("penthera fix")} — plan and apply local fix recipes
@@ -39,7 +40,11 @@ const HELP = `
   hardcoded secret to env var. Plans change after each apply: run --plan again.
 `;
 
-/** Findings for the repo: a report's findings, or a fresh scan plus recipe probes. */
+/**
+ * Findings for the repo: a report's findings, or a fresh repo scan. The scan
+ * runs the recipes' static checks itself, so the plan and the scan count the
+ * same findings.
+ */
 async function gatherFindings(repo, input) {
   if (input) {
     const report = JSON.parse(readFileSync(resolve(input), "utf-8"));
@@ -47,7 +52,7 @@ async function gatherFindings(repo, input) {
   }
   const result = await scanRepo(repo, {});
   const seen = new Set();
-  const findings = [...result.findings, ...probeRepo(repo)].filter((f) => {
+  const findings = result.findings.filter((f) => {
     if (f.severity === "info" && f.category === "config") return false;
     const k = findingKey(f);
     if (seen.has(k)) return false;
@@ -55,6 +60,16 @@ async function gatherFindings(repo, input) {
     return true;
   });
   return { findings, fresh: true };
+}
+
+/**
+ * The plan's counts in the words every surface uses (src/report/counts.js):
+ * problems in the run, how many of them a plan fixes, and the plans.
+ */
+export function planCounts(findings, plans) {
+  const problems = new Set(findings.filter((f) => isProblem(f)).map(findingKey));
+  const covered = new Set(plans.flatMap((p) => p.findings.map(findingKey)).filter((k) => problems.has(k)));
+  return { problems: problems.size, covered: covered.size, fixes: plans.length, findings: findings.length };
 }
 
 const NAMED = { "\0": "\\0", "\b": "\\b", "\t": "\\t", "\n": "\\n", "\v": "\\v", "\f": "\\f", "\r": "\\r", "\x1b": "\\e" };
@@ -151,19 +166,20 @@ export async function runFix(argv) {
     process.exit(2);
   }
   const { plans, unmatched, refused } = await planFixes(repo, gathered.findings, { model });
+  const counts = planCounts(gathered.findings, plans);
 
   if (!opts.apply) {
     if (opts.json) {
-      console.log(JSON.stringify({ repo, plans: plans.map(redactPlan), unmatched: unmatched.map((f) => ({ title: f.title, category: f.category, severity: f.severity, url: f.url || null })), refused: refused.map((r) => ({ title: r.finding.title, reason: r.reason })) }, null, 2));
+      console.log(JSON.stringify({ repo, counts, plans: plans.map(redactPlan), unmatched: unmatched.map((f) => ({ title: f.title, category: f.category, severity: f.severity, url: f.url || null })), refused: refused.map((r) => ({ title: r.finding.title, reason: r.reason })) }, null, 2));
       process.exit(0);
     }
     process.stdout.write(`\n  ${bold("penthera fix")} ${dim(repo)}\n`);
-    process.stdout.write(`  ${plans.length} fix${plans.length === 1 ? "" : "es"} planned for ${gathered.findings.length} finding${gathered.findings.length === 1 ? "" : "s"}${gathered.fresh ? " (fresh repo scan)" : ` (from ${opts.input})`}\n`);
+    process.stdout.write(`  ${fixesText(counts.fixes, counts.covered, counts.problems)}${gathered.fresh ? " (fresh repo scan)" : ` (from ${opts.input})`}\n`);
     for (const p of plans) printPlan(redactPlan(p));
     for (const r of refused) process.stdout.write(`\n  ${yellow("Refused")} the model's fix for ${visible(r.finding.title)}: ${visible(r.reason)}\n`);
-    const manual = unmatched.filter((f) => f.severity !== "info");
+    const manual = unmatched.filter((f) => isProblem(f));
     if (manual.length) {
-      process.stdout.write(`\n  ${dim(`${manual.length} finding${manual.length === 1 ? "" : "s"} without a recipe; fix by hand (\`penthera --repo . -o report.json\` writes an action plan)${model ? "" : " or try --fix-model <name>"}:`)}\n`);
+      process.stdout.write(`\n  ${dim(`${plural(manual.length, "problem")} without a recipe; fix by hand (\`penthera --repo . -o report.json\` writes an action plan)${model ? "" : " or try --fix-model <name>"}:`)}\n`);
       for (const f of manual.slice(0, 20)) process.stdout.write(`    [${visible(f.severity)}] ${visible(f.title)}\n`);
     }
     if (plans.length) process.stdout.write(`\n  Apply one:  penthera fix --apply <id>${opts.repo ? ` --repo ${opts.repo}` : ""}${opts.input ? ` -o ${opts.input}` : ""}\n\n`);

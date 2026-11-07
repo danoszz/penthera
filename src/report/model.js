@@ -13,6 +13,7 @@ import { RECIPES } from "../../lib/fix/index.js";
 import { OWASP_NAMES } from "../../lib/agents/owasp.js";
 import { findingId } from "../../lib/memory/views.js";
 import { buildTimeline, formatDuration } from "./timeline.js";
+import { problemCounts } from "./counts.js";
 
 const SEV_ORDER = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
 
@@ -185,6 +186,8 @@ export function buildReportModel(result, { version = "0.0.0" } = {}) {
     probes: [...(result?.executedProbes || [])].sort(),
     summary: {
       ...counts,
+      // Problems: act on plus check first, the number every surface shows.
+      problems: problemCounts(findings).problems,
       serious: counts.critical + counts.high,
       seriousInTests: findings.filter((f) => (f.severity === "critical" || f.severity === "high") && TEST_PATH.test(f.file || "")).length,
       total: findings.length,

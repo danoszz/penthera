@@ -23,7 +23,7 @@ penthera agent --loop --repo . --auto low           # auto-apply only recipes me
 
 One iteration:
 
-1. **Scan** the repo (white-box scan plus the fix recipes' static probes) and,
+1. **Scan** the repo (the same repo scan as `penthera --repo`, which runs the fix recipes' checks) and,
    with `--url`, the running app.
 2. **Triage**: drop findings suppressed in memory or `penthera.suppress.json`,
    and rank the rest with memory (severity always first).
@@ -146,7 +146,7 @@ Every step carries `startedAt` and `durationMs`.
   memory: { projectId, chain: "ok" | "broken", eventsAppended },
   iterations: [{
     n, startedAt, durationMs,
-    findings: { total, suppressed, fixable },
+    findings: { total, problems, suppressed, fixable },   // problems: to act on plus check first; fixable: fixes planned
     steps: [{ step: "scan" | "triage" | "plan", startedAt, durationMs }],
     fixes: [{
       planId, recipe, title, framework, source: "recipe" | "local-model", confidence,

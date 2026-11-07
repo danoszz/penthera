@@ -140,8 +140,9 @@ export function createRunManager(deps) {
       emit(run, "log", { text });
       const m = text.match(/^\s*iteration (\d+)\/(\d+)/);
       if (m) emit(run, "iteration", { n: Number(m[1]), of: Number(m[2]) });
-      const s = text.match(/^\s*scan: (\d+) findings \((\d+) suppressed\), (\d+) fixable/);
-      if (s) emit(run, "scanned", { findings: Number(s[1]), suppressed: Number(s[2]), fixable: Number(s[3]) });
+      // The loop's line, in the words every surface uses (src/report/counts.js).
+      const s = text.match(/^\s*scan: (\d+) problems? \((\d+) suppressed\), (\d+) fix(?:es)? planned/);
+      if (s) emit(run, "scanned", { problems: Number(s[1]), suppressed: Number(s[2]), fixes: Number(s[3]) });
       if (/verified and committed/.test(text)) emit(run, "fix", { status: "verified", text });
       else if (/failed verification, reverted/.test(text)) emit(run, "fix", { status: "failed", text });
       else if (/^\s*not applied:/.test(text)) emit(run, "fix", { status: "not-applied", text });

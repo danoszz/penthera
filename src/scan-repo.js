@@ -19,6 +19,7 @@ import { discoverFrameworkRoutes } from "../lib/whitebox/frameworks.js";
 import { runtimeAdvisoriesForRepo } from "../lib/advisories/index.js";
 import { buildCoverage } from "../lib/coverage.js";
 import { readRepoFile, isRefused } from "../lib/fs-safe.js";
+import { probeRepoDetailed, findingKey } from "../lib/fix/index.js";
 
 /** Source and config files the route scan reads are capped at 5 MiB. */
 const SOURCE_MAX_BYTES = 5 * 1024 * 1024;
@@ -35,6 +36,30 @@ function refusedFileFinding(e, repoPath) {
     category: "config",
     source: "repo-scan",
   };
+}
+
+const SEV_RANK = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
+
+/**
+ * Add the settings checks' findings to the scan's. A wildcard CORS hit the
+ * route scan already reported for the same file is the same problem: the route
+ * scan's finding stays (baselines and suppressions know it), unless the
+ * settings check rates it worse. Repeats within the checks go too.
+ */
+function mergeSettings(result, findings) {
+  const corsFiles = new Map();
+  for (const f of result.findings) {
+    if (f.category === "code-pattern" && f.pattern === "cors-wildcard" && f.file) corsFiles.set(f.file, f);
+  }
+  const seen = new Set(result.findings.map(findingKey));
+  for (const f of findings) {
+    const same = f.category === "cors" ? corsFiles.get(f.file) : null;
+    if (same && (SEV_RANK[same.severity] ?? 5) <= (SEV_RANK[f.severity] ?? 5)) continue;
+    const k = findingKey(f);
+    if (seen.has(k)) continue;
+    seen.add(k);
+    result.findings.push(f);
+  }
 }
 
 /**
@@ -127,7 +152,9 @@ export async function scanRepo(repoPath, opts = {}) {
   const ignored = gitIgnored(repoPath);
   // Every return goes through here: the ledger says what was read, including
   // when route analysis found nothing to read.
+  let settings = null;
   const finish = () => {
+    if (settings) mergeSettings(result, settings.findings);
     result.coverage = buildCoverage(repoPath, result, { ignored });
     result.duration = Date.now() - startTime;
     return result;
@@ -156,6 +183,15 @@ export async function scanRepo(repoPath, opts = {}) {
   progress("Checking GitHub Actions workflows...");
   result.findings.push(...scanWorkflows(repoPath));
   result.executedProbes.push("ci-workflows");
+
+  // ── Phase 1e: the fix planner's static checks ─────────────────────────
+  // Headers, cookie flags, CORS and login rate limits, read from the code. The
+  // fix plan reads the same findings from this scan, so both count the same.
+  progress("Checking headers, cookies, CORS and login rate limits...");
+  settings = probeRepoDetailed(repoPath);
+  // Kept off the JSON report (it lists every file read); the ledger reads it.
+  Object.defineProperty(result, "settingsCoverage", { value: settings.coverage, enumerable: false });
+  result.executedProbes.push("app-settings");
   if (library.enabled) {
     result.executedProbes.push("library-mode");
     result.findings.push({

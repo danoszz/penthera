@@ -1,4 +1,4 @@
-**Penthera: Fix now.** 3 to act on, 2 to check first, 0 likely noise. Scanned: live URL, repo.
+**Penthera: Fix now.** 5 problems (3 to act on, 2 to check first), 0 likely noise. Scanned: live URL, repo.
 
 ### Act on
 

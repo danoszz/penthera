@@ -20,6 +20,9 @@ import { exitCodeOf, exitReason, isSevere } from "./exit.js";
 import { hintCommand } from "../utils/invocation.js";
 import { notRead, readNothing, siteUnread, SITE_NOT_READ } from "./unread.js";
 import { unreachableText } from "./reach.js";
+import { bucketOf, pathOf, plural, problemsText } from "./counts.js";
+
+export { bucketOf };
 
 export const BRIEF_SCHEMA = "penthera.brief/1";
 // Exit 0 is not "safe to publish". Penthera tests these from outside; a pass shows
@@ -33,14 +36,8 @@ const MAX_ITEMS = 8;
 const MAX_EXAMPLES = 3;
 const MAX_NEXT = 3;
 
-// Generated or build output: nobody edits these files, so a hit in them is noise.
-const GENERATED = /(?:^|\/)(?:\.next[^/]*|dist|build|out|\.turbo|\.svelte-kit|\.nuxt|\.output|__pycache__|coverage)\//;
-const FIXTURE = /(?:^|\/)(?:fixtures?|__fixtures__|testdata|__mocks__)\//;
-// Test code: a key here is a test's own sample. A fixtures folder keeps its own reason, so FIXTURE is checked first.
-const TEST_FILE = /(?:^|\/)(?:tests|__tests__)\/|(?:^|\/)[^/]*\.(?:test|spec)\.[^/]+$/;
 // An info finding that says something was not found or not run belongs under Not checked.
 const GAP = /^no\b|not (?:found|run|read|checked|supported)|did not|skipped|unreachable/i;
-const URL_RE = /^[a-z][a-z0-9+.-]*:\/\//i;
 
 const NOISE_REASONS = {
   "local-only": "in files git ignores, never committed",
@@ -56,34 +53,17 @@ const SKIP_LABELS = {
   "sink-file-cap": "past the eval and exec check's 5,000-file limit",
   "no-api-surface": "not analysed because no API routes were found",
   "language-not-supported": "in a language route analysis does not support",
+  "settings-file-cap": "past the settings check's 2,000-file limit",
+  refused: "refused (a link out of the project, a device or a FIFO)",
+  unreadable: "that could not be read",
 };
 
 const text = (s, max = 300) => cleanText(String(s ?? ""), max);
-
-function pathOf(f) {
-  const u = f.file || f.url;
-  return u && !URL_RE.test(String(u)) ? String(u) : null;
-}
 
 function whereOf(f) {
   const p = pathOf(f);
   if (p) return Number.isInteger(f.line) && f.line > 0 ? `${p}:${f.line}` : p;
   return f.url ? String(f.url) : null;
-}
-
-/** Which bucket a finding goes in, and for noise, why. First match wins. */
-export function bucketOf(f, { skillTarget = false } = {}) {
-  const p = pathOf(f) || "";
-  if (f.localOnly) return { bucket: "noise", reason: "local-only" };
-  // A skill ships its dist/ and build/, so in a named skill those are real code.
-  if (!skillTarget && GENERATED.test(p)) return { bucket: "noise", reason: "generated" };
-  if (FIXTURE.test(p)) return { bucket: "noise", reason: "fixture" };
-  if (TEST_FILE.test(p)) return { bucket: "noise", reason: "test-file" };
-  if (f.severity === "info") return { bucket: "info" };
-  if (["potential", "needs-human-review"].includes(f.confidence)) return { bucket: "check" };
-  if (f.severity === "low") return { bucket: "check" };
-  if (f.category === "dependency-risk") return { bucket: "check" };
-  return { bucket: "act" };
 }
 
 /** A title with its own path taken out, so one rule across many files reads as one line. */
@@ -188,7 +168,9 @@ function coverageLines(coverage) {
       out.push(`${fam.label} did not run${why ? `: ${why}` : ""}.`);
       continue;
     }
-    for (const [k, n] of Object.entries(fam.skipped || {})) {
+    for (const [k, count] of Object.entries(fam.skipped || {})) {
+      // A file that is not a route but was read by the settings check was read.
+      const n = k === "not-a-route" ? count - (fam.notRouteReadBySettings || 0) : count;
       if (n > 0) out.push(`${fam.label}: ${filesText(n)} ${SKIP_LABELS[k] || k.replace(/-/g, " ")} ${n === 1 ? "was" : "were"} not read.`);
     }
   }
@@ -239,8 +221,9 @@ export function buildBrief(results, { reports = [], fixes = null, limits = [], m
   for (const r of list) notChecked.push(...coverageLines(r.coverage), ...(r.agents?.notChecked || []).map((l) => text(l, 300)), ...(r.notChecked || []).map((l) => text(l, 300)));
   const next = [];
   if (fixes) {
-    const lead = fixes.count ? `${fixes.count} may be fixable. ` : "";
-    next.push({ command: text(fixes.command, 200), why: `${lead}The fix plan also checks cookie flags, CORS and rate limits in your code` });
+    const problems = by.act.length + by.check.length;
+    const lead = fixes.count ? `A fix recipe matches ${fixes.count} of the ${plural(problems, "problem")}. ` : "";
+    next.push({ command: text(fixes.command, 200), why: `${lead}It shows each diff and changes nothing until you approve one` });
   }
   for (const f of by.info) {
     const cmd = commandIn(f);
@@ -288,6 +271,8 @@ export function buildBrief(results, { reports = [], fixes = null, limits = [], m
     target: text(targets.join(", "), 500),
     scanned: unread ? modes.filter((m) => m !== "url") : modes,
     counts: {
+      // Problems: act on plus check first, the number every surface shows (src/report/counts.js).
+      problems: by.act.length + by.check.length,
       act: by.act.length,
       check: by.check.length,
       noise: by.noise.length,
@@ -325,7 +310,7 @@ function whereText(i) {
 export function formatBrief(b, { footer = false } = {}) {
   const L = [];
   const c = b.counts;
-  const parts = [`${c.act} to act on`, `${c.check} to check first`, `${c.noise} likely noise`];
+  const parts = [problemsText({ problems: c.problems ?? c.act + c.check, act: c.act, check: c.check }), `${c.noise} likely noise`];
   if (c.info) parts.push(`${c.info} info in the full report`);
   const scanned = b.scanned.length ? ` Scanned: ${b.scanned.map((m) => MODE_NAMES[m] || m).join(", ")}.` : "";
   L.push(`**Penthera: ${b.verdict}.** ${parts.join(", ")}.${scanned}`, "");

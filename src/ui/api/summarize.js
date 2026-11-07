@@ -13,6 +13,7 @@ import { buildReportModel, CONFIDENCE_LABELS } from "../../report/model.js";
 import { createHash } from "node:crypto";
 import { notRead, siteUnread } from "../../report/unread.js";
 import { keyParts } from "../static/js/format.js";
+import { bucketOf, problemCounts } from "../../report/counts.js";
 
 export const SEVERITIES = ["critical", "high", "medium", "low", "info"];
 const SEV_RANK = Object.fromEntries(SEVERITIES.map((s, i) => [s, i]));
@@ -75,6 +76,8 @@ export function findingRow(f, report) {
     category: str(f.category, 80),
     source: str(f.source, 80),
     confidence: str(f.confidence, 40),
+    // act, check, noise or info: the brief's buckets, so the list counts problems the same way.
+    bucket: bucketOf(f).bucket,
     location: str(loc, 500),
     seen: report.timestamp || null,
     // Tool names only (--giants): anything else in a report file is dropped.
@@ -210,18 +213,20 @@ export function buildOverview({ scans = [], memory = [], runs = [], duties = () 
     // The run counts a fix when it lands, the scans once a later one misses it. Whichever is further.
     const mem = memory.find((m) => matchesProject(m.label, key) || matchesProject(m.label, keyParts(key).folder));
     const done = Math.max(gone.length, mem?.verifiedFixes || 0);
-    tallied.push({ key, c, gone: done, at: time(latest.data.timestamp) ?? latest.mtime, siteUnread: Boolean(siteUnread(latest.data)) });
+    // "Open" and "to fix" are problems: the brief's act on plus check first (src/report/counts.js).
+    const problems = problemCounts(latest.data.findings).problems;
+    tallied.push({ key, c, problems, gone: done, at: time(latest.data.timestamp) ?? latest.mtime, siteUnread: Boolean(siteUnread(latest.data)) });
     const unread = notRead(latest.data) || onlyAudits(latest.data);
     const hidden = Array.isArray(latest.data.suppressed) ? latest.data.suppressed : [];
     const trend = series.length > 1 || !mem?.trend?.length
-      ? series.slice(-12).map((r) => ({ ts: r.data.timestamp, ...counts(r.data.findings) }))
+      ? series.slice(-12).map((r) => ({ ts: r.data.timestamp, ...counts(r.data.findings), problems: problemCounts(r.data.findings).problems }))
       : mem.trend;
     projects.push({
       key,
       mode: str(latest.data.mode, 20) || (latest.data.modes || []).join("+") || null,
       lastScan: latest.data.timestamp || null,
       counts: c,
-      open: actionable(c),
+      open: problems,
       fixed: done,
       ...postureGrade(c),
       // What wasn't read has no grade to show, whatever else was.
@@ -233,7 +238,7 @@ export function buildOverview({ scans = [], memory = [], runs = [], duties = () 
       suppressed: hidden.length,
       duties: duties(key),
       nothingToFix: Boolean(nothingToFix(key, time(latest.data.timestamp) ?? latest.mtime)),
-      trend: trend.map((t) => ({ ts: t.ts, total: actionable(t), critical: t.critical, high: t.high })),
+      trend: trend.map((t) => ({ ts: t.ts, total: t.problems ?? actionable(t), critical: t.critical, high: t.high })),
       memory: mem ? { events: mem.events, chain: mem.chain, medianTimeToFixDays: mem.medianTimeToFixDays } : null,
     });
   }
@@ -245,7 +250,7 @@ export function buildOverview({ scans = [], memory = [], runs = [], duties = () 
   let fixed = 0;
   for (const t of counted) {
     for (const s of SEVERITIES) mix[s] += t.c[s];
-    open += actionable(t.c);
+    open += t.problems;
     fixed += t.gone;
   }
 
@@ -521,7 +526,7 @@ export function explainFinding(f, report) {
 
 const scanMeta = (r, i) => ({
   i, ts: r.data.timestamp || new Date(r.mtime).toISOString(), file: r.name,
-  counts: counts(r.data.findings), open: actionable(counts(r.data.findings)),
+  counts: counts(r.data.findings), open: problemCounts(r.data.findings).problems,
 });
 
 /**
