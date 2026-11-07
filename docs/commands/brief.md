@@ -69,7 +69,11 @@ The first matching rule wins:
 2. An **info** finding goes to **Next** if it names a command, or to **Not
    checked** if it says something was not found or not run.
 3. **Check first:** confidence `potential` or `needs-human-review`, severity
-   low, or a dependency capability.
+   low, or a dependency capability. A hardcoded password stays high but goes
+   here when it is in a test or verify script and an address at a test domain
+   (`example.com`, `.test`, `.invalid`) is within three lines; the finding says
+   so. A real domain next to it, or one other password in the file, keeps it in
+   Act on.
 4. **Act on:** everything else.
 
 The design is in [docs/research/spec-agent-brief.md](https://github.com/danoszz/penthera/blob/main/docs/research/spec-agent-brief.md).
