@@ -93,9 +93,9 @@ export function readConfig(env) {
     origin: baseUrl.origin,
     redirectUri: `${baseUrl.origin}/install`,
     slug: /^[a-z0-9-]{1,32}$/.test(env.INTEGRATION_SLUG ?? "") ? env.INTEGRATION_SLUG : "penthera",
-    // The integration's id for the check's `source`. Vercel's integration ids and OAuth client ids
-    // both look like oac_...; INTEGRATION_ID overrides when the two differ (README, "Unverified").
-    integrationId: INTEGRATION_ID.test(env.INTEGRATION_ID ?? "") ? env.INTEGRATION_ID : INTEGRATION_ID.test(env.INTEGRATION_CLIENT_ID ?? "") ? env.INTEGRATION_CLIENT_ID : null,
+    // An override for the check's `source.integrationId`. Without it, the id is read from Vercel's
+    // record of the installation on each "Turn on the check" (README, "The check").
+    integrationId: INTEGRATION_ID.test(env.INTEGRATION_ID ?? "") ? env.INTEGRATION_ID : null,
     cronSecret: env.CRON_SECRET || null,
   };
 }
@@ -340,6 +340,7 @@ ${asks()}`, { step: "Step 1 of 2: pick" });
     if (form.get("action") === "enable") {
       const failed = [];
       const taken = [];
+      const integrationId = await integrationIdFor(api, s.configurationId, c);
       for (const p of projects) {
         try {
           // A project's link belongs to the installation that owns a live Penthera check on it. If
@@ -354,9 +355,9 @@ ${asks()}`, { step: "Step 1 of 2: pick" });
           // hold production until Vercel times the run out.
           await store.putLink({ projectId: p.id, configurationId: s.configurationId });
           const existing = await api.listChecks(p.id);
-          if (!existing.some((k) => isIntegrationCheck(k, s.configurationId))) await api.createCheck(p.id, checkBody(s.configurationId, c.integrationId));
+          if (!existing.some((k) => isIntegrationCheck(k, s.configurationId))) await createOurCheck(api, p.id, s.configurationId, integrationId);
         } catch (e) {
-          logError("check_failed", { status: e.status ?? 0, code: e.code ?? "network", configurationId: s.configurationId });
+          logError("check_failed", { status: e.status ?? 0, code: e.code ?? "network", message: e.detail ?? "", configurationId: s.configurationId });
           failed.push(p);
         }
       }
@@ -508,6 +509,40 @@ ${asks({ open: true })}`);
     }
     if (api) await removeOurChecks(api, event.payload.configuration.projects, id);
     return json(200, { ok: true, deleted: true });
+  }
+
+  /**
+   * The integration id for the check's source: INTEGRATION_ID when set, else Vercel's own record of
+   * this installation. When the lookup fails, null: the source then names the configuration only,
+   * and the failure is logged with Vercel's code and message.
+   */
+  async function integrationIdFor(api, configurationId, c) {
+    if (c.integrationId) return c.integrationId;
+    try {
+      const id = await api.getIntegrationId(configurationId);
+      if (!id) logError("integration_lookup_failed", { code: "no_integration_id", configurationId });
+      return id;
+    } catch (e) {
+      logError("integration_lookup_failed", { status: e.status ?? 0, code: e.code ?? "network", message: e.detail ?? "", configurationId });
+      return null;
+    }
+  }
+
+  /**
+   * POST the check. The docs give `timeout` a default of 300 and no maximum; if Vercel refuses the
+   * body with a 400 whose message names `timeout`, the create is tried once more without it (the
+   * default applies). Any other error is thrown as it came.
+   */
+  async function createOurCheck(api, projectId, configurationId, integrationId) {
+    const body = checkBody(configurationId, integrationId);
+    try {
+      return await api.createCheck(projectId, body);
+    } catch (e) {
+      if (!(e instanceof VercelError && e.status === 400 && /timeout/i.test(e.detail ?? ""))) throw e;
+      logError("check_timeout_refused", { status: e.status, code: e.code, message: e.detail, configurationId });
+      const { timeout: _dropped, ...rest } = body;
+      return api.createCheck(projectId, rest);
+    }
   }
 
   /**
