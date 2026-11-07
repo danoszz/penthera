@@ -495,7 +495,7 @@ describe("project links", () => {
     await second(ctx, { withCheck: true });
     const res = await ctx.app.setup(form("/setup", `csrf=${ctx.csrf}&action=enable&p=prj_one`, { cookie: ctx.cookie }));
     expect(res.status).toBe(409);
-    expect(await res.text()).toContain("Another Penthera installation already runs the check for: shop");
+    expect(await res.text()).toContain("Another Penthera installation already runs the check for shop");
     expect(ctx.store.dumpLinks()).toEqual([{ projectId: "prj_one", configurationId: OTHER_CFG }]);
     // No second check was added next to theirs.
     expect(ctx.vercel.checks.prj_one.map((k) => k.id)).toEqual(["chk_other"]);

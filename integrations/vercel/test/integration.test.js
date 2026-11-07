@@ -269,8 +269,14 @@ describe("setup", () => {
     expect(vercel.calls.some((c) => c.method === "POST" && c.url.pathname.endsWith("/checks"))).toBe(false);
 
     const done = await app.setup(post("/setup", `csrf=${csrf}&action=enable&p=prj_one`, { cookie, origin: BASE }));
-    expect(done.status).toBe(303);
-    expect(done.headers.get("location")).toBe(NEXT);
+    // Done says what happens next, and its one blue button finishes the install in Vercel.
+    expect(done.status).toBe(200);
+    const dtext = await done.text();
+    expect(dtext).toContain("<h1>The check is on</h1>");
+    expect(dtext).toContain("What happens on your next deploy");
+    expect(dtext).toContain(`<a class="btn go" href="${NEXT.replaceAll("&", "&amp;")}">Finish in Vercel</a>`);
+    expect(dtext).toContain('href="https://github.com/acme/shop/actions/workflows/penthera-vercel.yml"');
+    expect(done.headers.getSetCookie().some((c) => c.startsWith("__Host-pv_session=;"))).toBe(true);
     expect(vercel.checks.prj_one).toHaveLength(1);
     expect(vercel.checks.prj_one[0]).toMatchObject(checkBody(CFG, "oac_testclient"));
     expect(vercel.checks.prj_one[0].source).toEqual({ kind: "integration", integrationId: "oac_testclient", integrationConfigurationId: CFG });
@@ -483,6 +489,19 @@ describe("pages", () => {
     }
     expect(pick).toContain('<details class="faq">');
     expect(configure).toContain('<details class="faq" open>');
+  });
+
+  it("draws no thin left line on any page: no border-left, no blockquote bar", () => {
+    const style = readFileSync(here("../lib/http.mjs"), "utf8");
+    expect(style).not.toMatch(/border-left|border-inline-start|<blockquote/);
+  });
+
+  it("every install error says what to do and offers the way out", async () => {
+    const { app } = setup();
+    for (const url of ["/install", `/install?code=${CODE}`, `/install?code=${CODE}&configurationId=${CFG}&teamId=bad`, `/install?code=${CODE}&configurationId=${CFG}&state=x`]) {
+      const body = await (await app.install(get(url))).text();
+      expect(body).toContain('<a class="btn go" href="/start">Install again</a>');
+    }
   });
 
   it("an expired session and a failed form check each offer a way out", async () => {
