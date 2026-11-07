@@ -6,7 +6,7 @@
  * string value is redacted if it looks like a credential, and the values of
  * the secret env vars are masked wherever they appear.
  */
-const FIELDS = new Set(["configurationId", "status", "code", "route", "count"]);
+const FIELDS = new Set(["configurationId", "status", "code", "message", "route", "count"]);
 const SECRET_ENV = ["INTEGRATION_CLIENT_SECRET", "PENTHERA_TOKEN_KEYS", "KV_REST_API_TOKEN", "CRON_SECRET"];
 
 // Long opaque strings (tokens, codes, keys) and anything after a bearer or key= label.

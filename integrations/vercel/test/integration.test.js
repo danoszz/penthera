@@ -60,6 +60,7 @@ function mockVercel({ checks = {}, fail = {}, token = ACCESS_TOKEN } = {}) {
     if (init.headers?.Authorization !== `Bearer ${token}`) return reply(401, { error: { code: "unauthorized" } });
     let m;
     if (url.pathname === "/v10/projects") return reply(200, { projects: PROJECTS, pagination: { count: 2, next: null } });
+    if (url.pathname === `/v1/integrations/configuration/${CFG}`) return reply(200, { id: CFG, integrationId: "oac_realintegration", slug: "penthera" });
     if ((m = /^\/v9\/projects\/([^/]+)$/.exec(url.pathname))) {
       const p = PROJECTS.find((x) => x.id === m[1]);
       return p ? reply(200, p) : reply(404, { error: { code: "not_found" } });
@@ -272,8 +273,10 @@ describe("setup", () => {
     expect(done.status).toBe(303);
     expect(done.headers.get("location")).toBe(NEXT);
     expect(vercel.checks.prj_one).toHaveLength(1);
-    expect(vercel.checks.prj_one[0]).toMatchObject(checkBody(CFG, "oac_testclient"));
-    expect(vercel.checks.prj_one[0].source).toEqual({ kind: "integration", integrationId: "oac_testclient", integrationConfigurationId: CFG });
+    expect(vercel.checks.prj_one[0]).toMatchObject(checkBody(CFG, "oac_realintegration"));
+    // The integration id comes from Vercel's record of the installation, not the client id.
+    expect(vercel.checks.prj_one[0].source).toEqual({ kind: "integration", integrationId: "oac_realintegration", integrationConfigurationId: CFG });
+    expect(vercel.calls.some((c) => c.url.pathname === `/v1/integrations/configuration/${CFG}` && c.url.searchParams.get("teamId") === TEAM)).toBe(true);
 
     // Enabling again adds no duplicate; remove deletes ours.
     await app.setup(post("/setup", `csrf=${csrf}&action=enable&p=prj_one`, { cookie, origin: BASE }));

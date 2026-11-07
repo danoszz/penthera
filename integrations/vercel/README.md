@@ -186,8 +186,17 @@ users can import GitHub checks in the dashboard, integrations cannot.
 (`lib/workflow.mjs`, `checkBody`). The source shape is the first `oneOf` branch
 of the create schema; `kind` defaults to `integration` there and none of its
 fields is marked required. `integrationId` is `INTEGRATION_ID` when set, or
-else the client id (both are `oac_...`). Vercel then makes a check run for each
-production deployment of the project.
+else read on each "Turn on the check" from
+`GET /v1/integrations/configuration/{configurationId}` with the installation's
+token (its `integrationId`, "the app the configuration was created for", and
+only when the answer's `id` is this configuration). If that lookup fails, the
+source names the configuration alone and the log says why; the client id is
+never sent. Vercel then makes a check run for each production deployment of the
+project.
+
+If Vercel answers the create with a 400 whose message names `timeout`, the
+server tries once more without it (Vercel's default, 300 s). The docs give
+`timeout` a default and no maximum.
 
 **The result.** `PATCH /v2/deployments/{deploymentId}/check-runs/{checkRunId}`
 with `status: "completed"`, `conclusion` (`succeeded` or `failed`; the schema
@@ -319,7 +328,9 @@ a commit status directly. The relay adds no new way in; it keeps the gate at
   `Cache-Control: no-store`, and `Cross-Origin-Opener-Policy: unsafe-none`,
   which Vercel requires for the install popup.
 - **Logs:** errors only, through one logger (`lib/log.mjs`) that keeps an
-  allow-list of fields and masks token shapes and the secret env values. ESLint
+  allow-list of fields and masks token shapes and the secret env values. For a
+  failed check create or integration lookup, that includes Vercel's error code
+  and message (at most 200 characters), so a failure explains itself. ESLint
   bans `console` everywhere else in this folder. A test runs install, setup,
   failures and a broken config with random fake credentials and checks none
   appears in the output.
@@ -358,7 +369,7 @@ client id and secret use the `INTEGRATION_` prefix. Never paste their values int
 | `PENTHERA_TOKEN_KEYS` | `v1:<base64 of 32 random bytes>`. To rotate, prepend a new one: `v2:<new>,v1:<old>`. The first encrypts; all decrypt |
 | `PUBLIC_BASE_URL` | This server's origin, such as `https://vercel.penthera.org`. The Redirect URL is `<PUBLIC_BASE_URL>/install` |
 | `INTEGRATION_SLUG` | The integration's URL slug. Default `penthera` |
-| `INTEGRATION_ID` | Optional. The integration's id (`oac_...`) for the check's `source`, if it differs from the client id |
+| `INTEGRATION_ID` | Optional. Overrides the integration id (`oac_...`) the server reads from Vercel for the check's `source` |
 | `CRON_SECRET` | A long random string. Vercel's cron sends it to `/api/sweep` |
 | `KV_REST_API_URL`, `KV_REST_API_TOKEN` | Set by Vercel when you connect the Upstash store |
 
@@ -423,12 +434,13 @@ Not verified, because it needs a live integration:
   /v2/deployments/{id}/check-runs` but do not say whether a project check gets
   its runs on its own. The server finds the run, or starts it, so both work.
   Watch the first production deploy: the run should show up as queued.
-- **`integrationId`.** The server sends the client id unless `INTEGRATION_ID`
-  is set. If Vercel answers 400 on "Turn on the check", set `INTEGRATION_ID`
-  to the id the Integrations Console shows.
+- **The configuration lookup's scope.** `GET /v1/integrations/configuration/{id}`
+  says only that the owner of the configuration may read it. If the log shows
+  `integration_lookup_failed` with a 403, the scope list needs the
+  integration-configuration read scope, or set `INTEGRATION_ID`.
 - **`timeout: 1200`.** The default is 300 seconds; the job may take 15
-  minutes. The docs give no maximum. If Vercel refuses it, lower it in
-  `lib/workflow.mjs`.
+  minutes. The docs give no maximum. A 400 that names `timeout` falls back to
+  the default by itself.
 - **`link.repoId` and `link.repoOwnerId` on `GET /v9/projects/{id}`.** The relay
   refuses a project without `repoId`; if Vercel never sends it, every report is
   refused and deploys wait for the timeout. `repoOwnerId` is compared when
