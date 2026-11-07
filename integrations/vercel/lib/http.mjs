@@ -74,7 +74,15 @@ input[type=checkbox]:disabled:not(:checked){border-style:dashed;background:trans
 textarea{display:block;width:100%;height:17rem;margin:12px 0 0;padding:16px;font-family:var(--px);font-size:var(--t-note);line-height:1.6;letter-spacing:.02em;color:var(--text-1);background:var(--plate);border:1px solid var(--edge);border-radius:0;resize:vertical;tab-size:2;white-space:pre;overflow-wrap:normal;overflow-x:auto}
 textarea:focus-visible{outline-offset:0}
 textarea+.lede{margin-top:32px}
-.callout{max-width:36rem;margin-top:48px;padding-left:16px;border-left:4px solid #fff;color:var(--text-1)}
+.note{max-width:36rem;margin-top:24px;padding:16px 20px;background:var(--plate);color:var(--text-1)}
+.steps{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:minmax(0,1fr);gap:2px;max-width:40rem}
+.steps li{display:flex;gap:16px;padding:16px 20px;background:var(--plate);line-height:1.5}
+.steps .n{flex:none;width:1.5ch;font-family:var(--px);font-size:var(--t-note);line-height:1.9;color:var(--accent-ink)}
+.steps strong{font-weight:500;color:var(--text-1)}
+.links{display:flex;flex-wrap:wrap;gap:0 24px;margin:16px 0 0;padding:0;list-style:none;font-family:var(--px);font-size:var(--t-note);letter-spacing:.02em}
+.links a{display:inline-flex;align-items:center;min-height:var(--target)}
+.links.col{flex-direction:column;align-items:flex-start}
+.links.col a{display:block;min-height:0;padding:12px 0;line-height:1.4;overflow-wrap:anywhere}
 .faq{margin-top:48px;background:var(--plate)}
 .faq summary{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:64px;padding:12px 20px;list-style:none;cursor:pointer;font-size:var(--t-lead);font-weight:500;line-height:1.2;letter-spacing:-.02em;color:var(--text-1)}
 .faq summary::-webkit-details-marker{display:none}
@@ -85,8 +93,7 @@ textarea+.lede{margin-top:32px}
 .faq dt{margin-top:20px;font-weight:500;line-height:1.35;color:var(--text-1)}
 .faq dt:first-child{margin-top:0}
 .faq dd{max-width:36rem;margin:4px 0 0;font-size:var(--t-small);line-height:1.5;color:var(--text-2)}
-.faq .links{display:flex;flex-wrap:wrap;gap:0 24px;margin:16px 0 0;padding:0 20px 12px;list-style:none;font-family:var(--px);font-size:var(--t-note);letter-spacing:.02em}
-.faq .links a{display:inline-flex;align-items:center;min-height:var(--target)}
+.faq .links{padding:0 20px 12px}
 .foot{width:100%;max-width:calc(var(--measure) + 2 * var(--gutter));padding:64px var(--gutter) calc(var(--veil) + 16px);font-family:var(--px);font-size:var(--t-note);line-height:1.6;letter-spacing:.02em;color:var(--text-3)}
 .foot ul{display:flex;flex-wrap:wrap;gap:0 24px;margin:8px 0 0;padding:0;list-style:none}
 .home{display:grid;place-items:center;max-width:none;padding-bottom:var(--veil);text-align:center}
@@ -165,7 +172,7 @@ const MARK = `<svg class="mark" viewBox="0 0 279 63" role="img" aria-label="Pent
 /** The bottom blur: three layers, each blurring more over a shorter band nearer the edge. */
 const VEIL = `<div class="veil" aria-hidden="true"><i></i><i></i><i></i></div>`;
 
-export const FOOTER = `<footer class="foot"><p>Penthera runs in your own GitHub Actions. This server keeps only an encrypted install token, deleted when you uninstall.</p><ul><li><a href="https://penthera.org" target="_blank" rel="noopener noreferrer">penthera.org</a></li><li><a href="https://docs.penthera.org/vercel/terms" target="_blank" rel="noopener noreferrer">Terms</a></li><li><a href="https://docs.penthera.org/vercel/privacy" target="_blank" rel="noopener noreferrer">Privacy</a></li></ul></footer>`;
+export const FOOTER = `<footer class="foot"><p>Penthera runs in your own GitHub Actions. This server keeps an encrypted install token and the projects you turned the check on for, and deletes both when you uninstall.</p><ul><li><a href="https://penthera.org" target="_blank" rel="noopener noreferrer">penthera.org</a></li><li><a href="https://docs.penthera.org/vercel/terms" target="_blank" rel="noopener noreferrer">Terms</a></li><li><a href="https://docs.penthera.org/vercel/privacy" target="_blank" rel="noopener noreferrer">Privacy</a></li></ul></footer>`;
 
 const ESC = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
 export function esc(s) {

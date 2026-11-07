@@ -16,7 +16,7 @@
     "pentest",
     "owasp",
     "sarif",
-    "secrets",
+    "secret-scanning",
     "cli",
     "vibecoding",
     "supply-chain",
