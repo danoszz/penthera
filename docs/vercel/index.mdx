@@ -34,7 +34,9 @@ Commit the workflow before you turn the check on. Until the file is committed, a
 
 The scan is the standard URL scan of [`penthera <url>`](/commands/scan): TLS, security headers, cookies, CORS, exposed files and known-vulnerable libraries. Rules decide every finding. It reads your pages and sends one login attempt with obviously fake credentials, to check that a wrong password is refused. It contacts only the deployment's host.
 
-A scan that fails or does not finish also fails the check. Silence is never a pass.
+A scan that fails or does not finish also fails the check. Silence is never a pass. A pass also needs proof in Penthera's report that the site was read: the home page answered 2xx, no firewall challenge or block page, no rate limiting, and the app scan finished. A deployment that redirects its `vercel.app` address to your own domain is not read, so it fails. And it counts only for the deployment's own address in Vercel's record, so a scan of any other URL fails the check.
+
+The check holds a deploy only while automatic production aliasing is on, which is Vercel's default. You find it under the project's **Settings**, **Environments**, **Production**. With it off, Vercel never moves your production domain by itself, so the check has nothing to hold: it still runs and shows pass or fail on the deployment.
 
 ## Read the findings
 
@@ -70,7 +72,7 @@ Penthera asks Vercel for three scopes and nothing else:
 
 It asks for no access to your code or your GitHub account. You commit the workflow yourself, on purpose.
 
-The server keeps an encrypted Vercel token, the installation id, your team or user id, the install date, a random session value, the ids of the projects you turned the check on for, and anonymous daily totals that name nobody. It never keeps your code, deployment URLs or findings. For each production deploy the workflow sends only the deployment id, the project id and pass or fail, signed by GitHub.
+The server keeps an encrypted Vercel token, the installation id, your team or user id, the install date, a random session value, the ids of the projects you turned the check on for, and anonymous daily totals that name nobody. It never keeps your code, deployment URLs or findings. For each production deploy the workflow sends only the deployment id, the project id, pass or fail, a SHA-256 fingerprint of the host it scanned and, if it couldn't read the site, a reason code, signed by GitHub.
 
 Everything is in the [privacy notice](/vercel/privacy) and the [terms](/vercel/terms). The functions run in Frankfurt and the data stays in the EU.
 
@@ -86,6 +88,14 @@ Everything is in the [privacy notice](/vercel/privacy) and the [terms](/vercel/t
 ### The check fails with a Deployment Protection message
 
 With Vercel Authentication on (Standard Protection, the usual setting), the deployment URL answers 401 to the scanner. The job then fails and says so, instead of passing a scan that read nothing. Turn the protection off for the deployments you want checked. Penthera never sees or stores a bypass secret.
+
+### The check fails with "Site not read"
+
+The scan did not read your app: a firewall served a bot challenge or a block page, the deployment answered 401 or 403 or redirected elsewhere, requests were rate limited, nothing answered, or the scan stopped early. If your app redirects its `vercel.app` address to your own domain, exempt the deployment URL from that redirect. The check says which, and the GitHub job summary has the details. A challenge on your own deployment usually means Vercel's Bot Protection or Attack Challenge Mode is on for it; allow the scanner, or scan a preview. For 401 or 403, see Deployment Protection below.
+
+### The check fails with "Scanned URL is not this deployment"
+
+The workflow scanned an address that is not this deployment's own URL in Vercel, or it is a workflow from before 8 November 2026 that does not say which address it scanned. Copy the workflow again from Penthera's setup page or Configure, and commit it.
 
 ### The check stays pending
 
@@ -126,4 +136,4 @@ Vercel creates the installation before it sends you to Penthera, so a refused in
 
 ### Still stuck
 
-Write to `security@penthera.org` or open an issue at [github.com/danoszz/penthera/issues](https://github.com/danoszz/penthera/issues). We aim to answer within 5 business days.
+Write to `team@penthera.org` or open an issue at [github.com/danoszz/penthera/issues](https://github.com/danoszz/penthera/issues). We aim to answer within 5 business days.

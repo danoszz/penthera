@@ -13,12 +13,13 @@
  *   GET  /sweep      weekly cron: deletes records whose token no longer works
  *   GET  /health
  */
+import { createHash } from "node:crypto";
 import {
   ConfigError, cookieKey, mac, openToken, parseKeys, randomToken, safeEqual, sealToken, signValue, unsignValue,
   verifyWebhookSignature,
 } from "./crypto.mjs";
 import { clearCookie, esc, html, json, message, readBody, readCookie, readForm, redirect, safeNext, setCookie } from "./http.mjs";
-import { logError } from "./log.mjs";
+import { logError, logInfo } from "./log.mjs";
 import { OidcError, jwksCache, verifyGithubToken } from "./oidc.mjs";
 import { STAT_FIELDS } from "./store.mjs";
 import { VercelError, exchangeCode, vercelClient } from "./vercel.mjs";
@@ -38,7 +39,29 @@ const INTEGRATION_ID = /^oac_[A-Za-z0-9]{1,64}$/;
 const GITHUB_REPO = /^[A-Za-z0-9_.-]{1,100}\/[A-Za-z0-9_.-]{1,100}$/;
 /** The only body POST /report accepts, and the only conclusions. */
 const REPORT_FIELDS = ["conclusion", "deploymentId", "projectId"];
+// Sent by the workflow since 8 Nov: a SHA-256 of the host it scanned (never the host: no deployment
+// URL reaches us), and why it could not read the site. A workflow from before sends neither; its
+// "succeeded" then counts as failed, with no host to bind.
+const REPORT_OPTIONAL = ["hostSha256", "reason"];
 const CONCLUSIONS = new Set(["succeeded", "failed"]);
+const sha256 = (s) => createHash("sha256").update(s).digest("hex");
+/** The workflow's reasons a scan did not read the site, in the words the check shows. */
+const NOT_READ = {
+  unreachable: "nothing answered at the deployment",
+  challenge: "a firewall served a bot challenge instead of the site",
+  denied: "the deployment answered 401 or 403 (Deployment Protection?)",
+  redirected: "the deployment redirected the scanner elsewhere instead of serving the site",
+  status: "the deployment's home page did not answer 2xx",
+  rate_limited: "requests were rate limited during the scan",
+  blocked: "a firewall's block page answered instead of the site",
+  incomplete: "the scan did not finish reading the site",
+  unreadable: "the scan left no report to check",
+};
+const TEXT = {
+  succeeded: "Penthera found no high or critical issue. Details in the GitHub job summary.",
+  failed: "Penthera found a high or critical issue, or could not finish the scan. Details in the GitHub job summary.",
+  unbound: "Scanned URL is not this deployment, so it was not checked. Update the workflow from Penthera's setup page.",
+};
 /** Reports per runner address per minute, per function instance. The firewall rule in README.md is the real limit. */
 const REPORTS_PER_MINUTE = 30;
 /** Unverified refusals are written to the counters at most this often, per instance. */
@@ -79,7 +102,7 @@ const asks = ({ open = false } = {}) => `<details class="faq"${open ? " open" : 
 <dt>What this server keeps</dt>
 <dd>One encrypted install token, with the installation id, your team or user id, the install date and a random value that ends old setup sessions. For each project with the check on, the project id and which installation turned it on. We delete all of it when you uninstall. Apart from that, anonymous daily totals with no ids, deleted after 90 days. No code, no deployment URLs, no results.</dd>
 <dt>What the workflow does</dt>
-<dd>It runs Penthera's passive scan on your deployment, in your own GitHub Actions, and holds no secrets. For a production deploy it then sends us three things: the deployment id, the project id, and pass or fail, with a token GitHub signs for your repo. We check the token, set the check's result in Vercel, and keep nothing about it, only anonymous daily totals to keep the service working. The findings stay in GitHub: the job summary and a run artifact.</dd>
+<dd>It runs Penthera's passive scan on your deployment, in your own GitHub Actions, and holds no secrets. For a production deploy it then sends us the deployment id, the project id, pass or fail, a fingerprint (SHA-256) of the host it scanned and, if it couldn't read the site, a reason code, with a token GitHub signs for your repo. We check the token, pass only a scan of that deployment's own host, set the check's result in Vercel, and keep nothing about it, only anonymous daily totals to keep the service working. The findings stay in GitHub: the job summary and a run artifact.</dd>
 <dt>What it never does</dt>
 <dd>It never reads your code, never writes to your repo beyond one commit status, and never sends findings or code to us. It doesn't attack your site: it reads your pages and sends one login with obviously fake credentials, to check a wrong password is refused.</dd>
 <dt>Why you commit the workflow yourself</dt>
@@ -94,7 +117,8 @@ const NEXT_STEPS = `<h2>What happens on your next deploy</h2>
 <li><span class="n" aria-hidden="true">1</span><span><strong>Vercel builds it</strong> and asks your repo's workflow to scan it.</span></li>
 <li><span class="n" aria-hidden="true">2</span><span><strong>Penthera scans the live deployment</strong> in your GitHub Actions. That usually takes under a minute, and the deploy waits for it.</span></li>
 <li><span class="n" aria-hidden="true">3</span><span><strong>A pass goes live.</strong> A fail stays out of production, and the check in Vercel links to the findings in the GitHub job summary.</span></li>
-</ol>`;
+</ol>
+<p class="small" data-reason="auto_alias"><strong>One Vercel setting matters:</strong> automatic production aliasing, which is on unless you turned it off (Project Settings, Environments, Production). The check holds a deploy only while it's on. With it off, Vercel never moves your domain by itself, so there's nothing to hold back, and the scan still runs.</p>`;
 
 // Changing an install happens in Vercel; this says where. `confirmed` is true on the status view.
 const UNINSTALL = "<strong>Uninstall.</strong> Vercel, Settings, Integrations, Penthera, Manage, Uninstall. We delete the token and project links then. Remove <code>penthera-vercel.yml</code> from your repo too.";
@@ -155,7 +179,7 @@ export function createApp({ env = process.env, store, fetch: fetchImpl = globalT
     const record = await store.get(id);
     if (!record) return null;
     if (record.configurationId !== id) {
-      logError("record_mismatch", { configurationId: id });
+      logError("record_mismatch");
       return null;
     }
     return record;
@@ -177,7 +201,7 @@ export function createApp({ env = process.env, store, fetch: fetchImpl = globalT
     try {
       return client(record, id, keys);
     } catch (e) {
-      logError("token_unreadable", { configurationId: id, code: e instanceof ConfigError ? "config" : "decrypt" });
+      logError("token_unreadable", { code: e instanceof ConfigError ? "config" : "decrypt" });
       return null;
     }
   }
@@ -263,7 +287,7 @@ export function createApp({ env = process.env, store, fetch: fetchImpl = globalT
     if (state) {
       const reason = !stateCookie ? "state_cookie_missing" : !safeEqual(state, stateCookie) ? "state_mismatch" : null;
       if (reason) {
-        logError("install_refused", { code: reason, configurationId });
+        logError("install_refused", { code: reason });
         return installRefused(reason);
       }
       cookies.push(clearCookie(STATE));
@@ -278,12 +302,12 @@ export function createApp({ env = process.env, store, fetch: fetchImpl = globalT
     try {
       token = await exchangeCode({ code, clientId: c.clientId, clientSecret: c.clientSecret, redirectUri: c.redirectUri, fetch: fetchImpl });
     } catch (e) {
-      logError("exchange_failed", { status: e.status ?? 0, code: e.code ?? "network", configurationId });
+      logError("exchange_failed", { status: e.status ?? 0, code: e.code ?? "network" });
       return message(502, "Vercel's one-time code had already run out", "Each code lasts 30 minutes and works once. Restarting gets you a fresh one.", { cookies, left: LEFT_REFUSED, action: { href: "/start", label: "Restart on Vercel" }, why: "Vercel's code proves the install is yours, and we can't go on without it." });
     }
     // The exchange must name the configuration this redirect claims, and the team, or we store nothing.
     if (token.configurationId !== configurationId || (teamId && token.teamId !== teamId)) {
-      logError("configuration_mismatch", { configurationId });
+      logError("configuration_mismatch");
       return message(400, "Vercel named a different install", "The link and Vercel disagree about which install this is, so we stopped and stored nothing.", { cookies, left: LEFT_REFUSED, action: { href: "/start", label: "Restart on Vercel" }, why: "We store an install only once Vercel confirms whose it is." });
     }
     const ownerId = token.teamId ?? token.userId ?? teamId;
@@ -293,7 +317,7 @@ export function createApp({ env = process.env, store, fetch: fetchImpl = globalT
     // never duplicate, and never hand a record to another owner.
     const previous = await load(configurationId);
     if (previous && previous.ownerId !== ownerId) {
-      logError("owner_mismatch", { configurationId });
+      logError("owner_mismatch");
       return message(409, "This install belongs to another Vercel team", "Restart, and Vercel asks which team to install on. Pick the one you want Penthera on.", { cookies, left: { penthera: "Nothing changed, here or in the other team's setup.", vercel: "The install stays with the team that made it." }, action: { href: "/start", label: "Choose a team on Vercel" }, why: "One team can never take over another team's install, or see its projects." });
     }
     // createdAt is the latest install, so a replayed older uninstall event cannot delete it.
@@ -302,6 +326,7 @@ export function createApp({ env = process.env, store, fetch: fetchImpl = globalT
     await store.put({ configurationId, ownerId, ...sealToken(token.accessToken, configurationId, c.keys), createdAt, sessionNonce });
     const value = signValue({ c: configurationId, o: ownerId, s: sessionNonce, n: next, e: now() + SESSION_MS }, cookieKey(c.keys));
     cookies.push(setCookie(SESSION, value, SESSION_MS / 1000));
+    logInfo("install_ok", { source });
     return redirect("/setup", { cookies });
   }
 
@@ -426,6 +451,7 @@ ${asks()}`);
       } catch (e) {
         return apiFailure(e, s.configurationId, "remove_failed");
       }
+      logInfo("check_off", { projects: 1 });
       return redirect("/setup");
     }
 
@@ -490,10 +516,12 @@ ${asks()}`);
           if (others.length) lookalikes.push(p);
         } catch (e) {
           const problem = turnOnProblem(e);
-          logError("check_failed", { status: e.status ?? 0, code: e.code ?? problem.kind, message: e.detail ?? "", route: problem.kind, configurationId: s.configurationId });
+          logError("check_failed", { status: e.status ?? 0, code: e.code ?? problem.kind, message: e.detail ?? "", route: problem.kind });
           failed.push({ ...p, problem });
         }
       }
+      const turnedOn = projects.filter((p) => !failed.some((f) => f.id === p.id) && !taken.includes(p)).length;
+      if (turnedOn) logInfo("check_on", { projects: turnedOn });
       // Vercel's install ends on its `next` address, which closes the popup; Turn on already said what comes next.
       if (!failed.length && !taken.length && !lookalikes.length && s.next) return redirect(s.next, { cookies: [clearCookie(SESSION)] });
       const failedIds = new Set(failed.map((p) => p.id));
@@ -591,13 +619,13 @@ ${asks()}`);
     try {
       record = await store.get(id);
     } catch {
-      logError("store_failed", { configurationId: id, route: "webhook" });
+      logError("store_failed", { route: "webhook" });
       return json(500, { error: "store_unavailable" });
     }
     // A record whose own id is not the one Vercel signed for was tampered with: for `removed` the key
     // is still deleted, with no call to Vercel; a transfer leaves it alone.
     const trusted = record && record.configurationId === id ? record : null;
-    if (record && !trusted) logError("record_mismatch", { configurationId: id });
+    if (record && !trusted) logError("record_mismatch");
     if (!trusted) {
       if (type === "integration-configuration.removed") {
         // Also when the record is already gone: a retry after a failed link cleanup lands here.
@@ -605,7 +633,7 @@ ${asks()}`);
           if (record) await store.delete(id);
           await dropLinks(id);
         } catch {
-          logError("store_failed", { configurationId: id, route: "webhook" });
+          logError("store_failed", { route: "webhook" });
           return json(500, { error: "store_unavailable" });
         }
       }
@@ -642,10 +670,11 @@ ${asks()}`);
       await store.delete(id);
       await dropLinks(id);
     } catch {
-      logError("store_failed", { configurationId: id, route: "webhook" });
+      logError("store_failed", { route: "webhook" });
       return json(500, { error: "store_unavailable" });
     }
     if (api) await removeOurChecks(api, event.payload.configuration.projects, id);
+    logInfo("uninstall_ok");
     return json(200, { ok: true, deleted: true });
   }
 
@@ -658,10 +687,10 @@ ${asks()}`);
     if (c.integrationId) return c.integrationId;
     try {
       const id = await api.getIntegrationId(configurationId);
-      if (!id) logError("integration_lookup_failed", { code: "no_integration_id", configurationId });
+      if (!id) logError("integration_lookup_failed", { code: "no_integration_id" });
       return id;
     } catch (e) {
-      logError("integration_lookup_failed", { status: e.status ?? 0, code: e.code ?? "network", message: e.detail ?? "", configurationId });
+      logError("integration_lookup_failed", { status: e.status ?? 0, code: e.code ?? "network", message: e.detail ?? "" });
       return null;
     }
   }
@@ -706,7 +735,7 @@ ${asks()}`);
       return await api.createCheck(projectId, body);
     } catch (e) {
       if (!(e instanceof VercelError && e.status === 400 && /timeout/i.test(e.detail ?? ""))) throw e;
-      logError("check_timeout_refused", { status: e.status, code: e.code, message: e.detail, configurationId });
+      logError("check_timeout_refused", { status: e.status, code: e.code, message: e.detail });
       const { timeout: _dropped, ...rest } = body;
       return api.createCheck(projectId, rest);
     }
@@ -841,7 +870,9 @@ ${asks()}`);
   /**
    * POST /report: the workflow's pass or fail for one production deployment, relayed to our check.
    *
-   * Body: exactly { deploymentId, projectId, conclusion: "succeeded" | "failed" }. Authorization: a
+   * Body: { deploymentId, projectId, conclusion: "succeeded" | "failed" }, and since 8 Nov hostSha256
+   * (a SHA-256 of the host the workflow scanned) and reason (why the scan did not read the site), and
+   * nothing else. Authorization: a
    * GitHub Actions OIDC token for this server's origin (lib/oidc.mjs). Every id that decides
    * anything is checked against Vercel with the token of the installation that turned the check on:
    *
@@ -855,6 +886,8 @@ ${asks()}`);
    *      that check, which Vercel says belongs to this project and this deployment;
    *   5. the run is not completed yet, so a result is never overwritten.
    *
+   * A "succeeded" counts only when hostSha256 is the hash of the deployment's own host in Vercel's
+   * record (3): the dispatch URL the workflow scanned is signed by nobody. Otherwise it is "failed".
    * Only then is the run's conclusion set. Nothing about the scan or the request is stored.
    */
   async function relay(request) {
@@ -869,9 +902,13 @@ ${asks()}`);
     } catch {
       return json(400, { error: "bad_json" });
     }
-    const keys = body && typeof body === "object" && !Array.isArray(body) ? Object.keys(body).sort().join() : "";
-    if (keys !== REPORT_FIELDS.join()) return json(400, { error: "bad_body" });
+    const keys = body && typeof body === "object" && !Array.isArray(body) ? Object.keys(body) : [];
+    if (!REPORT_FIELDS.every((k) => keys.includes(k)) || !keys.every((k) => REPORT_FIELDS.includes(k) || REPORT_OPTIONAL.includes(k))) return json(400, { error: "bad_body" });
     const { deploymentId, projectId, conclusion } = body;
+    // Untrusted, like the rest of the body: the host's hash is only ever compared with Vercel's own
+    // record, and the reason only picks one of our sentences.
+    const hostSha256 = typeof body.hostSha256 === "string" && /^[0-9a-f]{64}$/.test(body.hostSha256) ? body.hostSha256 : null;
+    const reason = typeof body.reason === "string" && Object.hasOwn(NOT_READ, body.reason) ? body.reason : null;
     if (typeof deploymentId !== "string" || !DEPLOYMENT_ID.test(deploymentId)) return json(400, { error: "bad_deployment" });
     if (typeof projectId !== "string" || !PROJECT_ID.test(projectId)) return json(400, { error: "bad_project" });
     if (typeof conclusion !== "string" || !CONCLUSIONS.has(conclusion)) return json(400, { error: "bad_conclusion" });
@@ -927,6 +964,14 @@ ${asks()}`);
       if (deployment.id !== deploymentId || deployment.projectId !== projectId || deployment.target !== "production") {
         return json(403, { error: "deployment_mismatch" });
       }
+      // 3c. A pass counts only for a scan of this deployment's own host. The dispatch URL the
+      //     workflow scanned is not signed by anyone, so it is bound here, to Vercel's record.
+      //     A missing or other host turns a pass into a fail; a fail stays a fail.
+      const bound = hostSha256 !== null && deployment.url !== "" && hostSha256 === sha256(deployment.url);
+      const result = conclusion === "succeeded" && !bound ? "failed" : conclusion;
+      const text = conclusion === "succeeded" && !bound ? TEXT.unbound
+        : result === "failed" && reason ? `Site not read: ${NOT_READ[reason]}. Details in the GitHub job summary.`
+          : TEXT[result];
       // 4. This installation's check on the project, and its run on this deployment.
       const check = (await api.listChecks(projectId)).find((k) => isIntegrationCheck(k, configurationId) && typeof k.id === "string" && k.id);
       if (!check) return json(404, { error: "not_enabled" });
@@ -940,17 +985,16 @@ ${asks()}`);
       const runUrl = /^\d{1,20}$/.test(String(claims.run_id ?? "")) ? `https://github.com/${repo}/actions/runs/${claims.run_id}` : undefined;
       await api.updateCheckRun(deploymentId, run.id, {
         status: "completed",
-        conclusion,
-        conclusionText: conclusion === "succeeded"
-          ? "Penthera found no high or critical issue. Details in the GitHub job summary."
-          : "Penthera found a high or critical issue, or could not finish the scan. Details in the GitHub job summary.",
+        conclusion: result,
+        conclusionText: text,
         ...(runUrl ? { externalUrl: runUrl } : {}),
       });
-      return json(200, { ok: true, conclusion });
+      logInfo("report_ok", { conclusion: result });
+      return json(200, { ok: true, conclusion: result, ...(result !== conclusion ? { note: "scanned_url_not_this_deployment" } : {}) });
     } catch (e) {
       // Every Vercel error is a 502, also a 403 or 404: the workflow then fails loudly instead of
       // reading it as "the check is not on", and the run stays as it was.
-      logError("report_failed", { status: e.status ?? 0, code: e.code ?? "network", configurationId });
+      logError("report_failed", { status: e.status ?? 0, code: e.code ?? "network" });
       return json(502, { error: "vercel_unavailable" });
     }
   }
@@ -978,7 +1022,7 @@ ${asks()}`);
           await store.delete(id);
           removed++;
         } else if (!(e instanceof VercelError)) {
-          logError("sweep_failed", { configurationId: id, code: e instanceof ConfigError ? "config" : "network" });
+          logError("sweep_failed", { code: e instanceof ConfigError ? "config" : "network" });
         }
       }
     }
@@ -993,12 +1037,14 @@ ${asks()}`);
     return json(200, { ok: true, checked, removed, unlinked });
   }
 
+  // Every way a setup session ends lands here: no cookie (a later Configure click, another browser),
+  // 30 minutes passed, an uninstall, a reinstall or a transfer. The copy must be true for all of them.
   function expired() {
-    return message(401, "Your setup page closed after 30 minutes", "Your install and any checks you turned on keep running. To change projects, restart from Vercel.", { left: { penthera: "Your install and checks are as you left them.", vercel: "Penthera stays installed." }, action: { href: "/start", label: "Restart on Vercel" }, why: "Setup closes after 30 minutes, so a page left open can't change your projects later." });
+    return message(401, "This setup page has closed", "Setup stays open for 30 minutes after an install, in the browser you installed from. It also closes when Penthera is uninstalled or installed again. To change projects, restart from Vercel.", { left: { penthera: "Nothing changed. If Penthera is still installed, your checks run as you left them. If you uninstalled it, we already deleted its token and project links.", vercel: "Nothing changed. Settings, Integrations shows whether Penthera is installed." }, action: { href: "/start", label: "Restart on Vercel" }, why: "Setup can change which deploys Penthera holds, so only the browser that just installed can use it, and only for 30 minutes." });
   }
 
   function apiFailure(e, configurationId, event) {
-    logError(event, { status: e.status ?? 0, code: e.code ?? "network", configurationId });
+    logError(event, { status: e.status ?? 0, code: e.code ?? "network" });
     return message(502, "Vercel didn't answer just now", "Your projects are as they were. Vercel is usually back within a minute, and this page tries again by itself.", { left: { penthera: "Nothing changed.", vercel: "Nothing changed." }, action: { href: "/setup", label: "Try again" }, refresh: { seconds: 30, url: "/setup" } });
   }
 

@@ -142,12 +142,40 @@ export async function runComment(opts, env = process.env, api = null) {
   }
 }
 
+/**
+ * Why a URL scan's report does not prove the site was read, or null. An allow-list, the same as
+ * the Vercel workflow's: a 2xx home page, no challenge or block page, no rate limiting, and the app
+ * scan done. A report with no `reachable` and no URL mode is not a URL scan (deps, agents).
+ */
+export function siteNotRead(report) {
+  const url = report && (report.mode === "url" || (report.modes || []).includes("url") || "reachable" in report || "challenge" in report);
+  if (!url) return null;
+  const s = typeof report.httpStatus === "number" ? report.httpStatus : 0;
+  if (report.reachable === false) return "unreachable";
+  if (report.challenge) return "challenge";
+  if (s === 0) return "incomplete";
+  if (s === 401 || s === 403) return "denied";
+  if (s >= 300 && s < 400) return "redirected";
+  if (s < 200 || s >= 300) return "status";
+  if ((Array.isArray(report.findings) ? report.findings : []).some((f) => f?.source === "waf-challenge")) return "blocked";
+  if (report.endpoints?.byStatus && Object.hasOwn(report.endpoints.byStatus, "429")) return "rate_limited";
+  if (!Array.isArray(report.executedProbes) || !report.executedProbes.includes("endpoint-discovery")) return "incomplete";
+  return null;
+}
+
 export function runGate(opts) {
   const report = JSON.parse(readFileSync(opts.report, "utf-8"));
-  const res = gate(report.findings, opts["fail-on"] || "none");
-  // A green job must not read as a check of a site nobody read.
-  if (report.challenge || report.reachable === false) console.log("::warning::Site not read: Penthera couldn't read the site, so this job says nothing about it.");
-  if (res.fail) console.error(`penthera: ${res.count} finding(s) at or above ${opts["fail-on"]}; failing as requested by fail-on.`);
+  const failOn = opts["fail-on"] || "none";
+  const res = gate(report.findings, failOn);
+  // A green job must not read as a check of a site nobody read. With a fail-on gate, such a run
+  // is incomplete (exit 2, as the CLI exits for an input it could not read), whatever it found.
+  const unread = siteNotRead(report);
+  if (unread && failOn !== "none") {
+    console.error(`::error::Site not read (${unread}): Penthera couldn't read the site, so this job can't pass the fail-on gate.`);
+    return { ...res, fail: true, incomplete: true, unread };
+  }
+  if (unread) console.log("::warning::Site not read: Penthera couldn't read the site, so this job says nothing about it.");
+  if (res.fail) console.error(`penthera: ${res.count} finding(s) at or above ${failOn}; failing as requested by fail-on.`);
   return res;
 }
 
@@ -158,7 +186,10 @@ async function main(argv) {
     options: { "body-file": { type: "string" }, repo: { type: "string" }, pr: { type: "string" }, report: { type: "string" }, "fail-on": { type: "string" } },
   });
   if (cmd === "comment" && values["body-file"]) { await runComment(values); return 0; }
-  if (cmd === "gate" && values.report) return runGate(values).fail ? 1 : 0;
+  if (cmd === "gate" && values.report) {
+    const r = runGate(values);
+    return r.incomplete ? 2 : r.fail ? 1 : 0;
+  }
   console.error("usage: comment.mjs comment --body-file <md> | gate --report <json> --fail-on none|high|critical");
   return 2;
 }

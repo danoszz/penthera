@@ -188,8 +188,8 @@ production deployment off the production domains until the check passes,
 which is what Vercel's Deployment Checks page describes; Force Promote
 bypasses it. The spec's enum also lists `deployment-promotion`, but live Vercel
 answered it on 7 Nov with `400 not_implemented` ("Only deployment-alias and
-none are currently supported for blocks"), so the contract mock refuses it too
-(`LIVE_LIMITS` in `test/vercel-contract.mjs`). Vercel holds a deployment only
+none are currently supported for blocks"), so the fake Vercel refuses it too
+(`test/vercel-allowed.mjs`, "What Vercel accepts" below). Vercel holds a deployment only
 when automatic aliasing for production is on (its default). The source shape is the first `oneOf` branch
 of the create schema; `kind` defaults to `integration` there and none of its
 fields is marked required. `integrationId` is `INTEGRATION_ID` when set, or
@@ -262,10 +262,22 @@ is not rerequestable: a re-run means a redeploy.
 ### POST /report
 
 The workflow's last step runs on every outcome (`if: always()`), for production
-deployments only, and sends exactly
-`{ deploymentId, projectId, conclusion: "succeeded" | "failed" }`. It reports
-`failed` when the scan failed, was incomplete, or did not run. The ids come from
-Vercel's dispatch payload (`client_payload.id`, `client_payload.project.id`).
+deployments only, and sends
+`{ deploymentId, projectId, conclusion: "succeeded" | "failed", hostSha256, reason? }`
+and nothing else. The ids come from Vercel's dispatch payload
+(`client_payload.id`, `client_payload.project.id`). It reports `succeeded` only
+when the step "Check the scan read the site" passed: that step runs only after a
+successful scan and reads the report JSON with jq. It is an allow-list: the
+site counts as read only with `reachable` not false, no `challenge`, a numeric
+`httpStatus` from 200 to 299 (a redirect to a custom domain reads nothing of
+this deployment), no `waf-challenge` finding (a block page), no 429 among the
+discovered endpoints, and `executedProbes` an array with `endpoint-discovery`
+(the app scan ran). Otherwise it fails with a reason (`unreachable`,
+`challenge`, `denied`, `redirected`, `status`, `blocked`, `rate_limited`,
+`incomplete`, or `unreadable` for a missing or broken report), which the relay turns into "Site not read:
+...". Neither the exit code nor the URL check's own `curl` decides it.
+`hostSha256` is the SHA-256 of the host the workflow scanned: never the host,
+because no deployment URL reaches this server (privacy notice).
 
 It sends a GitHub Actions OIDC token as `Authorization: Bearer`, requested with
 `audience=https://vercel.penthera.org/report/<deploymentId>` (the job has
@@ -299,6 +311,13 @@ It sends a GitHub Actions OIDC token as `Authorization: Bearer`, requested with
 5. **Deployment, before any write.** `GET /v13/deployments/{id}` must name this
    project and target `production`. Only then is a run looked up, started or
    changed.
+5b. **The scanned host is this deployment's.** The dispatch URL the workflow
+   scanned is signed by nobody, so a `succeeded` counts only when `hostSha256`
+   equals the SHA-256 of the deployment's own `url` in that same Vercel answer.
+   A missing hash (a workflow from before 8 Nov), a malformed one or another
+   host's turns it into `failed`, "Scanned URL is not this deployment". A
+   `failed` stays failed. The workflow's own `*.vercel.app` check stays too, as a
+   whole-string bash match, so a value with a second line cannot pass it.
 6. **Check and run.** The project must carry this installation's own check
    (`source.integrationConfigurationId`). The run must be a run of exactly that
    check, and Vercel's run must name this project and this deployment.
@@ -315,12 +334,14 @@ then passes with a notice, for people who use the commit status alone.
 The commit status stays in the workflow, so a GitHub check added by hand still
 works.
 
-**Risk left (repo write access).** Anyone who can write to the repo can send
-the workflow a `repository_dispatch` of their own, with any deployment id and a
-URL that scans clean, and so pass the check for that deployment. That is the
-same trust a hand-added GitHub check already gives them: write access can post
-a commit status directly. The relay adds no new way in; it keeps the gate at
-"who can change this repo's default branch or send its dispatches".
+**Risk left (repo write access).** Since 8 Nov a dispatch can no longer pass the
+integration's check with a URL of its choosing: the scanned host must be the
+deployment's own (5b), and the report must prove the site was read. Anyone who
+can write to the repo can still change the workflow on the default branch, so
+the gate stays at "who can change this repo's default branch". On the
+commit-status route (a GitHub check added by hand, without the integration) the
+dispatch URL is not bound: the job's own status decides, and write access can
+post a commit status directly anyway.
 
 ### Security
 
@@ -409,13 +430,40 @@ a commit status directly. The relay adds no new way in; it keeps the gate at
   `Referrer-Policy: same-origin` (with `no-referrer`, browsers send `Origin: null` on our own form posts), a closed `Permissions-Policy`,
   `Cache-Control: no-store`, and `Cross-Origin-Opener-Policy: unsafe-none`,
   which Vercel requires for the install popup.
-- **Logs:** errors only, through one logger (`lib/log.mjs`) that keeps an
-  allow-list of fields and masks token shapes and the secret env values. For a
-  failed check create or integration lookup, that includes Vercel's error code
-  and message (at most 200 characters), so a failure explains itself. ESLint
-  bans `console` everywhere else in this folder. A test runs install, setup,
-  failures and a broken config with random fake credentials and checks none
-  appears in the output.
+- **Logs:** one logger (`lib/log.mjs`); ESLint bans `console` everywhere else
+  in this folder.
+  - **Errors** (`logError`, stderr) keep an allow-list of fields: the event,
+    an error code, the HTTP status, a route, and for a failed check create or
+    integration lookup Vercel's error message (at most 200 characters), so a
+    failure explains itself. No ids: no field holds one, and any id inside a
+    string (`icfg_`, `team_`, `prj_`, `dpl_`, `oac_`, `user_`, `chk_`,
+    `crun_`, the list in `ID_PREFIXES`) becomes `[id]`. Token shapes and the
+    secret env values are masked. A test runs install, setup, failures and a
+    broken config with random fake credentials and checks none appears in the
+    output. Until 8 Nov, error lines carried the installation's
+    `configurationId`; the privacy notice promised an error code at most, so
+    the code now keeps that promise.
+  - **Good events** (`logInfo`, stdout, `"level": "info"`) have the counters'
+    privacy: an event name from a fixed list and only fields with fixed values
+    or a count, never an id, a repo, a code or a token.
+
+    | Event | Fields | When |
+    |---|---|---|
+    | `install_ok` | `source`: `marketplace`, `deploy-button` or `external` | an install was stored and its setup session started |
+    | `check_on` | `projects`: how many | Turn on added or kept this installation's check |
+    | `check_off` | `projects`: 1 | Remove check |
+    | `report_ok` | `conclusion`: `succeeded` or `failed` | a workflow's result reached Vercel |
+    | `uninstall_ok` | none | the `removed` webhook deleted the record and links |
+
+    Any other field or value is dropped, and an event outside the list logs
+    nothing.
+
+  `test/e2e-listing.test.js` captures every log line, error and info: on the
+  whole journey (the five good events, in order) and on a second run where
+  Vercel refuses with messages full of ids (a refused install, a spent code, a
+  failed lookup, a refused check, a failed report). No line may hold an id, a
+  repo, a run id, an install code or a token, and the check failure keeps
+  Vercel's text with each id as `[id]`.
 - **Configure:** Vercel's Configure button carries only a `configurationId`,
   which proves nothing about who clicked. So without the install session the
   page shows nothing account-specific.
@@ -585,10 +633,9 @@ that holds it to Vercel's published contract:
 A check's `source` is checked against the one `oneOf` branch its `kind` names,
 because the spec's branches overlap: the webhook branch accepts any object with
 a `kind`. The fake's own answers are checked against the response schemas too,
-so it cannot answer in a shape Vercel does not promise. It also refuses a
-git-provider check from an integration (`not_implemented`), as live Vercel did
-on 7 Nov. A mismatch fails the test and names the field, for example
-`/blocks: must be equal to one of the allowed values`.
+so it cannot answer in a shape Vercel does not promise. On top of the spec,
+every field is held to the table below. A mismatch fails the test and names
+the field, for example `/blocks: must be equal to one of the allowed values`.
 
 The OAuth code exchange (`POST /v2/oauth/access_token`) is not in the OpenAPI
 spec. It is checked by hand: form-encoded, with `client_id`, `client_secret`,
@@ -617,6 +664,97 @@ of three views. Only the owner's view has `projectId`; the reduced public view
 has `project.id` instead. The relay read only `projectId`, so it would have
 refused every report and held production. It now reads either.
 
+### What Vercel accepts
+
+The spec promised more than live Vercel served twice: a `git-provider` source
+and `blocks: "deployment-promotion"` both passed the spec and were refused live
+on 7 Nov with `400 not_implemented`. So the fake Vercel is strict: every field
+the server sends must be a row of `test/vercel-allowed.mjs`, with a value
+inside the row's allowed values. A field that is not in the table is refused
+too, so a new field cannot reach Vercel untested. A refused value gets a 400 in
+Vercel's error shape, `{ "error": { "code", "message" } }`: the live answer
+word for word where we have seen one (the `blocks` message), otherwise
+`bad_request` with a message of ours. A test keeps this table and the file in
+step.
+
+- **refused live**: Vercel refused a value we sent; the fake refuses it the
+  same way.
+- **worked live**: a live call with this field went through.
+- **unverified live**: only the docs or the spec say so. These are what the
+  next live test checks.
+
+| Call | In | Field | Allowed | Source | Live |
+|---|---|---|---|---|---|
+| `POST /v2/oauth/access_token` | form | `client_id` | required, a non-empty string | [oauth](https://vercel.com/docs/integrations/create-integration/vercel-api-integrations) | worked live 7 Nov |
+| `POST /v2/oauth/access_token` | form | `client_secret` | required, a non-empty string | [oauth](https://vercel.com/docs/integrations/create-integration/vercel-api-integrations) | worked live 7 Nov |
+| `POST /v2/oauth/access_token` | form | `code` | required, a non-empty string | [oauth](https://vercel.com/docs/integrations/create-integration/vercel-api-integrations) | worked live 7 Nov |
+| `POST /v2/oauth/access_token` | form | `redirect_uri` | required, a non-empty string | [oauth](https://vercel.com/docs/integrations/create-integration/vercel-api-integrations) | worked live 7 Nov |
+| `GET /v10/projects` | query | `teamId` | the installation's team_... id | [oauth](https://vercel.com/docs/integrations/create-integration/vercel-api-integrations), [spec](https://vercel.com/openapi.json) | worked live 7 Nov |
+| `GET /v9/projects/{idOrName}` | query | `teamId` | the installation's team_... id | [oauth](https://vercel.com/docs/integrations/create-integration/vercel-api-integrations), [spec](https://vercel.com/openapi.json) | unverified live |
+| `GET /v13/deployments/{idOrUrl}` | query | `teamId` | the installation's team_... id | [oauth](https://vercel.com/docs/integrations/create-integration/vercel-api-integrations), [spec](https://vercel.com/openapi.json) | unverified live |
+| `GET /v1/integrations/configuration/{id}` | query | `teamId` | the installation's team_... id | [oauth](https://vercel.com/docs/integrations/create-integration/vercel-api-integrations), [spec](https://vercel.com/openapi.json) | unverified live |
+| `GET /v2/projects/{projectIdOrName}/checks` | query | `teamId` | the installation's team_... id | [oauth](https://vercel.com/docs/integrations/create-integration/vercel-api-integrations), [spec](https://vercel.com/openapi.json) | unverified live |
+| `POST /v2/projects/{projectIdOrName}/checks` | query | `teamId` | the installation's team_... id | [oauth](https://vercel.com/docs/integrations/create-integration/vercel-api-integrations), [spec](https://vercel.com/openapi.json) | unverified live |
+| `DELETE /v2/projects/{projectIdOrName}/checks/{checkId}` | query | `teamId` | the installation's team_... id | [oauth](https://vercel.com/docs/integrations/create-integration/vercel-api-integrations), [spec](https://vercel.com/openapi.json) | unverified live |
+| `GET /v2/deployments/{deploymentId}/check-runs` | query | `teamId` | the installation's team_... id | [oauth](https://vercel.com/docs/integrations/create-integration/vercel-api-integrations), [spec](https://vercel.com/openapi.json) | unverified live |
+| `POST /v2/deployments/{deploymentId}/check-runs` | query | `teamId` | the installation's team_... id | [oauth](https://vercel.com/docs/integrations/create-integration/vercel-api-integrations), [spec](https://vercel.com/openapi.json) | unverified live |
+| `PATCH /v2/deployments/{deploymentId}/check-runs/{checkRunId}` | query | `teamId` | the installation's team_... id | [oauth](https://vercel.com/docs/integrations/create-integration/vercel-api-integrations), [spec](https://vercel.com/openapi.json) | unverified live |
+| `GET /v10/projects` | query | `limit` | a string (the spec types it as one); we send 20 | [spec](https://vercel.com/openapi.json) | worked live 7 Nov |
+| `GET /v10/projects` | query | `from` | the continuation token from pagination.next | [spec](https://vercel.com/openapi.json) | unverified live |
+| `POST /v2/projects/{projectIdOrName}/checks` | body | `name` | required, a string; no length limit is documented | [spec](https://vercel.com/openapi.json), [create](https://vercel.com/docs/rest-api/checks-v2/create-a-check) | unverified live |
+| `POST /v2/projects/{projectIdOrName}/checks` | body | `requires` | required: build-ready, deployment-url or none | [spec](https://vercel.com/openapi.json), [create](https://vercel.com/docs/rest-api/checks-v2/create-a-check) | unverified live |
+| `POST /v2/projects/{projectIdOrName}/checks` | body | `blocks` | deployment-alias or none (the spec also lists build-start, deployment-start and deployment-promotion) | [spec](https://vercel.com/openapi.json), [create](https://vercel.com/docs/rest-api/checks-v2/create-a-check), [checks](https://vercel.com/docs/deployment-checks) | refused live 7 Nov: `400 not_implemented` |
+| `POST /v2/projects/{projectIdOrName}/checks` | body | `targets` | unique strings: production, preview, all (alone) or a custom environment env_... | [spec](https://vercel.com/openapi.json), [create](https://vercel.com/docs/rest-api/checks-v2/create-a-check) | unverified live |
+| `POST /v2/projects/{projectIdOrName}/checks` | body | `isRerequestable` | a boolean; git-provider checks cannot be re-requested | [spec](https://vercel.com/openapi.json), [create](https://vercel.com/docs/rest-api/checks-v2/create-a-check) | unverified live |
+| `POST /v2/projects/{projectIdOrName}/checks` | body | `timeout` | a number of seconds, default 300; no maximum is documented | [spec](https://vercel.com/openapi.json), [create](https://vercel.com/docs/rest-api/checks-v2/create-a-check) | unverified live |
+| `POST /v2/projects/{projectIdOrName}/checks` | source | `kind` | integration, for an integration's token (the spec also has webhook and git-provider) | [spec](https://vercel.com/openapi.json), [create](https://vercel.com/docs/rest-api/checks-v2/create-a-check) | refused live 7 Nov: `400 not_implemented` |
+| `POST /v2/projects/{projectIdOrName}/checks` | source | `integrationId` | the integration's oac_... id; required in the answer's integration source | [spec](https://vercel.com/openapi.json), [create](https://vercel.com/docs/rest-api/checks-v2/create-a-check) | unverified live |
+| `POST /v2/projects/{projectIdOrName}/checks` | source | `integrationConfigurationId` | this installation's icfg_... id; required in the answer's integration source | [spec](https://vercel.com/openapi.json), [create](https://vercel.com/docs/rest-api/checks-v2/create-a-check) | unverified live |
+| `POST /v2/deployments/{deploymentId}/check-runs` | body | `checkId` | required: the id of a check on the deployment's project | [spec](https://vercel.com/openapi.json) | unverified live |
+| `PATCH /v2/deployments/{deploymentId}/check-runs/{checkRunId}` | body | `status` | queued, running or completed | [spec](https://vercel.com/openapi.json), [update](https://vercel.com/docs/rest-api/checks-v2/update-a-check-run) | unverified live |
+| `PATCH /v2/deployments/{deploymentId}/check-runs/{checkRunId}` | body | `conclusion` | canceled, skipped, timeout, failed, neutral or succeeded | [spec](https://vercel.com/openapi.json), [update](https://vercel.com/docs/rest-api/checks-v2/update-a-check-run) | unverified live |
+| `PATCH /v2/deployments/{deploymentId}/check-runs/{checkRunId}` | body | `conclusionText` | a string; no length limit is documented | [spec](https://vercel.com/openapi.json), [update](https://vercel.com/docs/rest-api/checks-v2/update-a-check-run) | unverified live |
+| `PATCH /v2/deployments/{deploymentId}/check-runs/{checkRunId}` | body | `externalUrl` | a URI matching ^https?://\|^sso: | [spec](https://vercel.com/openapi.json), [update](https://vercel.com/docs/rest-api/checks-v2/update-a-check-run) | unverified live |
+
+Unverified live, so far: the whole check body other than `blocks` and the
+source kind (Turn on has not yet created a check live), the check-run create
+and update, and `teamId` on every call but the project list. No length limit
+is documented for `name` or `conclusionText`, and no maximum for `timeout`;
+the server already retries a create without `timeout` when a 400 names it. The
+message of the live `git-provider` refusal was not kept, so the fake's wording
+for that one is ours.
+
+### The whole journey, step by step
+
+`test/e2e-listing.test.js` walks the journey from the listing link one step at
+a time, each step its own test: the install from
+`vercel.com/integrations/penthera/new` (`source=external`, no state), Pick,
+Workflow, Turn on, a production deployment created (Vercel queues a run), the
+workflow's `POST /report` with an OIDC token signed by a local fake GitHub
+issuer (a pass, then a second deployment that fails), a repeated report
+refused, Configure, and the uninstall webhook, after which the record, the
+links and our check are gone. The last step asserts that every request fit the
+spec and the table, and that nothing left the machine. It also checks that the
+fake answers `blocks: "deployment-promotion"` with the 400 Daan's Turn on got,
+and that the server shows that answer on the failure page.
+
+The fakes are in `test/journey-harness.mjs`, shared with the journey test and
+the local click-through below.
+
+### Click through it locally
+
+```bash
+node integrations/vercel/scripts/local-journey.mjs
+```
+
+starts the real server on a free localhost port against the same strict fake
+Vercel and fake GitHub issuer, seeded with a team, a GitHub project, a GitLab
+project and a production deployment. It prints the URL and the steps. A
+`/__fake` page, served only by this script, sends what Vercel and GitHub would
+send: a new production deployment, a pass or a fail from the workflow, the
+uninstall webhook, and the fake's state (checks, runs, store). Nothing leaves
+the machine.
+
 ### What only a live test proves
 
 These stay unproven until Daan's live run:
@@ -632,6 +770,11 @@ These stay unproven until Daan's live run:
   the way it refused the git-provider check.
 - The workflow itself on a real runner: the dispatch payload, the OIDC token
   request, `jq` and `curl`.
+- That the check holds a production deployment off the domain with
+  `blocks: "deployment-alias"`, and that with automatic production aliasing
+  off the dispatch still comes and the scan still runs. Vercel's docs tie
+  `vercel.deployment.ready` to the deployment, not to aliasing, and the setup
+  pages and the guide say so.
 
 ## Legal
 

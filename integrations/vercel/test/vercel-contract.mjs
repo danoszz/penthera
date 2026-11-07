@@ -16,14 +16,17 @@
  * The OAuth code exchange is not in the OpenAPI spec; it is checked by hand against Vercel's
  * docs (form-encoded client_id, client_secret, code, redirect_uri).
  *
- * The spec can promise more than live Vercel serves. LIVE_LIMITS holds what a live answer
- * refused although the spec allows it, each with the date and the answer seen.
+ * On top of the spec, every field the server sends is held to test/vercel-allowed.mjs: the values
+ * Vercel accepts, from its docs, its spec and what live Vercel refused. A field that is not in
+ * that table is refused too, so a new field cannot reach Vercel untested. A refused value is
+ * answered as live Vercel answered it when we have seen it (400 not_implemented and its message).
  *
  * Every mismatch is pushed to `violations` as "<METHOD> <path>: <field>: <problem>", and the
  * request is answered 400, as Vercel would.
  */
 import { readFileSync } from "node:fs";
 import Ajv from "ajv";
+import { checkFields, refusalOf } from "./vercel-allowed.mjs";
 
 export const SPEC = JSON.parse(readFileSync(new URL("./fixtures/vercel-openapi.json", import.meta.url), "utf8"));
 const ajv = new Ajv({ strict: false, allErrors: true, validateFormats: false });
@@ -69,14 +72,6 @@ const fmt = (errors, base = "") => (errors ?? []).map((e) => `${base}${e.instanc
 /**
  * Checks one request against the contract. Returns { op, params, body, problems }.
  */
-/** [method, path, field, allowed values, Vercel's live answer]: refusals the spec does not show. */
-export const LIVE_LIMITS = [
-  // 7 Nov 2026, POST /setup on Daan's team: 400 not_implemented, "Only deployment-alias and none
-  // are currently supported for blocks". The spec's enum also lists build-start,
-  // deployment-start and deployment-promotion.
-  ["POST", "/v2/projects/{projectIdOrName}/checks", "blocks", ["deployment-alias", "none"], "400 not_implemented: Only deployment-alias and none are currently supported for blocks"],
-];
-
 export function checkRequest(method, url, init = {}) {
   const problems = [];
   const match = OPS.find((o) => o.method === method && o.re.test(url.pathname));
@@ -124,12 +119,18 @@ export function checkRequest(method, url, init = {}) {
       problems.push(...fmt(compile(whole).errors));
     }
   }
-  for (const [m, path, field, allowed, answer] of LIVE_LIMITS) {
-    if (m === method && path === match.path && body?.[field] !== undefined && !allowed.includes(body[field])) {
-      problems.push(`/${field}: ${JSON.stringify(body[field])} is in the spec but live Vercel refuses it (${answer})`);
-    }
-  }
-  return { op: match, params, body: body ?? null, problems };
+  // The table of what Vercel accepts: the query, the body, and a check's source.
+  const key = `${method} ${match.path}`;
+  const { source, ...top } = body && typeof body === "object" ? body : {};
+  const found = [
+    ...checkFields(key, "query", Object.fromEntries(url.searchParams)),
+    ...(body && typeof body === "object" ? checkFields(key, "body", top) : []),
+    ...(source && typeof source === "object" ? checkFields(key, "source", source) : []),
+  ];
+  problems.push(...found.map((f) => `${f.row?.in === "source" ? "/source/" : "/"}${f.field}: ${f.problem}${f.row ? ` (${f.row.live})` : ""}`));
+  // The answer: a value live Vercel refused gets its live answer first.
+  const refused = found.find((f) => f.row?.refusal) ?? found[0];
+  return { op: match, params, body: body ?? null, problems, refusal: refused ? refusalOf(refused) : null };
 }
 
 /**
@@ -203,6 +204,7 @@ export function contractVercel({ world, token, clientId, clientSecret, code, red
       if (method !== "POST") problems.push("method is not POST");
       if (!ct.startsWith("application/x-www-form-urlencoded")) problems.push("Content-Type is not form-encoded");
       for (const k of ["client_id", "client_secret", "code", "redirect_uri"]) if (!form.get(k)) problems.push(`${k} is missing`);
+      problems.push(...checkFields("POST /v2/oauth/access_token", "form", Object.fromEntries(form)).map((f) => `${f.field}: ${f.problem}`));
       if (problems.length) {
         violations.push(...problems.map((p) => `POST /v2/oauth/access_token: ${p}`));
         return reply(400, { error: { code: "bad_request" } });
@@ -213,10 +215,10 @@ export function contractVercel({ world, token, clientId, clientSecret, code, red
       return reply(200, { token_type: "Bearer", access_token: token, installation_id: world.configurationId, user_id: world.userId, team_id: world.teamId });
     }
 
-    const { op, params, body, problems } = checkRequest(method, url, init);
+    const { op, params, body, problems, refusal } = checkRequest(method, url, init);
     if (problems.length) {
       violations.push(...problems.map((p) => `${method} ${url.pathname}: ${p}`));
-      return reply(400, { error: { code: "bad_request", message: problems[0] } });
+      return reply(400, refusal ? { error: refusal.error } : { error: { code: "bad_request", message: problems[0] } });
     }
     if (new Headers(init.headers ?? {}).get("authorization") !== `Bearer ${token}`) return reply(403, { error: { code: "forbidden" } });
     if (world.teamId && url.searchParams.get("teamId") !== world.teamId) return reply(403, { error: { code: "forbidden", message: "teamId is required for a team token" } });
@@ -246,7 +248,6 @@ export function contractVercel({ world, token, clientId, clientSecret, code, red
       case "GET /v2/projects/{projectIdOrName}/checks":
         return answer(200, { checks: checks[params.projectIdOrName] ?? [] });
       case "POST /v2/projects/{projectIdOrName}/checks": {
-        if (body.source?.kind === "git-provider") return reply(400, { error: { code: "not_implemented", message: "Integrations cannot create git-provider checks" } });
         if (body.source?.kind === "integration" && (body.source.integrationConfigurationId !== world.configurationId || (body.source.integrationId && body.source.integrationId !== world.integrationId))) {
           return reply(400, { error: { code: "bad_request", message: "source does not belong to this integration" } });
         }
@@ -282,5 +283,5 @@ export function contractVercel({ world, token, clientId, clientSecret, code, red
         return reply(501, {});
     }
   };
-  return { fetch, violations, calls, checks, runs };
+  return { fetch, violations, calls, checks, runs, token };
 }

@@ -11,7 +11,10 @@ import { openToken, parseKeys, sealToken, signValue, unsignValue, verifyWebhookS
 import { CSP, safeNext } from "../lib/http.mjs";
 import { redact, setLogSink } from "../lib/log.mjs";
 import { memoryStore, redisStore } from "../lib/store.mjs";
-import { WORKFLOW_YAML, checkBody, checkName, githubNewFileUrl, isOurCheck } from "../lib/workflow.mjs";
+import { PREFILL_YAML, WORKFLOW_YAML, checkBody, checkName, githubNewFileUrl, isOurCheck } from "../lib/workflow.mjs";
+// The repo's vendored YAML parser: no package to install, the same one the Action tests use.
+import YAML from "../../../lib/vendor/yaml/index.js";
+const parseYaml = (text) => YAML.parse(text);
 
 const here = (p) => new URL(p, import.meta.url);
 const b64key = () => randomBytes(32).toString("base64");
@@ -360,7 +363,7 @@ describe("setup", () => {
     const u = new URL(link);
     expect(u.pathname).toBe("/acme/shop/new/main");
     expect(u.searchParams.get("filename")).toBe(".github/workflows/penthera-vercel.yml");
-    expect(u.searchParams.get("value")).toBe(WORKFLOW_YAML);
+    expect(u.searchParams.get("value")).toBe(PREFILL_YAML);
     expect(vercel.calls.some((c) => c.method === "POST" && c.url.pathname.endsWith("/checks"))).toBe(false);
 
     const done = await app.setup(post("/setup", `csrf=${csrf}&action=enable&p=prj_one`, { cookie, origin: BASE }));
@@ -425,7 +428,13 @@ describe("setup", () => {
     const ctx = setup({ now: () => t });
     const res = await ctx.app.install(get(installUrl()));
     t += 31 * 60_000;
-    expect((await ctx.app.setup(get("/setup", { cookie: cookieJar(res) }))).status).toBe(401);
+    const closed = await ctx.app.setup(get("/setup", { cookie: cookieJar(res) }));
+    expect(closed.status).toBe(401);
+    // The same page follows an uninstall, so it never claims Penthera is still installed.
+    const body = await closed.text();
+    expect(body).toContain("If you uninstalled it");
+    expect(body).not.toContain("stays installed");
+    expect(body).toContain('href="/start"');
   });
 
   it("configure without the install session reveals nothing about the configuration", async () => {
@@ -515,11 +524,12 @@ describe("no secrets in logs", () => {
     for (const secret of [ACCESS_TOKEN, CLIENT_SECRET, CODE, "deadbeefdeadbeef", "not-a-key"]) expect(all).not.toContain(secret);
   });
 
-  it("redact() masks token shapes and env secrets but keeps ids and error codes", () => {
+  it("redact() masks token shapes, env secrets and every id, and keeps error codes", () => {
     const e = { INTEGRATION_CLIENT_SECRET: CLIENT_SECRET };
     expect(redact(`Bearer ${ACCESS_TOKEN}`, e)).not.toContain(ACCESS_TOKEN);
     expect(redact(`secret ${CLIENT_SECRET} here`, e)).not.toContain(CLIENT_SECRET);
-    expect(redact(`${CFG} integration_configuration_disabled`, e)).toBe(`${CFG} integration_configuration_disabled`);
+    expect(redact(`${CFG} integration_configuration_disabled`, e)).toBe("[id] integration_configuration_disabled");
+    expect(redact("project prj_a1 of team_b2 (user_c3) on dpl_d4, oac_e5, chk_f6, crun_g7", e)).toBe("project [id] of [id] ([id]) on [id], [id], [id], [id]");
   });
 });
 
@@ -668,9 +678,19 @@ describe("store", () => {
 });
 
 describe("workflow and repo rules", () => {
-  it("matches row 125's example when that file is in the repo", () => {
-    const example = here("../../../docs/examples/vercel-deployment-check.yml");
-    if (existsSync(example)) expect(WORKFLOW_YAML).toBe(readFileSync(example, "utf8"));
+  it("is the same file in docs/examples and in this repo's own workflows", () => {
+    for (const copy of ["../../../docs/examples/vercel-deployment-check.yml", "../../../.github/workflows/penthera-vercel.yml"]) {
+      expect(existsSync(here(copy)), copy).toBe(true);
+      expect(readFileSync(here(copy), "utf8"), copy).toBe(WORKFLOW_YAML);
+    }
+  });
+
+  it("the prefill link carries the same workflow, without its full-line comments, and says where they are", () => {
+    expect(parseYaml(PREFILL_YAML)).toEqual(parseYaml(WORKFLOW_YAML));
+    // So stripping comments never touches a script: no run block holds a comment line.
+    for (const st of parseYaml(WORKFLOW_YAML).jobs.scan.steps) if (st.run) expect(st.run, st.name).not.toMatch(/^\s*#/m);
+    expect(PREFILL_YAML.split("\n")[0]).toMatch(/^# Penthera on Vercel\. The file with its comments: https:\/\/github\.com\/danoszz\/penthera\/blob\/main\/integrations\/vercel\/workflow\/penthera-vercel\.yml$/);
+    expect(PREFILL_YAML.split("\n").slice(1).filter((l) => /^\s*#/.test(l))).toEqual([]);
   });
 
   it("pins every action by full SHA, triggers on deployment.ready, and sets no AI input", () => {
@@ -695,6 +715,8 @@ describe("workflow and repo rules", () => {
 
   it("builds the GitHub link only for plain owner/repo names, and keeps it short enough", () => {
     expect(githubNewFileUrl("acme/shop", "main").length).toBeLessThan(8_000);
+    // The longest names GitHub allows: a 39-character owner and a 100-character repo.
+    expect(githubNewFileUrl(`${"o".repeat(39)}/${"r".repeat(100)}`, "main").length).toBeLessThan(8_000);
     expect(githubNewFileUrl("acme/shop", "release/v2")).toContain("/new/release/v2?");
     for (const bad of ["acme", "acme/shop/x", "../x/y", "a b/c", ""]) expect(githubNewFileUrl(bad, "main")).toBeNull();
   });

@@ -10,6 +10,14 @@ import { readFileSync } from "node:fs";
 
 export const WORKFLOW_PATH = ".github/workflows/penthera-vercel.yml";
 export const WORKFLOW_YAML = readFileSync(new URL("../workflow/penthera-vercel.yml", import.meta.url), "utf8");
+export const WORKFLOW_SOURCE = "https://github.com/danoszz/penthera/blob/main/integrations/vercel/workflow/penthera-vercel.yml";
+
+/**
+ * The file GitHub's prefill link carries: the template without its full-line comments, because the
+ * link has a size limit, and one line that says where the commented file is. The same workflow:
+ * a test parses both and compares them. The copy box on the page keeps every comment.
+ */
+export const PREFILL_YAML = `# Penthera on Vercel. The file with its comments: ${WORKFLOW_SOURCE}\n${WORKFLOW_YAML.split("\n").filter((l) => !/^\s*#/.test(l)).join("\n").replace(/\n{3,}/g, "\n\n").replace(/^\n+/, "")}`;
 
 const WORKFLOW_NAME = /^name:\s*(.+?)\s*$/m.exec(WORKFLOW_YAML)?.[1] ?? "Penthera on Vercel";
 const JOB_ID = "scan";
@@ -84,6 +92,6 @@ export function githubNewFileUrl(repo, branch) {
   const [owner, name, extra] = String(repo ?? "").split("/");
   if (extra !== undefined || !SLUG.test(owner ?? "") || !SLUG.test(name ?? "")) return null;
   const ref = String(branch || "main").split("/").map(encodeURIComponent).join("/");
-  const q = new URLSearchParams({ filename: WORKFLOW_PATH, value: WORKFLOW_YAML });
+  const q = new URLSearchParams({ filename: WORKFLOW_PATH, value: PREFILL_YAML });
   return `https://github.com/${owner}/${name}/new/${ref}?${q}`;
 }

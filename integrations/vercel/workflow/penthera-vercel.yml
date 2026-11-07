@@ -49,7 +49,7 @@ jobs:
         run: |
           host="${DEPLOYMENT_URL#https://}"
           host="${host%/}"
-          if ! printf '%s' "$host" | grep -Eq '^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.vercel\.app$'; then
+          if ! [[ "$host" =~ ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.vercel\.app$ ]]; then
             echo "::error::Not a Vercel deployment URL, so nothing was scanned: $host"
             exit 2
           fi
@@ -74,6 +74,28 @@ jobs:
           fail-on: high   # a high or critical finding fails the check
           sarif: "false"  # dispatch runs sit on the default branch, not the deployed commit
 
+      # A pass needs proof in the report that the site was read: a 2xx home page, no challenge,
+      # no block page, no rate limiting, and the app scan done. Anything else fails, with the reason.
+      - name: Check the scan read the site
+        id: read
+        if: steps.penthera.outcome == 'success'
+        env:
+          REPORT: ${{ steps.penthera.outputs.report-file }}
+        run: |
+          why=$(jq -r '(.httpStatus | if type == "number" then . else 0 end) as $s
+            | if .reachable == false then "unreachable" elif .challenge then "challenge" elif $s == 0 then "incomplete"
+            elif $s == 401 or $s == 403 then "denied" elif $s >= 300 and $s < 400 then "redirected"
+            elif $s < 200 or $s >= 300 then "status" elif any(.findings[]?; .source == "waf-challenge") then "blocked"
+            elif (.endpoints.byStatus // {} | has("429")) then "rate_limited"
+            elif (.executedProbes | type) != "array" or (.executedProbes | index("endpoint-discovery")) == null then "incomplete"
+            else "read" end' "$REPORT" || echo unreadable)
+          if [ "$why" != read ]; then
+            why=${why:-unreadable}
+            echo "reason=$why" >> "$GITHUB_OUTPUT"
+            echo "::error::Site not read ($why), so this deploy fails the check."
+            exit 1
+          fi
+
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always() && steps.penthera.outputs.report-file != ''
         with:
@@ -81,18 +103,21 @@ jobs:
           path: ${{ steps.penthera.outputs.report-file }}
 
       # Production only, also after a failed or incomplete scan (then: failed). Sends the two
-      # ids and the result; the token proves which repo, workflow and deployment it is for.
+      # ids, the result and a hash of the host it scanned (never the host); the token proves
+      # which repo, workflow and deployment it is for.
       - name: Report pass or fail to the Vercel check
         if: always() && github.event.client_payload.environment == 'production'
         env:
-          SCAN_OUTCOME: ${{ steps.penthera.outcome }}
+          SCAN_OUTCOME: ${{ steps.read.outcome }} # success: the scan passed and read the site
+          REASON: ${{ steps.read.outputs.reason }}
+          SCANNED: ${{ steps.target.outputs.url }}
           DEPLOYMENT_ID: ${{ github.event.client_payload.id }}
           PROJECT_ID: ${{ github.event.client_payload.project.id }}
           RELAY: https://vercel.penthera.org
         run: |
           conclusion=failed
           if [ "$SCAN_OUTCOME" = "success" ]; then conclusion=succeeded; fi
-          if ! printf '%s' "$DEPLOYMENT_ID" | grep -Eq '^dpl_[A-Za-z0-9]{1,64}$' || ! printf '%s' "$PROJECT_ID" | grep -Eq '^prj_[A-Za-z0-9]{1,64}$'; then
+          if ! [[ "$DEPLOYMENT_ID" =~ ^dpl_[A-Za-z0-9]{1,64}$ && "$PROJECT_ID" =~ ^prj_[A-Za-z0-9]{1,64}$ ]]; then
             echo "::error::The dispatch has no usable deployment or project id, so nothing was reported."
             exit 1
           fi
@@ -103,11 +128,13 @@ jobs:
             exit 1
           fi
           echo "::add-mask::$token"
-          body=$(jq -nc --arg d "$DEPLOYMENT_ID" --arg p "$PROJECT_ID" --arg c "$conclusion" '{deploymentId: $d, projectId: $p, conclusion: $c}')
+          h=$(printf '%s' "${SCANNED#https://}" | sha256sum | cut -c1-64)
+          body=$(jq -nc --arg d "$DEPLOYMENT_ID" --arg p "$PROJECT_ID" --arg c "$conclusion" --arg h "$h" --arg r "$REASON" \
+            '{deploymentId: $d, projectId: $p, conclusion: $c, hostSha256: $h} + (if $r == "" then {} else {reason: $r} end)')
           code=$(curl -sS -o "$RUNNER_TEMP/penthera-relay.json" -w '%{http_code}' --max-time 30 -X POST "$RELAY/report" \
             -H "Authorization: Bearer $token" -H "Content-Type: application/json" --data "$body" || echo 000)
           case "$code" in
-            200) echo "Reported $conclusion to the Vercel check." ;;
+            200) echo "Reported $(jq -r .conclusion "$RUNNER_TEMP/penthera-relay.json") to the Vercel check." ;;
             404) echo "::notice::The Penthera check is not on for this project, so the commit status alone counts." ;;
             *) echo "::error::The relay answered $code ($(head -c 200 "$RUNNER_TEMP/penthera-relay.json" 2>/dev/null)). The Vercel check stays pending."; exit 1 ;;
           esac
