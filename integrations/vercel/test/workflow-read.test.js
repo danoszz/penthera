@@ -9,7 +9,8 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, wr
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { parse } from "yaml";
+// The repo's vendored YAML parser: no package to install.
+import YAML from "../../../lib/vendor/yaml/index.js";
 
 vi.mock("node:dns/promises", () => {
   const fail = async () => { throw Object.assign(new Error("dns disabled in tests"), { code: "ENOTFOUND" }); };
@@ -23,7 +24,7 @@ vi.mock("node:tls", () => {
 const { scanUrl } = await import("../../../src/scan-url.js");
 const { WORKFLOW_YAML } = await import("../lib/workflow.mjs");
 
-const steps = parse(WORKFLOW_YAML).jobs.scan.steps;
+const steps = YAML.parse(WORKFLOW_YAML).jobs.scan.steps;
 const step = (id) => steps.find((s) => s.id === id);
 const relayStep = steps.find((s) => s.name === "Report pass or fail to the Vercel check");
 const HOST = "shop-abc123.vercel.app";

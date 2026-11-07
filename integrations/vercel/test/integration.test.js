@@ -12,7 +12,9 @@ import { CSP, safeNext } from "../lib/http.mjs";
 import { redact, setLogSink } from "../lib/log.mjs";
 import { memoryStore, redisStore } from "../lib/store.mjs";
 import { PREFILL_YAML, WORKFLOW_YAML, checkBody, checkName, githubNewFileUrl, isOurCheck } from "../lib/workflow.mjs";
-import { parse as parseYaml } from "yaml";
+// The repo's vendored YAML parser: no package to install, the same one the Action tests use.
+import YAML from "../../../lib/vendor/yaml/index.js";
+const parseYaml = (text) => YAML.parse(text);
 
 const here = (p) => new URL(p, import.meta.url);
 const b64key = () => randomBytes(32).toString("base64");
