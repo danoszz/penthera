@@ -142,12 +142,27 @@ export async function runComment(opts, env = process.env, api = null) {
   }
 }
 
+/** Why a URL scan's report says nothing about the site, or null: nothing answered, a firewall's challenge, or a 401 or 403. */
+export function siteNotRead(report) {
+  if (report?.reachable === false) return "unreachable";
+  if (report?.challenge) return "challenge";
+  if (report?.httpStatus === 401 || report?.httpStatus === 403) return "denied";
+  return null;
+}
+
 export function runGate(opts) {
   const report = JSON.parse(readFileSync(opts.report, "utf-8"));
-  const res = gate(report.findings, opts["fail-on"] || "none");
-  // A green job must not read as a check of a site nobody read.
-  if (report.challenge || report.reachable === false) console.log("::warning::Site not read: Penthera couldn't read the site, so this job says nothing about it.");
-  if (res.fail) console.error(`penthera: ${res.count} finding(s) at or above ${opts["fail-on"]}; failing as requested by fail-on.`);
+  const failOn = opts["fail-on"] || "none";
+  const res = gate(report.findings, failOn);
+  // A green job must not read as a check of a site nobody read. With a fail-on gate, such a run
+  // is incomplete (exit 2, as the CLI exits for an input it could not read), whatever it found.
+  const unread = siteNotRead(report);
+  if (unread && failOn !== "none") {
+    console.error(`::error::Site not read (${unread}): Penthera couldn't read the site, so this job can't pass the fail-on gate.`);
+    return { ...res, fail: true, incomplete: true, unread };
+  }
+  if (unread) console.log("::warning::Site not read: Penthera couldn't read the site, so this job says nothing about it.");
+  if (res.fail) console.error(`penthera: ${res.count} finding(s) at or above ${failOn}; failing as requested by fail-on.`);
   return res;
 }
 
@@ -158,7 +173,10 @@ async function main(argv) {
     options: { "body-file": { type: "string" }, repo: { type: "string" }, pr: { type: "string" }, report: { type: "string" }, "fail-on": { type: "string" } },
   });
   if (cmd === "comment" && values["body-file"]) { await runComment(values); return 0; }
-  if (cmd === "gate" && values.report) return runGate(values).fail ? 1 : 0;
+  if (cmd === "gate" && values.report) {
+    const r = runGate(values);
+    return r.incomplete ? 2 : r.fail ? 1 : 0;
+  }
   console.error("usage: comment.mjs comment --body-file <md> | gate --report <json> --fail-on none|high|critical");
   return 2;
 }

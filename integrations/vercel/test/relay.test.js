@@ -1,7 +1,7 @@
 // POST /report: the GitHub OIDC check, the binding to the Vercel project and deployment, and
 // the cleanup of project links. Offline: a local RSA key stands in for GitHub's JWKS, and a mock
 // stands in for Vercel. No call reaches GitHub, Vercel or Upstash.
-import { createHmac, generateKeyPairSync, randomBytes, sign } from "node:crypto";
+import { createHash, createHmac, generateKeyPairSync, randomBytes, sign } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { createApp } from "../lib/app.mjs";
 import { parseKeys, sealToken } from "../lib/crypto.mjs";
@@ -117,7 +117,8 @@ const cookieJar = (res) => res.headers.getSetCookie().map((c) => c.split(";")[0]
 const get = (path, headers = {}) => new Request(`${BASE}${path}`, { headers });
 const form = (path, body, headers = {}) =>
   new Request(`${BASE}${path}`, { method: "POST", body, headers: { "content-type": "application/x-www-form-urlencoded", origin: BASE, ...headers } });
-const report = (token, body = { deploymentId: "dpl_one", projectId: "prj_one", conclusion: "succeeded" }, headers = {}) =>
+const X_HOST = createHash("sha256").update("x.vercel.app").digest("hex");
+const report = (token, body = { deploymentId: "dpl_one", projectId: "prj_one", conclusion: "succeeded", hostSha256: X_HOST }, headers = {}) =>
   new Request(`${BASE}/report`, {
     method: "POST",
     body: typeof body === "string" ? body : JSON.stringify(body),
@@ -151,6 +152,63 @@ async function enabled({ clock, store = memoryStore(), vercel = mock(), queued =
 }
 
 const patches = (vercel) => vercel.calls.filter((c) => c.method === "PATCH");
+
+describe("a pass counts only for a scan of this deployment, that read the site", () => {
+  const body = (extra) => ({ deploymentId: "dpl_one", projectId: "prj_one", conclusion: "succeeded", ...extra });
+  const relay = async (b) => {
+    const ctx = await enabled();
+    const res = await ctx.app.report(report(jwt(claims()), b));
+    return { res, out: await res.json(), run: ctx.vercel.runs.dpl_one[0] };
+  };
+
+  it("the hash of this deployment's own host: succeeded", async () => {
+    const { res, out, run } = await relay(body({ hostSha256: X_HOST }));
+    expect(res.status).toBe(200);
+    expect(out).toEqual({ ok: true, conclusion: "succeeded" });
+    expect(run).toMatchObject({ conclusion: "succeeded", conclusionText: expect.stringMatching(/^Penthera found no high or critical issue/) });
+  });
+
+  it("another host, a missing host (a workflow from before) or a malformed hash: the pass becomes failed, Scanned URL is not this deployment", async () => {
+    const other = createHash("sha256").update("someone-else.vercel.app").digest("hex");
+    for (const extra of [{ hostSha256: other }, {}, { hostSha256: "x.vercel.app" }, { hostSha256: X_HOST.toUpperCase() }]) {
+      const { res, out, run } = await relay(body(extra));
+      expect(res.status, JSON.stringify(extra)).toBe(200);
+      expect(out).toEqual({ ok: true, conclusion: "failed", note: "scanned_url_not_this_deployment" });
+      expect(run).toMatchObject({ status: "completed", conclusion: "failed", conclusionText: expect.stringMatching(/^Scanned URL is not this deployment/) });
+    }
+  });
+
+  it("a fail stays a fail with any host; with a reason, the check says why the site was not read", async () => {
+    const cases = [
+      [{ conclusion: "failed", hostSha256: X_HOST, reason: "challenge" }, /^Site not read: a firewall served a bot challenge instead of the site\./],
+      [{ conclusion: "failed", reason: "unreachable" }, /^Site not read: nothing answered at the deployment\./],
+      [{ conclusion: "failed", reason: "incomplete" }, /^Site not read: the scan did not finish reading the site\./],
+      [{ conclusion: "failed", reason: "made-up" }, /^Penthera found a high or critical issue, or could not finish the scan/],
+      [{ conclusion: "failed" }, /^Penthera found a high or critical issue, or could not finish the scan/],
+    ];
+    for (const [extra, text] of cases) {
+      const { out, run } = await relay(body(extra));
+      expect(out.conclusion, JSON.stringify(extra)).toBe("failed");
+      expect(run.conclusionText, JSON.stringify(extra)).toMatch(text);
+    }
+  });
+
+  it("accepts no field beyond the ids, the conclusion, hostSha256 and reason: not the host itself, not findings", async () => {
+    const ctx = await enabled();
+    expect((await ctx.app.report(report(jwt(claims()), body({ hostSha256: X_HOST, host: "x.vercel.app" })))).status).toBe(400);
+    expect((await ctx.app.report(report(jwt(claims()), body({ hostSha256: X_HOST, findings: [] })))).status).toBe(400);
+  });
+
+  it("the deployment's host comes from Vercel's record, read with the installation's token, never from the body", async () => {
+    // The fake Vercel answers url: "x.vercel.app" for dpl_one; a report claiming that hash for
+    // another deployment of the project is compared with that deployment's own record instead.
+    const ctx = await enabled();
+    const res = await ctx.app.report(report(jwt(claims(T0, { aud: `${BASE}/report/dpl_one` })), body({ hostSha256: X_HOST })));
+    expect((await res.json()).conclusion).toBe("succeeded");
+    const reads = ctx.vercel.calls.filter((c) => c.url.pathname === "/v13/deployments/dpl_one");
+    expect(reads).toHaveLength(1);
+  });
+});
 
 describe("POST /report relays pass or fail to our check run", () => {
   it("sets the run's conclusion with the installation's token, and stores nothing about the scan", async () => {
@@ -956,11 +1014,13 @@ describe("the workflow reports to the relay", () => {
     expect(step).toMatch(/if: always\(\) && github\.event\.client_payload\.environment == 'production'/);
     expect(step).toContain("audience=https%3A%2F%2Fvercel.penthera.org%2Freport%2F$DEPLOYMENT_ID");
     // The id is checked against its shape before it goes into the token request.
-    expect(step.indexOf("grep -Eq '^dpl_")).toBeLessThan(step.indexOf("ACTIONS_ID_TOKEN_REQUEST_URL"));
+    expect(step.indexOf("=~ ^dpl_")).toBeGreaterThan(-1);
+    expect(step.indexOf("=~ ^dpl_")).toBeLessThan(step.indexOf("ACTIONS_ID_TOKEN_REQUEST_URL"));
     expect(step).toContain('if [ "$SCAN_OUTCOME" = "success" ]; then conclusion=succeeded; fi');
     expect(step).toContain("conclusion=failed");
     // Untrusted dispatch values reach the shell only through env.
     expect(step).not.toMatch(/run: \|[\s\S]*\$\{\{/);
-    expect(step).toContain("{deploymentId: $d, projectId: $p, conclusion: $c}");
+    expect(step).toContain("{deploymentId: $d, projectId: $p, conclusion: $c, hostSha256: $h}");
+    expect(step).toContain(`h=$(printf '%s' "\${SCANNED#https://}" | sha256sum | cut -c1-64)`);
   });
 });

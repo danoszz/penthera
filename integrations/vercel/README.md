@@ -262,10 +262,20 @@ is not rerequestable: a re-run means a redeploy.
 ### POST /report
 
 The workflow's last step runs on every outcome (`if: always()`), for production
-deployments only, and sends exactly
-`{ deploymentId, projectId, conclusion: "succeeded" | "failed" }`. It reports
-`failed` when the scan failed, was incomplete, or did not run. The ids come from
-Vercel's dispatch payload (`client_payload.id`, `client_payload.project.id`).
+deployments only, and sends
+`{ deploymentId, projectId, conclusion: "succeeded" | "failed", hostSha256, reason? }`
+and nothing else. The ids come from Vercel's dispatch payload
+(`client_payload.id`, `client_payload.project.id`). It reports `succeeded` only
+when the step "Check the scan read the site" passed: that step runs only after a
+successful scan and reads the report JSON with jq. The site counts as read only
+with `reachable` not false, no `challenge`, no `httpStatus` 401 or 403, no
+`waf-challenge` finding (a block page), and `endpoint-discovery` in
+`executedProbes` (the app scan ran). Otherwise it fails with a reason
+(`unreachable`, `challenge`, `denied`, `blocked`, `incomplete`, or `unreadable`
+for a missing or broken report), which the relay turns into "Site not read:
+...". Neither the exit code nor the URL check's own `curl` decides it.
+`hostSha256` is the SHA-256 of the host the workflow scanned: never the host,
+because no deployment URL reaches this server (privacy notice).
 
 It sends a GitHub Actions OIDC token as `Authorization: Bearer`, requested with
 `audience=https://vercel.penthera.org/report/<deploymentId>` (the job has
@@ -299,6 +309,13 @@ It sends a GitHub Actions OIDC token as `Authorization: Bearer`, requested with
 5. **Deployment, before any write.** `GET /v13/deployments/{id}` must name this
    project and target `production`. Only then is a run looked up, started or
    changed.
+5b. **The scanned host is this deployment's.** The dispatch URL the workflow
+   scanned is signed by nobody, so a `succeeded` counts only when `hostSha256`
+   equals the SHA-256 of the deployment's own `url` in that same Vercel answer.
+   A missing hash (a workflow from before 8 Nov), a malformed one or another
+   host's turns it into `failed`, "Scanned URL is not this deployment". A
+   `failed` stays failed. The workflow's own `*.vercel.app` check stays too, as a
+   whole-string bash match, so a value with a second line cannot pass it.
 6. **Check and run.** The project must carry this installation's own check
    (`source.integrationConfigurationId`). The run must be a run of exactly that
    check, and Vercel's run must name this project and this deployment.
