@@ -658,18 +658,21 @@ ${asks({ open: true })}`);
 
   /**
    * True when installation `configurationId` still owns a Penthera check on the project, read with
-   * its own token. A missing record, an unreadable token, or Vercel saying 401, 403 or 404 means it
-   * does not. Any other error keeps the current owner (true): a link is never taken over on a guess.
+   * its own token. It fails closed: only a missing record, or Vercel saying 401 or 404 for that
+   * token, means it does not. A record whose token does not decrypt (a key rotation, a config
+   * error) and a 403 (a disabled installation can come back, as in the sweep) count as owned, like
+   * any other error: a check is never deleted and a link never taken over on a guess.
    */
   async function ownsCheck(configurationId, projectId, c) {
     if (!CONFIG_ID.test(configurationId ?? "")) return false;
     const record = await load(configurationId);
-    const api = record && tryClient(record, configurationId, c.keys);
-    if (!api) return false;
+    if (!record) return false;
+    const api = tryClient(record, configurationId, c.keys);
+    if (!api) return true;
     try {
       return (await api.listChecks(projectId)).some((k) => isIntegrationCheck(k, configurationId));
     } catch (e) {
-      return !(e instanceof VercelError && [401, 403, 404].includes(e.status));
+      return !(e instanceof VercelError && [401, 404].includes(e.status));
     }
   }
 

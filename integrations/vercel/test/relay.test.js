@@ -589,6 +589,47 @@ describe("when Turn on meets an old check or a refusal", () => {
     expect(vercel.checks.prj_one.map((k) => k.id)).toEqual(["chk_old"]);
   });
 
+  const oldRecord = async (store, keys, token = ACCESS_TOKEN) =>
+    store.put({ configurationId: "icfg_OldInstall9", ownerId: TEAM, ...sealToken(token, "icfg_OldInstall9", keys), createdAt: new Date(T0).toISOString(), sessionNonce: "l".repeat(32) });
+
+  it("fails closed when the old installation's record is there but its token does not decrypt", async () => {
+    const { res, vercel } = await enable({}, async ({ vercel: v, store }) => {
+      v.checks.prj_one = [leftover()];
+      // Sealed under a key this server no longer has (a rotation gone wrong, a config error).
+      await oldRecord(store, parseKeys(`v1:${randomBytes(32).toString("base64")}`));
+    });
+    expect(res.status).toBe(409);
+    expect(vercel.calls.filter((c) => c.method === "DELETE")).toHaveLength(0);
+    expect(vercel.checks.prj_one.map((k) => k.id)).toEqual(["chk_old"]);
+  });
+
+  it("a 403 for the old installation counts as taken, as in the sweep: nothing is deleted", async () => {
+    const { res, vercel } = await enable(
+      { "GET /v2/projects/prj_one/checks": (i) => (i?.headers?.Authorization === "Bearer at_old_install" ? { status: 403, body: { error: { code: "integration_configuration_disabled" } } } : null) },
+      async ({ vercel: v, store, keys }) => {
+        v.checks.prj_one = [leftover()];
+        await oldRecord(store, keys, "at_old_install");
+      },
+    );
+    expect(res.status).toBe(409);
+    expect(vercel.calls.filter((c) => c.method === "DELETE")).toHaveLength(0);
+    expect(vercel.checks.prj_one.map((k) => k.id)).toEqual(["chk_old"]);
+  });
+
+  it("a 401 or 404 for the old installation's token means it is gone: our leftover is removed", async () => {
+    for (const status of [401, 404]) {
+      const { res, vercel } = await enable(
+        { "GET /v2/projects/prj_one/checks": (i) => (i?.headers?.Authorization === "Bearer at_old_install" ? { status, body: { error: { code: "gone" } } } : null) },
+        async ({ vercel: v, store, keys }) => {
+          v.checks.prj_one = [leftover()];
+          await oldRecord(store, keys, "at_old_install");
+        },
+      );
+      expect(res.status, String(status)).toBe(200);
+      expect(vercel.checks.prj_one.map((k) => k.id)).not.toContain("chk_old");
+    }
+  });
+
   it("never deletes a check that is not ours by source, and says it is there", async () => {
     const theirs = [
       { id: "chk_gh", name: "Penthera", projectId: "prj_one", source: { kind: "git-provider", provider: "github", externalCheckName: "Penthera on Vercel | scan (shop - production)" } },

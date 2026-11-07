@@ -206,8 +206,12 @@ creating its check, "Turn on" looks at the project's checks:
 - A check whose `source.integrationId` is ours, from a configuration this server
   holds no live record for, is a leftover of an earlier install. It is deleted
   with the current token.
-- If that configuration is still live (its own token still sees its check), the
-  project counts as taken (409), and nothing is deleted.
+- If that configuration is still live (its own token still sees its check), or
+  the server can't tell, the project counts as taken (409) and nothing is
+  deleted. "Can't tell" covers a record whose token doesn't decrypt (a key
+  rotation, a config error), and a 403, which the sweep also treats as possibly
+  coming back. Only a missing record, or a 401 or 404 for that token, counts as
+  gone.
 - Nothing that is not ours by source is ever deleted: not a hand-added GitHub
   check, not another integration's check, and nothing at all when the
   integration id is unknown. A check named like ours that this installation
