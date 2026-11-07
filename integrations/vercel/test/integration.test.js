@@ -407,7 +407,13 @@ describe("setup", () => {
     const ctx = setup({ now: () => t });
     const res = await ctx.app.install(get(installUrl()));
     t += 31 * 60_000;
-    expect((await ctx.app.setup(get("/setup", { cookie: cookieJar(res) }))).status).toBe(401);
+    const closed = await ctx.app.setup(get("/setup", { cookie: cookieJar(res) }));
+    expect(closed.status).toBe(401);
+    // The same page follows an uninstall, so it never claims Penthera is still installed.
+    const body = await closed.text();
+    expect(body).toContain("If you uninstalled it");
+    expect(body).not.toContain("stays installed");
+    expect(body).toContain('href="/start"');
   });
 
   it("configure without the install session reveals nothing about the configuration", async () => {
@@ -497,11 +503,12 @@ describe("no secrets in logs", () => {
     for (const secret of [ACCESS_TOKEN, CLIENT_SECRET, CODE, "deadbeefdeadbeef", "not-a-key"]) expect(all).not.toContain(secret);
   });
 
-  it("redact() masks token shapes and env secrets but keeps ids and error codes", () => {
+  it("redact() masks token shapes, env secrets and every id, and keeps error codes", () => {
     const e = { INTEGRATION_CLIENT_SECRET: CLIENT_SECRET };
     expect(redact(`Bearer ${ACCESS_TOKEN}`, e)).not.toContain(ACCESS_TOKEN);
     expect(redact(`secret ${CLIENT_SECRET} here`, e)).not.toContain(CLIENT_SECRET);
-    expect(redact(`${CFG} integration_configuration_disabled`, e)).toBe(`${CFG} integration_configuration_disabled`);
+    expect(redact(`${CFG} integration_configuration_disabled`, e)).toBe("[id] integration_configuration_disabled");
+    expect(redact("project prj_a1 of team_b2 (user_c3) on dpl_d4, oac_e5, chk_f6, crun_g7", e)).toBe("project [id] of [id] ([id]) on [id], [id], [id], [id]");
   });
 });
 
