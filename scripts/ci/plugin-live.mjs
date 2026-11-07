@@ -8,6 +8,10 @@
  *
  *   node scripts/ci/plugin-live.mjs            find the target and push it
  *   node scripts/ci/plugin-live.mjs --dry-run  print what it would do
+ *
+ * It moves only when the plugin folder itself changed. Every move is a new
+ * version in the directory, which waits for an Anthropic reviewer again, so a
+ * merge that leaves plugin/ as it was must not move the branch.
  */
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -18,6 +22,8 @@ const BRANCH = "plugin-claude-live";
 // the same pin; Anthropic's directory refuses local MCP servers from unverified
 // publishers, so it was removed. Every earlier commit's skill carries that pin too.)
 const SKILL = "plugin/skills/penthera/SKILL.md";
+// The folder the directory reads (its fetch shows only these files).
+const PLUGIN_DIR = "plugin";
 // How far back on main to look for a commit with the published pin.
 const MAX_COMMITS = 500;
 
@@ -41,6 +47,17 @@ export function pinOf(text) {
 export function chooseTarget(commits, latest) {
   if (!/^\d+\.\d+\.\d+$/.test(latest)) return null;
   return commits.find((c) => c.pin === latest)?.sha ?? null;
+}
+
+/**
+ * True when `a` and `b` hold the same plugin folder (the same git tree hash),
+ * so moving the branch from one to the other would change nothing the
+ * directory reads. A missing folder on either side is never "the same".
+ */
+export function samePlugin(a, b, run = git) {
+  const tree = (sha) => { try { return run("rev-parse", `${sha}:${PLUGIN_DIR}`); } catch { return null; } };
+  const ta = tree(a);
+  return ta !== null && ta === tree(b);
 }
 
 const git = (...args) => execFileSync("git", args, { encoding: "utf-8", stdio: ["ignore", "pipe", "pipe"] }).trim();
@@ -75,6 +92,10 @@ function main() {
   try { current = git("rev-parse", `origin/${BRANCH}`); } catch { /* the branch doesn't exist yet */ }
   if (current === target) {
     console.log(`${BRANCH} is at ${target.slice(0, 7)} (penthera@${latest}); nothing to do.`);
+    return;
+  }
+  if (current && samePlugin(current, target)) {
+    console.log(`${BRANCH} stays at ${current.slice(0, 7)}: the plugin folder at ${target.slice(0, 7)} is the same, so no new version for the directory.`);
     return;
   }
   if (current) {
