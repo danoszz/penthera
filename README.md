@@ -213,20 +213,18 @@ projects is experiment E1. To reproduce every table, get the sealed split with
 
 ```mermaid
 flowchart LR
-    U["You or your AI agent"] --> P(("Penthera<br/>on your machine"))
+    U["You or<br/>your agent"] --> P(("Penthera<br/>on your machine"))
 
-    P --> APP["Your app<br/>URL scan, repo scan<br/>runtime advisories"]
-    P --> DEP["Your dependencies<br/>capabilities, install firewall<br/>typosquats, upgrade diff"]
-    P --> AI["Your AI tooling<br/>skills, MCP, hooks<br/>plugins, rule files"]
+    P --> APP["Your app<br/>live and code"]
+    P --> DEP["Dependencies<br/>npm and Python"]
+    P --> AI["AI tooling<br/>skills, MCP, hooks"]
 
-    APP --> F[["Findings<br/>severity, confidence<br/>evidence at file:line"]]
-    DEP --> F
-    AI --> F
+    APP & DEP & AI --> F[["Findings<br/>rules decide"]]
 
-    F --> FIX["Fix loop<br/>asks first, local branch<br/>cannot edit its own tests"]
-    FIX -. "re-scan proves it" .-> F
-    F --> R["Reports and dashboard<br/>terminal, Markdown, SARIF<br/>penthera ui, MCP tools"]
-    F --> E["Evidence<br/>signed bundle<br/>NIS2 and CRA drafts"]
+    F --> FIX["Fix<br/>asks first"]
+    F --> R["Reports<br/>SARIF, ui, MCP"]
+    F --> E["Evidence<br/>signed bundle"]
+    FIX -. "re-scan" .-> F
 
     classDef core fill:#0000ed,stroke:#0000ed,color:#ffffff
     classDef box fill:#ffffff,stroke:#000000,color:#000000
@@ -235,102 +233,118 @@ flowchart LR
 ```
 
 <details>
-<summary><b>Advanced view</b>: black box, white box and the engine, for developers and security specialists</summary>
+<summary><b>Advanced: black box</b>, the running app over HTTP</summary>
 
-Black box tests the running app over HTTP. White box reads the code and
-config. Opt-in items say so. The limits of each part are in
-[METHODOLOGY.md](docs/METHODOLOGY.md#under-the-hood).
+The default scan sends no attack payloads. `--deep`, `--fuzz` and `--adaptive`
+start only after you confirm the hostname, or pass `--confirm-target <host>` in
+CI. Limits are in [METHODOLOGY.md](docs/METHODOLOGY.md#under-the-hood).
 
 ```mermaid
+%%{init: {"flowchart": {"nodeSpacing": 24, "rankSpacing": 40}}}%%
 flowchart LR
-    APP["Your running app<br/>penthera URL"]
+    APP["Running app<br/>penthera URL"] --> DEF
+    APP --> ACT
 
     subgraph DEF["Default: no attack payloads"]
-        B1["Transport and headers<br/>TLS certificate, ciphers<br/>security headers, CSP<br/>cookie flags, CORS"]
-        B2["Discovery<br/>wordlist routes<br/>OpenAPI spec<br/>hidden parameters<br/>exposed files, templates"]
-        B3["Auth<br/>one invalid login POST<br/>JWT, with --auth-bearer<br/>OAuth redirect<br/>client-side auth<br/>IDOR/BOLA: human review"]
-        B4["Versions and leaks<br/>JS libraries, Retire.js<br/>keys in JS bundles<br/>server version advisories<br/>SPF and DMARC"]
+        direction TB
+        B1["TLS, headers<br/>cookies, CORS"]
+        B2["Routes<br/>OpenAPI, files"]
+        B3["Auth, JWT, OAuth<br/>IDOR: review"]
+        B4["JS libraries<br/>bundle keys"]
     end
 
-    subgraph OPT["Opt-in"]
-        B5["No payloads<br/>--recon: crt.sh,<br/>Wayback, OTX<br/>--templates: Nuclei YAML"]
-        G{{"Gate<br/>type the hostname back<br/>or --confirm-target<br/>10 requests a second"}}
-        B6["Active<br/>--deep: SQLi, SSTI,<br/>SSRF, XSS, CMDi,<br/>open redirect,<br/>login burst<br/>--fuzz, --adaptive"]
+    subgraph ACT["Opt-in, gated"]
+        direction TB
+        A1["--deep<br/>SQLi, XSS, SSRF"]
+        A2["--fuzz<br/>API bodies"]
+        A3["--adaptive<br/>may send DELETE"]
     end
 
-    APP --> B1 & B2 & B3 & B4 & B5
-    APP --> G --> B6
-    B1 & B2 & B3 & B4 & B5 & B6 --> F[["Findings"]]
+    DEF & ACT --> F[["Findings"]]
 
     classDef core fill:#0000ed,stroke:#0000ed,color:#ffffff
     classDef box fill:#ffffff,stroke:#000000,color:#000000
-    classDef gate fill:#ffffff,stroke:#0000ed,color:#000000,stroke-width:2px
     class F core
-    class APP,B1,B2,B3,B4,B5,B6 box
-    class G gate
+    class APP,B1,B2,B3,B4,A1,A2,A3 box
     style DEF fill:none,stroke:#0000ed,stroke-width:2px
-    style OPT fill:none,stroke:#0000ed,stroke-width:2px,stroke-dasharray:6 4
+    style ACT fill:none,stroke:#0000ed,stroke-width:2px,stroke-dasharray:6 4
 ```
 
+</details>
+
+<details>
+<summary><b>Advanced: white box</b>, your code and config</summary>
+
+Code sinks use taint-lite within one file, with no call graph. Dependency
+capabilities are what code can do, not proof it is malicious.
+
 ```mermaid
+%%{init: {"flowchart": {"nodeSpacing": 24, "rankSpacing": 40}}}%%
 flowchart LR
-    REPO["Your code<br/>and config"]
+    REPO["Code and config"] --> RS
+    REPO --> OWN
 
     subgraph RS["penthera --repo ."]
-        W1["Secrets<br/>provider key formats<br/>.gitignore aware<br/>code, config, HCL,<br/>notebooks"]
-        W2["Routes and boundaries<br/>Next.js, Express,<br/>Hono, Fastify<br/>auth per route<br/>risky patterns"]
-        W3["Code sinks, taint-lite<br/>eval, new Function,<br/>node:vm, shell exec<br/>with request data<br/>one file, no call graph"]
-        W4["Library mode<br/>exported parameters<br/>count as untrusted"]
-        W5["CI and runtimes<br/>Actions: pwn request,<br/>script injection,<br/>unpinned actions<br/>runtime pin advisories"]
+        direction TB
+        W1["Secrets<br/>key formats"]
+        W2["Routes<br/>auth per route"]
+        W3["Code sinks<br/>eval, vm, exec"]
+        W4["CI, runtimes<br/>Actions, pins"]
     end
 
-    subgraph OWN["Their own commands"]
-        W6["penthera deps<br/>npm, requirements,<br/>poetry, uv, Pipfile,<br/>pdm, .venv<br/>capabilities, IOC packs<br/>typosquats, licenses<br/>upgrade diff"]
-        W7["penthera agents<br/>MCP servers, hooks<br/>skills, plugins<br/>permissions, rule files<br/>hidden content<br/>penthera.lock pins"]
-        W8["Before code lands<br/>penthera install<br/>penthera hook"]
+    subgraph OWN["Own commands"]
+        direction TB
+        W5["deps<br/>capabilities, IOCs"]
+        W6["agents<br/>MCP, skills, hooks"]
+        W7["install, hook<br/>before it lands"]
     end
 
-    REPO --> W1 & W2 & W3 & W4 & W5 & W6 & W7 & W8
-    W1 & W2 & W3 & W4 & W5 & W6 & W7 & W8 --> F[["Findings"]]
+    RS & OWN --> F[["Findings"]]
 
     classDef core fill:#0000ed,stroke:#0000ed,color:#ffffff
     classDef box fill:#ffffff,stroke:#000000,color:#000000
     class F core
-    class REPO,W1,W2,W3,W4,W5,W6,W7,W8 box
+    class REPO,W1,W2,W3,W4,W5,W6,W7 box
     style RS fill:none,stroke:#0000ed,stroke-width:2px
     style OWN fill:none,stroke:#0000ed,stroke-width:2px
 ```
 
+</details>
+
+<details>
+<summary><b>Advanced: engine and outputs</b>, how a match becomes a result</summary>
+
+Rules decide every finding. Exit code `0` means nothing critical or high, `1`
+critical or high, `2` an incomplete or refused scan. Under `--ai` a model only
+proposes.
+
 ```mermaid
+%%{init: {"flowchart": {"nodeSpacing": 30, "rankSpacing": 40}}}%%
 flowchart LR
-    subgraph ENG["Engine: rules decide"]
-        R["Signed rule packs<br/>core, advisories, IOC<br/>SSH signature, SHA-256<br/>ship in the release"]
-        GI["--giants, opt-in<br/>gitleaks, TruffleHog,<br/>Semgrep, osv-scanner,<br/>Trivy, Checkov,<br/>nuclei, ZAP baseline<br/>if installed, no shell"]
-        AI["--ai, opt-in<br/>an Ollama model proposes<br/>asks consent every run"]
-        OFF["Offline by design<br/>no telemetry<br/>no rule downloads"]
+    subgraph IN["Inputs"]
+        direction LR
+        R["Signed rule packs"]
+        GI["--giants, opt-in"]
+        AI["--ai, opt-in"]
     end
 
-    R --> FD[["Finding<br/>severity<br/>confidence: confirmed,<br/>likely, potential,<br/>needs-human-review<br/>file:line or URL"]]
-    GI --> FD
-    AI -. "a rule must confirm" .-> FD
-    FD --> EX{"Exit code<br/>0 none critical or high<br/>1 critical or high<br/>2 incomplete or refused"}
+    IN --> FD[["Finding<br/>severity, confidence"]]
+    FD --> EX{"Exit<br/>0, 1 or 2"}
+    EX --> OUT
 
-    subgraph OUT["Outputs and integrations"]
-        O1["Reports<br/>terminal, JSON,<br/>Markdown, SARIF<br/>audience reports<br/>agent brief"]
-        O2["penthera ui<br/>dashboard on 127.0.0.1"]
-        O3["penthera mcp<br/>six read-only tools"]
-        O4["GitHub Action<br/>PR capability diff<br/>SARIF upload"]
-        O5["Vercel Deployment Check<br/>relays the Action result"]
-        O6["Evidence bundle<br/>SHA-256 manifest<br/>SSH signature<br/>SBOM, AI-BOM<br/>NIS2 and CRA drafts"]
+    subgraph OUT["Outputs"]
+        direction LR
+        O1["Reports, SARIF"]
+        O2["penthera ui, MCP"]
+        O3["Action, Vercel check"]
+        O4["Evidence bundle"]
     end
-
-    EX --> O1 & O2 & O3 & O4 & O5 & O6
 
     classDef core fill:#0000ed,stroke:#0000ed,color:#ffffff
     classDef box fill:#ffffff,stroke:#000000,color:#000000
     class FD core
-    class R,GI,AI,OFF,EX,O1,O2,O3,O4,O5,O6 box
-    style ENG fill:none,stroke:#0000ed,stroke-width:2px
+    class R,GI,AI,EX,O1,O2,O3,O4 box
+    style IN fill:none,stroke:#0000ed,stroke-width:2px
     style OUT fill:none,stroke:#0000ed,stroke-width:2px
 ```
 
