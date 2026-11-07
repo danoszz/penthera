@@ -186,8 +186,17 @@ users can import GitHub checks in the dashboard, integrations cannot.
 (`lib/workflow.mjs`, `checkBody`). The source shape is the first `oneOf` branch
 of the create schema; `kind` defaults to `integration` there and none of its
 fields is marked required. `integrationId` is `INTEGRATION_ID` when set, or
-else the client id (both are `oac_...`). Vercel then makes a check run for each
-production deployment of the project.
+else read on each "Turn on the check" from
+`GET /v1/integrations/configuration/{configurationId}` with the installation's
+token (its `integrationId`, "the app the configuration was created for", and
+only when the answer's `id` is this configuration). If that lookup fails, the
+source names the configuration alone and the log says why; the client id is
+never sent. Vercel then makes a check run for each production deployment of the
+project.
+
+If Vercel answers the create with a 400 whose message names `timeout`, the
+server tries once more without it (Vercel's default, 300 s). The docs give
+`timeout` a default and no maximum.
 
 **The result.** `PATCH /v2/deployments/{deploymentId}/check-runs/{checkRunId}`
 with `status: "completed"`, `conclusion` (`succeeded` or `failed`; the schema
@@ -319,7 +328,9 @@ a commit status directly. The relay adds no new way in; it keeps the gate at
   `Cache-Control: no-store`, and `Cross-Origin-Opener-Policy: unsafe-none`,
   which Vercel requires for the install popup.
 - **Logs:** errors only, through one logger (`lib/log.mjs`) that keeps an
-  allow-list of fields and masks token shapes and the secret env values. ESLint
+  allow-list of fields and masks token shapes and the secret env values. For a
+  failed check create or integration lookup, that includes Vercel's error code
+  and message (at most 200 characters), so a failure explains itself. ESLint
   bans `console` everywhere else in this folder. A test runs install, setup,
   failures and a broken config with random fake credentials and checks none
   appears in the output.
@@ -358,7 +369,7 @@ client id and secret use the `INTEGRATION_` prefix. Never paste their values int
 | `PENTHERA_TOKEN_KEYS` | `v1:<base64 of 32 random bytes>`. To rotate, prepend a new one: `v2:<new>,v1:<old>`. The first encrypts; all decrypt |
 | `PUBLIC_BASE_URL` | This server's origin, such as `https://vercel.penthera.org`. The Redirect URL is `<PUBLIC_BASE_URL>/install` |
 | `INTEGRATION_SLUG` | The integration's URL slug. Default `penthera` |
-| `INTEGRATION_ID` | Optional. The integration's id (`oac_...`) for the check's `source`, if it differs from the client id |
+| `INTEGRATION_ID` | Optional. Overrides the integration id (`oac_...`) the server reads from Vercel for the check's `source` |
 | `CRON_SECRET` | A long random string. Vercel's cron sends it to `/api/sweep` |
 | `KV_REST_API_URL`, `KV_REST_API_TOKEN` | Set by Vercel when you connect the Upstash store |
 
@@ -423,12 +434,13 @@ Not verified, because it needs a live integration:
   /v2/deployments/{id}/check-runs` but do not say whether a project check gets
   its runs on its own. The server finds the run, or starts it, so both work.
   Watch the first production deploy: the run should show up as queued.
-- **`integrationId`.** The server sends the client id unless `INTEGRATION_ID`
-  is set. If Vercel answers 400 on "Turn on the check", set `INTEGRATION_ID`
-  to the id the Integrations Console shows.
+- **The configuration lookup's scope.** `GET /v1/integrations/configuration/{id}`
+  says only that the owner of the configuration may read it. If the log shows
+  `integration_lookup_failed` with a 403, the scope list needs the
+  integration-configuration read scope, or set `INTEGRATION_ID`.
 - **`timeout: 1200`.** The default is 300 seconds; the job may take 15
-  minutes. The docs give no maximum. If Vercel refuses it, lower it in
-  `lib/workflow.mjs`.
+  minutes. The docs give no maximum. A 400 that names `timeout` falls back to
+  the default by itself.
 - **`link.repoId` and `link.repoOwnerId` on `GET /v9/projects/{id}`.** The relay
   refuses a project without `repoId`; if Vercel never sends it, every report is
   refused and deploys wait for the timeout. `repoOwnerId` is compared when
@@ -462,11 +474,82 @@ links are gone (`/api/sweep` count, or the Upstash console).
 
 ## Tests
 
-`npm test` at the repo root runs `test/integration.test.js` and
-`test/relay.test.js` (the OIDC check against a local test key set) with the repo's
-vitest (the `unit` project includes `integrations/*/test`). The tests are
-offline: an in-memory store and a mocked `fetch`, no calls to Vercel, GitHub
-or Upstash.
+`npm test` at the repo root runs `test/integration.test.js`,
+`test/relay.test.js` (the OIDC check against a local test key set) and
+`test/e2e-journey.test.js` with the repo's vitest (the `unit` project includes
+`integrations/*/test`). The tests are offline: an in-memory store and a mocked
+`fetch`, no calls to Vercel, GitHub or Upstash.
+
+### The install journey against Vercel's API spec
+
+`test/e2e-journey.test.js` walks the whole install through the real app:
+`/start`, `/install` (from our link with `state`, and from the Marketplace),
+Pick, Workflow and Turn on (a browser's `Origin: null` and our own origin), a
+production deploy's `POST /report` with an OIDC token from a local key set, the
+check run's conclusion, a preview deploy refused before any write, `/configure`,
+the signed `removed` webhook, and an empty store. Each page is checked for the
+words a user should see, and against the error pages' words.
+
+Every call the server makes to Vercel goes to a fake (`test/vercel-contract.mjs`)
+that holds it to Vercel's published contract:
+
+- the method and path name a real operation;
+- path parameters are filled, and every query parameter is declared, with a
+  value that fits its type or enum;
+- `Authorization: Bearer` is present;
+- the JSON body validates against the request schema (ajv), so required
+  fields, enums, types, patterns and `additionalProperties` are all checked.
+
+A check's `source` is checked against the one `oneOf` branch its `kind` names,
+because the spec's branches overlap: the webhook branch accepts any object with
+a `kind`. The fake's own answers are checked against the response schemas too,
+so it cannot answer in a shape Vercel does not promise. It also refuses a
+git-provider check from an integration (`not_implemented`), as live Vercel did
+on 7 Nov. A mismatch fails the test and names the field, for example
+`/blocks: must be equal to one of the allowed values`.
+
+The OAuth code exchange (`POST /v2/oauth/access_token`) is not in the OpenAPI
+spec. It is checked by hand: form-encoded, with `client_id`, `client_secret`,
+`code` and `redirect_uri`.
+
+The contract is `test/fixtures/vercel-openapi.json`, a trimmed copy of
+[Vercel's OpenAPI spec](https://vercel.com/openapi.json), fetched on 7 Nov 2026.
+It keeps whole request schemas for the 10 operations in `lib/vercel.mjs`, and
+response schemas cut down to the fields the server reads. Refresh it by hand
+(never at run time, rule 5), then review the diff:
+
+```bash
+node integrations/vercel/scripts/refresh-openapi.mjs
+```
+
+The refresh fails if the spec drops an operation, or no longer has a response
+field the server reads.
+
+The journey test also runs `actionlint` on `workflow/penthera-vercel.yml`.
+actionlint runs shellcheck on the run scripts when shellcheck is installed. CI
+installs a pinned actionlint, checked against its SHA-256. Locally the test
+skips when actionlint is not installed; in CI it never skips.
+
+What the contract caught on 7 Nov: `GET /v13/deployments/{idOrUrl}` answers one
+of three views. Only the owner's view has `projectId`; the reduced public view
+has `project.id` instead. The relay read only `projectId`, so it would have
+refused every report and held production. It now reads either.
+
+### What only a live test proves
+
+These stay unproven until Daan's live run:
+
+- That Vercel makes the check run itself. The journey covers both cases.
+- That a real GitHub OIDC token carries the claims the relay reads
+  (`repository_id`, `repository_owner_id`, `workflow_ref`, `event_name`,
+  `run_id`) in the shapes GitHub documents.
+- That the install token is accepted on each call: the scopes, and whether
+  Vercel answers the owner's deployment view.
+- Behaviour the spec does not describe: limits such as `timeout`'s maximum,
+  error messages, rate limits, and anything Vercel refuses beyond its schema,
+  the way it refused the git-provider check.
+- The workflow itself on a real runner: the dispatch payload, the OIDC token
+  request, `jq` and `curl`.
 
 ## Legal
 

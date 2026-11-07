@@ -3,6 +3,7 @@
  * injected fetch, so tests never reach the network.
  *
  *   POST /v2/oauth/access_token           exchange the install code (no scope)
+ *   GET  /v1/integrations/configuration/{id}  this installation's integrationId, for the check's source
  *   GET  /v10/projects                    list granted projects   (project: Read)
  *   GET  /v9/projects/{id}                read one project        (project: Read)
  *   GET  /v2/projects/{id}/checks         list the project's checks
@@ -14,26 +15,31 @@
  *   PATCH /v2/deployments/{id}/check-runs/{rid}  set its conclusion
  *
  * Which scope the three checks-v2 calls need is not documented (README.md,
- * "Unverified"). Errors carry the HTTP status and Vercel's error code only,
- * never a body or a header.
+ * "Unverified"). Errors carry the HTTP status, Vercel's error code and its error message (at most
+ * 200 characters, for the error log, which redacts token shapes), never a header or the rest of
+ * the body.
  */
 export const API = "https://api.vercel.com";
 
 export class VercelError extends Error {
-  constructor(status, code) {
+  constructor(status, code, detail = "") {
     super(`vercel_api_${status}`);
     this.status = status;
     this.code = code;
+    /** Vercel's error message, cut to 200 printable characters. Logged only through lib/log.mjs. */
+    this.detail = detail;
   }
 }
 
 async function fail(res) {
   let code = "unknown";
+  let detail = "";
   try {
     const body = await res.json();
     if (typeof body?.error?.code === "string") code = body.error.code.slice(0, 64);
+    if (typeof body?.error?.message === "string") detail = body.error.message.replace(/[^\x20-\x7e]/g, " ").slice(0, 200);
   } catch {}
-  throw new VercelError(res.status, code);
+  throw new VercelError(res.status, code, detail);
 }
 
 /** Exchanges the one-time install code. Returns { accessToken, configurationId, teamId, userId }. */
@@ -78,6 +84,15 @@ export function vercelClient({ token, teamId, fetch: f = globalThis.fetch }) {
       const list = Array.isArray(json) ? json : (json?.projects ?? []);
       return { projects: list.map(projectView), next: json?.pagination?.next ?? null };
     },
+    /**
+     * The id of the integration this installation belongs to (oac_...), from Vercel's record of
+     * the installation, or null when Vercel's answer is not about `configurationId`.
+     */
+    async getIntegrationId(configurationId, { signal } = {}) {
+      const json = await call("GET", `/v1/integrations/configuration/${enc(configurationId)}`, { signal });
+      if (json?.id !== configurationId) return null;
+      return typeof json.integrationId === "string" && /^oac_[A-Za-z0-9]{1,64}$/.test(json.integrationId) ? json.integrationId : null;
+    },
     async getProject(id, { signal } = {}) {
       return projectView(await call("GET", `/v9/projects/${enc(id)}`, { signal }));
     },
@@ -94,9 +109,12 @@ export function vercelClient({ token, teamId, fetch: f = globalThis.fetch }) {
     /** Only the deployment's id, project and target. Everything else is dropped here. */
     async getDeployment(deploymentId, { signal } = {}) {
       const d = await call("GET", `/v13/deployments/${enc(deploymentId)}`, { signal });
+      // Vercel answers one of three views (OpenAPI, GET /v13/deployments/{idOrUrl}): the owner's view
+      // has `projectId`; the reduced public view has only `project.id`. Both are Vercel's own data.
+      const projectId = typeof d?.projectId === "string" ? d.projectId : typeof d?.project?.id === "string" ? d.project.id : "";
       return {
         id: typeof d?.id === "string" ? d.id : typeof d?.uid === "string" ? d.uid : "",
-        projectId: typeof d?.projectId === "string" ? d.projectId : "",
+        projectId,
         target: typeof d?.target === "string" ? d.target : null,
       };
     },

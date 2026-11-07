@@ -482,6 +482,85 @@ describe("GitHub's key set", () => {
   });
 });
 
+describe("turning the check on", () => {
+  /** enabled(), with Vercel's configuration lookup and the check create answered by `routes`. */
+  async function enableWith(routes, env = {}) {
+    const vercel = mock();
+    const lines = [];
+    const previous = setLogSink((l) => lines.push(l));
+    const fetch = async (u, i) => {
+      const url = new URL(String(u));
+      const key = `${i?.method ?? "GET"} ${url.pathname}`;
+      if (routes[key]) {
+        const r = routes[key](i);
+        if (r) return new Response(JSON.stringify(r.body), { status: r.status });
+      }
+      return vercel.fetch(u, i);
+    };
+    try {
+      const store = memoryStore();
+      const e = { INTEGRATION_CLIENT_ID: "oac_testclient", INTEGRATION_CLIENT_SECRET: CLIENT_SECRET, PENTHERA_TOKEN_KEYS: `v1:${randomBytes(32).toString("base64")}`, PUBLIC_BASE_URL: BASE, ...env };
+      const app = createApp({ env: e, store, fetch, now: () => T0 });
+      const cookie = cookieJar(await app.install(get(`/install?code=${CODE}&configurationId=${CFG}&teamId=${TEAM}&source=marketplace`)));
+      const csrf = /name="csrf" value="([^"]+)"/.exec(await (await app.setup(get("/setup", { cookie }))).text())[1];
+      const res = await app.setup(form("/setup", `csrf=${csrf}&action=enable&p=prj_one`, { cookie }));
+      return { res, vercel, lines, posts: vercel.calls.filter((c) => c.method === "POST" && c.url.pathname === "/v2/projects/prj_one/checks").map((c) => JSON.parse(c.body)) };
+    } finally {
+      setLogSink(previous);
+    }
+  }
+  const CONFIG = `GET /v1/integrations/configuration/${CFG}`;
+
+  it("uses the integration id from Vercel's record of the installation", async () => {
+    const { res, vercel } = await enableWith({ [CONFIG]: () => ({ status: 200, body: { id: CFG, integrationId: "oac_fromvercel" } }) });
+    expect(res.status).toBe(200);
+    expect(vercel.checks.prj_one[0].source).toEqual({ kind: "integration", integrationId: "oac_fromvercel", integrationConfigurationId: CFG });
+    expect(vercel.checks.prj_one[0]).toMatchObject({ name: "Penthera", requires: "deployment-url", blocks: "deployment-promotion", targets: ["production"], isRerequestable: false, timeout: 1200 });
+  });
+
+  it("INTEGRATION_ID overrides the lookup, which is then not made", async () => {
+    const { vercel } = await enableWith({ [CONFIG]: () => ({ status: 200, body: { id: CFG, integrationId: "oac_fromvercel" } }) }, { INTEGRATION_ID: "oac_override" });
+    expect(vercel.checks.prj_one[0].source.integrationId).toBe("oac_override");
+    expect(vercel.calls.some((c) => c.url.pathname.startsWith("/v1/integrations/"))).toBe(false);
+  });
+
+  it("never sends the client id: a failed or foreign lookup sends the configuration alone, and says why in the log", async () => {
+    const failed = await enableWith({ [CONFIG]: () => ({ status: 403, body: { error: { code: "forbidden", message: "Missing scope integration-configuration:read" } } }) });
+    expect(failed.vercel.checks.prj_one[0].source).toEqual({ kind: "integration", integrationConfigurationId: CFG });
+    expect(failed.lines.join("\n")).toMatch(/"event":"integration_lookup_failed","status":403,"code":"forbidden","message":"Missing scope integration-configuration:read"/);
+    const foreign = await enableWith({ [CONFIG]: () => ({ status: 200, body: { id: "icfg_Someone", integrationId: "oac_theirs" } }) });
+    expect(foreign.vercel.checks.prj_one[0].source).toEqual({ kind: "integration", integrationConfigurationId: CFG });
+    expect(JSON.stringify(foreign.posts)).not.toContain("oac_testclient");
+  });
+
+  it("logs Vercel's code and message when the create fails, with no token in it", async () => {
+    const { res, lines } = await enableWith({
+      "POST /v2/projects/prj_one/checks": () => ({ status: 400, body: { error: { code: "bad_request", message: `Invalid request: source.integrationId is not ours (token ${ACCESS_TOKEN})` } } }),
+    });
+    expect(res.status).toBe(502);
+    const line = lines.find((l) => l.includes('"event":"check_failed"'));
+    expect(JSON.parse(line)).toMatchObject({ status: 400, code: "bad_request", configurationId: CFG });
+    expect(JSON.parse(line).message).toMatch(/^Invalid request: source\.integrationId is not ours/);
+    expect(lines.join("\n")).not.toContain(ACCESS_TOKEN);
+  });
+
+  it("when Vercel refuses the timeout, tries once more without it, and only then", async () => {
+    let n = 0;
+    const timeoutRefused = await enableWith({
+      "POST /v2/projects/prj_one/checks": () => (n++ === 0 ? { status: 400, body: { error: { code: "bad_request", message: "timeout must be less than or equal to 600" } } } : null),
+    });
+    expect(timeoutRefused.res.status).toBe(200);
+    expect(timeoutRefused.vercel.checks.prj_one).toHaveLength(1);
+    expect(timeoutRefused.vercel.checks.prj_one[0].timeout).toBeUndefined();
+    expect(timeoutRefused.lines.some((l) => l.includes("check_timeout_refused"))).toBe(true);
+
+    let m = 0;
+    const other = await enableWith({ "POST /v2/projects/prj_one/checks": () => (m++, { status: 400, body: { error: { code: "bad_request", message: "name is required" } } }) });
+    expect(other.res.status).toBe(502);
+    expect(m).toBe(1);
+  });
+});
+
 describe("project links", () => {
   /** A second installation, OTHER_CFG, in the same team, with a working token. */
   async function second(ctx, { withCheck }) {
