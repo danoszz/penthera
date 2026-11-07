@@ -59,7 +59,7 @@ because those findings are about the test fixture, not the repo.
 **For your own staging URL**, copy
 [`docs/examples/github-actions-scan.yml`](https://github.com/danoszz/penthera/blob/main/docs/examples/github-actions-scan.yml)
 into your app's repo as `.github/workflows/penthera.yml` and add a
-`PENTEST_STAGING_URL` repository secret. It runs `npx penthera@<version>` on a
+`PENTEST_STAGING_URL` repository setting. It runs `npx penthera@<version>` on a
 weekly schedule and uploads SARIF to your Security tab. Pin the version so a
 scheduled run never picks up code you have not reviewed.
 
