@@ -8,96 +8,13 @@
 //
 // What this cannot prove, because only the live services can: README, "What only a live test proves".
 import { execFileSync, spawnSync } from "node:child_process";
-import { createHmac, generateKeyPairSync, randomBytes, sign } from "node:crypto";
+import { createHmac } from "node:crypto";
 import { existsSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { createApp } from "../lib/app.mjs";
-import { GITHUB_ISSUER, GITHUB_JWKS_URL } from "../lib/oidc.mjs";
-import { memoryStore } from "../lib/store.mjs";
 import { CHECK_TIMEOUT_SECONDS, WORKFLOW_YAML } from "../lib/workflow.mjs";
 import { OPERATIONS, trim } from "../scripts/refresh-openapi.mjs";
-import { SPEC, checkRequest, contractVercel } from "./vercel-contract.mjs";
-
-const BASE = "https://vercel.penthera.example.test";
-const CLIENT_ID = "oac_testclient";
-const CLIENT_SECRET = `cs_${randomBytes(18).toString("hex")}`;
-const ACCESS_TOKEN = `at_${randomBytes(18).toString("hex")}`;
-const CODE = randomBytes(12).toString("hex");
-const CFG = "icfg_JourneyConfig1";
-const TEAM = "team_JourneyTeam1";
-const NEXT = "https://vercel.com/integrations/penthera/new/done?configurationId=icfg_JourneyConfig1";
-const T0 = Date.UTC(2026, 10, 7, 12, 0, 0);
-
-const github = generateKeyPairSync("rsa", { modulusLength: 2048 });
-const KID = "journey-kid";
-const JWKS = { keys: [{ ...github.publicKey.export({ format: "jwk" }), kid: KID, use: "sig", alg: "RS256" }] };
-const b64 = (v) => Buffer.from(JSON.stringify(v)).toString("base64url");
-function oidc(deploymentId, t = T0) {
-  const s = Math.floor(t / 1000);
-  const h = b64({ alg: "RS256", typ: "JWT", kid: KID });
-  const p = b64({
-    iss: GITHUB_ISSUER, aud: `${BASE}/report/${deploymentId}`, repository: "daan/gaia-web", repository_id: "9001",
-    repository_owner: "daan", repository_owner_id: "42", event_name: "repository_dispatch", ref: "refs/heads/main",
-    workflow_ref: "daan/gaia-web/.github/workflows/penthera-vercel.yml@refs/heads/main", run_id: "123456", iat: s - 5, nbf: s - 5, exp: s + 295,
-  });
-  return `${h}.${p}.${sign("RSA-SHA256", Buffer.from(`${h}.${p}`), github.privateKey).toString("base64url")}`;
-}
-
-/** Daan's Vercel team: one GitHub project, one GitLab one, a production and a preview deployment. */
-const world = () => ({
-  configurationId: CFG, teamId: TEAM, userId: "user_daan", integrationId: "oac_PentheraIntegration",
-  projects: [
-    { id: "prj_gaiaweb", name: "gaia-web", link: { type: "github", org: "daan", repo: "gaia-web", repoId: 9001, repoOwnerId: 42, productionBranch: "main" } },
-    { id: "prj_notes", name: "notes", link: { type: "gitlab", projectNamespace: "daan", projectName: "notes", projectId: "77", productionBranch: "main" } },
-  ],
-  deployments: {
-    dpl_prod1: { projectId: "prj_gaiaweb", target: "production", url: "gaia-web-abc.vercel.app" },
-    dpl_preview1: { projectId: "prj_gaiaweb", target: null, url: "gaia-web-git-x.vercel.app" },
-  },
-});
-
-function harness({ autoRuns = true, publicView = false } = {}) {
-  const w = world();
-  // Vercel's reduced public view of a deployment: `project: { id, name }` and no `projectId`.
-  if (publicView) for (const d of Object.values(w.deployments)) Object.assign(d, { project: { id: d.projectId, name: "gaia-web" }, projectId: undefined });
-  const vercel = contractVercel({ world: w, token: ACCESS_TOKEN, clientId: CLIENT_ID, clientSecret: CLIENT_SECRET, code: CODE, redirectUri: `${BASE}/install`, autoRuns });
-  const outside = [];
-  const fetch = async (input, init) => {
-    const href = String(input);
-    if (href === GITHUB_JWKS_URL) return new Response(JSON.stringify(JWKS), { status: 200 });
-    if (new URL(href).origin !== "https://api.vercel.com") outside.push(href);
-    return vercel.fetch(input, init);
-  };
-  const env = {
-    INTEGRATION_CLIENT_ID: CLIENT_ID, INTEGRATION_CLIENT_SECRET: CLIENT_SECRET, PUBLIC_BASE_URL: BASE,
-    PENTHERA_TOKEN_KEYS: `v1:${randomBytes(32).toString("base64")}`, CRON_SECRET: `cron_${randomBytes(12).toString("hex")}`,
-  };
-  const store = memoryStore();
-  const app = createApp({ env, store, fetch, now: () => T0 });
-  return { app, store, vercel, outside, env };
-}
-
-// A browser's cookie jar, enough for our cookies.
-function jar() {
-  const cookies = new Map();
-  return {
-    take(res) {
-      for (const c of res.headers.getSetCookie()) {
-        const [pair, ...attrs] = c.split(";");
-        const [k, v] = pair.split("=");
-        if (attrs.some((a) => /max-age=0/i.test(a.trim())) || v === "") cookies.delete(k);
-        else cookies.set(k, v);
-      }
-      return res;
-    },
-    header: () => [...cookies].map(([k, v]) => `${k}=${v}`).join("; "),
-    has: (k) => cookies.has(k),
-  };
-}
-
-const get = (path, browser, headers = {}) => new Request(`${BASE}${path}`, { headers: { cookie: browser.header(), ...headers } });
-const post = (path, body, browser, origin) =>
-  new Request(`${BASE}${path}`, { method: "POST", body, headers: { "content-type": "application/x-www-form-urlencoded", cookie: browser.header(), ...(origin === undefined ? {} : { origin }) } });
+import { BASE, CFG, CLIENT_SECRET, CODE, NEXT, T0, TEAM, get, harness, jar, oidc, post } from "./journey-harness.mjs";
+import { SPEC, checkRequest } from "./vercel-contract.mjs";
 
 /** Asserts a user-facing page is a normal one, with none of the error pages' words. */
 async function page(res, status, ...words) {
@@ -215,7 +132,7 @@ describe("the contract check catches what live Vercel refused", () => {
 
   it("refuses blocks: deployment-promotion, as live Vercel did on 7 Nov, though the spec lists it", () => {
     expect(SPEC.paths["/v2/projects/{projectIdOrName}/checks"].post.requestBody.properties.blocks.enum).toContain("deployment-promotion");
-    expect(create({ ...good, blocks: "deployment-promotion" }).join()).toMatch(/\/blocks: "deployment-promotion" is in the spec but live Vercel refuses it/);
+    expect(create({ ...good, blocks: "deployment-promotion" }).join()).toMatch(/\/blocks: "deployment-promotion" is outside what Vercel accepts.*refused live 7 Nov/);
     expect(create({ ...good, blocks: "none" })).toEqual([]);
   });
 
@@ -231,7 +148,7 @@ describe("the contract check catches what live Vercel refused", () => {
   });
 
   it("checks query parameters, path parameters and the token", () => {
-    expect(checkRequest("GET", url("/v10/projects", "limit=20&teamId=t"), { headers: { Authorization: "Bearer t" } }).problems).toEqual([]);
+    expect(checkRequest("GET", url("/v10/projects", "limit=20&teamId=team_x"), { headers: { Authorization: "Bearer t" } }).problems).toEqual([]);
     expect(checkRequest("GET", url("/v10/projects", "projectId=x"), { headers: { Authorization: "Bearer t" } }).problems.join()).toMatch(/query projectId is not a parameter/);
     expect(checkRequest("GET", url("/v2/projects/prj_a/checks", "blocks=soon"), { headers: { Authorization: "Bearer t" } }).problems.join()).toMatch(/query blocks=soon does not fit/);
     expect(checkRequest("GET", url("/v9/projects/prj_a"), {}).problems.join()).toMatch(/Bearer/);
