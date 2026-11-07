@@ -13,11 +13,29 @@ export const WORKFLOW_YAML = readFileSync(new URL("../workflow/penthera-vercel.y
 export const WORKFLOW_SOURCE = "https://github.com/danoszz/penthera/blob/main/integrations/vercel/workflow/penthera-vercel.yml";
 
 /**
- * The file GitHub's prefill link carries: the template without its full-line comments, because the
- * link has a size limit, and one line that says where the commented file is. The same workflow:
- * a test parses both and compares them. The copy box on the page keeps every comment.
+ * The file GitHub's prefill link carries: the template without its comments, because the link has a
+ * size limit, and one line that says where the commented file is. Comments inside a run script stay
+ * (they are script text), and so do the version comments on `uses:` lines, which Dependabot reads to
+ * update SHA pins. The same workflow: a test parses both and compares them.
  */
-export const PREFILL_YAML = `# Penthera on Vercel. The file with its comments: ${WORKFLOW_SOURCE}\n${WORKFLOW_YAML.split("\n").filter((l) => !/^\s*#/.test(l)).join("\n").replace(/\n{3,}/g, "\n\n").replace(/^\n+/, "")}`;
+function withoutComments(yaml) {
+  const out = [];
+  let block = -1; // indentation of the key that opened a block scalar (run: |), or -1
+  for (const line of yaml.split("\n")) {
+    const indent = line.length - line.trimStart().length;
+    if (block >= 0 && (line.trim() === "" || indent > block)) {
+      out.push(line);
+      continue;
+    }
+    block = -1;
+    if (/^\s*#/.test(line)) continue;
+    const kept = /^\s*-?\s*uses:/.test(line) ? line : line.replace(/\s+#\s[^"']*$/, "");
+    if (/:\s*[|>][-+]?\s*$/.test(kept)) block = indent;
+    out.push(kept);
+  }
+  return out.join("\n").replace(/\n{3,}/g, "\n\n").replace(/^\n+/, "");
+}
+export const PREFILL_YAML = `# With comments: github.com/danoszz/penthera/blob/main/integrations/vercel/workflow/penthera-vercel.yml\n${withoutComments(WORKFLOW_YAML)}`;
 
 const WORKFLOW_NAME = /^name:\s*(.+?)\s*$/m.exec(WORKFLOW_YAML)?.[1] ?? "Penthera on Vercel";
 const JOB_ID = "scan";
