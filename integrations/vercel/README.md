@@ -181,9 +181,16 @@ users can import GitHub checks in the dashboard, integrations cannot.
 
 **The check.** `POST /v2/projects/{id}/checks` with
 `source: { kind: "integration", integrationId, integrationConfigurationId }`,
-`requires: "deployment-url"`, `blocks: "deployment-promotion"`,
+`requires: "deployment-url"`, `blocks: "deployment-alias"`,
 `targets: ["production"]`, `isRerequestable: false` and `timeout: 1200`
-(`lib/workflow.mjs`, `checkBody`). The source shape is the first `oneOf` branch
+(`lib/workflow.mjs`, `checkBody`). `blocks: "deployment-alias"` holds each
+production deployment off the production domains until the check passes,
+which is what Vercel's Deployment Checks page describes; Force Promote
+bypasses it. The spec's enum also lists `deployment-promotion`, but live Vercel
+answered it on 7 Nov with `400 not_implemented` ("Only deployment-alias and
+none are currently supported for blocks"), so the contract mock refuses it too
+(`LIVE_LIMITS` in `test/vercel-contract.mjs`). Vercel holds a deployment only
+when automatic aliasing for production is on (its default). The source shape is the first `oneOf` branch
 of the create schema; `kind` defaults to `integration` there and none of its
 fields is marked required. `integrationId` is `INTEGRATION_ID` when set, or
 else read on each "Turn on the check" from
@@ -327,9 +334,19 @@ a commit status directly. The relay adds no new way in; it keeps the gate at
   never given to a different owner (409).
 - **CSRF:** installs started from `/start` must return the `state` we set in an
   HttpOnly `__Host-` cookie, which lasts 30 minutes, as long as Vercel's install
-  code. Installs started on vercel.com carry no state (Vercel's docs), so they
-  must say `source=marketplace` or `source=deploy-button`, and the session is
-  set only after the exchange proves the configuration and its owner. A leftover
+  code. Installs started on vercel.com carry no state, so they must name a
+  Vercel source (`marketplace`, `deploy-button` or `external`), and the session
+  is set only after the exchange proves the configuration and its owner. The
+  listing link `vercel.com/integrations/penthera/new`, opened directly rather
+  than through `/start`, comes back as `source=external` with no state (live,
+  7 Nov: Daan's first install from the listing was refused as
+  `external_without_state`). Vercel's docs describe `state` only as a string
+  "passed back upon completion" when the starter set one, and give no reason
+  to treat a state-less `external` install differently from a Marketplace one:
+  both are the same login-CSRF case below, and both bind nothing until the
+  exchange. So an `external` install without state takes the Marketplace path.
+  A state that comes back is still checked: missing cookie or a mismatch is
+  refused, whatever the source. A leftover
   state cookie from an earlier `/start` does not block such an install: the
   browser takes the same path as one without the cookie, and the cookie is
   cleared. Until 7 Nov a browser holding the cookie had to send the matching
@@ -347,12 +364,13 @@ a commit status directly. The relay adds no new way in; it keeps the gate at
   reinstall of the same id; a random nonce does not come back.
   The new owner gets a session only by installing. Uninstall deletes the
   record, which ends sessions too.
-- **A refused install** (`/install`, 403) names one of three reasons on the
+- **A refused install** (`/install`, 403) names one of two reasons on the
   page (`data-reason`): `state_cookie_missing` (the state came back, but this
   browser no longer has the cookie: more than 30 minutes passed, or the install
-  started in another browser or on another device), `state_mismatch` (the
-  state does not match this browser's cookie), or `external_without_state` (our
-  own link, with no state). Each is refused before the code is exchanged, so
+  started in another browser or on another device) or `state_mismatch` (the
+  state does not match this browser's cookie). Until 7 Nov a third,
+  `external_without_state`, refused the listing link's normal install (see
+  CSRF above). Each is refused before the code is exchanged, so
   nothing is stored and no check is added; each clears the cookie and offers
   "Install again" (`/start`).
 
@@ -367,7 +385,8 @@ a commit status directly. The relay adds no new way in; it keeps the gate at
   if Vercel shows Penthera as already installed, remove it there first. Only a
   live test can show which of the three Vercel does.
 - **Risk left (login CSRF):** an attacker can send someone a link with the
-  attacker's own fresh install code and `source=marketplace`. The victim's
+  attacker's own fresh install code and `source=marketplace` (or
+  `source=external` with no state). The victim's
   browser then opens the attacker's setup page, for the attacker's own
   account. The victim's data and records are not touched, and the attacker
   gains nothing they did not already have. The fix would need Vercel to send

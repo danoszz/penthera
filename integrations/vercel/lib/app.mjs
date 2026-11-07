@@ -235,17 +235,19 @@ export function createApp({ env = process.env, store, fetch: fetchImpl = globalT
     if (teamId && !TEAM_ID.test(teamId)) return message(400, "Part of your install link is missing", "Vercel's link was cut short, often by copying it. Restarting from Vercel gives you a complete one.", { left: LEFT_REFUSED, action: { href: "/start", label: "Restart on Vercel" }, why: "We go on only when Vercel's link is complete." });
     if (q.get("next") && !next) return message(400, "Your install link points away from Vercel", "Its return address isn't on vercel.com, so we stopped before sending you anywhere.", { left: LEFT_REFUSED, action: { href: "/start", label: "Restart on Vercel" }, why: "We only ever send you back to vercel.com, so a link can't take you to another site." });
 
-    // CSRF: an install we started (/start) must come back with the state we set in the cookie, and
-    // the browser must still hold that cookie. Installs started on vercel.com (marketplace, deploy
-    // button) carry no state; they must say so in `source`, and the session is bound only after the
-    // exchange proves the configuration and its owner (README, "Security"). A leftover state cookie
-    // from an earlier /start does not block them: such a browser takes the same path as one without
-    // the cookie, and the cookie is cleared.
+    // CSRF: an install that comes back with a state (one we started on /start) must match the state
+    // cookie this browser still holds. Installs started on vercel.com carry no state: the
+    // Marketplace, the deploy button, and the listing link vercel.com/integrations/<slug>/new, which
+    // Vercel sends back as source=external (live, 7 Nov 2026; Vercel documents `state` only as
+    // passed back when the starter set one). They must name a Vercel source, and the session is
+    // bound only after the exchange proves the configuration and its owner (README, "Security").
+    // A leftover state cookie from an earlier /start does not block them: such a browser takes the
+    // same path as one without the cookie, and the cookie is cleared.
     const cookies = [];
     const stateCookie = readCookie(request, STATE);
-    const fromVercel = source === "marketplace" || source === "deploy-button";
-    if (state || source === "external") {
-      const reason = !state ? "external_without_state" : !stateCookie ? "state_cookie_missing" : !safeEqual(state, stateCookie) ? "state_mismatch" : null;
+    const fromVercel = source === "marketplace" || source === "deploy-button" || source === "external";
+    if (state) {
+      const reason = !stateCookie ? "state_cookie_missing" : !safeEqual(state, stateCookie) ? "state_mismatch" : null;
       if (reason) {
         logError("install_refused", { code: reason, configurationId });
         return installRefused(reason);
@@ -290,7 +292,7 @@ export function createApp({ env = process.env, store, fetch: fetchImpl = globalT
   }
 
   /**
-   * The three ways an install from our own link can fail its state check, each with its own page.
+   * The two ways an install from our own link can fail its state check, each with its own page.
    * Each is refused before the code is exchanged, so nothing is stored and no check is added.
    * Vercel has already made the installation by then; README, "A refused install", says what that
    * leaves behind. Placeholder copy: the Designer owns these pages.
@@ -300,7 +302,6 @@ export function createApp({ env = process.env, store, fetch: fetchImpl = globalT
     const pages = {
       state_cookie_missing: ["Your install link has run out", "This browser no longer holds the install it started: more than 30 minutes passed, or the link opened in another browser or on another device."],
       state_mismatch: ["This install didn't start in this browser", "If you clicked Install on Vercel just now, restart it here and it goes through. If you didn't, close this page: nothing happened."],
-      external_without_state: ["Part of your install link is missing", "It came from Penthera's install link but lost its check on the way, often when a link is copied."],
     };
     const [title, text] = pages[reason];
     return message(403, title, text, { cookies: [clearCookie(STATE)], left: LEFT_REFUSED, action: { href: "/start", label: "Restart on Vercel" }, why, reason });
@@ -348,7 +349,7 @@ export function createApp({ env = process.env, store, fetch: fetchImpl = globalT
 ${more}
 <div class="act"><button class="btn go" type="submit">Next: add the workflow</button></div>
 </form>
-<p class="small">The check blocks promotion to production when Penthera finds a high or critical issue. Previews are scanned too and never blocked.</p>
+<p class="small">When Penthera finds a high or critical issue, the check keeps your production domain on the last good deployment. Previews are scanned too and never blocked.</p>
 ${asks()}`, { step: "Step 1 of 2: pick" });
   }
 

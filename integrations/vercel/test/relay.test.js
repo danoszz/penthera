@@ -518,7 +518,7 @@ describe("turning the check on", () => {
     const { res, vercel } = await enableWith({ [CONFIG]: () => ({ status: 200, body: { id: CFG, integrationId: "oac_fromvercel" } }) });
     expect(res.status).toBe(200);
     expect(vercel.checks.prj_one[0].source).toEqual({ kind: "integration", integrationId: "oac_fromvercel", integrationConfigurationId: CFG });
-    expect(vercel.checks.prj_one[0]).toMatchObject({ name: "Penthera", requires: "deployment-url", blocks: "deployment-promotion", targets: ["production"], isRerequestable: false, timeout: 1200 });
+    expect(vercel.checks.prj_one[0]).toMatchObject({ name: "Penthera", requires: "deployment-url", blocks: "deployment-alias", targets: ["production"], isRerequestable: false, timeout: 1200 });
   });
 
   it("INTEGRATION_ID overrides the lookup, which is then not made", async () => {
