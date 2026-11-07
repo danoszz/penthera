@@ -74,6 +74,13 @@ input[type=checkbox]:disabled:not(:checked){border-style:dashed;background:trans
 textarea{display:block;width:100%;height:17rem;margin:12px 0 0;padding:16px;font-family:var(--px);font-size:var(--t-note);line-height:1.6;letter-spacing:.02em;color:var(--text-1);background:var(--plate);border:1px solid var(--edge);border-radius:0;resize:vertical;tab-size:2;white-space:pre;overflow-wrap:normal;overflow-x:auto}
 textarea:focus-visible{outline-offset:0}
 textarea+.lede{margin-top:32px}
+.left{max-width:36rem;margin:24px 0 0;padding:16px 20px;background:var(--plate);display:grid;gap:12px}
+.left div{display:grid;grid-template-columns:6rem minmax(0,1fr);gap:4px 16px}
+.left dt{font-family:var(--px);font-size:var(--t-note);line-height:1.75;letter-spacing:.02em;color:var(--text-3)}
+.left dd{margin:0;line-height:1.5;color:var(--text-1)}
+.why{max-width:36rem;margin-top:32px;font-size:var(--t-small);line-height:1.5;color:var(--text-3)}
+.why span{display:block;margin-bottom:4px;font-family:var(--px);font-size:var(--t-note);letter-spacing:.02em}
+@media (max-width:480px){.left div{grid-template-columns:minmax(0,1fr)}}
 .note{max-width:36rem;margin-top:24px;padding:16px 20px;background:var(--plate);color:var(--text-1)}
 .steps{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:minmax(0,1fr);gap:2px;max-width:40rem}
 .steps li{display:flex;gap:16px;padding:16px 20px;background:var(--plate);line-height:1.5}
@@ -149,8 +156,10 @@ export function json(status, data, { cookies } = {}) {
  * A page: the wordmark, the body, the footer. `step` is the setup step ("Step 1 of 2"), `footer: false`
  * leaves the footer out, and `main` names a layout class for <main>.
  */
-export function html(status, title, body, { cookies, step = "", footer = true, main = "" } = {}) {
-  const head = `<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex"><meta name="color-scheme" content="dark"><link rel="icon" href="/favicon.svg" type="image/svg+xml"><title>${esc(title)}</title><style>${STYLE}</style>`;
+export function html(status, title, body, { cookies, step = "", footer = true, main = "", refresh = null } = {}) {
+  // `refresh` ({ seconds, url }, same origin) takes the visitor on by itself when the only next step is to wait. No script needed.
+  const go = refresh ? `<meta http-equiv="refresh" content="${Number(refresh.seconds) | 0};url=${esc(refresh.url)}">` : "";
+  const head = `<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex"><meta name="color-scheme" content="dark">${go}<link rel="icon" href="/favicon.svg" type="image/svg+xml"><title>${esc(title)}</title><style>${STYLE}</style>`;
   const top = `<header class="top">${MARK}${step ? `<span class="step">${esc(step)}</span>` : ""}</header>`;
   const page = `<!doctype html><html lang="en"><head>${head}</head><body>${top}<main${main ? ` class="${esc(main)}"` : ""}>${body}</main>${footer ? FOOTER : ""}${VEIL}</body></html>`;
   return new Response(page, { status, headers: withHeaders({ "Content-Type": "text/html; charset=utf-8" }, cookies) });
@@ -160,10 +169,19 @@ export function redirect(location, { cookies, status = 303 } = {}) {
   return new Response(null, { status, headers: withHeaders({ Location: location }, cookies) });
 }
 
-/** A short message page, for errors and dead ends. `action` is an optional way out: { href, label }, same origin. */
-export function message(status, title, text, { cookies, action } = {}) {
+/**
+ * A message page for errors and dead ends, written like an engineer next to you: what happened, what
+ * is left behind on each side (`left`: { penthera, vercel }), one way on (`action`: { href, label },
+ * same origin), and why we check (`why`). `reason` is a stable data-reason for pages that share a
+ * status; `refresh` takes the visitor on by itself when the only next step is to wait.
+ */
+export function message(status, title, text, { cookies, action, reason, left, why, refresh } = {}) {
+  const r = reason ? ` data-reason="${esc(reason)}"` : "";
+  const rows = left ? [["Penthera", left.penthera], ["Vercel", left.vercel]].filter(([, v]) => v) : [];
+  const block = rows.length ? `<dl class="left">${rows.map(([k, v]) => `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join("")}</dl>` : "";
   const out = action ? `<div class="act"><a class="btn go" href="${esc(action.href)}">${esc(action.label)}</a></div>` : "";
-  return html(status, title, `<h1>${esc(title)}</h1><p class="lede">${esc(text)}</p>${out}`, { cookies, main: "one" });
+  const because = why ? `<p class="why"><span>Why we check this</span>${esc(why)}</p>` : "";
+  return html(status, title, `<h1${r}>${esc(title)}</h1><p class="lede">${esc(text)}</p>${block}${out}${because}`, { cookies, main: "one", refresh });
 }
 
 /** The wordmark, drawn: one path in brushed metal, lit from above. */

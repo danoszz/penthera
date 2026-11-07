@@ -249,6 +249,76 @@ describe("state check (CSRF)", () => {
   });
 });
 
+describe("the install window", () => {
+  const ext = (extra) => installUrl(extra).replace("source=marketplace", "source=external");
+  const reasonOf = async (res) => /<h1 data-reason="([a-z_]+)"/.exec(await res.text())?.[1] ?? null;
+  const clearsState = (res) => res.headers.getSetCookie().some((c) => c.startsWith("__Host-pv_state=;") && c.includes("Max-Age=0"));
+
+  it("a Marketplace or Deploy Button install goes through with a leftover state cookie, and clears it", async () => {
+    for (const source of ["marketplace", "deploy-button"]) {
+      const { app, store } = setup();
+      // Daan's retest: an earlier /start left pv_state in the browser, then he installed from Vercel's page.
+      const res = await app.install(get(installUrl().replace("source=marketplace", `source=${source}`), { cookie: "__Host-pv_state=left-from-an-earlier-start" }));
+      expect(res.status, source).toBe(303);
+      expect(res.headers.get("location")).toBe("/setup");
+      expect(clearsState(res)).toBe(true);
+      expect(res.headers.getSetCookie().some((c) => c.startsWith("__Host-pv_session="))).toBe(true);
+      expect(store.dump()).toHaveLength(1);
+    }
+  });
+
+  it("the leftover-cookie path is the no-cookie path: same exchange, same checks, same refusals", async () => {
+    // A mismatched exchange is refused the same way with or without the cookie.
+    for (const cookie of [undefined, "__Host-pv_state=old"]) {
+      const { app, store } = setup({ vercel: { fail: {} } });
+      const res = await app.install(get(installUrl().replace(`configurationId=${CFG}`, "configurationId=icfg_Other999"), cookie ? { cookie } : {}));
+      expect(res.status).toBe(400);
+      expect(store.dump()).toHaveLength(0);
+    }
+  });
+
+  it("the state cookie lasts 30 minutes, as long as Vercel's install code", async () => {
+    const { app } = setup();
+    const set = (await app.start(get("/start"))).headers.getSetCookie()[0];
+    expect(set).toMatch(/Max-Age=1800(;|$)/);
+  });
+
+  it("each failed state check has its own reason, clears the cookie, and stops before the exchange", async () => {
+    const cases = [
+      ["state_cookie_missing", ext("&state=abc"), {}],
+      ["state_mismatch", ext("&state=abc"), { cookie: "__Host-pv_state=xyz" }],
+      ["external_without_state", ext(""), {}],
+      ["external_without_state", ext(""), { cookie: "__Host-pv_state=xyz" }],
+      // A state on a Marketplace link is still checked against the cookie.
+      ["state_cookie_missing", installUrl("&state=abc"), {}],
+      ["state_mismatch", installUrl("&state=abc"), { cookie: "__Host-pv_state=xyz" }],
+    ];
+    for (const [reason, url, headers] of cases) {
+      const { app, vercel, store } = setup();
+      const res = await app.install(get(url, headers));
+      expect(res.status, reason).toBe(403);
+      expect(clearsState(res), reason).toBe(true);
+      expect(await reasonOf(res.clone()), url).toBe(reason);
+      expect(await res.text()).toContain('href="/start"');
+      expect(vercel.calls, reason).toHaveLength(0);
+      expect(store.dump()).toHaveLength(0);
+      expect(res.headers.getSetCookie().some((c) => c.startsWith("__Host-pv_session="))).toBe(false);
+    }
+  });
+
+  it("each refusal page says nothing was added and what to do in Vercel", async () => {
+    const { app } = setup();
+    for (const url of [ext("&state=abc"), ext("")]) {
+      const text = await (await app.install(get(url))).text();
+      expect(text).toContain("added nothing to your projects");
+      expect(text).toContain("Settings, Integrations");
+      expect(text).toContain('<dl class="left">');
+      expect(text).toContain("Why we check this");
+      expect(text).not.toContain("timed out");
+    }
+  });
+});
+
 describe("setup", () => {
   it("lists projects, shows the prefilled workflow link, registers the check, then returns to next", async () => {
     const { app, cookie, vercel } = await installed();
@@ -502,13 +572,23 @@ describe("pages", () => {
     const { app } = setup();
     for (const url of ["/install", `/install?code=${CODE}`, `/install?code=${CODE}&configurationId=${CFG}&teamId=bad`, `/install?code=${CODE}&configurationId=${CFG}&state=x`]) {
       const body = await (await app.install(get(url))).text();
-      expect(body).toContain('<a class="btn go" href="/start">Install again</a>');
+      expect(body).toContain('<a class="btn go" href="/start">Restart on Vercel</a>');
     }
+  });
+
+  it("a page whose only next step is waiting takes the visitor on by itself, without a script", async () => {
+    const { app } = setup();
+    let res;
+    for (let i = 0; i < 12; i++) res = await app.install(get(installUrl(), { "x-real-ip": "198.51.100.7" }));
+    const text = await res.text();
+    expect(res.status).toBe(429);
+    expect(text).toContain('<meta http-equiv="refresh" content="60;url=/start">');
+    expect(text).not.toMatch(/<script/i);
   });
 
   it("an expired session and a failed form check each offer a way out", async () => {
     const { app, cookie } = await installed();
-    expect(await (await app.setup(get("/setup"))).text()).toContain('<a class="btn go" href="/start">Install again</a>');
+    expect(await (await app.setup(get("/setup"))).text()).toContain('<a class="btn go" href="/start">Restart on Vercel</a>');
     expect(await (await app.setup(post("/setup", "csrf=wrong&action=workflow&p=prj_one", { cookie, origin: BASE }))).text()).toContain('href="/setup"');
   });
 });
@@ -613,12 +693,13 @@ describe("review fixes", () => {
     expect(openToken(await store.get(CFG), CFG, keys)).toBe("at_victim");
   });
 
-  it("refuses an install with neither state nor a Vercel source, and one that drops the state its cookie expects", async () => {
+  it("refuses an install with neither state nor a Vercel source, also with a leftover state cookie", async () => {
     const { app, vercel } = setup();
     const bare = await app.install(get(`/install?code=${CODE}&configurationId=${CFG}`));
     expect(bare.status).toBe(403);
-    const dropped = await app.install(get(installUrl(), { cookie: "__Host-pv_state=expected" }));
-    expect(dropped.status).toBe(403);
+    const leftover = await app.install(get(`/install?code=${CODE}&configurationId=${CFG}`, { cookie: "__Host-pv_state=expected" }));
+    expect(leftover.status).toBe(403);
+    expect(await leftover.text()).toContain('data-reason="no_source"');
     expect(vercel.calls).toHaveLength(0);
   });
 

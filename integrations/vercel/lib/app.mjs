@@ -27,7 +27,8 @@ import { WORKFLOW_PATH, WORKFLOW_YAML, checkBody, githubNewFileUrl, isIntegratio
 const SESSION = "pv_session";
 const STATE = "pv_state";
 const SESSION_MS = 30 * 60_000;
-const STATE_SECONDS = 15 * 60;
+/** The /start state cookie lasts as long as Vercel's install code: 30 minutes. */
+const STATE_SECONDS = 30 * 60;
 const MAX_PROJECTS_PER_POST = 20;
 const CONFIG_ID = /^icfg_[A-Za-z0-9]{1,64}$/;
 const TEAM_ID = /^team_[A-Za-z0-9]{1,64}$/;
@@ -86,6 +87,13 @@ const NEXT_STEPS = `<h2>What happens on your next deploy</h2>
 <li><span class="n" aria-hidden="true">2</span><span><strong>Penthera scans the live deployment</strong> in your GitHub Actions. That usually takes under a minute, and the deploy waits for it.</span></li>
 <li><span class="n" aria-hidden="true">3</span><span><strong>A pass goes live.</strong> A fail stays out of production, and the check in Vercel links to the findings in the GitHub job summary.</span></li>
 </ol>`;
+
+// What a refused install leaves behind. Vercel makes the installation before it sends the browser to
+// /install, so it probably still lists Penthera; we stopped before the code exchange (README, "A refused install").
+const LEFT_REFUSED = {
+  penthera: "We stored nothing and added nothing to your projects. Nothing to undo here.",
+  vercel: "Penthera may still be listed under Settings, Integrations, with no access to any project. If Vercel says it's already installed when you restart, remove it there first. If it ends up listed twice, remove the one with no projects.",
+};
 
 export function readConfig(env) {
   const need = (name) => {
@@ -214,46 +222,55 @@ export function createApp({ env = process.env, store, fetch: fetchImpl = globalT
     const state = q.get("state");
     const source = q.get("source");
     const next = q.get("next") ? safeNext(q.get("next")) : null;
-    if (!code || !/^[A-Za-z0-9]{8,128}$/.test(code)) return message(400, "This install link is incomplete", "Start the install again from Vercel.", { action: { href: "/start", label: "Install again" } });
-    if (!CONFIG_ID.test(configurationId ?? "")) return message(400, "This install link is incomplete", "Start the install again from Vercel.", { action: { href: "/start", label: "Install again" } });
-    if (teamId && !TEAM_ID.test(teamId)) return message(400, "This install link is incomplete", "Start the install again from Vercel.", { action: { href: "/start", label: "Install again" } });
-    if (q.get("next") && !next) return message(400, "This install link points elsewhere", "Its return address is not on vercel.com. Start the install again from Vercel.", { action: { href: "/start", label: "Install again" } });
+    if (!code || !/^[A-Za-z0-9]{8,128}$/.test(code)) return message(400, "Part of your install link is missing", "Vercel's link was cut short, often by copying it. Restarting from Vercel gives you a complete one.", { left: LEFT_REFUSED, action: { href: "/start", label: "Restart on Vercel" }, why: "We go on only when Vercel's link is complete." });
+    if (!CONFIG_ID.test(configurationId ?? "")) return message(400, "Part of your install link is missing", "Vercel's link was cut short, often by copying it. Restarting from Vercel gives you a complete one.", { left: LEFT_REFUSED, action: { href: "/start", label: "Restart on Vercel" }, why: "We go on only when Vercel's link is complete." });
+    if (teamId && !TEAM_ID.test(teamId)) return message(400, "Part of your install link is missing", "Vercel's link was cut short, often by copying it. Restarting from Vercel gives you a complete one.", { left: LEFT_REFUSED, action: { href: "/start", label: "Restart on Vercel" }, why: "We go on only when Vercel's link is complete." });
+    if (q.get("next") && !next) return message(400, "Your install link points away from Vercel", "Its return address isn't on vercel.com, so we stopped before sending you anywhere.", { left: LEFT_REFUSED, action: { href: "/start", label: "Restart on Vercel" }, why: "We only ever send you back to vercel.com, so a link can't take you to another site." });
 
     // CSRF: an install we started (/start) must come back with the state we set in the cookie, and
-    // a browser that holds that cookie must send the matching state. Installs started on vercel.com
-    // (marketplace, deploy button) carry no state; they must say so in `source`, and the session is
-    // bound only after the exchange proves the configuration and its owner (README, "Security").
+    // the browser must still hold that cookie. Installs started on vercel.com (marketplace, deploy
+    // button) carry no state; they must say so in `source`, and the session is bound only after the
+    // exchange proves the configuration and its owner (README, "Security"). A leftover state cookie
+    // from an earlier /start does not block them: such a browser takes the same path as one without
+    // the cookie, and the cookie is cleared.
     const cookies = [];
     const stateCookie = readCookie(request, STATE);
-    if (state || stateCookie || source === "external") {
-      if (!safeEqual(state, stateCookie)) return message(403, "This install timed out", "An install must finish within 15 minutes of starting here. Start it again.", { cookies: [clearCookie(STATE)], action: { href: "/start", label: "Install again" } });
+    const fromVercel = source === "marketplace" || source === "deploy-button";
+    if (state || source === "external") {
+      const reason = !state ? "external_without_state" : !stateCookie ? "state_cookie_missing" : !safeEqual(state, stateCookie) ? "state_mismatch" : null;
+      if (reason) {
+        logError("install_refused", { code: reason, configurationId });
+        return installRefused(reason);
+      }
       cookies.push(clearCookie(STATE));
-    } else if (source !== "marketplace" && source !== "deploy-button") {
-      return message(403, "Start the install from Vercel", "Penthera installs from its page on Vercel.", { action: { href: "/start", label: "Install again" } });
+    } else if (fromVercel) {
+      if (stateCookie) cookies.push(clearCookie(STATE));
+    } else {
+      return message(403, "Install Penthera from Vercel", "This link didn't come from Penthera's page on Vercel, where installs start.", { cookies: stateCookie ? [clearCookie(STATE)] : [], left: LEFT_REFUSED, action: { href: "/start", label: "Open Penthera on Vercel" }, why: "Installs start on Vercel, so a link someone sends you can't connect Penthera to your account.", reason: "no_source" });
     }
-    if (installLimited(request)) return message(429, "Too many tries", "Wait a minute, then start the install again from Vercel.", { cookies });
+    if (installLimited(request)) return message(429, "Too many install tries from your network", "We'll take you back to Vercel in a minute. You don't need to do anything.", { cookies, left: LEFT_REFUSED, action: { href: "/start", label: "Restart now" }, refresh: { seconds: 60, url: "/start" }, why: "A short limit keeps the install page from being flooded." });
 
     let token;
     try {
       token = await exchangeCode({ code, clientId: c.clientId, clientSecret: c.clientSecret, redirectUri: c.redirectUri, fetch: fetchImpl });
     } catch (e) {
       logError("exchange_failed", { status: e.status ?? 0, code: e.code ?? "network", configurationId });
-      return message(502, "Vercel did not accept the install", "Its code lasts 30 minutes and works once. Start the install again.", { cookies, action: { href: "/start", label: "Install again" } });
+      return message(502, "Vercel's one-time code had already run out", "Each code lasts 30 minutes and works once. Restarting gets you a fresh one.", { cookies, left: LEFT_REFUSED, action: { href: "/start", label: "Restart on Vercel" }, why: "Vercel's code proves the install is yours, and we can't go on without it." });
     }
     // The exchange must name the configuration this redirect claims, and the team, or we store nothing.
     if (token.configurationId !== configurationId || (teamId && token.teamId !== teamId)) {
       logError("configuration_mismatch", { configurationId });
-      return message(400, "This install does not match", "Vercel named a different installation. Start the install again.", { cookies, action: { href: "/start", label: "Install again" } });
+      return message(400, "Vercel named a different install", "The link and Vercel disagree about which install this is, so we stopped and stored nothing.", { cookies, left: LEFT_REFUSED, action: { href: "/start", label: "Restart on Vercel" }, why: "We store an install only once Vercel confirms whose it is." });
     }
     const ownerId = token.teamId ?? token.userId ?? teamId;
-    if (!ownerId) return message(502, "Vercel sent no account", "Start the install again from Vercel.", { cookies, action: { href: "/start", label: "Install again" } });
+    if (!ownerId) return message(502, "Vercel didn't say which team this is for", "We keep each team's install separate, so we need that before going on.", { cookies, left: LEFT_REFUSED, action: { href: "/start", label: "Restart on Vercel" }, why: "We store an install only once Vercel confirms whose it is." });
 
     // One record per configuration. A deploy-button install may reuse an existing id: we overwrite it,
     // never duplicate, and never hand a record to another owner.
     const previous = await load(configurationId);
     if (previous && previous.ownerId !== ownerId) {
       logError("owner_mismatch", { configurationId });
-      return message(409, "This installation belongs to another account", "Install Penthera again from the account you want it on.", { cookies, action: { href: "/start", label: "Install again" } });
+      return message(409, "This install belongs to another Vercel team", "Restart, and Vercel asks which team to install on. Pick the one you want Penthera on.", { cookies, left: { penthera: "Nothing changed, here or in the other team's setup.", vercel: "The install stays with the team that made it." }, action: { href: "/start", label: "Choose a team on Vercel" }, why: "One team can never take over another team's install, or see its projects." });
     }
     // createdAt is the latest install, so a replayed older uninstall event cannot delete it.
     const createdAt = new Date(now()).toISOString();
@@ -263,6 +280,24 @@ export function createApp({ env = process.env, store, fetch: fetchImpl = globalT
     cookies.push(setCookie(SESSION, value, SESSION_MS / 1000));
     return redirect("/setup", { cookies });
   }
+
+  /**
+   * The three ways an install from our own link can fail its state check, each with its own page.
+   * Each is refused before the code is exchanged, so nothing is stored and no check is added.
+   * Vercel has already made the installation by then; README, "A refused install", says what that
+   * leaves behind. Placeholder copy: the Designer owns these pages.
+   */
+  function installRefused(reason) {
+    const why = "An install link works only in the browser that started it, for 30 minutes, so nobody else can finish an install in your name.";
+    const pages = {
+      state_cookie_missing: ["Your install link has run out", "This browser no longer holds the install it started: more than 30 minutes passed, or the link opened in another browser or on another device."],
+      state_mismatch: ["This install didn't start in this browser", "If you clicked Install on Vercel just now, restart it here and it goes through. If you didn't, close this page: nothing happened."],
+      external_without_state: ["Part of your install link is missing", "It came from Penthera's install link but lost its check on the way, often when a link is copied."],
+    };
+    const [title, text] = pages[reason];
+    return message(403, title, text, { cookies: [clearCookie(STATE)], left: LEFT_REFUSED, action: { href: "/start", label: "Restart on Vercel" }, why, reason });
+  }
+
 
   async function setupPage(request) {
     const c = cfg();
@@ -314,12 +349,12 @@ ${asks()}`, { step: "Step 1 of 2: pick" });
     const s = await session(request, c);
     if (!s) return expired();
     const form = await readForm(request);
-    if (!form || !formAllowed(request, form, s, c)) return message(403, "That page was out of date", "Reload it and try again.", { action: { href: "/setup", label: "Reload" } });
+    if (!form || !formAllowed(request, form, s, c)) return message(403, "This page was out of date", "Nothing changed. Reload to pick up where you were.", { action: { href: "/setup", label: "Reload setup" }, why: "Each setup page carries a one-time check, so another site can't submit it for you." });
     const api = s.api;
 
     const removeId = form.get("remove");
     if (removeId) {
-      if (!PROJECT_ID.test(removeId)) return message(400, "That project is not in your list", "Reload the page and pick again.", { action: { href: "/setup", label: "Reload" } });
+      if (!PROJECT_ID.test(removeId)) return message(400, "That project isn't in your list", "Nothing changed. Reload and pick again.", { action: { href: "/setup", label: "Reload setup" } });
       try {
         const project = await api.getProject(removeId);
         for (const check of await api.listChecks(removeId)) {
@@ -343,7 +378,7 @@ ${asks()}`, { step: "Step 1 of 2: pick" });
     } catch (e) {
       return apiFailure(e, s.configurationId, "project_failed");
     }
-    if (!projects.length) return message(400, "Connect a GitHub repo first", "Penthera scans projects that deploy from a GitHub repository.", { action: { href: "/setup", label: "Back to your projects" } });
+    if (!projects.length) return message(400, "This project doesn't deploy from GitHub", "Penthera runs in GitHub Actions, so the project needs a GitHub repo. In Vercel: Project Settings, Git.", { action: { href: "/setup", label: "Back to your projects" } });
 
     if (form.get("action") === "enable") {
       const failed = [];
@@ -830,12 +865,12 @@ ${asks({ open: true })}`);
   }
 
   function expired() {
-    return message(401, "This page has expired", "It works for 30 minutes after an install. Install again to change your projects.", { action: { href: "/start", label: "Install again" } });
+    return message(401, "Your setup page closed after 30 minutes", "Your install and any checks you turned on keep running. To change projects, restart from Vercel.", { left: { penthera: "Your install and checks are as you left them.", vercel: "Penthera stays installed." }, action: { href: "/start", label: "Restart on Vercel" }, why: "Setup closes after 30 minutes, so a page left open can't change your projects later." });
   }
 
   function apiFailure(e, configurationId, event) {
     logError(event, { status: e.status ?? 0, code: e.code ?? "network", configurationId });
-    return message(502, "Vercel did not answer", "Try again in a minute. If it keeps failing, install again.", { action: { href: "/setup", label: "Try again" } });
+    return message(502, "Vercel didn't answer just now", "Your projects are as they were. Vercel is usually back within a minute, and this page tries again by itself.", { left: { penthera: "Nothing changed.", vercel: "Nothing changed." }, action: { href: "/setup", label: "Try again" }, refresh: { seconds: 30, url: "/setup" } });
   }
 
   /** Wraps a route: config errors become a 500 with a code, never a stack or a value. */
