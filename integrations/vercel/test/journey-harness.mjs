@@ -9,7 +9,7 @@
  *
  * Nothing here reaches the network: every fetch is answered by the fakes or recorded in `outside`.
  */
-import { createHmac, generateKeyPairSync, randomBytes, sign } from "node:crypto";
+import { createHash, createHmac, generateKeyPairSync, randomBytes, sign } from "node:crypto";
 import { createApp } from "../lib/app.mjs";
 import { GITHUB_ISSUER, GITHUB_JWKS_URL } from "../lib/oidc.mjs";
 import { memoryStore } from "../lib/store.mjs";
@@ -102,10 +102,14 @@ export function removedWebhook({ base = BASE, at = T0 + 1000, projects = ["prj_g
   return new Request(`${base}/webhook`, { method: "POST", body: raw, headers: { "x-vercel-signature": createHmac("sha1", CLIENT_SECRET).update(raw).digest("hex") } });
 }
 
-/** The workflow's last step: POST /report with the run's OIDC token. */
-export function reportRequest(deploymentId, conclusion, { base = BASE, t = T0, runId, projectId = "prj_gaiaweb", ip = "203.0.113.10" } = {}) {
+/**
+ * The workflow's last step: POST /report with the run's OIDC token, and the SHA-256 of the host it
+ * scanned (`host`), as the workflow sends it. Without `host`, the body of a workflow from before.
+ */
+export function reportRequest(deploymentId, conclusion, { base = BASE, t = T0, runId, projectId = "prj_gaiaweb", ip = "203.0.113.10", host, reason } = {}) {
+  const extra = { ...(host ? { hostSha256: createHash("sha256").update(host).digest("hex") } : {}), ...(reason ? { reason } : {}) };
   return new Request(`${base}/report`, {
-    method: "POST", body: JSON.stringify({ deploymentId, projectId, conclusion }),
+    method: "POST", body: JSON.stringify({ deploymentId, projectId, conclusion, ...extra }),
     headers: { authorization: `Bearer ${oidc(deploymentId, t, { base, runId })}`, "content-type": "application/json", "x-real-ip": ip },
   });
 }

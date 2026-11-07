@@ -17,6 +17,11 @@ what a rule confirms becomes a finding, and the rest is shown as
 penthera --repo . --ai
 ```
 
+AI mode **finds; it doesn't fix.** To have a coding agent fix what Penthera
+found, give it the findings through the [MCP server](commands/mcp.md), the
+[Agent Skill](commands/skill.md) or `penthera fix --plan`. The rules decide in
+every case.
+
 Whether AI mode finds more than the rules alone is not measured yet. A planned
 experiment (E9) will measure it, and AI mode stays opt-in until it does.
 

@@ -339,7 +339,7 @@ describe("runComment", () => {
 });
 
 describe("gate", () => {
-  it("warns when the site wasn't read, and only then", () => {
+  it("with a fail-on gate, a site it didn't read fails as incomplete; without one it only warns", () => {
     const dir = mkdtempSync(join(tmpdir(), "penthera-gate-"));
     const logs = [];
     const log = vi.spyOn(console, "log").mockImplementation((m) => logs.push(m));
@@ -348,15 +348,62 @@ describe("gate", () => {
         const file = join(dir, "r.json");
         writeFileSync(file, JSON.stringify({ findings: [], ...report }));
         logs.length = 0;
-        return { res: runGate({ report: file, "fail-on": "high" }), logs: [...logs] };
+        return { res: runGate({ report: file, "fail-on": failOn }), logs: [...logs], errs: [...errs] };
       };
-      const refused = run({ challenge: { provider: "Cloudflare" } });
-      expect(refused.res.fail).toBe(false);
-      expect(refused.logs[0]).toMatch(/^::warning::Site not read/);
-      expect(run({ reachable: false }).logs[0]).toMatch(/^::warning::/);
-      expect(run({ reachable: true }).logs).toEqual([]);
+      let failOn = "high";
+      const errs = [];
+      const err = vi.spyOn(console, "error").mockImplementation((m) => errs.push(m));
+      try {
+        for (const [report, unread] of [
+          [{ challenge: { provider: "Cloudflare" } }, "challenge"],
+          [{ reachable: false }, "unreachable"],
+          [{ reachable: true, httpStatus: 401 }, "denied"],
+          [{ reachable: true, httpStatus: 403 }, "denied"],
+          [{ reachable: true, httpStatus: 308, executedProbes: ["endpoint-discovery"] }, "redirected"],
+          [{ reachable: true, httpStatus: 429, executedProbes: ["endpoint-discovery"] }, "status"],
+          [{ reachable: true, httpStatus: 200, executedProbes: ["endpoint-discovery"], findings: [{ source: "waf-challenge" }] }, "blocked"],
+          [{ reachable: true, httpStatus: 200, executedProbes: ["endpoint-discovery"], endpoints: { byStatus: { 429: 2 } } }, "rate_limited"],
+          [{ reachable: true, httpStatus: 200, executedProbes: "endpoint-discovery" }, "incomplete"],
+          [{ reachable: true }, "incomplete"],
+        ]) {
+          errs.length = 0;
+          const r = run(report);
+          expect(r.res, JSON.stringify(report)).toMatchObject({ fail: true, incomplete: true, unread });
+          expect(r.errs[0]).toMatch(new RegExp(`^::error::Site not read \\(${unread}\\)`));
+        }
+        const clean = { reachable: true, httpStatus: 200, executedProbes: ["endpoint-discovery"] };
+        expect(run(clean).res).toEqual({ fail: false, count: 0 });
+        // A deps or agents report is no URL scan: the gate decides on its findings alone.
+        expect(run({ mode: "deps" }).res).toEqual({ fail: false, count: 0 });
+        failOn = "none";
+        const refused = run({ challenge: { provider: "Cloudflare" } });
+        expect(refused.res.fail).toBe(false);
+        expect(refused.logs[0]).toMatch(/^::warning::Site not read/);
+        expect(run({ reachable: false }).logs[0]).toMatch(/^::warning::/);
+        expect(run(clean).logs).toEqual([]);
+      } finally {
+        err.mockRestore();
+      }
     } finally {
       log.mockRestore();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("the gate command exits 2 on a site it didn't read, 1 on findings and 0 on a clean read (the Action's Apply fail-on step)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "penthera-gate-exit-"));
+    try {
+      const exit = (report, failOn = "high") => {
+        const file = join(dir, "r.json");
+        writeFileSync(file, JSON.stringify({ findings: [], ...report }));
+        return spawnSync(process.execPath, [new URL("../scripts/action/comment.mjs", import.meta.url).pathname, "gate", "--report", file, "--fail-on", failOn], { encoding: "utf-8" }).status;
+      };
+      expect(exit({ challenge: { provider: "Vercel", action: "challenge" } })).toBe(2);
+      expect(exit({ reachable: false })).toBe(2);
+      expect(exit({ reachable: true, httpStatus: 308, executedProbes: ["endpoint-discovery"] })).toBe(2);
+      expect(exit({ reachable: true, httpStatus: 200, executedProbes: ["endpoint-discovery"], findings: [{ severity: "high" }] })).toBe(1);
+      expect(exit({ reachable: true, httpStatus: 200, executedProbes: ["endpoint-discovery"] })).toBe(0);
+    } finally {
       rmSync(dir, { recursive: true, force: true });
     }
   });

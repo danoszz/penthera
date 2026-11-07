@@ -946,7 +946,8 @@
      "id",
      "projectId",
      "project.id",
-     "target"
+     "target",
+     "url"
     ],
     "response": {
      "oneOf": [
@@ -992,6 +993,9 @@
           null
          ],
          "nullable": true
+        },
+        "url": {
+         "type": "string"
         }
        }
       },
@@ -1017,6 +1021,9 @@
           null
          ],
          "nullable": true
+        },
+        "url": {
+         "type": "string"
         }
        }
       }

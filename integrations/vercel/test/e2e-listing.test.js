@@ -80,7 +80,7 @@ describe("the listing journey, step by step, against the strict fake Vercel", ()
   });
 
   it("6. The workflow reports a pass with its OIDC token: the run completes as succeeded, linked to the GitHub run", async () => {
-    const res = await h.app.report(reportRequest("dpl_prod2", "succeeded", { runId: "700" }));
+    const res = await h.app.report(reportRequest("dpl_prod2", "succeeded", { runId: "700", host: h.world.deployments.dpl_prod2.url }));
     expect(res.status, await res.clone().text()).toBe(200);
     expect(await res.json()).toEqual({ ok: true, conclusion: "succeeded" });
     expect(runOf(h, "dpl_prod2", s.check.id)).toMatchObject({ status: "completed", conclusion: "succeeded", externalUrl: "https://github.com/daan/gaia-web/actions/runs/700" });
@@ -89,7 +89,7 @@ describe("the listing journey, step by step, against the strict fake Vercel", ()
 
   it("7. A second production deployment fails the scan: its run completes as failed", async () => {
     h.world.deployments.dpl_prod3 = { projectId: "prj_gaiaweb", target: "production", url: "gaia-web-ghi.vercel.app" };
-    const res = await h.app.report(reportRequest("dpl_prod3", "failed", { runId: "701" }));
+    const res = await h.app.report(reportRequest("dpl_prod3", "failed", { runId: "701", host: h.world.deployments.dpl_prod3.url }));
     expect(res.status, await res.clone().text()).toBe(200);
     expect(runOf(h, "dpl_prod3", s.check.id)).toMatchObject({ status: "completed", conclusion: "failed", externalUrl: "https://github.com/daan/gaia-web/actions/runs/701" });
     // The first deployment's result is untouched.
@@ -97,7 +97,7 @@ describe("the listing journey, step by step, against the strict fake Vercel", ()
   });
 
   it("8. A result is set once: reporting the failed deployment again changes nothing", async () => {
-    const res = await h.app.report(reportRequest("dpl_prod3", "succeeded", { runId: "702" }));
+    const res = await h.app.report(reportRequest("dpl_prod3", "succeeded", { runId: "702", host: h.world.deployments.dpl_prod3.url }));
     expect(res.status).toBe(409);
     expect(runOf(h, "dpl_prod3", s.check.id).conclusion).toBe("failed");
   });
@@ -171,7 +171,7 @@ describe("error log lines carry no id either, also when Vercel's message is full
     // A report while Vercel is failing. The check is not on, so turn it on behind the server's back.
     h.vercel.checks.prj_gaiaweb = [{ id: "chk_9", name: "Penthera", source: { kind: "integration", integrationId: "oac_PentheraIntegration", integrationConfigurationId: CFG } }];
     await h.store.putLink({ projectId: "prj_gaiaweb", configurationId: CFG });
-    expect((await h.app.report(reportRequest("dpl_prod1", "succeeded"))).status).toBe(502);
+    expect((await h.app.report(reportRequest("dpl_prod1", "succeeded", { host: h.world.deployments.dpl_prod1.url }))).status).toBe(502);
 
     const events = lines.filter((l) => l.level === "error").map((l) => JSON.parse(l.line).event);
     for (const e of ["install_refused", "exchange_failed", "integration_lookup_failed", "check_failed", "report_failed"]) expect(events).toContain(e);

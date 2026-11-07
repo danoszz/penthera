@@ -13,6 +13,7 @@
  *   GET  /sweep      weekly cron: deletes records whose token no longer works
  *   GET  /health
  */
+import { createHash } from "node:crypto";
 import {
   ConfigError, cookieKey, mac, openToken, parseKeys, randomToken, safeEqual, sealToken, signValue, unsignValue,
   verifyWebhookSignature,
@@ -38,7 +39,29 @@ const INTEGRATION_ID = /^oac_[A-Za-z0-9]{1,64}$/;
 const GITHUB_REPO = /^[A-Za-z0-9_.-]{1,100}\/[A-Za-z0-9_.-]{1,100}$/;
 /** The only body POST /report accepts, and the only conclusions. */
 const REPORT_FIELDS = ["conclusion", "deploymentId", "projectId"];
+// Sent by the workflow since 8 Nov: a SHA-256 of the host it scanned (never the host: no deployment
+// URL reaches us), and why it could not read the site. A workflow from before sends neither; its
+// "succeeded" then counts as failed, with no host to bind.
+const REPORT_OPTIONAL = ["hostSha256", "reason"];
 const CONCLUSIONS = new Set(["succeeded", "failed"]);
+const sha256 = (s) => createHash("sha256").update(s).digest("hex");
+/** The workflow's reasons a scan did not read the site, in the words the check shows. */
+const NOT_READ = {
+  unreachable: "nothing answered at the deployment",
+  challenge: "a firewall served a bot challenge instead of the site",
+  denied: "the deployment answered 401 or 403 (Deployment Protection?)",
+  redirected: "the deployment redirected the scanner elsewhere instead of serving the site",
+  status: "the deployment's home page did not answer 2xx",
+  rate_limited: "requests were rate limited during the scan",
+  blocked: "a firewall's block page answered instead of the site",
+  incomplete: "the scan did not finish reading the site",
+  unreadable: "the scan left no report to check",
+};
+const TEXT = {
+  succeeded: "Penthera found no high or critical issue. Details in the GitHub job summary.",
+  failed: "Penthera found a high or critical issue, or could not finish the scan. Details in the GitHub job summary.",
+  unbound: "Scanned URL is not this deployment, so it was not checked. Update the workflow from Penthera's setup page.",
+};
 /** Reports per runner address per minute, per function instance. The firewall rule in README.md is the real limit. */
 const REPORTS_PER_MINUTE = 30;
 /** Unverified refusals are written to the counters at most this often, per instance. */
@@ -79,7 +102,7 @@ const asks = ({ open = false } = {}) => `<details class="faq"${open ? " open" : 
 <dt>What this server keeps</dt>
 <dd>One encrypted install token, with the installation id, your team or user id, the install date and a random value that ends old setup sessions. For each project with the check on, the project id and which installation turned it on. We delete all of it when you uninstall. Apart from that, anonymous daily totals with no ids, deleted after 90 days. No code, no deployment URLs, no results.</dd>
 <dt>What the workflow does</dt>
-<dd>It runs Penthera's passive scan on your deployment, in your own GitHub Actions, and holds no secrets. For a production deploy it then sends us three things: the deployment id, the project id, and pass or fail, with a token GitHub signs for your repo. We check the token, set the check's result in Vercel, and keep nothing about it, only anonymous daily totals to keep the service working. The findings stay in GitHub: the job summary and a run artifact.</dd>
+<dd>It runs Penthera's passive scan on your deployment, in your own GitHub Actions, and holds no secrets. For a production deploy it then sends us the deployment id, the project id, pass or fail, a fingerprint (SHA-256) of the host it scanned and, if it couldn't read the site, a reason code, with a token GitHub signs for your repo. We check the token, pass only a scan of that deployment's own host, set the check's result in Vercel, and keep nothing about it, only anonymous daily totals to keep the service working. The findings stay in GitHub: the job summary and a run artifact.</dd>
 <dt>What it never does</dt>
 <dd>It never reads your code, never writes to your repo beyond one commit status, and never sends findings or code to us. It doesn't attack your site: it reads your pages and sends one login with obviously fake credentials, to check a wrong password is refused.</dd>
 <dt>Why you commit the workflow yourself</dt>
@@ -792,7 +815,9 @@ ${asks({ open: true })}`);
   /**
    * POST /report: the workflow's pass or fail for one production deployment, relayed to our check.
    *
-   * Body: exactly { deploymentId, projectId, conclusion: "succeeded" | "failed" }. Authorization: a
+   * Body: { deploymentId, projectId, conclusion: "succeeded" | "failed" }, and since 8 Nov hostSha256
+   * (a SHA-256 of the host the workflow scanned) and reason (why the scan did not read the site), and
+   * nothing else. Authorization: a
    * GitHub Actions OIDC token for this server's origin (lib/oidc.mjs). Every id that decides
    * anything is checked against Vercel with the token of the installation that turned the check on:
    *
@@ -806,6 +831,8 @@ ${asks({ open: true })}`);
    *      that check, which Vercel says belongs to this project and this deployment;
    *   5. the run is not completed yet, so a result is never overwritten.
    *
+   * A "succeeded" counts only when hostSha256 is the hash of the deployment's own host in Vercel's
+   * record (3): the dispatch URL the workflow scanned is signed by nobody. Otherwise it is "failed".
    * Only then is the run's conclusion set. Nothing about the scan or the request is stored.
    */
   async function relay(request) {
@@ -820,9 +847,13 @@ ${asks({ open: true })}`);
     } catch {
       return json(400, { error: "bad_json" });
     }
-    const keys = body && typeof body === "object" && !Array.isArray(body) ? Object.keys(body).sort().join() : "";
-    if (keys !== REPORT_FIELDS.join()) return json(400, { error: "bad_body" });
+    const keys = body && typeof body === "object" && !Array.isArray(body) ? Object.keys(body) : [];
+    if (!REPORT_FIELDS.every((k) => keys.includes(k)) || !keys.every((k) => REPORT_FIELDS.includes(k) || REPORT_OPTIONAL.includes(k))) return json(400, { error: "bad_body" });
     const { deploymentId, projectId, conclusion } = body;
+    // Untrusted, like the rest of the body: the host's hash is only ever compared with Vercel's own
+    // record, and the reason only picks one of our sentences.
+    const hostSha256 = typeof body.hostSha256 === "string" && /^[0-9a-f]{64}$/.test(body.hostSha256) ? body.hostSha256 : null;
+    const reason = typeof body.reason === "string" && Object.hasOwn(NOT_READ, body.reason) ? body.reason : null;
     if (typeof deploymentId !== "string" || !DEPLOYMENT_ID.test(deploymentId)) return json(400, { error: "bad_deployment" });
     if (typeof projectId !== "string" || !PROJECT_ID.test(projectId)) return json(400, { error: "bad_project" });
     if (typeof conclusion !== "string" || !CONCLUSIONS.has(conclusion)) return json(400, { error: "bad_conclusion" });
@@ -878,6 +909,14 @@ ${asks({ open: true })}`);
       if (deployment.id !== deploymentId || deployment.projectId !== projectId || deployment.target !== "production") {
         return json(403, { error: "deployment_mismatch" });
       }
+      // 3c. A pass counts only for a scan of this deployment's own host. The dispatch URL the
+      //     workflow scanned is not signed by anyone, so it is bound here, to Vercel's record.
+      //     A missing or other host turns a pass into a fail; a fail stays a fail.
+      const bound = hostSha256 !== null && deployment.url !== "" && hostSha256 === sha256(deployment.url);
+      const result = conclusion === "succeeded" && !bound ? "failed" : conclusion;
+      const text = conclusion === "succeeded" && !bound ? TEXT.unbound
+        : result === "failed" && reason ? `Site not read: ${NOT_READ[reason]}. Details in the GitHub job summary.`
+          : TEXT[result];
       // 4. This installation's check on the project, and its run on this deployment.
       const check = (await api.listChecks(projectId)).find((k) => isIntegrationCheck(k, configurationId) && typeof k.id === "string" && k.id);
       if (!check) return json(404, { error: "not_enabled" });
@@ -891,14 +930,12 @@ ${asks({ open: true })}`);
       const runUrl = /^\d{1,20}$/.test(String(claims.run_id ?? "")) ? `https://github.com/${repo}/actions/runs/${claims.run_id}` : undefined;
       await api.updateCheckRun(deploymentId, run.id, {
         status: "completed",
-        conclusion,
-        conclusionText: conclusion === "succeeded"
-          ? "Penthera found no high or critical issue. Details in the GitHub job summary."
-          : "Penthera found a high or critical issue, or could not finish the scan. Details in the GitHub job summary.",
+        conclusion: result,
+        conclusionText: text,
         ...(runUrl ? { externalUrl: runUrl } : {}),
       });
-      logInfo("report_ok", { conclusion });
-      return json(200, { ok: true, conclusion });
+      logInfo("report_ok", { conclusion: result });
+      return json(200, { ok: true, conclusion: result, ...(result !== conclusion ? { note: "scanned_url_not_this_deployment" } : {}) });
     } catch (e) {
       // Every Vercel error is a 502, also a 403 or 404: the workflow then fails loudly instead of
       // reading it as "the check is not on", and the run stays as it was.

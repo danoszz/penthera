@@ -8,12 +8,12 @@
 //
 // What this cannot prove, because only the live services can: README, "What only a live test proves".
 import { execFileSync, spawnSync } from "node:child_process";
-import { createHmac } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
 import { existsSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { CHECK_TIMEOUT_SECONDS, WORKFLOW_YAML } from "../lib/workflow.mjs";
 import { OPERATIONS, trim } from "../scripts/refresh-openapi.mjs";
-import { BASE, CFG, CLIENT_SECRET, CODE, NEXT, T0, TEAM, get, harness, jar, oidc, post } from "./journey-harness.mjs";
+import { BASE, CFG, CLIENT_SECRET, CODE, NEXT, T0, TEAM, get, harness, jar, oidc, post, world } from "./journey-harness.mjs";
 import { SPEC, checkRequest } from "./vercel-contract.mjs";
 
 /** Asserts a user-facing page is a normal one, with none of the error pages' words. */
@@ -70,7 +70,7 @@ async function journey({ entry, origin, autoRuns = true, publicView = false }) {
   // 6. A production deploy: Vercel dispatches vercel.deployment.ready, the workflow scans, then reports.
   const report = (deploymentId, conclusion = "succeeded", ip = "203.0.113.10") =>
     h.app.report(new Request(`${BASE}/report`, {
-      method: "POST", body: JSON.stringify({ deploymentId, projectId: "prj_gaiaweb", conclusion }),
+      method: "POST", body: JSON.stringify({ deploymentId, projectId: "prj_gaiaweb", conclusion, hostSha256: createHash("sha256").update(world().deployments[deploymentId]?.url ?? "").digest("hex") }),
       headers: { authorization: `Bearer ${oidc(deploymentId)}`, "content-type": "application/json", "x-real-ip": ip },
     }));
   const rep = await report("dpl_prod1");

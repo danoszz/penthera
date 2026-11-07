@@ -47,7 +47,7 @@ async function fakePage(request) {
     } else if (act === "report") {
       const id = form.get("deployment");
       const conclusion = form.get("conclusion") === "failed" ? "failed" : "succeeded";
-      const res = await h.app.report(reportRequest(id, conclusion, { base, t: Date.now(), runId: String(++runs) }));
+      const res = await h.app.report(reportRequest(id, conclusion, { base, t: Date.now(), runId: String(++runs), host: h.world.deployments[id].url }));
       events.push(`The workflow reported ${conclusion} for ${id}: POST /report answered ${res.status} ${await res.text()}`);
     } else if (act === "uninstall") {
       const res = await h.app.webhook(removedWebhook({ base, at: Date.now() }));
