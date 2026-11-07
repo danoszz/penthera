@@ -11,8 +11,8 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { execFileSync } from "node:child_process";
-import { cpSync, mkdtempSync, readFileSync, rmSync, realpathSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { cpSync, mkdtempSync, mkdirSync, readFileSync, rmSync, realpathSync, writeFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { scanRepo } from "../src/scan-repo.js";
 import { buildBrief, formatBrief } from "../src/report/brief.js";
@@ -72,7 +72,7 @@ describe("one count everywhere (the next fixture)", () => {
     const report = join(root, "report.json");
     const brief = cli(["--repo", ".", "--brief", "-o", report, "--sarif", sarif]);
     expect(brief.out).toContain("8 problems (4 to act on, 4 to check first)");
-    expect(brief.out).toContain("A fix recipe matches 8 of the 8 problems");
+    expect(brief.out).toContain("5 fixes planned for 8 problems. It shows each diff");
     expect(brief.out).not.toMatch(/may be fixable|also checks cookie flags/);
     const json = JSON.parse(readFileSync(report, "utf-8"));
     expect(json.brief.counts).toMatchObject({ problems: 8, act: 4, check: 4, info: 1 });
@@ -83,6 +83,7 @@ describe("one count everywhere (the next fixture)", () => {
   it("the terminal report says the same", () => {
     const text = cli(["--repo", "."]).out;
     expect(text).toContain("8 problems (4 to act on, 4 to check first)");
+    expect(text).toContain("5 fixes planned for 8 problems: penthera fix --plan --repo");
   });
 
   it("the MCP scan_repo brief says 8 problems", async () => {
@@ -96,7 +97,7 @@ describe("one count everywhere (the next fixture)", () => {
     const plan = cli(["fix", "--plan", "--repo", "."]);
     expect(plan.out).toContain("5 fixes planned for 8 problems");
     const json = JSON.parse(cli(["fix", "--plan", "--repo", ".", "--json"]).out);
-    expect(json.counts).toEqual({ problems: 8, covered: 8, fixes: EXPECTED.fixes, findings: 9 });
+    expect(json.counts).toEqual({ problems: 8, covered: 8, fixes: EXPECTED.fixes, other: 0, findings: 9 });
   });
 
   it("the dashboard counts 8 open problems, in its header and in its list", () => {
@@ -114,5 +115,68 @@ describe("one count everywhere (the next fixture)", () => {
     const run = await runLoop({ repo: app, memoryRoot: join(root, "mem"), ask: async () => "n", maxIterations: 1, log: (l) => lines.push(l) });
     expect(run.iterations[0].findings).toMatchObject({ problems: 8, fixable: EXPECTED.fixes });
     expect(lines.join("\n")).toMatch(/scan: 8 problems \(0 suppressed\), 5 fixes planned/);
+  });
+});
+
+describe("the fix count is fixes planned for problems (gaia feedback, 8 Nov)", () => {
+  // An agent on a real repo saw "6 may be fixable" stay after it fixed every
+  // fixable one: the line counted findings a recipe matches by category, even
+  // when no diff comes out (a secret in a .env file), and likely noise.
+  let dir;
+  beforeAll(() => {
+    dir = realpathSync(mkdtempSync(join(tmpdir(), "penthera-fixcount-")));
+    const files = {
+      "package.json": JSON.stringify({ dependencies: { express: "4.0.0" } }),
+      // Built at run time, so this file holds no key-shaped string.
+      "ext/.env": `STRIPE_SECRET_KEY=${"sk_" + "live_"}${"a1B2c3D4".repeat(3)}\n`,
+      // Already fixed.
+      "server.js": 'const express = require("express");\nconst app = express();\nres.cookie("session", t, { httpOnly: true, secure: true, sameSite: "lax" });\napp.listen(3000);\n',
+      // Likely noise: a fixture.
+      "tests/fixtures/app.js": 'res.cookie("sid", v);\n',
+    };
+    for (const [rel, text] of Object.entries(files)) {
+      mkdirSync(dirname(join(dir, rel)), { recursive: true });
+      writeFileSync(join(dir, rel), text);
+    }
+  });
+  afterAll(() => rmSync(dir, { recursive: true, force: true }));
+  const run = (args) => {
+    try {
+      return execFileSync(process.execPath, [BIN, ...args], { cwd: dir, encoding: "utf-8", env: { ...process.env, HOME: dir, NO_COLOR: "1", CI: "1" } });
+    } catch (e) {
+      return String(e.stdout);
+    }
+  };
+
+  it("the scan counts the one fix the plan makes, for 4 of the 5 problems; the .env secret and the fixture are not fixable", () => {
+    const out = run(["--repo", ".", "--brief"]);
+    expect(out).toContain("5 problems (1 to act on, 4 to check first)");
+    expect(out).toContain("1 fix planned for 4 of 5 problems. It shows each diff");
+    expect(out).not.toMatch(/matches 5 of the 5|may be fixable/);
+  });
+
+  it("fix --plan says the same, and names the fix for noise apart", () => {
+    const out = run(["fix", "--plan", "--repo", "."]);
+    expect(out).toContain("1 fix planned for 4 of 5 problems, and 1 for likely noise or info");
+    const json = JSON.parse(run(["fix", "--plan", "--repo", ".", "--json"]));
+    expect(json.counts).toMatchObject({ problems: 5, covered: 4, fixes: 1, other: 1 });
+  });
+});
+
+describe("the scan's fix line stays cheap", () => {
+  it("over 50 problems it names the command without counting", () => {
+    const dir = realpathSync(mkdtempSync(join(tmpdir(), "penthera-fixcap-")));
+    try {
+      writeFileSync(join(dir, "package.json"), JSON.stringify({ dependencies: { express: "4.0.0" } }));
+      mkdirSync(join(dir, "src"));
+      // 30 files with two cookies each: 60 problems.
+      for (let i = 0; i < 30; i++) writeFileSync(join(dir, "src", `r${i}.js`), `res.cookie("session${i}", v);\nres.cookie("token${i}", v);\n`);
+      const out = execFileSync(process.execPath, [BIN, "--repo", "."], { cwd: dir, encoding: "utf-8", env: { ...process.env, HOME: dir, NO_COLOR: "1", CI: "1" } });
+      expect(out).toMatch(/Fixes: penthera fix --plan --repo/);
+      expect(execFileSync(process.execPath, [BIN, "--repo", ".", "--brief"], { cwd: dir, encoding: "utf-8", env: { ...process.env, HOME: dir, NO_COLOR: "1", CI: "1" } })).toContain("Plans a fix for each problem it can.");
+      expect(out).not.toMatch(/fix(?:es)? planned for/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

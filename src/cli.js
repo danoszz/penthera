@@ -244,14 +244,29 @@ function initArgs(argv) {
   return null;
 }
 
-/** How many of the scan's problems a fix recipe matches. It never fails a scan: without it the report is still complete. */
+/** Above this many problems the scan names `penthera fix` without counting: each problem's plan reads the repo. */
+const FIX_LINE_MAX_PROBLEMS = 50;
+
+/**
+ * The scan's fix line: the fixes `penthera fix --plan` would plan for this
+ * run's problems, counted the way the plan counts them ("5 fixes planned for 8
+ * problems"). It plans, so a finding a recipe matches but cannot change (a
+ * secret in a .env file, cookie options in a variable) and likely noise never
+ * count as fixable. It never fails a scan: without it the report is still complete.
+ */
 async function fixLine(repo, findings) {
+  const command = `penthera fix --plan --repo ${repo}`;
   try {
-    const { fixSummary } = await import("../lib/fix/index.js");
+    const { planFixes } = await import("../lib/fix/index.js");
     const { isProblem } = await import("./report/counts.js");
-    return { count: fixSummary(findings.filter((f) => isProblem(f))), command: `penthera fix --plan --repo ${repo}` };
+    const { planCounts } = await import("./cli/fix.js");
+    const problems = findings.filter((f) => isProblem(f));
+    if (problems.length > FIX_LINE_MAX_PROBLEMS) return { command };
+    const { plans } = await planFixes(repo, problems);
+    const { fixes, covered } = planCounts(findings, plans);
+    return { fixes, covered, problems: problems.length, command };
   } catch {
-    return null;
+    return { command };
   }
 }
 

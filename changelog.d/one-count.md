@@ -7,8 +7,11 @@ section: Changed
   findings with the same words: a *problem* is a finding to act on or to check
   first, and one *fix planned* can cover several problems. On the Next.js
   fixture the scan used to say 2 problems while `fix --plan` planned 5 fixes for
-  10 findings; every surface now says 8 problems, and the plan says
-  `5 fixes planned for 8 problems`. Headers read from code are marked
+  10 findings; every surface now says 8 problems, and the scan and the plan
+  both say `5 fixes planned for 8 problems`. The scan's fix line counts the
+  fixes the plan really makes: likely noise, and findings a recipe matches but
+  cannot change (a secret in a `.env` file), no longer show as fixable after
+  you fixed the rest. Headers read from code are marked
   `potential`, since a host or CDN may still add them. The new findings are
   medium or lower, so no exit code changes.
 - **The fix planner's checks are bounded.** Now that every scan runs them, each

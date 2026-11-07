@@ -84,10 +84,11 @@ describe("the next step's wording", () => {
   it("says the plan changes nothing on its own, and no longer claims checks the scan lacks", async () => {
     const { buildBrief } = await import("../src/report/brief.js");
     // The scan runs the fix planner's checks itself now (src/report/counts.js), so "also checks" would be false.
-    const b = buildBrief({ mode: "repo", findings: [] }, { fixes: { count: 0, command: "penthera fix --plan --repo ." } });
-    expect(b.next[0].why).toMatch(/^It shows each diff and changes nothing until you approve one/);
+    const b = buildBrief({ mode: "repo", findings: [] }, { fixes: { command: "penthera fix --plan --repo ." } });
+    // Not counted (over 50 problems): a short first sentence, so the first screen's line stays under 100 columns.
+    expect(b.next[0].why).toMatch(/^Plans a fix for each problem it can\. It shows each diff and changes nothing until you approve one/);
     expect(b.next[0].why).not.toMatch(/also checks/);
-    const one = buildBrief({ mode: "repo", findings: [{ title: "Cookie \"sid\" missing Secure", severity: "medium", category: "cookie", file: "a.js" }] }, { fixes: { count: 1, command: "penthera fix --plan --repo ." } });
-    expect(one.next[0].why).toMatch(/^A fix recipe matches 1 of the 1 problem\. /);
+    const one = buildBrief({ mode: "repo", findings: [{ title: "Cookie \"sid\" missing Secure", severity: "medium", category: "cookie", file: "a.js" }] }, { fixes: { fixes: 1, covered: 1, command: "penthera fix --plan --repo ." } });
+    expect(one.next[0].why).toMatch(/^1 fix planned for 1 problem\. It shows each diff/);
   });
 });

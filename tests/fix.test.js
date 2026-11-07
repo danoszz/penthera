@@ -371,7 +371,7 @@ describe("the scan's fix line", () => {
       } catch (e) { return { status: e.status, out: e.stdout }; }
     };
     const text = scan();
-    expect(text.out).toMatch(/A fix recipe matches \d+ of the \d+ problems?:/);
+    expect(text.out).toMatch(/\d+ fix(?:es)? planned for (?:\d+ of )?\d+ problems?:/);
     expect(text.out).toContain("penthera fix --plan --repo");
     const json = scan("--json");
     expect(json.status).toBe(text.status);

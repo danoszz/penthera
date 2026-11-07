@@ -64,12 +64,16 @@ async function gatherFindings(repo, input) {
 
 /**
  * The plan's counts in the words every surface uses (src/report/counts.js):
- * problems in the run, how many of them a plan fixes, and the plans.
+ * problems in the run, how many of them a plan fixes, and the fixes planned.
+ * A fix counts only when it covers a problem; `other` counts plans that touch
+ * only likely noise or info (a cookie set in a test file), so a fix for noise
+ * never shows as a fix still to do. The repo scan's fix line uses this too.
  */
 export function planCounts(findings, plans) {
   const problems = new Set(findings.filter((f) => isProblem(f)).map(findingKey));
   const covered = new Set(plans.flatMap((p) => p.findings.map(findingKey)).filter((k) => problems.has(k)));
-  return { problems: problems.size, covered: covered.size, fixes: plans.length, findings: findings.length };
+  const fixes = plans.filter((p) => p.findings.some((f) => problems.has(findingKey(f)))).length;
+  return { problems: problems.size, covered: covered.size, fixes, other: plans.length - fixes, findings: findings.length };
 }
 
 const NAMED = { "\0": "\\0", "\b": "\\b", "\t": "\\t", "\n": "\\n", "\v": "\\v", "\f": "\\f", "\r": "\\r", "\x1b": "\\e" };
@@ -174,7 +178,8 @@ export async function runFix(argv) {
       process.exit(0);
     }
     process.stdout.write(`\n  ${bold("penthera fix")} ${dim(repo)}\n`);
-    process.stdout.write(`  ${fixesText(counts.fixes, counts.covered, counts.problems)}${gathered.fresh ? " (fresh repo scan)" : ` (from ${opts.input})`}\n`);
+    const other = counts.other ? `, and ${counts.other} for likely noise or info` : "";
+    process.stdout.write(`  ${fixesText(counts.fixes, counts.covered, counts.problems)}${other}${gathered.fresh ? " (fresh repo scan)" : ` (from ${opts.input})`}\n`);
     for (const p of plans) printPlan(redactPlan(p));
     for (const r of refused) process.stdout.write(`\n  ${yellow("Refused")} the model's fix for ${visible(r.finding.title)}: ${visible(r.reason)}\n`);
     const manual = unmatched.filter((f) => isProblem(f));

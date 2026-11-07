@@ -63,7 +63,7 @@ SARIF reports, `penthera fix` and the fix loop.
 |---|---|
 | finding | Anything a rule reported, info and likely noise included |
 | problem | A finding to act on or to check first. Info, likely noise and suppressed findings are not problems |
-| fix planned | One diff from `penthera fix`. One fix can cover several problems |
+| fix planned | One diff from `penthera fix` that fixes at least one problem. One fix can cover several problems. A finding a recipe matches but cannot change is not fixable |
 
 The verdict line reads `8 problems (4 to act on, 4 to check first), 0 likely
 noise`. SARIF carries the same counts in `runs[0].properties.counts`.
