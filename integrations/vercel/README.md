@@ -722,6 +722,11 @@ These stay unproven until Daan's live run:
   the way it refused the git-provider check.
 - The workflow itself on a real runner: the dispatch payload, the OIDC token
   request, `jq` and `curl`.
+- That the check holds a production deployment off the domain with
+  `blocks: "deployment-alias"`, and that with automatic production aliasing
+  off the dispatch still comes and the scan still runs. Vercel's docs tie
+  `vercel.deployment.ready` to the deployment, not to aliasing, and the setup
+  pages and the guide say so.
 
 ## Legal
 
