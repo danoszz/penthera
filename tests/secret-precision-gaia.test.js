@@ -123,6 +123,26 @@ describe("a test account's password goes to Check first, still high", () => {
     }
   });
 
+  // The re-check of 72a23e3 (Low): text that only looks like a field.
+  it("a field inside a block comment, a template, after a regex quote, or inside a string does not count", () => {
+    const P = ["Kx9!", "mQ2#vL7pR"].join("");
+    const line = `const password = "${P}";`;
+    for (const text of [
+      `/*\n  email: "admin@example.com"\n*/\n${line}\n`,
+      `/**\n * email: "admin@example.com"\n */\n${line}\n`,
+      `  email: "admin@example.com"\n*/\n${line}\n`, // the window starts inside a comment
+      `const s = \`\n  email: "admin@example.com"\n\`;\n${line}\n`,
+      `const re = /"/; // email: "admin@example.com"\n${line}\n`,
+      `const note = "email: 'admin@example.com'";\n${line}\n`,
+    ]) {
+      const [f] = pw(repo({ "tests/login.test.js": text }));
+      expect(f.confidence, text).toBeUndefined();
+    }
+    // A real field over several lines still counts.
+    const [ok] = pw(repo({ "tests/login.test.js": `const u = {\n  email: "qa@example.com",\n  password: "${P}",\n};\n` }));
+    expect(ok.confidence).toBe("potential");
+  });
+
   it("near misses stay in Act on", () => {
     const cases = {
       "a real domain beside it": { "scripts/verify-login.js": script("ops@gaia.computer") },
