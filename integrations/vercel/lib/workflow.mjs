@@ -39,7 +39,10 @@ export function checkBody(configurationId, integrationId) {
   return {
     name: CHECK_LABEL,
     requires: "deployment-url",
-    blocks: "deployment-promotion",
+    // Live Vercel answers "deployment-promotion" with 400 not_implemented (7 Nov 2026): only
+    // "deployment-alias" and "none" work. "deployment-alias" holds the production domain on the
+    // last good deployment until the check passes.
+    blocks: "deployment-alias",
     targets: ["production"],
     isRerequestable: false,
     timeout: CHECK_TIMEOUT_SECONDS,

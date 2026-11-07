@@ -121,6 +121,10 @@ async function journey({ entry, origin, autoRuns = true, publicView = false }) {
     const to = new URL(start.headers.get("location"));
     expect(to.origin + to.pathname).toBe("https://vercel.com/integrations/penthera/new");
     installUrl += `&state=${to.searchParams.get("state")}&source=external`;
+  } else if (entry === "listing") {
+    // 1. The listing link vercel.com/integrations/penthera/new, opened directly: Vercel comes back
+    //    with source=external and no state (live, 7 Nov 2026).
+    installUrl += "&source=external";
   } else {
     installUrl += "&source=marketplace";
   }
@@ -142,7 +146,7 @@ async function journey({ entry, origin, autoRuns = true, publicView = false }) {
 
   const [check] = h.vercel.checks.prj_gaiaweb;
   expect(check).toMatchObject({
-    name: "Penthera", requires: "deployment-url", blocks: "deployment-promotion", targets: ["production"], timeout: CHECK_TIMEOUT_SECONDS,
+    name: "Penthera", requires: "deployment-url", blocks: "deployment-alias", targets: ["production"], timeout: CHECK_TIMEOUT_SECONDS,
     source: { kind: "integration", integrationId: "oac_PentheraIntegration", integrationConfigurationId: CFG },
   });
 
@@ -181,6 +185,7 @@ describe("Daan's install journey against Vercel's API spec", () => {
     ["marketplace", BASE, true, false],
     ["external", "null", true, false],
     ["external", BASE, false, false],
+    ["listing", "null", true, false],
     ["marketplace", "null", true, true],
   ]) {
     it(`from the ${entry}, Turn on with Origin ${origin === "null" ? "null" : "set"}, Vercel ${autoRuns ? "making" : "not making"} the run${publicView ? ", deployments in Vercel's public view" : ""}`, async () => {
@@ -202,10 +207,16 @@ describe("the contract check catches what live Vercel refused", () => {
   const url = (p, q = "teamId=team_x") => new URL(`https://api.vercel.com${p}?${q}`);
   const json = (body) => ({ headers: { Authorization: "Bearer t", "Content-Type": "application/json" }, body: JSON.stringify(body) });
   const create = (body) => checkRequest("POST", url("/v2/projects/prj_a/checks"), json(body)).problems;
-  const good = { name: "Penthera", requires: "deployment-url", blocks: "deployment-promotion", targets: ["production"], isRerequestable: false, timeout: 1200, source: { kind: "integration", integrationId: "oac_x", integrationConfigurationId: "icfg_x" } };
+  const good = { name: "Penthera", requires: "deployment-url", blocks: "deployment-alias", targets: ["production"], isRerequestable: false, timeout: 1200, source: { kind: "integration", integrationId: "oac_x", integrationConfigurationId: "icfg_x" } };
 
   it("passes the body the server sends", () => {
     expect(create(good)).toEqual([]);
+  });
+
+  it("refuses blocks: deployment-promotion, as live Vercel did on 7 Nov, though the spec lists it", () => {
+    expect(SPEC.paths["/v2/projects/{projectIdOrName}/checks"].post.requestBody.properties.blocks.enum).toContain("deployment-promotion");
+    expect(create({ ...good, blocks: "deployment-promotion" }).join()).toMatch(/\/blocks: "deployment-promotion" is in the spec but live Vercel refuses it/);
+    expect(create({ ...good, blocks: "none" })).toEqual([]);
   });
 
   it("names the field for a wrong enum, a wrong type, a missing field, an unknown source field and an unknown kind", () => {

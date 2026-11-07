@@ -16,6 +16,9 @@
  * The OAuth code exchange is not in the OpenAPI spec; it is checked by hand against Vercel's
  * docs (form-encoded client_id, client_secret, code, redirect_uri).
  *
+ * The spec can promise more than live Vercel serves. LIVE_LIMITS holds what a live answer
+ * refused although the spec allows it, each with the date and the answer seen.
+ *
  * Every mismatch is pushed to `violations` as "<METHOD> <path>: <field>: <problem>", and the
  * request is answered 400, as Vercel would.
  */
@@ -66,6 +69,14 @@ const fmt = (errors, base = "") => (errors ?? []).map((e) => `${base}${e.instanc
 /**
  * Checks one request against the contract. Returns { op, params, body, problems }.
  */
+/** [method, path, field, allowed values, Vercel's live answer]: refusals the spec does not show. */
+export const LIVE_LIMITS = [
+  // 7 Nov 2026, POST /setup on Daan's team: 400 not_implemented, "Only deployment-alias and none
+  // are currently supported for blocks". The spec's enum also lists build-start,
+  // deployment-start and deployment-promotion.
+  ["POST", "/v2/projects/{projectIdOrName}/checks", "blocks", ["deployment-alias", "none"], "400 not_implemented: Only deployment-alias and none are currently supported for blocks"],
+];
+
 export function checkRequest(method, url, init = {}) {
   const problems = [];
   const match = OPS.find((o) => o.method === method && o.re.test(url.pathname));
@@ -111,6 +122,11 @@ export function checkRequest(method, url, init = {}) {
       if (!compile(whole)(bodyRest)) problems.push(...fmt(compile(whole).errors));
     } else if (!compile(whole)(body)) {
       problems.push(...fmt(compile(whole).errors));
+    }
+  }
+  for (const [m, path, field, allowed, answer] of LIVE_LIMITS) {
+    if (m === method && path === match.path && body?.[field] !== undefined && !allowed.includes(body[field])) {
+      problems.push(`/${field}: ${JSON.stringify(body[field])} is in the spec but live Vercel refuses it (${answer})`);
     }
   }
   return { op: match, params, body: body ?? null, problems };

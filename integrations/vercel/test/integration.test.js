@@ -238,12 +238,11 @@ describe("state check (CSRF)", () => {
     expect(res.headers.getSetCookie().some((c) => c.startsWith("__Host-pv_state=;") && c.includes("Max-Age=0"))).toBe(true);
   });
 
-  it("refuses a missing, wrong or cookie-less state before exchanging the code", async () => {
+  it("refuses a wrong or cookie-less state before exchanging the code", async () => {
     const { app, vercel, store } = setup();
     const ext = (s) => installUrl(s).replace("source=marketplace", "source=external");
     expect((await app.install(get(ext("&state=abc"), { cookie: "__Host-pv_state=xyz" }))).status).toBe(403);
     expect((await app.install(get(ext("&state=abc")))).status).toBe(403);
-    expect((await app.install(get(ext("")))).status).toBe(403);
     expect(vercel.calls).toHaveLength(0);
     expect(store.dump()).toHaveLength(0);
   });
@@ -267,6 +266,30 @@ describe("the install window", () => {
     }
   });
 
+  it("an install from the listing link (source=external, no state) goes through like a Marketplace one", async () => {
+    // Daan's live install on 7 Nov from vercel.com/integrations/penthera/new came back like this.
+    for (const cookie of [undefined, "__Host-pv_state=left-from-an-earlier-start"]) {
+      const { app, store, vercel } = setup();
+      const res = await app.install(get(ext(""), cookie ? { cookie } : {}));
+      expect(res.status, String(cookie)).toBe(303);
+      expect(res.headers.get("location")).toBe("/setup");
+      expect(res.headers.getSetCookie().some((c) => c.startsWith("__Host-pv_session="))).toBe(true);
+      expect(clearsState(res)).toBe(!!cookie);
+      expect(vercel.calls.some((c) => c.url.pathname === "/v2/oauth/access_token")).toBe(true);
+      expect(store.dump()).toHaveLength(1);
+    }
+  });
+
+  it("a state-less listing install gets the same exchange checks as a Marketplace one", async () => {
+    for (const source of ["marketplace", "external"]) {
+      const { app, store } = setup();
+      const res = await app.install(get(installUrl().replace("source=marketplace", `source=${source}`).replace(`configurationId=${CFG}`, "configurationId=icfg_Other999")));
+      expect(res.status, source).toBe(400);
+      expect(store.dump()).toHaveLength(0);
+      expect(res.headers.getSetCookie().some((c) => c.startsWith("__Host-pv_session="))).toBe(false);
+    }
+  });
+
   it("the leftover-cookie path is the no-cookie path: same exchange, same checks, same refusals", async () => {
     // A mismatched exchange is refused the same way with or without the cookie.
     for (const cookie of [undefined, "__Host-pv_state=old"]) {
@@ -287,8 +310,6 @@ describe("the install window", () => {
     const cases = [
       ["state_cookie_missing", ext("&state=abc"), {}],
       ["state_mismatch", ext("&state=abc"), { cookie: "__Host-pv_state=xyz" }],
-      ["external_without_state", ext(""), {}],
-      ["external_without_state", ext(""), { cookie: "__Host-pv_state=xyz" }],
       // A state on a Marketplace link is still checked against the cookie.
       ["state_cookie_missing", installUrl("&state=abc"), {}],
       ["state_mismatch", installUrl("&state=abc"), { cookie: "__Host-pv_state=xyz" }],
@@ -308,7 +329,7 @@ describe("the install window", () => {
 
   it("each refusal page says nothing was added and what to do in Vercel", async () => {
     const { app } = setup();
-    for (const url of [ext("&state=abc"), ext("")]) {
+    for (const url of [ext("&state=abc"), installUrl("&state=abc")]) {
       const text = await (await app.install(get(url))).text();
       expect(text).toContain("added nothing to your projects");
       expect(text).toContain("Settings, Integrations");
@@ -636,7 +657,7 @@ describe("workflow and repo rules", () => {
 
   it("names the Vercel check after the status the workflow reports", () => {
     expect(checkName("shop")).toBe("Penthera on Vercel | scan (shop - production)");
-    expect(checkBody(CFG, "oac_x")).toMatchObject({ blocks: "deployment-promotion", targets: ["production"], isRerequestable: false, source: { kind: "integration", integrationId: "oac_x", integrationConfigurationId: CFG } });
+    expect(checkBody(CFG, "oac_x")).toMatchObject({ blocks: "deployment-alias", targets: ["production"], isRerequestable: false, source: { kind: "integration", integrationId: "oac_x", integrationConfigurationId: CFG } });
   });
 
   it("counts our integration check and the old git-provider check as ours, and nobody else's", () => {
