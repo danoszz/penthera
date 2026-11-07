@@ -1,6 +1,6 @@
 {
   "name": "penthera",
-  "version": "2.3.0",
+  "version": "2.3.2",
   "description": "Offline cyber security agent for your apps and AI coding tools. Open R&D: measured in public, improved every release.",
   "author": {
     "name": "Daan van der Zwaag",
@@ -8,6 +8,9 @@
   },
   "homepage": "https://penthera.org",
   "repository": "https://github.com/danoszz/penthera",
+  "documentationUrl": "https://docs.penthera.org",
+  "supportUrl": "https://github.com/danoszz/penthera/issues",
+  "privacyPolicyUrl": "https://docs.penthera.org/privacy",
   "license": "MIT",
   "keywords": [
     "security",
@@ -15,11 +18,9 @@
     "pentest",
     "owasp",
     "sarif",
-    "secrets",
     "cli",
     "vibecoding",
     "supply-chain",
-    "mcp",
     "ai-security",
     "nis2"
   ]

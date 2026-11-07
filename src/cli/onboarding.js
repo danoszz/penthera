@@ -13,6 +13,7 @@ import { createGit } from "../agent/git.js";
 import { existsSync, mkdirSync, writeFileSync, appendFileSync, lstatSync, realpathSync } from "node:fs";
 import { resolve, join, relative, isAbsolute, sep, dirname } from "node:path";
 import { readFileSync } from "node:fs";
+import { readRepoFile } from "../../lib/fs-safe.js";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
@@ -266,7 +267,7 @@ export async function runScanWizard() {
  * The Action pin, by commit SHA: the newest tagged release (the one before, while a
  * release is prepared). Update after tagging: git rev-parse vX.Y.Z^{commit}.
  */
-export const ACTION_PIN = Object.freeze({ tag: "v2.2.0", sha: "a9bbcab41d7c016d6cd333c7e50b2cf76f0b7a09" });
+export const ACTION_PIN = Object.freeze({ tag: "v2.3.2", sha: "f7dee0f4adef277e781cc0bd9c3902a2e6d1f4c4" });
 /** The agents workflow runs this version with npx. */
 const RUNNING_VERSION = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf-8")).version;
 
@@ -455,7 +456,7 @@ export function agentsWorkflowYaml(pin = null) {
 /** Whether a Penthera workflow under .github/workflows already runs the agents check. */
 function hasAgentsWorkflow(root, workflows) {
   return workflows.some((f) => {
-    try { return /penthera@\S+\s+agents\b|penthera\.js\s+agents\b|mode:\s*["']?agents\b/.test(readFileSync(join(root, f), "utf-8")); } catch { return false; }
+    try { return /penthera@\S+\s+agents\b|penthera\.js\s+agents\b|mode:\s*["']?agents\b/.test(readRepoFile(join(root, f), { root, maxBytes: 1024 * 1024 })); } catch { return false; }
   });
 }
 

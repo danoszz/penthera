@@ -23,10 +23,10 @@ function folderDiff(a, b) {
 }
 
 describe("the plugin's copy of the skill", () => {
-  it("is the same as skills/penthera, file for file", () => {
+  it("is the same as skills/penthera, file for file, except scripts/ (the directory takes no code files)", () => {
     const src = join(ROOT, "skills", "penthera");
     expect(walk(src).length).toBeGreaterThan(5);
-    expect(folderDiff(src, join(ROOT, "plugin", "skills", "penthera"))).toEqual([]);
+    expect(folderDiff(src, join(ROOT, "plugin", "skills", "penthera")).filter((f) => !f.startsWith("scripts/"))).toEqual([]);
   });
 
   it("names a changed, a missing and an extra file", () => {

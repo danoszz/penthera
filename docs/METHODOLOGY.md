@@ -32,7 +32,7 @@ software. The metadata are in [CITATION.cff](https://github.com/danoszz/penthera
 renders as "Cite this repository".
 
 ```text
-van der Zwaag, D. (2026). Penthera: An offline security scanner for web apps and AI-built code (Version 2.3.0) [Computer software]. https://github.com/danoszz/penthera
+van der Zwaag, D. (2026). Penthera: An offline security scanner for web apps and AI-built code (Version 2.3.2) [Computer software]. https://github.com/danoszz/penthera
 ```
 
 ```bibtex
@@ -40,7 +40,7 @@ van der Zwaag, D. (2026). Penthera: An offline security scanner for web apps and
   author  = {van der Zwaag, Daan},
   title   = {Penthera: An Offline Security Scanner for Web Apps and {AI}-Built Code},
   year    = {2026},
-  version = {2.3.0},
+  version = {2.3.2},
   license = {MIT},
   url     = {https://github.com/danoszz/penthera}
 }
@@ -122,6 +122,155 @@ Microsoft (Kohnfelder & Garg, 1999). Penthera's probes map onto it as follows:
 ## Black-box and white-box: what each can find
 
 Penthera runs two kinds of analysis and reports them together.
+
+### Under the hood
+
+The three diagrams show both suites and the engine as the code runs them
+today. Opt-in items say so. The sections after them give the method and the
+sources.
+
+**Black box: the running app**
+
+```mermaid
+flowchart LR
+    APP["Your running app<br/>penthera URL"]
+
+    subgraph DEF["Default: no attack payloads"]
+        B1["Transport and headers<br/>TLS certificate, ciphers<br/>security headers, CSP<br/>cookie flags, CORS"]
+        B2["Discovery<br/>wordlist routes<br/>OpenAPI spec<br/>hidden parameters<br/>exposed files, templates"]
+        B3["Auth<br/>one invalid login POST<br/>JWT, with --auth-bearer<br/>OAuth redirect<br/>client-side auth<br/>IDOR/BOLA: human review"]
+        B4["Versions and leaks<br/>JS libraries, Retire.js<br/>keys in JS bundles<br/>server version advisories<br/>SPF and DMARC"]
+    end
+
+    subgraph OPT["Opt-in"]
+        B5["No payloads<br/>--recon: crt.sh,<br/>Wayback, OTX<br/>--templates: Nuclei YAML"]
+        G{{"Gate<br/>type the hostname back<br/>or --confirm-target<br/>10 requests a second"}}
+        B6["Active<br/>--deep: SQLi, SSTI,<br/>SSRF, XSS, CMDi,<br/>open redirect,<br/>login burst<br/>--fuzz, --adaptive"]
+    end
+
+    APP --> B1 & B2 & B3 & B4 & B5
+    APP --> G --> B6
+    B1 & B2 & B3 & B4 & B5 & B6 --> F[["Findings"]]
+
+    classDef core fill:#0000ed,stroke:#0000ed,color:#ffffff
+    classDef box fill:#ffffff,stroke:#000000,color:#000000
+    classDef gate fill:#ffffff,stroke:#0000ed,color:#000000,stroke-width:2px
+    class F core
+    class APP,B1,B2,B3,B4,B5,B6 box
+    class G gate
+    style DEF fill:none,stroke:#0000ed,stroke-width:2px
+    style OPT fill:none,stroke:#0000ed,stroke-width:2px,stroke-dasharray:6 4
+```
+
+- The default URL scan sends no attack payloads: `GET` and `OPTIONS`, plus one
+  `POST /api/login` with invalid credentials. `--profile quick` sends no login
+  request. See [Non-destructive by default](#non-destructive-by-default).
+- `--deep`, `--fuzz` and `--adaptive` need a confirmation bound to the
+  hostname, or `--confirm-target <host>` in CI, and run at 10 requests per
+  second unless `--rate` says otherwise.
+- The CLI scans the URL you name. Scan only what you are authorized to test.
+  `penthera mcp` scans only loopback or hosts listed with `--allow-host`, and
+  only passively. Under `--offline` or in MCP, a redirect may move between the
+  apex and `www.` or to a subdomain of the target, never to a sibling or a
+  parent host.
+- IDOR/BOLA results are `needs-human-review`. Stored and second-order flaws are
+  not tested.
+
+**White box: code and config**
+
+```mermaid
+flowchart LR
+    REPO["Your code<br/>and config"]
+
+    subgraph RS["penthera --repo ."]
+        W1["Secrets<br/>provider key formats<br/>.gitignore aware<br/>code, config, HCL,<br/>notebooks"]
+        W2["Routes and boundaries<br/>Next.js, Express,<br/>Hono, Fastify<br/>auth per route<br/>risky patterns"]
+        W3["Code sinks, taint-lite<br/>eval, new Function,<br/>node:vm, shell exec<br/>with request data<br/>one file, no call graph"]
+        W4["Library mode<br/>exported parameters<br/>count as untrusted"]
+        W5["CI and runtimes<br/>Actions: pwn request,<br/>script injection,<br/>unpinned actions<br/>runtime pin advisories"]
+    end
+
+    subgraph OWN["Their own commands"]
+        W6["penthera deps<br/>npm, requirements,<br/>poetry, uv, Pipfile,<br/>pdm, .venv<br/>capabilities, IOC packs<br/>typosquats, licenses<br/>upgrade diff"]
+        W7["penthera agents<br/>MCP servers, hooks<br/>skills, plugins<br/>permissions, rule files<br/>hidden content<br/>penthera.lock pins"]
+        W8["Before code lands<br/>penthera install<br/>penthera hook"]
+    end
+
+    REPO --> W1 & W2 & W3 & W4 & W5 & W6 & W7 & W8
+    W1 & W2 & W3 & W4 & W5 & W6 & W7 & W8 --> F[["Findings"]]
+
+    classDef core fill:#0000ed,stroke:#0000ed,color:#ffffff
+    classDef box fill:#ffffff,stroke:#000000,color:#000000
+    class F core
+    class REPO,W1,W2,W3,W4,W5,W6,W7,W8 box
+    style RS fill:none,stroke:#0000ed,stroke-width:2px
+    style OWN fill:none,stroke:#0000ed,stroke-width:2px
+```
+
+- Taint-lite works within one file, with no call graph, scopes or sanitizers.
+  `likely` means "derived from the request", not "exploitable".
+- Library mode is on for a publishable `package.json`. `--no-library` scans it
+  as an app.
+- `penthera deps` reads package code statically. A capability is what code can
+  do, not proof that it is malicious. Known CVEs in dependencies come from
+  osv-scanner or Trivy under `--giants`, not from Penthera's own rules.
+- `penthera agents` does not start MCP servers, so tool descriptions are not
+  checked.
+
+**Engine and outputs**
+
+```mermaid
+flowchart LR
+    subgraph ENG["Engine: rules decide"]
+        R["Signed rule packs<br/>core, advisories, IOC<br/>SSH signature, SHA-256<br/>ship in the release"]
+        GI["--giants, opt-in<br/>gitleaks, TruffleHog,<br/>Semgrep, osv-scanner,<br/>Trivy, Checkov,<br/>nuclei, ZAP baseline<br/>if installed, no shell"]
+        AI["--ai, opt-in<br/>an Ollama model proposes<br/>asks consent every run"]
+        OFF["Offline by design<br/>no telemetry<br/>no rule downloads"]
+    end
+
+    R --> FD[["Finding<br/>severity<br/>confidence: confirmed,<br/>likely, potential,<br/>needs-human-review<br/>file:line or URL"]]
+    GI --> FD
+    AI -. "a rule must confirm" .-> FD
+    FD --> EX{"Exit code<br/>0 none critical or high<br/>1 critical or high<br/>2 incomplete or refused"}
+
+    subgraph OUT["Outputs and integrations"]
+        O1["Reports<br/>terminal, JSON,<br/>Markdown, SARIF<br/>audience reports<br/>agent brief"]
+        O2["penthera ui<br/>dashboard on 127.0.0.1"]
+        O3["penthera mcp<br/>six read-only tools"]
+        O4["GitHub Action<br/>PR capability diff<br/>SARIF upload"]
+        O5["Vercel Deployment Check<br/>relays the Action result"]
+        O6["Evidence bundle<br/>SHA-256 manifest<br/>SSH signature<br/>SBOM, AI-BOM<br/>NIS2 and CRA drafts"]
+    end
+
+    EX --> O1 & O2 & O3 & O4 & O5 & O6
+
+    classDef core fill:#0000ed,stroke:#0000ed,color:#ffffff
+    classDef box fill:#ffffff,stroke:#000000,color:#000000
+    class FD core
+    class R,GI,AI,OFF,EX,O1,O2,O3,O4,O5,O6 box
+    style ENG fill:none,stroke:#0000ed,stroke-width:2px
+    style OUT fill:none,stroke:#0000ed,stroke-width:2px
+```
+
+- Rule packs are data (regexes, string lists, IOC lists), never code. Loading
+  checks the SSH signature, the SHA-256 of every file, the schema and a ReDoS
+  guard. A pack that fails is refused whole ([rule packs](rule-packs.md)).
+- Exit code `2` means the scan is incomplete: a tool the `--giants` policy
+  requires did not run, an input was refused (a lockfile over the size cap), or
+  an active scan had no confirmation.
+- `--giants` runs only tools you installed, from `PATH` outside the scanned
+  repository, with no shell. Offline tools run with the network denied where
+  macOS `sandbox-exec` or Linux `bwrap` is available. CodeQL runs only with
+  `--with codeql` ([giants](commands/giants.md)).
+- `--ai` proposals that no rule confirms are labelled "model-proposed,
+  unverified" and never change the exit code. Whether AI mode finds more than
+  the rules alone is not measured yet ([AI mode](ai-mode.md)).
+- Network use besides the target: `--recon` sources, DNS for SPF and DMARC, and
+  the Retire.js database, which `--offline` replaces with the snapshot vendored
+  in the release. See [Offline and no telemetry](#offline-and-no-telemetry).
+- The Vercel Deployment Check server does no scanning. It relays the result of
+  the workflow in your own GitHub Actions
+  ([integration server](https://github.com/danoszz/penthera/blob/main/integrations/vercel/README.md)).
 
 ### Black-box (URL scan)
 
@@ -627,8 +776,15 @@ are welcome (see [MANIFESTO.md](MANIFESTO.md)).
 - **Logic and authorization.** No business logic testing. IDOR/BOLA findings are
   heuristics that need a human to confirm them.
 - **Secrets.** Detection is pattern-based. In Markdown and other documentation
-  files, and in translation files, only the fixed-shape rules run, so unprefixed
-  secrets and secrets in notes are missed.
+  files, in translation files (`.json`, `.yml`, `.yaml`, `.properties` and
+  `.po` in a folder such as `locales/` or `i18n/`), and in `build/`, `dist/`,
+  `coverage/`, `reports/` and `vendor/` at the repo root, only the fixed-shape
+  rules run, so unprefixed secrets and secrets in notes are missed there.
+  `.env`, `*.env` and `*.env.*` files and shell scripts (`.sh`, `.bash`,
+  `.zsh`) get every rule wherever they are. A root folder of that kind is
+  skipped when git ignores it. Below the root those
+  names get every rule. Dependencies (`node_modules`, virtualenvs) are never
+  read.
 - **Dependencies (`deps`, `install`).**
   - Analysis is static. Behavior that is only decided at run time (code
     fetched or decrypted on execution, heavily obfuscated or minified bundles,

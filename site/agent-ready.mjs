@@ -287,7 +287,7 @@ Reach for it when the user wants one of these, on something they own or are auth
   curl -s ${origin}/api/check -H 'content-type: application/json' -d '{"url":"example.com","consent":true}'
   \`\`\`
 
-- Call it as tools from an agent: the MCP server, \`npx -y penthera@${version} mcp\`. It runs on the user's machine over stdio. Manifest: [${origin}/server.json](${origin}/server.json). Its tools are read-only, read inside the project, apply no fixes and run no shell. \`scan_url\` is passive and reaches loopback or hosts the user lists with \`--allow-host\`. A redirect may also move within the target's registrable domain.
+- Call it as tools from an agent: the MCP server, \`npx -y penthera@${version} mcp\`. It runs on the user's machine over stdio. Manifest: [${origin}/server.json](${origin}/server.json). Its tools are read-only, read inside the project, apply no fixes and run no shell. \`scan_url\` is passive and reaches loopback or hosts the user lists with \`--allow-host\`. A redirect may also move between the apex and \`www.\`, or to a subdomain of the target, never to a sibling or a parent host.
 - Teach a coding agent to run scans and explain them: the Agent Skill, \`npx skills add danoszz/penthera\`.
 
 What it does not do:

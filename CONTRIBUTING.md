@@ -350,8 +350,12 @@ live once a maintainer approves it with 2FA. **Do not run `npm publish` locally.
    - `.claude-plugin/plugin.json` (`version`)
    - `.claude-plugin/marketplace.json` (`metadata.version`)
    - `plugin/.claude-plugin/plugin.json` (`version`), `plugin/skills/penthera/SKILL.md`
-     (a copy of the skill) and `plugin/.mcp.json` (the pin), plus the Agent Plugins
-     copies `plugin/plugin.json` and `plugin/mcp.json`; a test keeps them equal
+     (a copy of the skill, whose `npx -y penthera@<version>` lines are the
+     plugin's pin), plus the Agent Plugins copy `plugin/plugin.json`; a test keeps
+     them equal. The plugin is skill-only: no `.mcp.json` or `mcp.json` in `plugin/`,
+     because Anthropic's directory refuses local MCP servers from unverified publishers.
+     It also ships only Markdown, text, JSON, YAML and images (plus the licence and
+     readme), so the copy leaves out `skills/penthera/scripts/`; a test checks both
    - `CITATION.cff` (`version`)
    - `docs/METHODOLOGY.md` (the "How to cite" block)
    - `server.json` (`version` and `packages[0].version`) and the pins in
@@ -385,6 +389,13 @@ live once a maintainer approves it with 2FA. **Do not run `npm publish` locally.
 6. Approve the staged version with 2FA: npmjs.com → penthera → Staged Packages →
    Approve, or `npm stage list penthera` and `npm stage approve <stage-id>`.
    Check the file list and provenance before you approve.
+   Once npm serves it as `latest`, two places follow:
+   - **Anthropic's plugin directory follows the `plugin-claude-live` branch.** The
+     `Plugin live` workflow moves that branch to the newest commit on `main`
+     whose plugin skill pins the version npm serves, within the hour or
+     on the next push to `main`, and only forward. Nothing to do by hand.
+   - **The official MCP Registry** needs one publish from `main`:
+     `mcp-publisher login github`, then `mcp-publisher publish`.
 7. After the version is live, update every pin users copy: `penthera@<version>`
    across `README.md`, `AGENTS.md`, `docs/`, `skills/penthera/SKILL.md` and
    `llms-install.md`, the action SHA in `docs/commands/action.md` and

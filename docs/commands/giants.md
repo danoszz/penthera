@@ -116,6 +116,8 @@ Two findings are the same when their keys match:
 The default is **Penthera-first**, as E14's rule kept it. A tool finding
 that matches one of Penthera's is folded into it, and the report says
 "found by Penthera, gitleaks". Penthera's confidence and remediation lead.
+The folded finding keeps the higher of the two severities, so a tool's
+critical is never hidden behind Penthera's medium (since 2.3.2).
 Everything else is merged among the tools (highest severity wins, every source
 kept) and listed in its own section, "Also reported by other tools".
 

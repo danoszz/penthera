@@ -261,7 +261,10 @@ export function createRunManager(deps) {
     const model = models.find((m) => m.name === req.ai.model || m.name === `${req.ai.model}:latest`);
     if (!model) throw new RunError(`Ollama has no model named ${cleanLine(req.ai.model)}.`, 400);
     let allow = null;
-    try { allow = loadPolicy(req.repo).policy.ai?.allow ?? null; } catch (e) { throw new RunError(cleanLine(e.message)); }
+    let loaded;
+    try { loaded = loadPolicy(req.repo); } catch (e) { throw new RunError(cleanLine(e.message)); }
+    if (loaded.warning) throw new RunError(cleanLine(`${loaded.warning.replace(/ The default policy applies\.$/, "")} AI mode does not run until it can be read.`));
+    allow = loaded.policy.ai?.allow ?? null;
     if (allow && allow.length === 0) throw new RunError("penthera.policy.json turns AI mode off for this project.", 403);
     if (model.route === "ollama-cloud" && req.ai.confirmHost !== CLOUD_HOST) {
       throw new RunError(`This model runs on ${CLOUD_HOST}. Type ${CLOUD_HOST} in the AI mode sheet to send your code there.`, 428);

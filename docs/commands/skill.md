@@ -27,7 +27,11 @@ cp -r skills/penthera .cursor/skills/penthera     # Cursor
 cp -r skills/penthera .claude/skills/penthera     # Claude Code
 ```
 
-Or as a plugin, with the skill and the MCP server together. In Claude Code:
+Or as a plugin. The plugin holds only the skill, which runs the pinned CLI; it
+starts no MCP server (Anthropic's plugin directory accepts a server that runs
+on your computer only from verified publishers). To add the MCP server, run
+`claude mcp add penthera -- npx -y penthera@2.3.2 mcp` ([mcp.md](mcp.md#claude-code)).
+In Claude Code:
 
 ```bash
 claude plugin marketplace add danoszz/penthera
@@ -65,9 +69,13 @@ The skill adds an authorization gate: it instructs the agent to refuse targets y
 do not own or are not authorized to test, and the wizard asks you to confirm before
 scanning a remote host. The raw CLI does not check who owns a target. It asks for
 confirmation only before active modes (`--deep`, `--fuzz`, `--adaptive`, `--all`,
-`--profile deep`). You are responsible for every target you pass it. Run preflight
-from your project folder before the first scan. The script is in the skill's own folder:
-`~/.claude/skills/penthera` after `npx skills add -g`, or `skills/penthera` in a checkout.
+`--profile deep`). You are responsible for every target you pass it. Before the
+first scan the agent runs the skill's preflight checks: Node.js 22 or later, a
+working `penthera` command, a `reports/` folder, and an authorized target. They
+are plain steps in SKILL.md, so the skill runs no script of its own. The Claude
+plugin ships Markdown and JSON only, as Anthropic's plugin directory requires. An
+install with `npx skills add`, or a checkout, still has the same checks as a
+script, from your project folder:
 
 ```bash
 bash ~/.claude/skills/penthera/scripts/preflight.sh http://localhost:3000

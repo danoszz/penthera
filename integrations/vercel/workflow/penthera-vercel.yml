@@ -1,0 +1,113 @@
+# Example: Penthera as a Vercel Deployment Check.
+#
+# When Vercel has built a deployment, before it is promoted, this workflow runs
+# Penthera's passive URL scan on it and reports the result:
+#   - to the Penthera integration's check, for production: only the deployment
+#     id, the project id and pass or fail, with a GitHub OIDC token. No findings.
+#   - as a commit status, for a GitHub check added by hand.
+#
+# Commit it as `.github/workflows/penthera-vercel.yml` on the default branch: the
+# dispatch runs only from there, and the relay accepts only this path. Without the
+# integration, add the GitHub check "Penthera on Vercel | scan (<project> -
+# <environment>)" in Project Settings > Deployment Checks.
+#
+# Scan only your own deployments. The job refuses any URL that is not a
+# *.vercel.app deployment URL, and the scan contacts only that host.
+#
+# Deployment Protection: with Vercel Authentication on (Standard Protection, the
+# usual setting), the deployment URL answers 401 to the scanner. The job then fails
+# and says so, instead of passing a scan that read nothing.
+
+name: Penthera on Vercel
+
+on:
+  repository_dispatch:
+    types:
+      - "vercel.deployment.ready"
+
+permissions: {}
+
+jobs:
+  scan:
+    if: github.event.action == 'vercel.deployment.ready'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      actions: read   # the status action reads this job's step results
+      statuses: write # and writes the commit status, for a GitHub check added by hand
+      id-token: write # a GitHub-signed token for vercel.penthera.org, to report pass or fail for one deployment
+    steps:
+      # Sets "pending" on the deployment's commit now, and the job's result at the end.
+      - uses: vercel/repository-dispatch/actions/status@30f760c6640485cd92f8c785ef361382555fb712 # v1
+
+      # The dispatch payload is input: it reaches the shell only through env,
+      # and only a plain *.vercel.app host goes on to the scan.
+      - name: Check the deployment URL
+        id: target
+        env:
+          DEPLOYMENT_URL: ${{ github.event.client_payload.url }}
+        run: |
+          host="${DEPLOYMENT_URL#https://}"
+          host="${host%/}"
+          if ! printf '%s' "$host" | grep -Eq '^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.vercel\.app$'; then
+            echo "::error::Not a Vercel deployment URL, so nothing was scanned: $host"
+            exit 2
+          fi
+          code=$(curl -s -o /dev/null -w '%{http_code}' --max-redirs 0 --max-time 20 "https://$host/" || true)
+          if [ "$code" = "401" ] || [ "$code" = "403" ]; then
+            echo "::error::https://$host answers $code: Deployment Protection is on, so Penthera cannot read the site. Turn it off for this check, or wait for the protection bypass support."
+            exit 2
+          fi
+          echo "url=https://$host" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: 22
+
+      - name: "Penthera: your open-source cyber security agent"
+        id: penthera
+        uses: danoszz/penthera@f7dee0f4adef277e781cc0bd9c3902a2e6d1f4c4 # v2.3.2
+        with:
+          mode: scan
+          url: ${{ steps.target.outputs.url }}
+          offline: "true" # contact only the deployment's host (2.4.0 and later; the default there)
+          fail-on: high   # a high or critical finding fails the check
+          sarif: "false"  # dispatch runs sit on the default branch, not the deployed commit
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always() && steps.penthera.outputs.report-file != ''
+        with:
+          name: penthera-vercel-${{ github.run_id }}
+          path: ${{ steps.penthera.outputs.report-file }}
+
+      # Production only, also after a failed or incomplete scan (then: failed). Sends the two
+      # ids and the result; the token proves which repo, workflow and deployment it is for.
+      - name: Report pass or fail to the Vercel check
+        if: always() && github.event.client_payload.environment == 'production'
+        env:
+          SCAN_OUTCOME: ${{ steps.penthera.outcome }}
+          DEPLOYMENT_ID: ${{ github.event.client_payload.id }}
+          PROJECT_ID: ${{ github.event.client_payload.project.id }}
+          RELAY: https://vercel.penthera.org
+        run: |
+          conclusion=failed
+          if [ "$SCAN_OUTCOME" = "success" ]; then conclusion=succeeded; fi
+          if ! printf '%s' "$DEPLOYMENT_ID" | grep -Eq '^dpl_[A-Za-z0-9]{1,64}$' || ! printf '%s' "$PROJECT_ID" | grep -Eq '^prj_[A-Za-z0-9]{1,64}$'; then
+            echo "::error::The dispatch has no usable deployment or project id, so nothing was reported."
+            exit 1
+          fi
+          token=$(curl -sS --fail --max-time 20 -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=https%3A%2F%2Fvercel.penthera.org%2Freport%2F$DEPLOYMENT_ID" | jq -r '.value // empty')
+          if [ -z "$token" ]; then
+            echo "::error::GitHub gave no OIDC token, so nothing was reported. The job needs id-token: write."
+            exit 1
+          fi
+          echo "::add-mask::$token"
+          body=$(jq -nc --arg d "$DEPLOYMENT_ID" --arg p "$PROJECT_ID" --arg c "$conclusion" '{deploymentId: $d, projectId: $p, conclusion: $c}')
+          code=$(curl -sS -o "$RUNNER_TEMP/penthera-relay.json" -w '%{http_code}' --max-time 30 -X POST "$RELAY/report" \
+            -H "Authorization: Bearer $token" -H "Content-Type: application/json" --data "$body" || echo 000)
+          case "$code" in
+            200) echo "Reported $conclusion to the Vercel check." ;;
+            404) echo "::notice::The Penthera check is not on for this project, so the commit status alone counts." ;;
+            *) echo "::error::The relay answered $code ($(head -c 200 "$RUNNER_TEMP/penthera-relay.json" 2>/dev/null)). The Vercel check stays pending."; exit 1 ;;
+          esac

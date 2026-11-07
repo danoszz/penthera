@@ -48,7 +48,10 @@ export async function preflightAi({ opts, repo, interactive, ask = askOnStderr, 
   }
   let policyAllow = null;
   try {
-    policyAllow = loadPolicy(repo).policy.ai?.allow ?? null;
+    const { policy, warning } = loadPolicy(repo);
+    // The policy can turn AI mode off; one that could not be read is not taken as consent.
+    if (warning) return { exit: 2, message: `${warning.replace(/ The default policy applies\.$/, "")} AI mode does not run until it can be read.` };
+    policyAllow = policy.ai?.allow ?? null;
   } catch (e) {
     return { exit: 2, message: e.message };
   }

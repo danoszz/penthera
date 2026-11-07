@@ -7,7 +7,8 @@ import { mkdtempSync, mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
-import { checkWorkflow, scanWorkflows } from "../lib/whitebox/workflows.js";
+import fc from "fast-check";
+import { checkWorkflow, scanWorkflows, pullRef, exprSpans } from "../lib/whitebox/workflows.js";
 import { cpuMs } from "./fixtures/cpu-time.js";
 
 const rules = (text) => checkWorkflow(text, ".github/workflows/x.yml").map((f) => `${f.templateId}:${f.line}`);
@@ -321,6 +322,97 @@ describe("crafted workflows can't make the check slow", () => {
     expect(found.map((f) => `${f.templateId}:${f.severity}`)).toEqual(["gha-unpinned-action:low"]);
   });
 
+  it("reads pull/<ref>/head in one pass, however many unclosed pull/${{ a line has (Vercel, 5 Nov)", () => {
+    const run = (line) => `on: pull_request_target\njobs:\n  a:\n    steps:\n      - run: ${line}\n`;
+    expect(timed(run("git fetch " + "pull/${{ ".repeat(25000)))).toBeLessThan(2000);
+    expect(timed(run("git fetch " + "pull/x".repeat(40000)))).toBeLessThan(2000);
+    expect(ids(run("git fetch origin pull/123/head:pr && git checkout pr"))).toEqual(["gha-pwn-request:high"]);
+    expect(ids(run("git fetch origin pull/${{ github.event.number }}/merge"))).toEqual(["gha-pwn-request:high"]);
+    expect(ids(run("git fetch origin pull/${{ x }} pull/${{ github.event.number }}/head"))).toEqual(["gha-pwn-request:high"]);
+    expect(ids(run("git log --grep pull/123/headline"))).toEqual([]);
+    expect(ids(run("git fetch origin mypull/123/head"))).toEqual([]);
+  });
+
+  it("a '}}' inside a string doesn't end a pull/ expression early (Vercel, 5 Nov)", () => {
+    const run = (line) => `on: pull_request_target\njobs:\n  a:\n    steps:\n      - run: ${line}\n`;
+    expect(ids(run("git fetch origin pull/${{ github.event.number||'}}' }}/head:pr && git checkout pr"))).toEqual(["gha-pwn-request:high"]);
+    expect(ids(run("git fetch origin pull/${{ format('{0}}}', github.event.number) }}/merge"))).toEqual(["gha-pwn-request:high"]);
+  });
+
+  it("reads expressions across lines, \\ continuations and expressions in a row (review, 5 Nov)", () => {
+    const run = (body) => `on: pull_request_target\njobs:\n  a:\n    steps:\n      - run: |\n${body.split("\n").map((x) => "          " + x).join("\n")}\n`;
+    expect(ids(run("echo ${{ contains('a\n${{ ', 'z') }} && git fetch origin pull/${{ github.event.number }}/head && make"))).toEqual(["gha-pwn-request:high"]);
+    expect(ids(run("git fetch origin \\\npull/${{ github.event.number }}/head"))).toEqual(["gha-pwn-request:high"]);
+    expect(ids(run("git fetch origin pull/${{ github.event.number }}${{ '' }}/head"))).toEqual(["gha-pwn-request:high"]);
+    expect(ids(run("echo pull/1/head"))).toEqual([]);
+  });
+
+  it("reads each script line's pull/ once, with many git lines and alias reuse (Vercel, 5 Nov)", () => {
+    const body = "git status\n".repeat(11000) + "echo pull/1/head\n";
+    const one = `on: pull_request_target\njobs:\n  a:\n    steps:\n      - run: |\n${body.split("\n").map((x) => "          " + x).join("\n")}\n`;
+    expect(one.length).toBeLessThan(256 * 1024);
+    expect(timed(one)).toBeLessThan(2000);
+    // Near-matches defeat the fast string search; aliases make 90 jobs reuse the
+    // script. Over 2 minutes on the code before this fix.
+    const near = ("git pullpullpullpullpullpull\n").repeat(7000).split("\n").map((x) => "      " + x).join("\n");
+    const reused = `on: pull_request_target\ndefs:\n  s: &s\n    run: |\n${near}\njobs:\n${Array.from({ length: 90 }, (_, i) => `  j${i}:\n    steps: [*s]\n`).join("")}`;
+    expect(reused.length).toBeLessThan(256 * 1024);
+    expect(timed(reused)).toBeLessThan(2000);
+  });
+
+  it("evaluates a job or step that aliases reuse once, on any trigger (review, 5 Nov)", () => {
+    const script = "echo ${{ github.sha }}\n".repeat(3000).split("\n").map((x) => "      " + x).join("\n");
+    for (const on of ["push", "pull_request_target"]) {
+      const y = `on: ${on}\ndefs:\n  s: &S\n    run: |\n${script}\njobs:\n  j0: &J\n    steps: [${Array(50).fill("*S").join(", ")}]\n${Array.from({ length: 48 }, (_, i) => `  j${i + 1}: *J\n`).join("")}`;
+      expect(y.length).toBeLessThan(256 * 1024);
+      expect(timed(y)).toBeLessThan(2000);
+    }
+  });
+
+  it("reads env scopes as a chain, not a copy per step", () => {
+    const n = 11000;
+    const y = `on: pull_request_target\nenv:\n${Array.from({ length: n }, (_, i) => `  V${i}: x\n`).join("")}jobs:\n  a:\n    steps:\n${"      - {}\n".repeat(n)}`;
+    expect(y.length).toBeLessThan(256 * 1024);
+    expect(timed(y)).toBeLessThan(2000);
+  });
+
+  it("finds a PR fetch behind git options, a shell variable or a split expression", () => {
+    const run = (body, env = "") => `on: pull_request_target\n${env}jobs:\n  a:\n    steps:\n      - run: |\n${body.split("\n").map((x) => "          " + x).join("\n")}\n`;
+    expect(ids(run("git -C . fetch origin ${{ github.event.pull_request.head.sha }} && npm test"))).toEqual(["gha-pwn-request:high"]);
+    expect(ids(run("git -c http.extraheader=x fetch origin ${{ github.event.pull_request.head.sha }}"))).toEqual(["gha-pwn-request:high"]);
+    expect(ids(run('git fetch origin "$SHA" && npm test', "env:\n  SHA: ${{ github.event.pull_request.head.sha }}\n"))).toEqual(["gha-pwn-request:high"]);
+    expect(ids(run("git fetch origin ${{\ngithub.event.pull_request.head.sha }} && npm test"))).toEqual(["gha-pwn-request:high"]);
+    expect(ids(run('git log "$SHA"', "env:\n  SHA: ${{ github.event.pull_request.head.sha }}\n"))).toEqual([]);
+  });
+
+  it("keeps every git form the old regex caught, and normalizes a long expression once (review, 5 Nov)", () => {
+    const run = (body) => `on: pull_request_target\njobs:\n  a:\n    steps:\n      - run: |\n${body.split("\n").map((x) => "          " + x).join("\n")}\n`;
+    for (const l of ["echo ok;git checkout ${{ github.head_ref }}", "(git checkout ${{ github.head_ref }})", "x=$(git checkout ${{ github.head_ref }})",
+      "/usr/bin/git checkout ${{ github.head_ref }}", "git fetch&&git checkout ${{ github.head_ref }}", 'git -c http.extraheader="AUTHORIZATION: basic x" fetch origin ${{ github.head_ref }}']) {
+      expect(ids(run(l)), l).toContain("gha-pwn-request:high");
+    }
+    expect(timed(run("${{ github.head_ref\n" + "git fetch\n".repeat(16000)))).toBeLessThan(2000);
+    expect(timed(run("x ${{ 'a\n" + "git fetch\n".repeat(16000) + "' }}"))).toBeLessThan(2000);
+    expect(timed(run(('git -c "x ').repeat(20000)))).toBeLessThan(2000);
+  });
+
+  it("keeps a shell variable inside a git option value, and one coordinate system under Unicode (Vercel, 5 Nov)", () => {
+    const run = (body, env = "") => `on: pull_request_target\n${env}jobs:\n  a:\n    steps:\n      - run: |\n${body.split("\n").map((x) => "          " + x).join("\n")}\n`;
+    const sha = "env:\n  SHA: ${{ github.event.pull_request.head.sha }}\n";
+    expect(ids(run('git -C ./$DIR fetch origin "$SHA"\ngit checkout FETCH_HEAD && npm ci', sha))).toEqual(["gha-pwn-request:high"]);
+    expect(ids(run('git -c core.x=$X fetch origin "$SHA"', sha))).toEqual(["gha-pwn-request:high"]);
+    const gitVar = "env:\n  GIT: git\n  SHA: ${{ github.event.pull_request.head.sha }}\n";
+    for (const cmd of ["$GIT", "${GIT}"]) {
+      expect(ids(run(`${cmd} -C . fetch origin "$SHA"\ngit checkout FETCH_HEAD && npm ci`, gitVar)), cmd).toEqual(["gha-pwn-request:high"]);
+    }
+    expect(ids(run(`# ${"\u0130".repeat(5000)}\ngit fetch origin \${{ github.event.pull_request.head.sha }}\ngit checkout FETCH_HEAD`))).toEqual(["gha-pwn-request:high"]);
+  });
+
+  it("finds every expression's end in one pass, even with unclosed quotes", () => {
+    expect(timed(I + "      - run: echo " + "${{ ' }} ".repeat(25000) + "\n")).toBeLessThan(2000);
+    expect(exprSpans("a ${{ 'x}}' }} b ${{ c")).toEqual([{ start: 2, close: 12, open: false }, { start: 17, close: 22, open: true }]);
+  });
+
   it("checks one very long line in well under a second", () => {
     expect(timed(" ".repeat(250 * 1024) + "run")).toBeLessThan(2000);
     expect(timed(I + "      - run: " + "${{ github.event." + "a.".repeat(100 * 1024) + " }}\n")).toBeLessThan(2000);
@@ -331,5 +423,46 @@ describe("our own workflows", () => {
   it("have no pwn request or script injection", () => {
     const serious = scanWorkflows(".").filter((f) => f.templateId !== "gha-unpinned-action");
     expect(serious.map((f) => `${f.file}:${f.line} ${f.templateId}`)).toEqual([]);
+  });
+});
+
+// pullRef replaced a regex for speed (a Vercel finding). A speed refactor must
+// keep the meaning: on lines without quotes or lone braces, where the two
+// readings agree, it must give the old regex's answer for every input.
+describe("pullRef means what the regex it replaced meant", () => {
+  const OLD = /\bpull\/(\$\{\{[^}]*\}\}|[^/\s]+)\/(head|merge)\b/;
+  const MULTI = /\bpull\/(\$\{\{[^}]*\}\}){2,}\/(head|merge)\b/;
+  const piece = fc.constantFrom("pull/", "${{", " }}", "/head", "/merge", "/headx", " ", "x", "1", "/", "a.b", "-", "_", "git fetch ");
+  it("agrees with the old regex on 5,000 generated lines", () => {
+    fc.assert(fc.property(fc.array(piece, { maxLength: 14 }), (parts) => {
+      const line = parts.join("");
+      // Intended difference: a pull/ inside another ${{ }} is expression text,
+      // not script text, so GitHub never runs it as a fetch.
+      const inside = (at) => exprSpans(line).some((sp) => sp.start < at && at < sp.close);
+      const offsets = [...line.matchAll(/pull\//g)].map((m) => m.index);
+      fc.pre(!offsets.some(inside));
+      // Intended superset (R12): a ref number built from several expressions
+      // back to back, pull/${{ a }}${{ b }}/merge, is still a pull ref. The old
+      // regex took one expression only. Found by fast-check on CI, seed 1358429370.
+      if (pullRef(line) && !OLD.test(line)) expect(MULTI.test(line), line).toBe(true);
+      else expect(pullRef(line), line).toBe(OLD.test(line));
+    }), { numRuns: 5000 });
+  });
+
+  it("counts a pull ref built from several expressions back to back", () => {
+    expect(pullRef("pull/${{ }}${{ }}/merge")).toBe(true);
+    expect(pullRef("refs/pull/${{ github.event.number }}${{ env.X }}/head")).toBe(true);
+  });
+});
+
+// R11, enforced: exprSpans is the only reader of expression boundaries. A
+// second, ad-hoc search for }} is how the 5 Nov bypass got in.
+describe("one parser per grammar", () => {
+  it("only exprSpans looks for }} in lib/whitebox/workflows.js", async () => {
+    const { readFileSync } = await import("node:fs");
+    const src = readFileSync(new URL("../lib/whitebox/workflows.js", import.meta.url), "utf-8");
+    const body = src.slice(src.indexOf("export function exprSpans"), src.indexOf("/** Each ${{ }} in a string, normalized"));
+    const outside = src.replace(body, "");
+    expect(outside.match(/indexOf\("\}\}"|"\}" && \w+\[\w+ \+ 1\] === "\}"/g)).toBeNull();
   });
 });

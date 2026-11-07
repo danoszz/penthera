@@ -27,7 +27,7 @@ Without `--offline`, a scan may contact these third parties:
 
 Other commands stay local unless you opt in. `penthera deps` makes no network requests by default. With `--online` it sends GET requests for public package metadata to the npm registry (`registry.npmjs.org`, or your `npm_config_registry`), and nothing about your project. `--fix-model` talks only to a local Ollama on `127.0.0.1:11434`.
 
-`penthera mcp` talks to your agent over stdin and stdout and opens no port. Of its tools, only `scan_url` uses the network, and it stays on the target and the hosts you listed with `--allow-host`. A redirect may also move within the target's registrable domain. It never contacts the hosts above, and it uses the vendored Retire.js snapshot. Without `--offline` it makes the same DNS lookups as a URL scan. See [docs/commands/mcp.md](commands/mcp.md).
+`penthera mcp` talks to your agent over stdin and stdout and opens no port. Of its tools, only `scan_url` uses the network, and it stays on the target and the hosts you listed with `--allow-host`. A redirect may also move between the apex and `www.`, or to a subdomain of the target, never to a sibling or a parent host. It never contacts the hosts above, and it uses the vendored Retire.js snapshot. Without `--offline` it makes the same DNS lookups as a URL scan. See [docs/commands/mcp.md](commands/mcp.md).
 
 ### AI mode: `--ai`
 
@@ -56,7 +56,7 @@ The dashboard keeps one thing between restarts: the word Simple or Advanced, in
 penthera http://localhost:3000 --offline
 ```
 
-With `--offline`, the HTTP client refuses every host except the scan target. A redirect may only move to a host on the target's registrable domain (`example.com` to `www.example.com`). In practice:
+With `--offline`, the HTTP client refuses every host except the scan target. A redirect may only move between the apex and `www.` (`example.com` to `www.example.com`, or back), or down to a subdomain of the target (`example.com` to `app.example.com`). It never moves to a sibling or a parent host: `one.vercel.app` never follows to `two.vercel.app`, and `app.example.com` never to `example.com`. On a platform that gives each customer a host, a sibling is someone else's site, and this holds on every platform, listed or not. In practice:
 
 - **Recon is skipped.** No queries go to crt.sh, the Wayback Machine or OTX.
 - **The Retire.js database comes from the snapshot vendored in the package** (`lib/data/retire-jsrepository.json.gz`), refreshed by `scripts/refresh-retire-db.mjs`. The source URL, fetch date and SHA-256 sit next to it in `retire-jsrepository.meta.json`, so you can check it against upstream. Online scans fall back to the snapshot too when the live download fails.

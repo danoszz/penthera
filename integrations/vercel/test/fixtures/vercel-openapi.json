@@ -1,0 +1,1712 @@
+{
+ "x-source": "https://vercel.com/openapi.json",
+ "x-fetched": "2026-11-07",
+ "x-spec-version": "0.0.1",
+ "x-not-in-spec": [],
+ "paths": {
+  "/v10/projects": {
+   "get": {
+    "operationId": "getProjects",
+    "parameters": [
+     {
+      "name": "from",
+      "description": "Query only projects updated after the given timestamp or continuation token.",
+      "in": "query",
+      "schema": {
+       "description": "Query only projects updated after the given timestamp or continuation token.",
+       "type": "string"
+      }
+     },
+     {
+      "name": "since",
+      "description": "Query only projects updated after this JavaScript timestamp.",
+      "in": "query",
+      "schema": {
+       "description": "Query only projects updated after this JavaScript timestamp.",
+       "type": "number",
+       "example": 1540095775941
+      }
+     },
+     {
+      "name": "until",
+      "description": "Query only projects updated before this JavaScript timestamp.",
+      "in": "query",
+      "schema": {
+       "description": "Query only projects updated before this JavaScript timestamp.",
+       "type": "number",
+       "example": 1540095775951
+      }
+     },
+     {
+      "name": "gitForkProtection",
+      "description": "Specifies whether PRs from Git forks should require a team member's authorization before it can be deployed",
+      "in": "query",
+      "schema": {
+       "description": "Specifies whether PRs from Git forks should require a team member's authorization before it can be deployed",
+       "type": "string",
+       "enum": [
+        "1",
+        "0"
+       ],
+       "example": "1"
+      }
+     },
+     {
+      "name": "limit",
+      "description": "Limit the number of projects returned",
+      "in": "query",
+      "schema": {
+       "description": "Limit the number of projects returned",
+       "type": "string"
+      }
+     },
+     {
+      "name": "search",
+      "description": "Search projects by the name field",
+      "in": "query",
+      "schema": {
+       "description": "Search projects by the name field",
+       "type": "string",
+       "maxLength": 100
+      }
+     },
+     {
+      "name": "repo",
+      "description": "Filter results by repo. Also used for project count",
+      "in": "query",
+      "schema": {
+       "description": "Filter results by repo. Also used for project count",
+       "type": "string"
+      }
+     },
+     {
+      "name": "repoId",
+      "description": "Filter results by Repository ID.",
+      "in": "query",
+      "schema": {
+       "description": "Filter results by Repository ID.",
+       "type": "string"
+      }
+     },
+     {
+      "name": "repoUrl",
+      "description": "Filter results by Repository URL.",
+      "in": "query",
+      "schema": {
+       "description": "Filter results by Repository URL.",
+       "type": "string",
+       "example": "https://github.com/vercel/next.js"
+      }
+     },
+     {
+      "name": "excludeRepos",
+      "description": "Filter results by excluding those projects that belong to a repo",
+      "in": "query",
+      "schema": {
+       "description": "Filter results by excluding those projects that belong to a repo",
+       "type": "string"
+      }
+     },
+     {
+      "name": "edgeConfigId",
+      "description": "Filter results by connected Global Config ID",
+      "in": "query",
+      "schema": {
+       "description": "Filter results by connected Global Config ID",
+       "type": "string"
+      }
+     },
+     {
+      "name": "edgeConfigTokenId",
+      "description": "Filter results by connected Global Config Token ID",
+      "in": "query",
+      "schema": {
+       "description": "Filter results by connected Global Config Token ID",
+       "type": "string"
+      }
+     },
+     {
+      "name": "deprecated",
+      "in": "query",
+      "schema": {
+       "type": "boolean"
+      }
+     },
+     {
+      "name": "elasticConcurrencyEnabled",
+      "description": "Filter results by projects with elastic concurrency enabled",
+      "in": "query",
+      "schema": {
+       "description": "Filter results by projects with elastic concurrency enabled",
+       "type": "string",
+       "enum": [
+        "1",
+        "0"
+       ],
+       "example": "1"
+      }
+     },
+     {
+      "name": "staticIpsEnabled",
+      "description": "Filter results by projects with Static IPs enabled",
+      "in": "query",
+      "schema": {
+       "description": "Filter results by projects with Static IPs enabled",
+       "enum": [
+        "0",
+        "1"
+       ],
+       "example": "1",
+       "type": "string"
+      }
+     },
+     {
+      "name": "buildMachineTypes",
+      "description": "Filter results by effective build machine types. Accepts comma-separated values. Use \\\"elastic\\\" for projects with elastic selection and \\\"default\\\" for projects without a build machine type set.",
+      "in": "query",
+      "schema": {
+       "description": "Filter results by effective build machine types. Accepts comma-separated values. Use \\\"elastic\\\" for projects with elastic selection and \\\"default\\\" for projects without a build machine type set.",
+       "type": "string",
+       "example": "default,enhanced"
+      }
+     },
+     {
+      "name": "buildQueueConfiguration",
+      "description": "Filter results by build queue configuration. SKIP_NAMESPACE_QUEUE includes projects without a configuration set.",
+      "in": "query",
+      "schema": {
+       "description": "Filter results by build queue configuration. SKIP_NAMESPACE_QUEUE includes projects without a configuration set.",
+       "type": "string",
+       "enum": [
+        "SKIP_NAMESPACE_QUEUE",
+        "WAIT_FOR_NAMESPACE_QUEUE"
+       ],
+       "example": "SKIP_NAMESPACE_QUEUE"
+      }
+     },
+     {
+      "description": "The Team identifier to perform the request on behalf of.",
+      "in": "query",
+      "name": "teamId",
+      "schema": {
+       "type": "string",
+       "example": "team_1a2b3c4d5e6f7g8h9i0j1k2l"
+      }
+     },
+     {
+      "description": "The Team slug to perform the request on behalf of.",
+      "in": "query",
+      "name": "slug",
+      "schema": {
+       "type": "string",
+       "example": "my-team-url-slug"
+      }
+     }
+    ],
+    "requestBody": null,
+    "reads": [
+     "projects[].id",
+     "projects[].name",
+     "projects[].link.type",
+     "projects[].link.org",
+     "projects[].link.repo",
+     "projects[].link.repoId",
+     "projects[].link.repoOwnerId",
+     "projects[].link.productionBranch",
+     "pagination.next"
+    ],
+    "response": {
+     "nullable": true,
+     "oneOf": [
+      {
+       "type": "array"
+      },
+      {
+       "type": "object",
+       "properties": {
+        "projects": {
+         "type": "array",
+         "items": {
+          "type": "object",
+          "properties": {
+           "id": {
+            "type": "string"
+           },
+           "name": {
+            "type": "string"
+           },
+           "link": {
+            "oneOf": [
+             {
+              "type": "object",
+              "properties": {
+               "type": {
+                "type": "string",
+                "enum": [
+                 "github"
+                ]
+               },
+               "org": {
+                "type": "string"
+               },
+               "repo": {
+                "type": "string"
+               },
+               "repoId": {
+                "type": "number"
+               },
+               "repoOwnerId": {
+                "type": "number"
+               },
+               "productionBranch": {
+                "type": "string"
+               }
+              }
+             },
+             {
+              "type": "object",
+              "properties": {
+               "type": {
+                "type": "string",
+                "enum": [
+                 "github-limited"
+                ]
+               },
+               "org": {
+                "type": "string"
+               },
+               "repo": {
+                "type": "string"
+               },
+               "repoId": {
+                "type": "number"
+               },
+               "repoOwnerId": {
+                "type": "number"
+               },
+               "productionBranch": {
+                "type": "string"
+               }
+              }
+             },
+             {
+              "type": "object",
+              "properties": {
+               "type": {
+                "type": "string",
+                "enum": [
+                 "github-custom-host"
+                ]
+               },
+               "org": {
+                "type": "string"
+               },
+               "repo": {
+                "type": "string"
+               },
+               "repoId": {
+                "type": "number"
+               },
+               "repoOwnerId": {
+                "type": "number"
+               },
+               "productionBranch": {
+                "type": "string"
+               }
+              }
+             },
+             {
+              "type": "object",
+              "properties": {
+               "type": {
+                "type": "string",
+                "enum": [
+                 "gitlab"
+                ]
+               },
+               "productionBranch": {
+                "type": "string"
+               }
+              }
+             },
+             {
+              "type": "object",
+              "properties": {
+               "type": {
+                "type": "string",
+                "enum": [
+                 "bitbucket"
+                ]
+               },
+               "productionBranch": {
+                "type": "string"
+               }
+              }
+             },
+             {
+              "type": "object",
+              "properties": {
+               "type": {
+                "type": "string",
+                "enum": [
+                 "vercel"
+                ]
+               },
+               "org": {
+                "type": "string"
+               },
+               "repo": {
+                "type": "string"
+               },
+               "repoId": {
+                "type": "string"
+               },
+               "productionBranch": {
+                "type": "string"
+               }
+              }
+             },
+             {
+              "type": "object",
+              "properties": {
+               "type": {
+                "type": "string",
+                "enum": [
+                 "v0"
+                ]
+               },
+               "org": {
+                "type": "string"
+               },
+               "repo": {
+                "type": "string"
+               },
+               "repoId": {
+                "type": "string"
+               },
+               "productionBranch": {
+                "type": "string"
+               }
+              }
+             },
+             {
+              "type": "object",
+              "properties": {
+               "type": {
+                "type": "string",
+                "enum": [
+                 "cursor-origin"
+                ]
+               },
+               "repo": {
+                "type": "string"
+               },
+               "repoId": {
+                "type": "string"
+               },
+               "productionBranch": {
+                "type": "string"
+               }
+              }
+             }
+            ]
+           }
+          }
+         }
+        },
+        "pagination": {
+         "oneOf": [
+          {
+           "type": "object",
+           "properties": {
+            "next": {
+             "type": "string",
+             "nullable": true
+            }
+           }
+          },
+          {
+           "type": "object",
+           "properties": {
+            "next": {
+             "type": "number",
+             "nullable": true
+            }
+           }
+          }
+         ]
+        }
+       }
+      },
+      {
+       "type": "object",
+       "properties": {
+        "projects": {
+         "type": "array",
+         "items": {
+          "type": "object",
+          "properties": {
+           "id": {
+            "type": "string"
+           },
+           "name": {
+            "type": "string"
+           },
+           "link": {
+            "oneOf": [
+             {
+              "type": "object",
+              "properties": {
+               "type": {
+                "type": "string",
+                "enum": [
+                 "github"
+                ]
+               },
+               "org": {
+                "type": "string"
+               },
+               "repo": {
+                "type": "string"
+               },
+               "repoId": {
+                "type": "number"
+               },
+               "repoOwnerId": {
+                "type": "number"
+               },
+               "productionBranch": {
+                "type": "string"
+               }
+              }
+             },
+             {
+              "type": "object",
+              "properties": {
+               "type": {
+                "type": "string",
+                "enum": [
+                 "github-limited"
+                ]
+               },
+               "org": {
+                "type": "string"
+               },
+               "repo": {
+                "type": "string"
+               },
+               "repoId": {
+                "type": "number"
+               },
+               "repoOwnerId": {
+                "type": "number"
+               },
+               "productionBranch": {
+                "type": "string"
+               }
+              }
+             },
+             {
+              "type": "object",
+              "properties": {
+               "type": {
+                "type": "string",
+                "enum": [
+                 "github-custom-host"
+                ]
+               },
+               "org": {
+                "type": "string"
+               },
+               "repo": {
+                "type": "string"
+               },
+               "repoId": {
+                "type": "number"
+               },
+               "repoOwnerId": {
+                "type": "number"
+               },
+               "productionBranch": {
+                "type": "string"
+               }
+              }
+             },
+             {
+              "type": "object",
+              "properties": {
+               "type": {
+                "type": "string",
+                "enum": [
+                 "gitlab"
+                ]
+               },
+               "productionBranch": {
+                "type": "string"
+               }
+              }
+             },
+             {
+              "type": "object",
+              "properties": {
+               "type": {
+                "type": "string",
+                "enum": [
+                 "bitbucket"
+                ]
+               },
+               "productionBranch": {
+                "type": "string"
+               }
+              }
+             },
+             {
+              "type": "object",
+              "properties": {
+               "type": {
+                "type": "string",
+                "enum": [
+                 "vercel"
+                ]
+               },
+               "org": {
+                "type": "string"
+               },
+               "repo": {
+                "type": "string"
+               },
+               "repoId": {
+                "type": "string"
+               },
+               "productionBranch": {
+                "type": "string"
+               }
+              }
+             },
+             {
+              "type": "object",
+              "properties": {
+               "type": {
+                "type": "string",
+                "enum": [
+                 "v0"
+                ]
+               },
+               "org": {
+                "type": "string"
+               },
+               "repo": {
+                "type": "string"
+               },
+               "repoId": {
+                "type": "string"
+               },
+               "productionBranch": {
+                "type": "string"
+               }
+              }
+             },
+             {
+              "type": "object",
+              "properties": {
+               "type": {
+                "type": "string",
+                "enum": [
+                 "cursor-origin"
+                ]
+               },
+               "repo": {
+                "type": "string"
+               },
+               "repoId": {
+                "type": "string"
+               },
+               "productionBranch": {
+                "type": "string"
+               }
+              }
+             }
+            ]
+           }
+          }
+         }
+        },
+        "pagination": {
+         "oneOf": [
+          {
+           "type": "object",
+           "properties": {
+            "next": {
+             "type": "string",
+             "nullable": true
+            }
+           }
+          },
+          {
+           "type": "object",
+           "properties": {
+            "next": {
+             "type": "number",
+             "nullable": true
+            }
+           }
+          }
+         ]
+        }
+       }
+      }
+     ]
+    }
+   }
+  },
+  "/v9/projects/{idOrName}": {
+   "get": {
+    "operationId": "getProject",
+    "parameters": [
+     {
+      "name": "idOrName",
+      "description": "The unique project identifier or the project name",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "example": "prj_12HKQaOmR5t5Uy6vdcQsNIiZgHGB",
+       "description": "The unique project identifier or the project name",
+       "type": "string"
+      },
+      "x-vercel-cli": {
+       "kind": "argument"
+      }
+     },
+     {
+      "description": "The Team identifier to perform the request on behalf of.",
+      "in": "query",
+      "name": "teamId",
+      "schema": {
+       "type": "string",
+       "example": "team_1a2b3c4d5e6f7g8h9i0j1k2l"
+      }
+     },
+     {
+      "description": "The Team slug to perform the request on behalf of.",
+      "in": "query",
+      "name": "slug",
+      "schema": {
+       "type": "string",
+       "example": "my-team-url-slug"
+      }
+     }
+    ],
+    "requestBody": null,
+    "reads": [
+     "id",
+     "name",
+     "link.type",
+     "link.org",
+     "link.repo",
+     "link.repoId",
+     "link.repoOwnerId",
+     "link.productionBranch"
+    ],
+    "response": {
+     "type": "object",
+     "properties": {
+      "id": {
+       "type": "string"
+      },
+      "name": {
+       "type": "string"
+      },
+      "link": {
+       "oneOf": [
+        {
+         "type": "object",
+         "properties": {
+          "type": {
+           "type": "string",
+           "enum": [
+            "github"
+           ]
+          },
+          "org": {
+           "type": "string"
+          },
+          "repo": {
+           "type": "string"
+          },
+          "repoId": {
+           "type": "number"
+          },
+          "repoOwnerId": {
+           "type": "number"
+          },
+          "productionBranch": {
+           "type": "string"
+          }
+         }
+        },
+        {
+         "type": "object",
+         "properties": {
+          "type": {
+           "type": "string",
+           "enum": [
+            "github-limited"
+           ]
+          },
+          "org": {
+           "type": "string"
+          },
+          "repo": {
+           "type": "string"
+          },
+          "repoId": {
+           "type": "number"
+          },
+          "repoOwnerId": {
+           "type": "number"
+          },
+          "productionBranch": {
+           "type": "string"
+          }
+         }
+        },
+        {
+         "type": "object",
+         "properties": {
+          "type": {
+           "type": "string",
+           "enum": [
+            "github-custom-host"
+           ]
+          },
+          "org": {
+           "type": "string"
+          },
+          "repo": {
+           "type": "string"
+          },
+          "repoId": {
+           "type": "number"
+          },
+          "repoOwnerId": {
+           "type": "number"
+          },
+          "productionBranch": {
+           "type": "string"
+          }
+         }
+        },
+        {
+         "type": "object",
+         "properties": {
+          "type": {
+           "type": "string",
+           "enum": [
+            "gitlab"
+           ]
+          },
+          "productionBranch": {
+           "type": "string"
+          }
+         }
+        },
+        {
+         "type": "object",
+         "properties": {
+          "type": {
+           "type": "string",
+           "enum": [
+            "bitbucket"
+           ]
+          },
+          "productionBranch": {
+           "type": "string"
+          }
+         }
+        },
+        {
+         "type": "object",
+         "properties": {
+          "type": {
+           "type": "string",
+           "enum": [
+            "vercel"
+           ]
+          },
+          "org": {
+           "type": "string"
+          },
+          "repo": {
+           "type": "string"
+          },
+          "repoId": {
+           "type": "string"
+          },
+          "productionBranch": {
+           "type": "string"
+          }
+         }
+        },
+        {
+         "type": "object",
+         "properties": {
+          "type": {
+           "type": "string",
+           "enum": [
+            "v0"
+           ]
+          },
+          "org": {
+           "type": "string"
+          },
+          "repo": {
+           "type": "string"
+          },
+          "repoId": {
+           "type": "string"
+          },
+          "productionBranch": {
+           "type": "string"
+          }
+         }
+        },
+        {
+         "type": "object",
+         "properties": {
+          "type": {
+           "type": "string",
+           "enum": [
+            "cursor-origin"
+           ]
+          },
+          "repo": {
+           "type": "string"
+          },
+          "repoId": {
+           "type": "string"
+          },
+          "productionBranch": {
+           "type": "string"
+          }
+         }
+        }
+       ]
+      }
+     }
+    }
+   }
+  },
+  "/v13/deployments/{idOrUrl}": {
+   "get": {
+    "operationId": "getDeployment",
+    "parameters": [
+     {
+      "name": "idOrUrl",
+      "description": "The unique identifier or hostname of the deployment.",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "example": "dpl_89qyp1cskzkLrVicDaZoDbjyHuDJ",
+       "description": "The unique identifier or hostname of the deployment.",
+       "type": "string"
+      }
+     },
+     {
+      "name": "withGitRepoInfo",
+      "description": "When `true`, the response includes the `gitSource` object with the commit SHA, branch name, and connected repository metadata. Defaults to `false`.",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "description": "When `true`, the response includes the `gitSource` object with the commit SHA, branch name, and connected repository metadata. Defaults to `false`.",
+       "type": "string",
+       "example": "true"
+      }
+     },
+     {
+      "description": "The Team identifier to perform the request on behalf of.",
+      "in": "query",
+      "name": "teamId",
+      "schema": {
+       "type": "string",
+       "example": "team_1a2b3c4d5e6f7g8h9i0j1k2l"
+      }
+     },
+     {
+      "description": "The Team slug to perform the request on behalf of.",
+      "in": "query",
+      "name": "slug",
+      "schema": {
+       "type": "string",
+       "example": "my-team-url-slug"
+      }
+     }
+    ],
+    "requestBody": null,
+    "reads": [
+     "id",
+     "projectId",
+     "project.id",
+     "target"
+    ],
+    "response": {
+     "oneOf": [
+      {
+       "type": "object",
+       "properties": {
+        "id": {
+         "type": "string"
+        },
+        "target": {
+         "type": "string",
+         "enum": [
+          "production",
+          "staging",
+          null
+         ],
+         "nullable": true
+        }
+       }
+      },
+      {
+       "type": "object",
+       "properties": {
+        "id": {
+         "type": "string"
+        },
+        "projectId": {
+         "type": "string"
+        },
+        "project": {
+         "type": "object",
+         "properties": {
+          "id": {
+           "type": "string"
+          }
+         }
+        },
+        "target": {
+         "type": "string",
+         "enum": [
+          "production",
+          "staging",
+          null
+         ],
+         "nullable": true
+        }
+       }
+      },
+      {
+       "type": "object",
+       "properties": {
+        "id": {
+         "type": "string"
+        },
+        "project": {
+         "type": "object",
+         "properties": {
+          "id": {
+           "type": "string"
+          }
+         }
+        },
+        "target": {
+         "type": "string",
+         "enum": [
+          "production",
+          "staging",
+          null
+         ],
+         "nullable": true
+        }
+       }
+      }
+     ]
+    }
+   }
+  },
+  "/v1/integrations/configuration/{id}": {
+   "get": {
+    "operationId": "getConfiguration",
+    "parameters": [
+     {
+      "name": "id",
+      "description": "ID of the configuration to check",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "description": "ID of the configuration to check",
+       "example": "icfg_cuwj0AdCdH3BwWT4LPijCC7t"
+      }
+     },
+     {
+      "description": "The Team identifier to perform the request on behalf of.",
+      "in": "query",
+      "name": "teamId",
+      "schema": {
+       "type": "string",
+       "example": "team_1a2b3c4d5e6f7g8h9i0j1k2l"
+      }
+     },
+     {
+      "description": "The Team slug to perform the request on behalf of.",
+      "in": "query",
+      "name": "slug",
+      "schema": {
+       "type": "string",
+       "example": "my-team-url-slug"
+      }
+     }
+    ],
+    "requestBody": null,
+    "reads": [
+     "id",
+     "integrationId"
+    ],
+    "response": {
+     "oneOf": [
+      {
+       "type": "object",
+       "properties": {
+        "id": {
+         "type": "string"
+        },
+        "integrationId": {
+         "type": "string"
+        }
+       }
+      },
+      {
+       "type": "object",
+       "properties": {
+        "id": {
+         "type": "string"
+        },
+        "integrationId": {
+         "type": "string"
+        }
+       }
+      },
+      {
+       "type": "object",
+       "properties": {
+        "id": {
+         "type": "string"
+        },
+        "integrationId": {
+         "type": "string"
+        }
+       }
+      }
+     ]
+    }
+   }
+  },
+  "/v2/projects/{projectIdOrName}/checks": {
+   "get": {
+    "operationId": "listProjectChecks",
+    "parameters": [
+     {
+      "name": "projectIdOrName",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "blocks",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "enum": [
+        "build-start",
+        "deployment-start",
+        "deployment-alias",
+        "deployment-promotion",
+        "none"
+       ]
+      }
+     },
+     {
+      "description": "The Team identifier to perform the request on behalf of.",
+      "in": "query",
+      "name": "teamId",
+      "schema": {
+       "type": "string",
+       "example": "team_1a2b3c4d5e6f7g8h9i0j1k2l"
+      }
+     },
+     {
+      "description": "The Team slug to perform the request on behalf of.",
+      "in": "query",
+      "name": "slug",
+      "schema": {
+       "type": "string",
+       "example": "my-team-url-slug"
+      }
+     }
+    ],
+    "requestBody": null,
+    "reads": [
+     "checks[].id",
+     "checks[].source.kind",
+     "checks[].source.integrationConfigurationId",
+     "checks[].source.externalCheckName"
+    ],
+    "response": {
+     "type": "object",
+     "properties": {
+      "checks": {
+       "type": "array",
+       "items": {
+        "type": "object",
+        "properties": {
+         "id": {
+          "type": "string"
+         },
+         "source": {
+          "oneOf": [
+           {
+            "type": "object",
+            "properties": {
+             "kind": {
+              "type": "string",
+              "enum": [
+               "integration"
+              ]
+             },
+             "integrationConfigurationId": {
+              "type": "string"
+             }
+            }
+           },
+           {
+            "type": "object",
+            "properties": {
+             "kind": {
+              "type": "string",
+              "enum": [
+               "webhook"
+              ]
+             }
+            }
+           },
+           {
+            "type": "object",
+            "properties": {
+             "kind": {
+              "type": "string",
+              "enum": [
+               "git-provider"
+              ]
+             },
+             "externalCheckName": {
+              "type": "string"
+             }
+            }
+           }
+          ]
+         }
+        }
+       }
+      }
+     }
+    }
+   },
+   "post": {
+    "operationId": "createProjectCheck",
+    "parameters": [
+     {
+      "name": "projectIdOrName",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "description": "The Team identifier to perform the request on behalf of.",
+      "in": "query",
+      "name": "teamId",
+      "schema": {
+       "type": "string",
+       "example": "team_1a2b3c4d5e6f7g8h9i0j1k2l"
+      }
+     },
+     {
+      "description": "The Team slug to perform the request on behalf of.",
+      "in": "query",
+      "name": "slug",
+      "schema": {
+       "type": "string",
+       "example": "my-team-url-slug"
+      }
+     }
+    ],
+    "requestBody": {
+     "properties": {
+      "name": {
+       "type": "string"
+      },
+      "isRerequestable": {
+       "type": "boolean",
+       "description": "Whether check runs can be manually re-requested. Git provider checks cannot be re-requested."
+      },
+      "requires": {
+       "type": "string",
+       "enum": [
+        "build-ready",
+        "deployment-url",
+        "none"
+       ],
+       "default": "deployment-url"
+      },
+      "targets": {
+       "type": "array",
+       "items": {
+        "type": "string"
+       },
+       "uniqueItems": true,
+       "description": "Deployment targets where this check applies. Valid values are \"production\", \"preview\", \"all\", or a Custom Environment ID such as \"env_...\". If omitted, defaults to [\"production\"]. \"all\" cannot be combined with other targets."
+      },
+      "blocks": {
+       "type": "string",
+       "enum": [
+        "build-start",
+        "deployment-start",
+        "deployment-alias",
+        "deployment-promotion",
+        "none"
+       ],
+       "default": "deployment-alias"
+      },
+      "source": {
+       "type": "object",
+       "oneOf": [
+        {
+         "additionalProperties": false,
+         "properties": {
+          "kind": {
+           "type": "string",
+           "default": "integration"
+          },
+          "integrationId": {
+           "type": "string"
+          },
+          "integrationConfigurationId": {
+           "type": "string"
+          },
+          "resourceId": {
+           "type": "string"
+          },
+          "externalResourceId": {
+           "type": "string"
+          }
+         }
+        },
+        {
+         "properties": {
+          "kind": {
+           "type": "string"
+          },
+          "webhookId": {
+           "type": "string"
+          }
+         },
+         "required": [
+          "kind"
+         ]
+        },
+        {
+         "properties": {
+          "kind": {
+           "type": "string",
+           "description": "Imports Git provider check results, such as GitHub check runs or commit statuses, as Deployment Checks."
+          },
+          "externalCheckName": {
+           "type": "string",
+           "description": "The Git provider check name or context to match, for example a GitHub Actions job name."
+          },
+          "provider": {
+           "type": "string",
+           "enum": [
+            "github"
+           ]
+          }
+         },
+         "required": [
+          "kind",
+          "externalCheckName",
+          "provider"
+         ]
+        }
+       ]
+      },
+      "timeout": {
+       "type": "number",
+       "default": 300
+      }
+     },
+     "required": [
+      "name",
+      "requires"
+     ],
+     "type": "object"
+    },
+    "reads": [
+     "id"
+    ],
+    "response": {
+     "type": "object",
+     "properties": {
+      "id": {
+       "type": "string"
+      }
+     }
+    }
+   }
+  },
+  "/v2/projects/{projectIdOrName}/checks/{checkId}": {
+   "delete": {
+    "operationId": "deleteProjectCheck",
+    "parameters": [
+     {
+      "name": "projectIdOrName",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "checkId",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "description": "The Team identifier to perform the request on behalf of.",
+      "in": "query",
+      "name": "teamId",
+      "schema": {
+       "type": "string",
+       "example": "team_1a2b3c4d5e6f7g8h9i0j1k2l"
+      }
+     },
+     {
+      "description": "The Team slug to perform the request on behalf of.",
+      "in": "query",
+      "name": "slug",
+      "schema": {
+       "type": "string",
+       "example": "my-team-url-slug"
+      }
+     }
+    ],
+    "requestBody": null,
+    "reads": [],
+    "response": {
+     "type": "object"
+    }
+   }
+  },
+  "/v2/deployments/{deploymentId}/check-runs": {
+   "get": {
+    "operationId": "listDeploymentCheckRuns",
+    "parameters": [
+     {
+      "name": "deploymentId",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "description": "The Team identifier to perform the request on behalf of.",
+      "in": "query",
+      "name": "teamId",
+      "schema": {
+       "type": "string",
+       "example": "team_1a2b3c4d5e6f7g8h9i0j1k2l"
+      }
+     },
+     {
+      "description": "The Team slug to perform the request on behalf of.",
+      "in": "query",
+      "name": "slug",
+      "schema": {
+       "type": "string",
+       "example": "my-team-url-slug"
+      }
+     }
+    ],
+    "requestBody": null,
+    "reads": [
+     "runs[].id",
+     "runs[].checkId",
+     "runs[].projectId",
+     "runs[].deploymentId",
+     "runs[].status"
+    ],
+    "response": {
+     "type": "object",
+     "properties": {
+      "runs": {
+       "type": "array",
+       "items": {
+        "oneOf": [
+         {
+          "type": "object",
+          "properties": {
+           "id": {
+            "type": "string"
+           },
+           "checkId": {
+            "type": "string"
+           },
+           "projectId": {
+            "type": "string"
+           },
+           "deploymentId": {
+            "type": "string"
+           },
+           "status": {
+            "type": "string",
+            "enum": [
+             "completed",
+             "queued",
+             "running"
+            ]
+           }
+          }
+         },
+         {
+          "type": "object",
+          "properties": {
+           "id": {
+            "type": "string"
+           },
+           "projectId": {
+            "type": "string"
+           },
+           "deploymentId": {
+            "type": "string"
+           },
+           "status": {
+            "type": "string",
+            "enum": [
+             "completed",
+             "queued",
+             "running"
+            ]
+           }
+          }
+         }
+        ]
+       }
+      }
+     }
+    }
+   },
+   "post": {
+    "operationId": "createDeploymentCheckRun",
+    "parameters": [
+     {
+      "name": "deploymentId",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "description": "The Team identifier to perform the request on behalf of.",
+      "in": "query",
+      "name": "teamId",
+      "schema": {
+       "type": "string",
+       "example": "team_1a2b3c4d5e6f7g8h9i0j1k2l"
+      }
+     },
+     {
+      "description": "The Team slug to perform the request on behalf of.",
+      "in": "query",
+      "name": "slug",
+      "schema": {
+       "type": "string",
+       "example": "my-team-url-slug"
+      }
+     }
+    ],
+    "requestBody": {
+     "properties": {
+      "checkId": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "checkId"
+     ],
+     "type": "object"
+    },
+    "reads": [
+     "id",
+     "checkId",
+     "projectId",
+     "deploymentId",
+     "status"
+    ],
+    "response": {
+     "oneOf": [
+      {
+       "type": "object",
+       "properties": {
+        "id": {
+         "type": "string"
+        },
+        "checkId": {
+         "type": "string"
+        },
+        "projectId": {
+         "type": "string"
+        },
+        "deploymentId": {
+         "type": "string"
+        },
+        "status": {
+         "type": "string",
+         "enum": [
+          "completed",
+          "queued",
+          "running"
+         ]
+        }
+       }
+      },
+      {
+       "type": "object",
+       "properties": {
+        "id": {
+         "type": "string"
+        },
+        "projectId": {
+         "type": "string"
+        },
+        "deploymentId": {
+         "type": "string"
+        },
+        "status": {
+         "type": "string",
+         "enum": [
+          "completed",
+          "queued",
+          "running"
+         ]
+        }
+       }
+      }
+     ]
+    }
+   }
+  },
+  "/v2/deployments/{deploymentId}/check-runs/{checkRunId}": {
+   "patch": {
+    "operationId": "updateDeploymentCheckRun",
+    "parameters": [
+     {
+      "name": "deploymentId",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "checkRunId",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "description": "The Team identifier to perform the request on behalf of.",
+      "in": "query",
+      "name": "teamId",
+      "schema": {
+       "type": "string",
+       "example": "team_1a2b3c4d5e6f7g8h9i0j1k2l"
+      }
+     },
+     {
+      "description": "The Team slug to perform the request on behalf of.",
+      "in": "query",
+      "name": "slug",
+      "schema": {
+       "type": "string",
+       "example": "my-team-url-slug"
+      }
+     }
+    ],
+    "requestBody": {
+     "additionalProperties": false,
+     "properties": {
+      "externalId": {
+       "type": "string"
+      },
+      "externalUrl": {
+       "type": "string",
+       "format": "uri",
+       "pattern": "^https?://|^sso:"
+      },
+      "status": {
+       "type": "string",
+       "enum": [
+        "queued",
+        "running",
+        "completed"
+       ]
+      },
+      "output": {
+       "type": "object"
+      },
+      "completedAt": {
+       "type": "number"
+      },
+      "conclusion": {
+       "type": "string",
+       "enum": [
+        "canceled",
+        "skipped",
+        "timeout",
+        "failed",
+        "neutral",
+        "succeeded"
+       ]
+      },
+      "conclusionText": {
+       "type": "string"
+      }
+     },
+     "type": "object"
+    },
+    "reads": [],
+    "response": {
+     "oneOf": [
+      {
+       "type": "object"
+      },
+      {
+       "type": "object"
+      }
+     ]
+    }
+   }
+  }
+ }
+}

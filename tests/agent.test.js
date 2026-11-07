@@ -453,7 +453,7 @@ describe("agent loop: how a run ends", () => {
     const repo = fixtureRepo();
     const bug = (file) => ({ severity: "critical", title: "eval in source", category: "code-pattern", file });
     const hidden = { severity: "critical", title: "Hidden", category: "code-pattern", url: "x.js" };
-    writeFileSync(join(repo, "penthera.suppress.json"), JSON.stringify({ version: 1, suppress: [{ fingerprint: fingerprintFinding(hidden), reason: "false positive here" }] }));
+    writeFileSync(join(repo, "penthera.suppress.json"), JSON.stringify({ version: 1, suppress: [{ fingerprint: fingerprintFinding(hidden), severity: "critical", reason: "false positive here" }] }));
     git(repo, "add", "-A");
     git(repo, "commit", "-qm", "suppress");
     const run = await runLoop({ repo, memoryRoot: tempDir(), ask: async () => "n", maxIterations: 1, deps: { scanRepo: async () => ({ findings: [bug("a.js"), bug("b.js"), hidden] }) } });

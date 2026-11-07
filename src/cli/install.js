@@ -153,7 +153,9 @@ export async function runInstall(argv) {
   let policy;
   let policyPath;
   try {
-    ({ policy, path: policyPath } = loadPolicy(root, opts.policy ? resolve(opts.policy) : null));
+    let warning;
+    ({ policy, path: policyPath, warning } = loadPolicy(root, opts.policy ? resolve(opts.policy) : null));
+    if (warning) process.stderr.write(`\n  ${yellow("warning")} ${warning}\n`);
   } catch (e) {
     printError(e.message);
     return 2;

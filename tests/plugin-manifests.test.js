@@ -5,8 +5,9 @@ import { join } from "node:path";
 const PLUGIN = join(import.meta.dirname, "..", "plugin");
 const read = (f) => JSON.parse(readFileSync(join(PLUGIN, f), "utf8"));
 
-// Claude Code reads .claude-plugin/plugin.json and .mcp.json. GitHub Copilot and
-// Codex read the Agent Plugins 1.0.0 copies at the folder's root. They must agree.
+// Claude Code reads .claude-plugin/plugin.json. GitHub Copilot and Codex read the
+// Agent Plugins 1.0.0 copy at the folder's root. They must agree. The plugin is
+// skill-only, so neither has an MCP file (tests/plugin-folder.test.js checks that).
 describe("the plugin's two manifests", () => {
   it("say the same thing about the plugin", () => {
     const claude = read(".claude-plugin/plugin.json");
@@ -17,20 +18,8 @@ describe("the plugin's two manifests", () => {
     }
   });
 
-  it("start the same MCP server, pinned", () => {
-    const claude = read(".mcp.json").mcpServers;
-    const agent = read("mcp.json");
-    expect(agent.$schema).toBe("https://agent-plugins.org/schemas/1.0.0/mcp.schema.json");
-    expect(Object.keys(agent.mcpServers)).toEqual(Object.keys(claude));
-    for (const [name, server] of Object.entries(claude)) {
-      expect(agent.mcpServers[name]).toEqual({ type: "stdio", ...server });
-      expect(server.args.find((a) => a.startsWith("penthera@"))).toMatch(/^penthera@\d+\.\d+\.\d+$/);
-    }
-  });
-
   it("keep to the fields the Agent Plugins schema allows", () => {
     const allowed = ["$schema", "name", "version", "description", "author", "homepage", "repository", "license", "keywords", "extensions"];
     expect(Object.keys(read("plugin.json")).filter((k) => !allowed.includes(k))).toEqual([]);
-    expect(Object.keys(read("mcp.json")).sort()).toEqual(["$schema", "mcpServers"]);
   });
 });

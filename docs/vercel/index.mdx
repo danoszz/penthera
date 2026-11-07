@@ -1,0 +1,129 @@
+---
+title: "Penthera on Vercel"
+sidebarTitle: "Vercel guide"
+description: "Install the Penthera integration, commit one workflow, and every production deploy gets a security check."
+---
+
+> **Starter.** For "how do I put Penthera in front of my Vercel production deploys?"
+
+The integration adds a Deployment Check to the projects you pick. When Vercel has built a production deployment, a workflow in your own GitHub Actions runs Penthera's passive scan on it. A pass goes live. A high or critical finding keeps the deploy off your production domain until it is fixed. Previews are scanned too and never blocked.
+
+It is free and open source. The scan runs in your GitHub Actions, not on our server.
+
+## What you need
+
+- A Vercel project that deploys from a GitHub repository. Projects without one show as "Needs a GitHub-connected project" and cannot be picked.
+- Permission to commit a file to that repository's default branch.
+- Deployment Protection that lets the scanner read the deployment. See [Troubleshooting](#troubleshooting).
+
+## Install
+
+1. Open Penthera in the Vercel Marketplace and choose **Install**. Pick the team to install it on.
+2. Vercel sends you to Penthera's setup page. Tick the projects to check, then go on.
+3. Penthera shows the workflow file, filled in for each project. Use the button to open GitHub with the file ready, or copy it. Commit it as `.github/workflows/penthera-vercel.yml` on the repository's default branch. Vercel's dispatch runs only from there, and the integration accepts only that path. The file holds no secrets.
+4. Back on the setup page, choose **Turn on the check**. The page takes you back to Vercel and the install is done.
+
+Commit the workflow before you turn the check on. Until the file is committed, a production deploy would wait for a scan that nobody runs.
+
+## What a deploy looks like
+
+1. Vercel builds the deployment and asks your repository's workflow to scan it.
+2. Penthera scans the live deployment URL in your GitHub Actions. That usually takes under a minute, and the deploy waits for it.
+3. If the scan passes, the check in Vercel passes and the deployment can go live.
+4. If the scan finds a high or critical problem, the check fails and the deployment stays out of production. The check links to the GitHub run.
+
+The scan is the standard URL scan of [`penthera <url>`](/commands/scan): TLS, security headers, cookies, CORS, exposed files and known-vulnerable libraries. Rules decide every finding. It reads your pages and sends one login attempt with obviously fake credentials, to check that a wrong password is refused. It contacts only the deployment's host.
+
+A scan that fails or does not finish also fails the check. Silence is never a pass.
+
+## Read the findings
+
+The findings stay in GitHub:
+
+1. In Vercel, open the failed check and follow its link to the GitHub run.
+2. Open the job summary. It lists each finding with its severity, what was seen and how to fix it.
+3. The full report is attached to the run as the artifact `penthera-vercel-<run id>`.
+
+To fix a blocked deploy, fix the finding and deploy again. The check cannot be re-run on its own: a new result needs a new deployment.
+
+To ship anyway, use Vercel's Force Promote on the deployment, remove the check, or uninstall. The finding still ships with it.
+
+## False positives
+
+The workflow scans a URL and does not check out your code, so a `penthera.suppress.json` file in your repository is not read there, and `penthera memory suppress` writes to a machine's local memory, which a fresh GitHub runner does not have. Both work for repository scans. See [the learning store](/local-loop) and [`penthera scan`](/commands/scan).
+
+For a finding you have judged safe, you can:
+
+- **Fix the cause.** Most header and cookie findings go away with a one-line change in your app or in `vercel.json`.
+- **Raise the bar.** In your committed workflow, change `fail-on: high` to `fail-on: critical`. Then only critical findings block a deploy. High findings still appear in the summary.
+- **Tell us.** A wrong finding is a bug in a rule. Open an issue at [github.com/danoszz/penthera/issues](https://github.com/danoszz/penthera/issues) with the finding's title and the deployment's header or page that triggered it.
+
+## What it asks for and keeps
+
+Penthera asks Vercel for three scopes and nothing else:
+
+| Scope | Why |
+|---|---|
+| Deployment Checks, read and write | To add the check and set its result. |
+| Projects, read | To list your projects and their repositories. |
+| Deployments, read | To confirm a result belongs to a production deployment of that project. |
+
+It asks for no access to your code or your GitHub account. You commit the workflow yourself, on purpose.
+
+The server keeps an encrypted Vercel token, the installation id, your team or user id, the install date, a random session value, the ids of the projects you turned the check on for, and anonymous daily totals that name nobody. It never keeps your code, deployment URLs or findings. For each production deploy the workflow sends only the deployment id, the project id and pass or fail, signed by GitHub.
+
+Everything is in the [privacy notice](/vercel/privacy) and the [terms](/vercel/terms). The functions run in Frankfurt and the data stays in the EU.
+
+## Uninstall
+
+1. In Vercel, open **Settings**, **Integrations**, **Penthera**, **Manage**, and choose **Uninstall**.
+2. We delete the token, the installation record and the project ids when Vercel tells us. A weekly check also deletes any record whose token Vercel no longer accepts.
+3. Remove the check by hand if a project still lists it. Open the project's **Settings**, **Build and Deployment**, **Deployment Checks**, and delete the Penthera check. A check left behind with nobody to finish it would hold production deploys until Vercel times it out.
+4. Delete `.github/workflows/penthera-vercel.yml` from each repository.
+
+## Troubleshooting
+
+### The check fails with a Deployment Protection message
+
+With Vercel Authentication on (Standard Protection, the usual setting), the deployment URL answers 401 to the scanner. The job then fails and says so, instead of passing a scan that read nothing. Turn the protection off for the deployments you want checked. Penthera never sees or stores a bypass secret.
+
+### The check stays pending
+
+The workflow is missing, is not on the default branch, or is not at `.github/workflows/penthera-vercel.yml`. Commit it there. Also check that the job has `id-token: write`, as in the file Penthera gives you. If the job reports that the relay answered an error, the check stays pending until Vercel's timeout.
+
+### Turn on the check failed
+
+The page names the project, says what Vercel answered and what to do, and shows a short code in small print. Try again only when the page offers it.
+
+| Page says | What it means | What to do |
+|---|---|---|
+| Install again (`revoked`) | Vercel no longer accepts this installation's access (401). | Install Penthera again from Vercel. |
+| Disabled (`disabled`) | Vercel disabled the installation, usually because the person who installed it left the team (403). | A team owner transfers it in Settings, Integrations, or you install again. |
+| Not allowed (`forbidden`) | Vercel says this installation may not add checks to the project (403). | Accept any pending permission update under Settings, Integrations, Penthera. Check the project is shared with Penthera under Manage. |
+| Project not found (`not_found`) | Penthera may no longer have access to the project (404). | Give Penthera access under Manage, then turn the check on again. |
+| Already has a check (`conflict`) | The project already has a check like this one (409). | Remove the old Penthera check in Deployment Checks, then try again. |
+| Leftover check (`leftover`) | An earlier install left a check that this installation could not remove. | Remove it in Deployment Checks, then try again. |
+| Rate limited (`rate_limited`) | Vercel is limiting requests (429). | Wait a minute, then try again. |
+| Vercel had a problem (`vercel_down`, `network`) | Vercel failed or did not answer (5xx). | Try again in a minute. |
+| Could not save (`store`) | Our server failed to save the setting. Nothing changed in Vercel. | Try again in a minute. |
+| Not accepted (`rejected`) | Vercel did not accept the check's settings. This is on our side. | Send us the code at [github.com/danoszz/penthera/issues](https://github.com/danoszz/penthera/issues). |
+
+Another team's installation may hold a check on the same project. Then the page says so and adds no second check. A check named like ours that this installation did not add gets a note with a link to Deployment Checks.
+
+### The install page refused the install
+
+These pages mean nothing was stored and no check was added. An install link works only in the browser that started it, for 30 minutes.
+
+| Page says | What it means | What to do |
+|---|---|---|
+| Your install link has run out | More than 30 minutes passed, or the link opened in another browser or device. | Choose **Restart on Vercel**. |
+| This install didn't start in this browser | The install began somewhere else. If you did not start one, close the page. Nothing happened. | Restart the install here. |
+| Part of your install link is missing | The link lost its check on the way, often when it was copied. | Restart the install. |
+| Install Penthera from Vercel | The link did not come from Penthera's page on Vercel. | Open Penthera on Vercel and install from there. |
+| This install belongs to another Vercel team | One team cannot take over another team's install. | Restart, and pick the team you want Penthera on. |
+
+Vercel creates the installation before it sends you to Penthera, so a refused install may still show Penthera in your Integrations list. Uninstall it there, or restart the install.
+
+### Still stuck
+
+Write to `team@penthera.org` or open an issue at [github.com/danoszz/penthera/issues](https://github.com/danoszz/penthera/issues). We aim to answer within 5 business days.

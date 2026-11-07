@@ -26,4 +26,6 @@ export default [
   { files: ["src/ui/static/**", "site/check/**", "site/theme.js", "site/track.js", "site/pro.js", "site/gopro.js"], languageOptions: { globals: { ...globals.browser } } },
   { files: ["site/theme.js", "site/track.js", "site/pro.js", "site/gopro.js"], languageOptions: { sourceType: "script" } },
   { files: ["**/*.cjs"], languageOptions: { sourceType: "commonjs" } },
+  // The Vercel integration server logs only through its redacting logger.
+  { files: ["integrations/vercel/**/*.mjs"], ignores: ["integrations/vercel/lib/log.mjs"], rules: { "no-console": "error" } },
 ];

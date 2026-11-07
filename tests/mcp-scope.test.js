@@ -125,9 +125,11 @@ describe("the scoped egress policy", () => {
     }
   });
 
-  it("keeps the same-site allowance for a redirect only", () => {
-    expect(checkEgress("https://www.example.com/", { redirect: true }, ctx()).allowed).toBe(true);
-    expect(checkEgress("https://www.example.com/", { redirect: false }, ctx()).allowed).toBe(false);
+  it("keeps the subdomain allowance for a redirect only, and never moves to a sibling", () => {
+    expect(checkEgress("https://eu.app.example.com/", { redirect: true }, ctx()).allowed).toBe(true);
+    expect(checkEgress("https://eu.app.example.com/", { redirect: false }, ctx()).allowed).toBe(false);
+    // A sibling of the target (2.3.2): on a shared platform that is another tenant.
+    expect(checkEgress("https://www.example.com/", { redirect: true }, ctx()).allowed).toBe(false);
   });
 
   it("allows listed hosts", () => {

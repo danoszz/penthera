@@ -124,9 +124,11 @@ describe("agent brief: buckets", () => {
     expect(formatBrief(b)).toContain("1 suppressed (1 critical or high): not counted here.");
   });
 
-  it("names reports/ when the scan skipped it", () => {
-    const b = buildBrief({ target: "/repo", mode: "repo", findings: [], coverage: { excludedDirs: ["node_modules", "reports"], families: [] } });
-    expect(b.not_checked.join(" ")).toMatch(/Folders named reports were not read, at any depth/);
+  it("names the root output folders where only the shape rules ran", () => {
+    const b = buildBrief({ target: "/repo", mode: "repo", findings: [], coverage: { excludedDirs: ["node_modules"], rootOutputDirs: ["dist", "reports"], families: [] } });
+    expect(b.not_checked.join(" ")).toMatch(/only its fixed-shape rules \(key prefixes, private keys\) in dist\/, reports\/ at the repo root/);
+    const none = buildBrief({ target: "/repo", mode: "repo", findings: [], coverage: { excludedDirs: ["node_modules"], families: [] } });
+    expect(none.not_checked.join(" ")).not.toMatch(/fixed-shape/);
   });
 
   it("groups one fix in one file, and one rule across many files", () => {

@@ -11,8 +11,8 @@
  * names the scan target and records every host contacted, every request it
  * refused, and every probe request that failed. Under `offline: true` or
  * `scoped: true` the client refuses any host (or port) other than the target's
- * and `allowHosts`; a redirect may also move to a host on the target's
- * registrable domain. `scoped` holds that line without `offline`'s other
+ * and `allowHosts`; a redirect may also move between the target's apex and
+ * `www.`, or to a subdomain of the target host. `scoped` holds that line without `offline`'s other
  * limits, for callers that promise a scope (`penthera mcp`). Outside a context
  * (unit tests, library use) requests are unrestricted and nothing is recorded.
  *
@@ -23,7 +23,7 @@
  */
 import { AsyncLocalStorage } from "node:async_hooks";
 import { readFileSync } from "node:fs";
-import { registrableDomain } from "./url.js";
+import { registrableDomain, redirectStaysOnTarget } from "./url.js";
 
 const DEFAULT_TIMEOUT = 8_000;
 const MAX_REDIRECTS = 10;
@@ -118,8 +118,11 @@ export function checkEgress(url, opts = {}, ctx = currentEgress()) {
   const host = parsed.hostname.toLowerCase();
   if (ctx.allowHosts.has(host)) return { allowed: true };
   const sameHost = host === ctx.targetHost;
-  // A redirect may move within the target's registrable domain (apex -> www).
-  const sameSite = opts.redirect && ctx.targetDomain && !isIpLike(host) && registrableDomain(host) === ctx.targetDomain;
+  // A redirect may move between the apex and www, or down to a subdomain of
+  // the target host, never to a sibling or a parent: on a platform that gives
+  // each customer a host (vercel.app, hf.space, notion.site...) those belong
+  // to someone else, listed platform or not (redirectStaysOnTarget).
+  const sameSite = opts.redirect && !isIpLike(host) && redirectStaysOnTarget(ctx.targetHost, host);
   if (!sameHost && !sameSite) {
     return { allowed: false, reason: `${host} is not the scan target (${ctx.targetHost})` };
   }

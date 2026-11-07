@@ -81,9 +81,9 @@ issues". The MCP lines pin the version.
 
 | Agent | Run this |
 |---|---|
-| Claude Code, plugin (skill and MCP server) | `claude plugin marketplace add danoszz/penthera`, then `claude plugin install penthera@penthera` |
-| Claude Code, MCP server only | `claude mcp add penthera -- npx -y penthera@2.3.0 mcp` |
-| Codex | `codex mcp add penthera -- npx -y penthera@2.3.0 mcp` |
+| Claude Code, plugin (skill only, runs the CLI) | `claude plugin marketplace add danoszz/penthera`, then `claude plugin install penthera@penthera` |
+| Claude Code, MCP server only | `claude mcp add penthera -- npx -y penthera@2.3.2 mcp` |
+| Codex | `codex mcp add penthera -- npx -y penthera@2.3.2 mcp` |
 | GitHub Copilot CLI | `copilot plugin marketplace add danoszz/penthera`, then `copilot plugin install penthera@penthera` |
 | GitHub Copilot in VS Code | the `code --add-mcp` line in [mcp.md](docs/commands/mcp.md#github-copilot) |
 | Gemini CLI | `gemini extensions install https://github.com/danoszz/penthera` |
@@ -222,26 +222,142 @@ projects is experiment E1. To reproduce every table, get the sealed split with
 
 ```mermaid
 flowchart LR
-    U["You or your AI agent"] --> P(("Penthera<br/>on your machine"))
+    U["You or<br/>your agent"] --> P(("Penthera<br/>on your machine"))
 
-    P --> APP["Your app<br/>URL scan, repo scan<br/>runtime advisories"]
-    P --> DEP["Your dependencies<br/>capabilities, install firewall<br/>typosquats, upgrade diff"]
-    P --> AI["Your AI tooling<br/>skills, MCP, hooks<br/>plugins, rule files"]
+    P --> APP["Your app<br/>live and code"]
+    P --> DEP["Dependencies<br/>npm and Python"]
+    P --> AI["AI tooling<br/>skills, MCP, hooks"]
 
-    APP --> F[["Findings<br/>severity, confidence<br/>evidence at file:line"]]
-    DEP --> F
-    AI --> F
+    APP & DEP & AI --> F[["Findings<br/>rules decide"]]
 
-    F --> FIX["Fix loop<br/>asks first, local branch<br/>cannot edit its own tests"]
-    FIX -. "re-scan proves it" .-> F
-    F --> R["Reports and dashboard<br/>terminal, Markdown, SARIF<br/>penthera ui, MCP tools"]
-    F --> E["Evidence<br/>signed bundle<br/>NIS2 and CRA drafts"]
+    F --> FIX["Fix<br/>asks first"]
+    F --> R["Reports<br/>SARIF, ui, MCP"]
+    F --> E["Evidence<br/>signed bundle"]
+    FIX -. "re-scan" .-> F
 
     classDef core fill:#0000ed,stroke:#0000ed,color:#ffffff
     classDef box fill:#ffffff,stroke:#000000,color:#000000
     class P core
     class U,APP,DEP,AI,F,FIX,R,E box
 ```
+
+<details>
+<summary><b>Advanced: black box</b>, the running app over HTTP</summary>
+
+The default scan sends no attack payloads. `--deep`, `--fuzz` and `--adaptive`
+start only after you confirm the hostname, or pass `--confirm-target <host>` in
+CI. Limits are in [METHODOLOGY.md](docs/METHODOLOGY.md#under-the-hood).
+
+```mermaid
+%%{init: {"flowchart": {"nodeSpacing": 24, "rankSpacing": 40}}}%%
+flowchart LR
+    APP["Running app<br/>penthera URL"] --> DEF
+    APP --> ACT
+
+    subgraph DEF["Default: no attack payloads"]
+        direction TB
+        B1["TLS, headers<br/>cookies, CORS"]
+        B2["Routes<br/>OpenAPI, files"]
+        B3["Auth, JWT, OAuth<br/>IDOR: review"]
+        B4["JS libraries<br/>bundle keys"]
+    end
+
+    subgraph ACT["Opt-in, gated"]
+        direction TB
+        A1["--deep<br/>SQLi, XSS, SSRF"]
+        A2["--fuzz<br/>API bodies"]
+        A3["--adaptive<br/>may send DELETE"]
+    end
+
+    DEF & ACT --> F[["Findings"]]
+
+    classDef core fill:#0000ed,stroke:#0000ed,color:#ffffff
+    classDef box fill:#ffffff,stroke:#000000,color:#000000
+    class F core
+    class APP,B1,B2,B3,B4,A1,A2,A3 box
+    style DEF fill:none,stroke:#0000ed,stroke-width:2px
+    style ACT fill:none,stroke:#0000ed,stroke-width:2px,stroke-dasharray:6 4
+```
+
+</details>
+
+<details>
+<summary><b>Advanced: white box</b>, your code and config</summary>
+
+Code sinks use taint-lite within one file, with no call graph. Dependency
+capabilities are what code can do, not proof it is malicious.
+
+```mermaid
+%%{init: {"flowchart": {"nodeSpacing": 24, "rankSpacing": 40}}}%%
+flowchart LR
+    REPO["Code and config"] --> RS
+    REPO --> OWN
+
+    subgraph RS["penthera --repo ."]
+        direction TB
+        W1["Secrets<br/>key formats"]
+        W2["Routes<br/>auth per route"]
+        W3["Code sinks<br/>eval, vm, exec"]
+        W4["CI, runtimes<br/>Actions, pins"]
+    end
+
+    subgraph OWN["Own commands"]
+        direction TB
+        W5["deps<br/>capabilities, IOCs"]
+        W6["agents<br/>MCP, skills, hooks"]
+        W7["install, hook<br/>before it lands"]
+    end
+
+    RS & OWN --> F[["Findings"]]
+
+    classDef core fill:#0000ed,stroke:#0000ed,color:#ffffff
+    classDef box fill:#ffffff,stroke:#000000,color:#000000
+    class F core
+    class REPO,W1,W2,W3,W4,W5,W6,W7 box
+    style RS fill:none,stroke:#0000ed,stroke-width:2px
+    style OWN fill:none,stroke:#0000ed,stroke-width:2px
+```
+
+</details>
+
+<details>
+<summary><b>Advanced: engine and outputs</b>, how a match becomes a result</summary>
+
+Rules decide every finding. Exit code `0` means nothing critical or high, `1`
+critical or high, `2` an incomplete or refused scan. Under `--ai` a model only
+proposes.
+
+```mermaid
+%%{init: {"flowchart": {"nodeSpacing": 30, "rankSpacing": 40}}}%%
+flowchart LR
+    subgraph IN["Inputs"]
+        direction LR
+        R["Signed rule packs"]
+        GI["--giants, opt-in"]
+        AI["--ai, opt-in"]
+    end
+
+    IN --> FD[["Finding<br/>severity, confidence"]]
+    FD --> EX{"Exit<br/>0, 1 or 2"}
+    EX --> OUT
+
+    subgraph OUT["Outputs"]
+        direction LR
+        O1["Reports, SARIF"]
+        O2["penthera ui, MCP"]
+        O3["Action, Vercel check"]
+        O4["Evidence bundle"]
+    end
+
+    classDef core fill:#0000ed,stroke:#0000ed,color:#ffffff
+    classDef box fill:#ffffff,stroke:#000000,color:#000000
+    class FD core
+    class R,GI,AI,EX,O1,O2,O3,O4 box
+    style IN fill:none,stroke:#0000ed,stroke-width:2px
+    style OUT fill:none,stroke:#0000ed,stroke-width:2px
+```
+
+</details>
 
 ### Before you deploy
 
@@ -290,7 +406,7 @@ never fails CI. Whether it finds more than the rules alone is not measured yet
 | Scans: URL, repo, dependencies, AI tooling, installs, pre-commit hook | **Stable**: in every release since 1.x, covered by the tests and the release gate |
 | Fix loop and local dashboard (`penthera ui`) | **Stable**; the dashboard was redesigned in 1.9.0 |
 | MCP server, Agent Skill, Claude Code plugin | **Stable**, since 1.9.0 |
-| Gemini CLI extension | **Stable**: it installs the newest release (2.3.0) |
+| Gemini CLI extension | **Stable**: it installs the newest release (2.3.2) |
 | Evidence bundles, NIS2 and CRA drafts | **Stable** as readiness tooling, not a certification |
 | AI mode (`--ai`) | **Experimental**: whether it finds more than the rules alone is not measured yet ([AI mode](docs/ai-mode.md)) |
 | Live check on [penthera.org](https://penthera.org) | **Beta**: passive only, [terms](docs/live-check-terms.md) |
@@ -366,8 +482,8 @@ The [claim map](docs/claims.md) ties these claims to the tests that hold them.
 **Verify it yourself.** In an empty folder:
 
 ```bash
-npm install penthera@2.3.0 && npm audit signatures
-npx penthera@2.3.0 rules list
+npm install penthera@2.3.2 && npm audit signatures
+npx penthera@2.3.2 rules list
 ```
 
 The first checks npm's registry signature and the build provenance of the
@@ -453,7 +569,7 @@ What changed, what we are measuring, and what comes next, in one place.
 
 | | Where it stands | Read more |
 |---|---|---|
-| **Latest release** | 2.3.0 (2026-11-05) on npm `latest`: GitHub Actions workflow checks, less noise on the first run, a verdict-first repo scan, no runtime dependencies, and an install line per agent | [CHANGELOG](CHANGELOG.md), [roadmap](ROADMAP.md) |
+| **Latest release** | 2.3.2 (2026-11-06) on npm `latest`, a security patch: hostile files can no longer hang a scan, secrets stay masked in what reports quote, and a dependency file Penthera can't read fails the check. 2.3.0 brought: GitHub Actions workflow checks, less noise on the first run, a verdict-first repo scan, no runtime dependencies, and an install line per agent | [CHANGELOG](CHANGELOG.md), [roadmap](ROADMAP.md) |
 | **Research** | Public benchmarks (E11b) published: on a sealed half of four public datasets, 1st of the free tools on npm and PyPI malware (tied 1st to 3rd), 1st on JS library injection bugs (tied 1st to 4th), 2nd on leaked secrets ([summary](#public-benchmarks)). E10 pilot published: precision 0.88, recall 0.07 to 0.71 on two known-vulnerable apps after fixes (one labeller, not independent; a re-run is pending because default scans no longer send login checks). E1 on real code is pre-registered; E8 (agent guardrails) is a draft | [E11b results](bench/public/RESULTS.md), [E10 results](bench/known-vuln/RESULTS.md), [E1 pre-registration](docs/research/prereg/E1-real-world-accuracy.md), [agents safely](docs/agents-safely.md) |
 | **Next** | Real-world precision and recall with intervals (E1), published whatever the result | [Roadmap: next](ROADMAP.md#next), [research plan](docs/vision-2.0.md) |
 

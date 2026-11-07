@@ -38,6 +38,8 @@ export function mergeResults(results) {
       coverage: results.find((r) => r.coverage)?.coverage || null,
       errors: results.flatMap((r) => r.errors || []),
       findings: dedupeFindings(results.flatMap((r) => r.findings || [])),
+      // A refused input in any target makes the merged run incomplete (exit 2).
+      ...(results.some((r) => r.incomplete?.length) ? { incomplete: results.flatMap((r) => r.incomplete || []) } : {}),
     };
   }
 
@@ -67,13 +69,22 @@ function mergeEndpoints(results) {
   return { total: all.length, discovered: all.length, byStatus, list: all };
 }
 
+const DEDUPE_RANK = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
+
+/**
+ * One finding per identity. The identity leaves severity out, so of two
+ * duplicates the more severe one is kept, at the first one's place (R10): a
+ * later high must not drop behind an earlier low.
+ */
 export function dedupeFindings(findings) {
-  const seen = new Set();
-  return findings.filter((f) => {
+  const at = new Map();
+  const out = [];
+  for (const f of findings) {
     // Same identity function as the baseline diff and the audit loop.
     const key = fingerprintFinding(f);
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+    const i = at.get(key);
+    if (i === undefined) { at.set(key, out.length); out.push(f); continue; }
+    if ((DEDUPE_RANK[f.severity] ?? -1) < (DEDUPE_RANK[out[i].severity] ?? -1)) out[i] = f;
+  }
+  return out;
 }
