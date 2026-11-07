@@ -310,8 +310,10 @@ describe("the install window", () => {
     const { app } = setup();
     for (const url of [ext("&state=abc"), ext("")]) {
       const text = await (await app.install(get(url))).text();
-      expect(text).toContain("Nothing was added to your projects");
+      expect(text).toContain("added nothing to your projects");
       expect(text).toContain("Settings, Integrations");
+      expect(text).toContain('<dl class="left">');
+      expect(text).toContain("Why we check this");
       expect(text).not.toContain("timed out");
     }
   });
@@ -570,13 +572,23 @@ describe("pages", () => {
     const { app } = setup();
     for (const url of ["/install", `/install?code=${CODE}`, `/install?code=${CODE}&configurationId=${CFG}&teamId=bad`, `/install?code=${CODE}&configurationId=${CFG}&state=x`]) {
       const body = await (await app.install(get(url))).text();
-      expect(body).toContain('<a class="btn go" href="/start">Install again</a>');
+      expect(body).toContain('<a class="btn go" href="/start">Restart on Vercel</a>');
     }
+  });
+
+  it("a page whose only next step is waiting takes the visitor on by itself, without a script", async () => {
+    const { app } = setup();
+    let res;
+    for (let i = 0; i < 12; i++) res = await app.install(get(installUrl(), { "x-real-ip": "198.51.100.7" }));
+    const text = await res.text();
+    expect(res.status).toBe(429);
+    expect(text).toContain('<meta http-equiv="refresh" content="60;url=/start">');
+    expect(text).not.toMatch(/<script/i);
   });
 
   it("an expired session and a failed form check each offer a way out", async () => {
     const { app, cookie } = await installed();
-    expect(await (await app.setup(get("/setup"))).text()).toContain('<a class="btn go" href="/start">Install again</a>');
+    expect(await (await app.setup(get("/setup"))).text()).toContain('<a class="btn go" href="/start">Restart on Vercel</a>');
     expect(await (await app.setup(post("/setup", "csrf=wrong&action=workflow&p=prj_one", { cookie, origin: BASE }))).text()).toContain('href="/setup"');
   });
 });
