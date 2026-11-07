@@ -56,9 +56,11 @@ jobs:
             echo "::error::Not a Vercel deployment URL, so nothing was scanned: $host"
             exit 2
           fi
-          h="$RUNNER_TEMP/h"; : > "$h"
-          if [ -n "$BYPASS" ]; then echo "::add-mask::$BYPASS"; echo "x-vercel-protection-bypass: $BYPASS" > "$h"; fi
-          code=$(curl -s -o /dev/null -w '%{http_code}' --max-redirs 0 --max-time 20 -H @"$h" "https://$host/" || true); rm -f "$h"
+          if [ -n "$BYPASS" ]; then
+            echo "::add-mask::$BYPASS"
+            [[ "$BYPASS" =~ ^[A-Za-z0-9._~-]{16,128}$ ]] || { echo "::error::VERCEL_AUTOMATION_BYPASS_SECRET: 16-128 of A-Za-z0-9._~-"; exit 2; }
+          fi
+          code=$(printf '%s' "${BYPASS:+x-vercel-protection-bypass: $BYPASS}" | curl -s -o /dev/null -w '%{http_code}' --max-redirs 0 --max-time 20 -H @- "https://$host/" || true)
           if [ "$code" = 401 ] || [ "$code" = 403 ]; then
             echo "::error::https://$host answers $code: Deployment Protection. Add the repo secret VERCEL_AUTOMATION_BYPASS_SECRET: docs.penthera.org/vercel#deployment-protection"
             exit 2

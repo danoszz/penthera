@@ -99,11 +99,13 @@ describe("vercelBypass()", () => {
       expect(vercelBypass(t, {}, env), t).toMatchObject({ header: "", note: expect.stringMatching(/^not sent/) });
     }
     expect(vercelBypass(TARGET, {}, {})).toEqual({ secret: "", header: "", note: null });
+    // The longest value it takes, the same as the workflow's bash check (macOS bash caps {n,m} at 255).
+    expect(vercelBypass(TARGET, {}, { PENTHERA_VERCEL_BYPASS: "x".repeat(128) }).header).toBe("x".repeat(128));
   });
 
   it("refuses a value that could break a header, before anything is scanned", () => {
     // Also every character a page could echo back in another form (&, %, quotes, <, space).
-    for (const bad of ["short-value", " leading-space-value", "has space inside it", "line\nbreak-header-x", "cr\rbreak-header-xx", "tab\there-value-xx", "é-not-ascii-value-x", "amp&ersand-value-x", "per%25cent-value-xx", "quote\"value-xxxxxx", "angle<value-xxxxxx", "x".repeat(257)]) {
+    for (const bad of ["short-value", " leading-space-value", "has space inside it", "line\nbreak-header-x", "cr\rbreak-header-xx", "tab\there-value-xx", "é-not-ascii-value-x", "amp&ersand-value-x", "per%25cent-value-xx", "quote\"value-xxxxxx", "angle<value-xxxxxx", "x".repeat(129)]) {
       expect(() => vercelBypass(TARGET, {}, { PENTHERA_VERCEL_BYPASS: bad }), JSON.stringify(bad)).toThrow(/PENTHERA_VERCEL_BYPASS/);
     }
   });

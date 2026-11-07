@@ -119,7 +119,7 @@ export function vercelBypass(target, opts = {}, env = process.env) {
   const secret = env.PENTHERA_VERCEL_BYPASS ?? "";
   if (!secret) return { secret, header: "", note: null };
   // URL-safe: no header injection or encoded copy.
-  if (!/^[\w.~-]{16,256}$/.test(secret)) throw new Error("PENTHERA_VERCEL_BYPASS: 16-256 of A-Za-z0-9._~- only; nothing scanned");
+  if (!/^[\w.~-]{16,128}$/.test(secret)) throw new Error("PENTHERA_VERCEL_BYPASS: 16-128 of A-Za-z0-9._~- only; nothing scanned");
   const u = new URL(target);
   const no = opts.scoped ? "MCP scan" : u.protocol !== "https:" || !/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.vercel\.app$/.test(u.hostname) ? "not *.vercel.app" : "";
   return { secret, header: no ? "" : secret, note: no ? `not sent: ${no}` : "sent to target only" };

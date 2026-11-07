@@ -91,7 +91,7 @@ With Vercel Authentication on (Standard Protection, which Vercel turns on for ne
 2. In GitHub, open the repository's **Settings**, **Secrets and variables**, **Actions**, and add a repository secret named `VERCEL_AUTOMATION_BYPASS_SECRET` with that value.
 3. Deploy again.
 
-Vercel generates the secret from letters and digits. Penthera accepts 16 to 256 characters of `A-Z a-z 0-9 . _ ~ -`, so no encoded copy of it can slip past the redaction; any other value stops the scan with a message.
+Vercel generates the secret from letters and digits. Penthera accepts 16 to 128 characters of `A-Z a-z 0-9 . _ ~ -`, so no encoded copy of it can slip past the redaction; any other value stops the scan with a message.
 
 The workflow sends the secret as the `x-vercel-protection-bypass` header, and only to the `*.vercel.app` deployment host it scans: Penthera checks the host, and the header never goes to another host, also not after a redirect. GitHub masks the secret in the log, and Penthera replaces it with `[redacted]` anywhere in its report, job summary and artifact. It never reaches Penthera's server. If you rotate the secret in Vercel, update the repository secret too; until then the job fails with the same message.
 
