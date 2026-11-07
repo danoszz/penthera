@@ -101,6 +101,15 @@ textarea+.lede{margin-top:32px}
 .faq dt:first-child{margin-top:0}
 .faq dd{max-width:36rem;margin:4px 0 0;font-size:var(--t-small);line-height:1.5;color:var(--text-2)}
 .faq .links{padding:0 20px 12px}
+.faq+.faq{margin-top:2px}
+.act+.left{margin-top:48px}
+.copy{margin-top:48px}
+.faq .in{padding:0 20px 20px}
+.faq .in .small{margin-top:0}
+.faq .in textarea{background:var(--ground)}
+.row .sub{display:inline-flex;align-items:center;gap:.5ch;min-height:var(--target);font-family:var(--px);font-size:var(--t-note);letter-spacing:.02em}
+.steps li>span{min-width:0}
+.steps code{font-size:.9em}
 .foot{width:100%;max-width:calc(var(--measure) + 2 * var(--gutter));padding:64px var(--gutter) calc(var(--veil) + 16px);font-family:var(--px);font-size:var(--t-note);line-height:1.6;letter-spacing:.02em;color:var(--text-3)}
 .foot ul{display:flex;flex-wrap:wrap;gap:0 24px;margin:8px 0 0;padding:0;list-style:none}
 .home{display:grid;place-items:center;max-width:none;padding-bottom:var(--veil);text-align:center}
