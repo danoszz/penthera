@@ -381,6 +381,27 @@ describe("setup", () => {
     expect(vercel.checks.prj_one).toHaveLength(0);
   });
 
+  it("once a check is on, /setup reports in per project instead of starting the wizard again", async () => {
+    const { app, cookie } = await installed();
+    const pick = await (await app.setup(get("/setup", { cookie }))).text();
+    expect(pick).toContain("<h1>Pick your projects</h1>");
+    const csrf = /name="csrf" value="([^"]+)"/.exec(pick)[1];
+    await app.setup(post("/setup", `csrf=${csrf}&action=enable&p=prj_one`, { cookie, origin: BASE }));
+    const status = await (await app.setup(get("/setup", { cookie }))).text();
+    expect(status).toContain("<h1>Penthera checks 1 of 2 projects</h1>");
+    expect(status).not.toContain("Pick your projects");
+    expect(status).toContain('<span class="on">Check on</span>');
+    expect(status).toContain('name="remove" value="prj_one"');
+    expect(status).toContain("Needs a GitHub-connected project");
+    // No stored result: the row links to the repo's runs, where the workflow and every result are.
+    expect(status).toMatch(/href="https:\/\/github\.com\/[^"]+\/actions\/workflows\/penthera-vercel\.yml"/);
+    expect(status).toContain('<details class="faq copy">');
+    expect(status).not.toMatch(/<script/i);
+    // Turn off goes back to the wizard once nothing is on.
+    await app.setup(post("/setup", `csrf=${csrf}&remove=prj_one`, { cookie, origin: BASE }));
+    expect(await (await app.setup(get("/setup", { cookie }))).text()).toContain("<h1>Pick your projects</h1>");
+  });
+
   it("accepts a browser post that says Origin: null when the form token is right", async () => {
     const { app, cookie } = await installed();
     const page = await (await app.setup(get("/setup", { cookie }))).text();
@@ -581,7 +602,11 @@ describe("pages", () => {
       expect(page).not.toMatch(/<script/i);
     }
     expect(pick).toContain('<details class="faq">');
-    expect(configure).toContain('<details class="faq" open>');
+    expect(configure).not.toContain('<details class="faq" open>');
+    // Configure without a session: one way to confirm through Vercel, and the workflow behind a closed toggle.
+    expect(configure).toContain('<a class="btn go" href="/start">Show my projects</a>');
+    expect(configure).toContain('<details class="faq copy"><summary>Copy the workflow again</summary>');
+    expect(configure).not.toContain("<details class=\"faq copy\" open>");
   });
 
   it("draws no thin left line on any page: no border-left, no blockquote bar", () => {

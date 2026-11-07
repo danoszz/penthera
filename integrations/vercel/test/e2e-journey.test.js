@@ -165,7 +165,7 @@ async function journey({ entry, origin, autoRuns = true, publicView = false }) {
   expect(h.vercel.runs.dpl_preview1 ?? []).toHaveLength(0);
 
   // 7. Configure, later, from Vercel's button, with no session.
-  await page(await h.app.configure(new Request(`${BASE}/configure?configurationId=${CFG}`)), 200, "Penthera on Vercel", "penthera-vercel.yml");
+  await page(await h.app.configure(new Request(`${BASE}/configure?configurationId=${CFG}`)), 200, "Your Penthera install", "Show my projects", "penthera-vercel.yml");
 
   // 8. Uninstall: Vercel's signed webhook.
   const raw = JSON.stringify({ id: "evt_1", type: "integration-configuration.removed", createdAt: T0 + 1000, payload: { configuration: { id: CFG, projects: ["prj_gaiaweb"] } } });

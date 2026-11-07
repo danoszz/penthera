@@ -96,6 +96,20 @@ const NEXT_STEPS = `<h2>What happens on your next deploy</h2>
 <li><span class="n" aria-hidden="true">3</span><span><strong>A pass goes live.</strong> A fail stays out of production, and the check in Vercel links to the findings in the GitHub job summary.</span></li>
 </ol>`;
 
+// Changing an install happens in Vercel; this says where. `confirmed` is true on the status view.
+const UNINSTALL = "<strong>Uninstall.</strong> Vercel, Settings, Integrations, Penthera, Manage, Uninstall. We delete the token and project links then. Remove <code>penthera-vercel.yml</code> from your repo too.";
+const manage = (confirmed) => `<h2>${confirmed ? "Change your install" : "What you can do"}</h2>
+<ul class="steps">
+${confirmed ? "" : '<li><span><strong>Turn the check on or off.</strong> Show my projects, then one button per project. Or in Vercel: Project Settings, Deployment Checks.</span></li>\n'}<li><span><strong>Add projects.</strong> Give Penthera access to them in Vercel (Settings, Integrations, Penthera, Manage), then ${confirmed ? '<a href="/setup">reload this page</a>' : "Show my projects"}.</span></li>
+<li><span>${UNINSTALL}</span></li>
+</ul>`;
+
+// The workflow, for anyone who needs it again: closed by default.
+const copyWorkflow = () => `<details class="faq copy"><summary>Copy the workflow again</summary>
+<div class="in"><p class="small">Commit it as <code>${WORKFLOW_PATH}</code> on your default branch. The workflow only runs from there.</p>
+<textarea readonly spellcheck="false" wrap="off" aria-label="Workflow file">${esc(WORKFLOW_YAML)}</textarea></div>
+</details>`;
+
 // What a refused install leaves behind. Vercel makes the installation before it sends the browser to
 // /install, so it probably still lists Penthera; we stopped before the code exchange (README, "A refused install").
 const LEFT_REFUSED = {
@@ -327,6 +341,7 @@ export function createApp({ env = process.env, store, fetch: fetchImpl = globalT
     const single = page.projects.length === 1 && !page.next && !from;
     const anyOn = [...status.values()].some(Boolean);
     const token = formToken(s, c);
+    if (anyOn) return statusPage(page, status, token, from);
     const rows = page.projects.map((p, i) => {
       if (!p.repo) return `<li class="row off"><label class="pick"><input type="checkbox" disabled aria-label="Not available"><span class="grow"><span class="name" title="${esc(p.name)}">${esc(p.name)}</span><span class="meta">Needs a GitHub-connected project</span></span></label></li>`;
       const on = status.get(p.id);
@@ -351,6 +366,42 @@ ${more}
 </form>
 <p class="small">When Penthera finds a high or critical issue, the check keeps your production domain on the last good deployment. Previews are scanned too and never blocked.</p>
 ${asks()}`, { step: "Step 1 of 2: pick" });
+  }
+
+  // Once a check is on, /setup reports in instead of starting the wizard again. Each row says what
+  // Vercel says about its check now; results stay in GitHub, so the row links there.
+  function statusPage(page, status, token, from) {
+    const total = page.projects.length;
+    const onCount = [...status.values()].filter((v) => v === true).length;
+    const title = page.next || from
+      ? "Your projects"
+      : onCount === total
+        ? total === 1 ? "Penthera checks your project" : `Penthera checks all ${total} projects`
+        : `Penthera checks ${onCount} of ${total} projects`;
+    const rows = page.projects.map((p) => {
+      const name = `<span class="name" title="${esc(p.name)}">${esc(p.name)}</span>`;
+      if (!p.repo) return `<li class="row off"><span class="grow">${name}<span class="meta">Needs a GitHub-connected project</span></span></li>`;
+      const on = status.get(p.id);
+      const state = on === true ? '<span class="on">Check on</span>' : on === false ? "Check off" : "Check status unknown";
+      const link = `<a class="sub" href="https://github.com/${esc(p.repo)}/actions/workflows/penthera-vercel.yml" target="_blank" rel="noopener noreferrer">Workflow and results <span aria-hidden="true">↗</span></a>`;
+      const button = on === true
+        ? `<button class="btn quiet" name="remove" value="${esc(p.id)}" type="submit" aria-label="Turn off for ${esc(p.name)}">Turn off</button>`
+        : on === false ? `<button class="btn quiet" name="p" value="${esc(p.id)}" type="submit" aria-label="Turn on for ${esc(p.name)}">Turn on</button>` : "";
+      return `<li class="row"><span class="grow">${name}<span class="meta">${esc(p.repo)} · ${state}</span>${link}</span>${button}</li>`;
+    });
+    const more = page.next ? `<p class="more"><a href="/setup?from=${esc(page.next)}">More projects</a></p>` : "";
+    return html(200, "Penthera: your projects", `
+<h1>${title}</h1>
+<p class="lede">Each production deploy of a checked project waits for Penthera's scan. Previews are scanned too and never blocked.</p>
+<form method="post" action="/setup">
+<input type="hidden" name="csrf" value="${token}">
+<input type="hidden" name="action" value="workflow">
+<ul class="list">${rows.join("")}</ul>
+</form>
+${more}
+${manage(true)}
+${copyWorkflow()}
+${asks()}`);
   }
 
   async function setupPost(request) {
@@ -505,14 +556,18 @@ ${NEXT_STEPS}
     if (s && s.configurationId === id) return redirect("/setup");
     // Vercel's Configure button proves nothing about who clicks it, so without the install
     // session this page shows only what is the same for everyone.
-    return html(200, "Penthera: configure", `
-<h1>Penthera on Vercel</h1>
-<p class="lede">Penthera's check runs from the workflow in your repo, <code>${WORKFLOW_PATH}</code>. Copy it again here:</p>
-<textarea readonly spellcheck="false" wrap="off" aria-label="Workflow file">${esc(WORKFLOW_YAML)}</textarea>
-<p class="lede">To turn the check off for one project: Vercel, Project Settings, Deployment Checks, and remove the Penthera check. You can also delete the workflow file.</p>
-<p class="lede">To add projects: give the integration access to them in Vercel, then install again from <a href="/start" target="_blank" rel="noopener noreferrer">this link</a>. Changing projects from this page works for 30 minutes after an install.</p>
-<p class="lede">To uninstall: Vercel, Settings, Integrations, Penthera, Manage, Uninstall. We delete the stored token and project links then. Remove the Penthera check from each project too, or production deploys keep waiting for it.</p>
-${asks({ open: true })}`);
+    return html(200, "Penthera: your install", `
+<h1>Your Penthera install</h1>
+<p class="lede">To show your projects and their checks here, Vercel first confirms it's you. That's one click on Vercel.</p>
+<div class="act"><a class="btn go" href="/start">Show my projects</a></div>
+<dl class="left">
+<div><dt>Penthera</dt><dd>An encrypted install token and the ids of projects with the check on. No code, no results.</dd></div>
+<div><dt>Vercel</dt><dd>The check on each project, under Project Settings, Deployment Checks.</dd></div>
+<div><dt>GitHub</dt><dd>The workflow and every scan result, in your repo's Actions tab.</dd></div>
+</dl>
+${manage(false)}
+${copyWorkflow()}
+${asks()}`);
   }
 
   async function webhook(request) {
