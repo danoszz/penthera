@@ -8,7 +8,7 @@ import { readFileSync, writeFileSync, mkdirSync, mkdtempSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { pinOf, chooseTarget, candidates } from "../scripts/ci/plugin-live.mjs";
+import { pinOf, chooseTarget, candidates, samePlugin } from "../scripts/ci/plugin-live.mjs";
 
 describe("plugin-claude-live", () => {
   it("reads the pinned version from the plugin's skill (the plugin has no .mcp.json)", () => {
@@ -65,5 +65,21 @@ describe("plugin-claude-live", () => {
     const target = chooseTarget(candidates("main", "2.3.1", run), "2.3.1");
     expect(target).not.toBe(discarded);
     expect(target).toBe(reviewed);
+  });
+  it("moves only when the plugin folder changed, so the directory isn't asked to review an identical version", () => {
+    const dir = mkdtempSync(join(tmpdir(), "plugin-same-"));
+    const env = { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1", HOME: dir };
+    const run = (...a) => execFileSync("git", ["-C", dir, ...a], { encoding: "utf-8", env, stdio: ["ignore", "pipe", "pipe"] }).trim();
+    const commit = (m) => { run("add", "-A"); execFileSync("git", ["-C", dir, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", m], { env }); return run("rev-parse", "HEAD"); };
+    run("init", "-q", "-b", "main");
+    writeFileSync(join(dir, "README.md"), "no plugin yet\n"); const none = commit("no plugin");
+    mkdirSync(join(dir, "plugin/skills/penthera"), { recursive: true });
+    writeFileSync(join(dir, "plugin/skills/penthera/SKILL.md"), "Run `npx -y penthera@2.3.2`.\n"); const live = commit("plugin");
+    writeFileSync(join(dir, "README.md"), "docs change\n"); const docs = commit("docs only");
+    writeFileSync(join(dir, "plugin/skills/penthera/SKILL.md"), "Run `npx -y penthera@2.3.2 --repo .`.\n"); const changed = commit("skill change");
+    expect(samePlugin(live, docs, run)).toBe(true);
+    expect(samePlugin(live, changed, run)).toBe(false);
+    expect(samePlugin(none, live, run)).toBe(false);
+    expect(samePlugin(none, none, run)).toBe(false);
   });
 });
