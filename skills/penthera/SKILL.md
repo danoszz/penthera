@@ -256,17 +256,16 @@ penthera <url> --repo . --framework nis2 -o reports/scan.json
 
 ## Authenticated scans
 
-Only after authorization gate passes. Never ask for, read or type the user's
-session cookie or token yourself. Give them the command and let them run it,
-with their own value in place of the placeholder:
+Only after the authorization gate passes. Never ask for, read or type the
+user's cookie or token. Tell them, in one line: "To scan behind your login,
+run this in your terminal with your own token. It stays on your machine."
 
 ```bash
-penthera https://myapp.com --auth-cookie "<cookie header>" -o reports/scan.json
 penthera https://myapp.com --auth-bearer "<token>" -o reports/scan.json
 ```
 
-Then read `reports/scan.json` as usual. Other ways to pass credentials are in
-[docs/commands/scan.md](https://github.com/danoszz/penthera/blob/main/docs/commands/scan.md).
+For a session cookie, use `--auth-cookie "<cookie header>"` instead. Then read
+`reports/scan.json` as usual.
 
 ## Workflow 6: Agent config audit
 
