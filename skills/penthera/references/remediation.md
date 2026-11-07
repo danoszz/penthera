@@ -126,7 +126,7 @@ def admin(): ...
 **Fix:** disable interactive docs and the spec in production.
 
 **FastAPI:** `FastAPI(docs_url=None, redoc_url=None, openapi_url=None)` in production (gate by an env flag).
-**Express + swagger-ui:** only mount when `process.env.NODE_ENV !== "production"`.
+**Express + swagger-ui:** mount it only outside production (check your app's environment setting).
 
 **Verify:** `/docs` and `/openapi.json` return 404 in production.
 
@@ -177,7 +177,7 @@ app.use("/api/login", rateLimit({ windowMs: 15 * 60 * 1000, max: 10 }));
 
 **Finding:** an API key, token, password, or private key is committed in the repo.
 **Fix (do all three):**
-1. Move it to an environment variable: `const key = process.env.STRIPE_SECRET_KEY;` (was `const key = "sk_live_..."`).
+1. Take the value out of the code and load it from configuration that stays out of the repo, such as an environment variable your host sets. The code then names the setting (say, `STRIPE_KEY`), never the value.
 2. **Rotate the secret now**, once committed it is compromised, even after removal.
 3. Add the file to `.gitignore`; if it was pushed, scrub history (`git filter-repo`).
 
