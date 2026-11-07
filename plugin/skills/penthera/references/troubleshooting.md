@@ -53,14 +53,10 @@ penthera --version
 
 ```bash
 # Bearer, prefix added automatically if missing
-penthera https://myapp.com --auth-bearer "eyJ..."
-
-# Or via env
-export PENTHERA_BEARER="eyJ..."
-penthera https://myapp.com -o reports/scan.json
+penthera https://myapp.com --auth-bearer "<token>"
 
 # Cookie, full header value
-penthera https://myapp.com --auth-cookie "session=abc123; path=/"
+penthera https://myapp.com --auth-cookie "<cookie header>"
 ```
 
 ## Site not read
