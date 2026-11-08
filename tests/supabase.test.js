@@ -550,6 +550,22 @@ drop policy if exists gone on public.t;`)).toEqual([]);
     expect(shown("a".repeat(81))).toMatch(/…[0-9a-f]{16}$/);
   });
 
+  it("a quoted mixed-case name, a NUL and the all-tables marker each keep their own id (review of PR 312)", () => {
+    const id = (sql) => scanSupabase(repo({ "supabase/migrations/001.sql": sql })).findings.map(findingId);
+    expect(id('create table "Users" (id int);')).not.toEqual(id("create table users (id int);"));
+    const pol = (name) => `create table public.t (id int);\nalter table public.t enable row level security;\ncreate policy ${name} on public.t for update to anon using (true);`;
+    expect(id(pol('"P"'))).not.toEqual(id(pol("p")));
+    // A NUL inside a quoted name no longer splits the key: it isn't read as public.t.
+    expect(id(`create table public.t (id int);\nalter table public.t enable row level security;\ncreate policy p on "t\u0000z" for update to anon using (true);`)).not.toEqual(id(pol("p")));
+    // Past the cap, "every table" and a table literally named "*" differ.
+    const decoys = `set search_path to private;\n${Array.from({ length: 50_001 }, (_, i) => `create table d${i} (id int);`).join("\n")}`;
+    const over = (b) => scanSupabase(repo({ "supabase/migrations/001.sql": decoys, "supabase/migrations/002.sql": b })).findings.filter((f) => f.title.includes("after Penthera's"));
+    const all = over("grant select on all tables in schema public to anon;");
+    const star = over('grant select on public."*" to anon;');
+    expect(all.map(findingId)).not.toEqual(star.map(findingId));
+    expect(all[0].description).toContain("`public.* (all tables)`");
+  }, 60_000);
+
   it("a dot inside a quoted name is not a schema separator (review of PR 312)", () => {
     // public."x.y" has no RLS; enabling RLS on "public.x".y must not hide it.
     const r = checkMigrations([{ rel: "001.sql", text: 'create table public."x.y" (id int);\ncreate table "public.x".y (id int);\nalter table "public.x".y enable row level security;' }]);
