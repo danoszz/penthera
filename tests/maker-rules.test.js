@@ -199,6 +199,21 @@ describe("server-action-no-auth: one file", () => {
     expect(big / small, `grew ${(big / small).toFixed(1)}x over 8x the input`).toBeLessThan(24);
     expect(unchecked(gen(64000))).toEqual(["act:a database write"]); // still found
   });
+  // Vercel 01M6Y9GQF73D17FDJC5KPG3EDD: imported names spelled `import` made the
+  // walk restart inside one binding list and reread the same long comment after
+  // `from` once per alias. Each statement is now consumed once.
+  it("reads one import once, however many of its names are spelled import", () => {
+    const gen = (aliases) => `'use server';\nimport { auth, ${Array.from({ length: aliases }, (_, k) => `import as i${k}`).join(", ")} } from /*${"x".repeat(400000)}*/ "@/auth";\nexport async function act(id){ await auth(); await db.delete(id); }\nexport async function bad(id){ await db.delete(id); }\n`;
+    const ms = (n) => { const src = gen(n); uncheckedActions(src); const s = process.hrtime.bigint(); for (let k = 0; k < 3; k++) uncheckedActions(src); return Number(process.hrtime.bigint() - s) / 1e6; };
+    const one = Math.max(ms(1), 0.5);
+    const many = ms(200); // the old walk reread the comment once per alias: ~10x here, now ~1x
+    expect(many / one, `200 aliases took ${(many / one).toFixed(1)}x one alias`).toBeLessThan(3);
+    expect(unchecked(gen(200))).toEqual(["bad:a database write"]); // auth still counts
+  });
+  it("still reads imports without semicolons, one after another", () =>
+    expect(unchecked("'use server'\nimport { db } from \"@/db\"\nimport { auth } from \"@/auth\"\nexport async function x(id){ await auth(); await db.delete(id) }\n")).toEqual([]));
+  it("a TS import-equals without semicolons does not borrow the next import's auth module", () =>
+    expect(unchecked("'use server'\nimport guard = require(\"./x\")\nimport { auth } from \"@/auth\"\nexport async function x(id){ await guard(); await db.delete(id) }\n")).toEqual(["x:a database write"]));
   it("a side-effect import of an auth module binds no names, so the action is still reported", () =>
     expect(unchecked("'use server';\nimport '@/lib/auth';\nexport async function x(id){ await db.delete(id); }\n")).toEqual(["x:a database write"]));
 });
