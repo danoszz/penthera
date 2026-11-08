@@ -666,12 +666,16 @@ drop policy if exists gone on public.t;`)).toEqual([]);
     const sch = "é".repeat(40);
     const a = scanSupabase(repo({ "supabase/config.toml": `[api]\nschemas = ["public", "${sch}"]\n`, "supabase/migrations/001.sql": `create table "${sch}".profiles (id uuid, email text);` }));
     expect(a.findings.map((f) => f.templateId)).toEqual(["supabase-rls-disabled"]);
+    expect(exposedSchemas(`[api]\nschemas = ["public", "${"a".repeat(300)}"]\n`)).toEqual(["public", "a".repeat(63)]);
     // 1,025 route handlers reading the server-only key don't take the slots; the client file is named.
     const files = { "app/page.tsx": `"use client";\nconst k = process.env.${SERVER_NAME};\n` };
     for (let i = 0; i < 1025; i++) files[`app/api/r${i}/route.js`] = `export const k = process.env.${SERVER_NAME};\n`;
     const b = scanSupabase(repo(files, { pkg: NEXT }));
     expect(b.findings.map((f) => `${f.file}:${f.severity}`)).toEqual(["app/page.tsx:medium"]);
     expect(b.incomplete).toEqual([]);
+    // A server-path file that client code imports is still reported (recheck of PR 312).
+    const d = scanSupabase(repo({ "components/Admin.jsx": '"use client";\nimport { a } from "../server/admin.js";\n', "server/admin.js": `export const a = process.env.${SERVER_NAME};\n` }, { pkg: NEXT }));
+    expect(d.findings.map((f) => `${f.file}:${f.severity}`)).toEqual(["server/admin.js:medium"]);
     // PostgreSQL folds only ASCII in an unquoted name: ÄRGER is Ärger, not ärger.
     const c = checkMigrations([{ rel: "1.sql", text: "create table public.ÄRGER (id int);\nalter table if exists public.ärger enable row level security;" }]);
     expect(c.findings.filter((f) => f.kind === "rls").map((f) => f.table.name)).toEqual(["Ärger"]); // Ä stays, RGER folds
