@@ -6,7 +6,7 @@ All notable changes to Penthera are documented here. Versioning follows [SemVer]
 
 ## [2.4.0] - 2026-11-08
 
-2.4.0 makes Penthera harder to fool and adds a receipt you can post. Vercel Security Review found 13 ways to hide a finding or stall a scan in this hardening work. Every one is fixed, each with a regression test that fails on the old code. Reviews by Claude Opus 5.5 and Mythos found more, also fixed with tests. Crafted files that took seconds to hours now take under a second. 8,000 nested object literals went from 15.6 s to 69 ms. A 4 MiB line of `[/]` went from an estimated hour and a half to under a tenth of a second. 4,000 linked skill files went from 18.5 s and 2 GB to under a second. When a file is too big to finish, the scan says so and exits 2, except in the two cases below. New: `penthera --card` writes a security receipt for your repo.
+2.4.0 makes Penthera harder to fool and adds a receipt you can post. Vercel Security Review found 13 ways to hide a finding or stall a scan in this hardening work. Every one is fixed, each with a regression test that fails on the old code. Reviews by Claude Opus 5.5 and Mythos found more, also fixed with tests. Crafted files that took seconds to hours now take under a second. 8,000 nested object literals went from 15.6 s to 69 ms. A 4 MiB line of `[/]` went from an estimated hour and a half to under a tenth of a second. 4,000 linked skill files went from 18.5 s and 2 GB to under a second. When a file is too big to finish, the scan says so and exits 2, except in the two cases below. New: `penthera --card` writes a security receipt for your repo, and every surface (the scan, `penthera ui`, the MCP tools, the reports and `penthera fix`) now counts one set of problems with the same words.
 
 Known limits: the checks read code token by token, without a full parser. Some shapes are still missed, to keep scans fast: a ternary inside a default parameter, `arguments[n]` in a helper, and a helper that passes its argument on to another helper. A skill file past the walk's file cap, and a symlinked command file inside the project, are skipped without a note. Both are older than 2.4 and planned for 2.4.1.
 
@@ -85,6 +85,17 @@ Known limits: the checks read code token by token, without a full parser. Some s
   or block page, no rate limiting, and the app scan done. This reaches the
   Vercel workflow with the next release of the Action; until then the
   workflow's own report check covers it.
+- **The share card never shows a URL, a credential or a path from your
+  project.** An old lockfile can store a package's version as a download URL
+  with a user name, password or token in it, and a card could show that URL
+  after the package name. A card now names only the package and drops every
+  word that holds a URL, a `user:password@` part, a `key:value` pair, a
+  percent escape or a path (route paths such as `app/[slug]/page.tsx`, home and
+  Windows paths included). The value after a key like `password:`, `token=` or
+  `Authorization:` is hidden whole, and a key split by dots is still hidden.
+  Invisible characters are removed before these checks, so they can't hide a
+  URL from them. "Not checked" lines such as the MCP note stay on the card
+  however short it gets.
 
 ### Added
 
@@ -130,6 +141,49 @@ Known limits: the checks read code token by token, without a full parser. Some s
 
 ### Changed
 
+- **One count everywhere.** A repo scan now runs the checks `penthera fix` uses:
+  security headers, cookie flags, CORS and login rate limits as your code sets
+  them, including in `next.config.mjs`. The scan, `penthera ui`, the MCP tools,
+  the JSON and SARIF reports, `penthera fix` and the fix loop count one set of
+  findings with the same words: a *problem* is a finding to act on or to check
+  first, and one *fix planned* can cover several problems. On the Next.js
+  fixture the scan used to say 2 problems while `fix --plan` planned 5 fixes for
+  10 findings; every surface now says 8 problems, and the plan says
+  `5 fixes planned for 8 problems`. The scan's fix line counts only problems
+  a recipe can change: likely noise, and a secret in a `.env` file, no longer
+  show as fixable after you fixed the rest. `penthera fix --plan` counts a fix
+  only when it changes a problem, and lists fixes for likely noise apart. Headers read from code are marked
+  `potential`, since a host or CDN may still add them. The new findings are
+  medium or lower, so no exit code changes.
+- **The fix planner's checks are bounded.** Now that every scan runs them, each
+  code file is read once and dropped, a long line can no longer make the CORS
+  or cookie check quadratic (80 KB took seven seconds before; 5 MiB now takes
+  milliseconds), each check keeps the 25 worst hits per file, and a link is
+  followed only inside the project. A code file that check could not read
+  (over the size limit, a device or FIFO, a link out of the project,
+  unreadable) or never reached (past the 5,000-file walk, which leaves out
+  generated and git-ignored folders) makes the scan incomplete and exits 2, as
+  a refused route file already did. Cookie calls written over several lines
+  (the Prettier style) are now checked and reported, to fix by hand: the fix
+  edits one-line calls, so they are not counted as fixable. `vercel.json`
+  headers count only when set for every route. Any number of `cookies()` stores is read, padding inside
+  `.get( "origin" )` is read as before, and a file with many hits holds only
+  the 25 worst in memory.
+- **Words an agent can act on.** In the JSON a repo finding also has `path`
+  (the file `url` already held, which stays) and every finding has
+  `exploitability`: `not-assessed` for a rule match, so `confidence: confirmed`
+  no longer reads as a verdict. Text reports say `pattern matched`,
+  `likely match`, `possible match` or `needs a person`. The brief says how to
+  suppress a problem you checked by its fid with a reason (`set_aside` in its
+  JSON), and `penthera fix --plan` prints its headline again at the end.
+- **Nothing to fix now.** A run with nothing to act on and only things to check
+  first (headers read from code, which your host may still add) says `Nothing
+  to fix now`, and its share card `Nothing to fix now · 4 to check`. Medium
+  or low things to check first and likely noise no longer lower the
+  agent-config grade; a finding to act on, or any critical or high finding,
+  still does. A confirmed problem still says `Fix now` or `Review`, and
+  suppressed findings keep their own verdict. The brief's JSON adds
+  `verdict_id`, a stable name for the verdict.
 - **The Claude plugin ships Markdown and JSON only.** Anthropic's plugin directory takes only Markdown, text, JSON, YAML and images from an unverified publisher, and held the plugin for its `.sh` and `.mjs` scripts. The plugin's skill no longer has a `scripts/` folder: the preflight is now four plain checks in SKILL.md (Node.js 22 or later, a working `penthera` command, a `reports/` folder, an authorized target), the same in the skill you add with `npx skills add`. A checkout and `npx skills add` keep `scripts/preflight.sh` and `validate-report`.
 - **The Claude plugin's live branch moves only when the plugin changed.** Before, every merge to main moved it, and each move asked Anthropic's directory to review a new version with the same plugin.
 - **The skill no longer tells the agent to put credentials in the environment.** Anthropic's plugin directory held the plugin because the skill showed `PENTHERA_BEARER` and `PENTHERA_COOKIE` and a fix example that read a key with `process.env`. For an authenticated scan, the skill now gives the `--auth-cookie` or `--auth-bearer` command for you to run with your own value, and the agent never asks for it. The hardcoded-secret fix is described in words. The environment variables still work, and docs/commands/scan.md still documents them.

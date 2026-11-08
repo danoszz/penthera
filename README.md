@@ -16,7 +16,7 @@ Daily notes from Penthera: **[x.com/penthera_org](https://x.com/penthera_org)**
 
 **How it compares:** [next to Snyk, Socket, Semgrep, ZAP and GitHub](#how-it-fits-with-other-tools).
 
-**New in 2.4:** `penthera --card` makes a security receipt of your repo to post, and 13 ways to hide a finding or stall a scan are closed ([what changed](CHANGELOG.md)).
+**New in 2.4:** `penthera --card` makes a security receipt of your repo to post, every surface counts one set of problems with the same words, and 13 ways to hide a finding or stall a scan are closed ([what changed](CHANGELOG.md)).
 
 **From your coding agent:** add Penthera ([one line per agent](#start-in-30-seconds)), then say "Hey Claude, run Penthera on this repo."
 
