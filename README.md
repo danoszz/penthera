@@ -16,6 +16,10 @@ Daily notes from Penthera: **[x.com/penthera_org](https://x.com/penthera_org)**
 
 **How it compares:** [next to Snyk, Socket, Semgrep, ZAP and GitHub](#how-it-fits-with-other-tools).
 
+**New in 2.4:** `penthera --card` makes a security receipt of your repo to post, every surface counts one set of problems with the same words, and 13 ways to hide a finding or stall a scan are closed ([what changed](CHANGELOG.md)).
+
+**From your coding agent:** add Penthera ([one line per agent](#start-in-30-seconds)), then say "Hey Claude, run Penthera on this repo."
+
 **132** readable rules · **6** read-only MCP tools · **0** runtime dependencies · **0** requests past loopback in the benchmark · **MIT**, no telemetry
 
 <br/>
@@ -82,8 +86,8 @@ issues". The MCP lines pin the version.
 | Agent | Run this |
 |---|---|
 | Claude Code, plugin (skill only, runs the CLI) | `claude plugin marketplace add danoszz/penthera`, then `claude plugin install penthera@penthera` |
-| Claude Code, MCP server only | `claude mcp add penthera -- npx -y penthera@2.3.2 mcp` |
-| Codex | `codex mcp add penthera -- npx -y penthera@2.3.2 mcp` |
+| Claude Code, MCP server only | `claude mcp add penthera -- npx -y penthera@2.4.0 mcp` |
+| Codex | `codex mcp add penthera -- npx -y penthera@2.4.0 mcp` |
 | GitHub Copilot CLI | `copilot plugin marketplace add danoszz/penthera`, then `copilot plugin install penthera@penthera` |
 | GitHub Copilot in VS Code | the `code --add-mcp` line in [mcp.md](docs/commands/mcp.md#github-copilot) |
 | Gemini CLI | `gemini extensions install https://github.com/danoszz/penthera` |
@@ -406,7 +410,7 @@ never fails CI. Whether it finds more than the rules alone is not measured yet
 | Scans: URL, repo, dependencies, AI tooling, installs, pre-commit hook | **Stable**: in every release since 1.x, covered by the tests and the release gate |
 | Fix loop and local dashboard (`penthera ui`) | **Stable**; the dashboard was redesigned in 1.9.0 |
 | MCP server, Agent Skill, Claude Code plugin | **Stable**, since 1.9.0 |
-| Gemini CLI extension | **Stable**: it installs the newest release (2.3.2) |
+| Gemini CLI extension | **Stable**: it installs the newest release (2.4.0) |
 | Evidence bundles, NIS2 and CRA drafts | **Stable** as readiness tooling, not a certification |
 | AI mode (`--ai`) | **Experimental**: whether it finds more than the rules alone is not measured yet ([AI mode](docs/ai-mode.md)) |
 | Live check on [penthera.org](https://penthera.org) | **Beta**: passive only, [terms](docs/live-check-terms.md) |
@@ -482,8 +486,8 @@ The [claim map](docs/claims.md) ties these claims to the tests that hold them.
 **Verify it yourself.** In an empty folder:
 
 ```bash
-npm install penthera@2.3.2 && npm audit signatures
-npx penthera@2.3.2 rules list
+npm install penthera@2.4.0 && npm audit signatures
+npx penthera@2.4.0 rules list
 ```
 
 The first checks npm's registry signature and the build provenance of the
@@ -569,7 +573,7 @@ What changed, what we are measuring, and what comes next, in one place.
 
 | | Where it stands | Read more |
 |---|---|---|
-| **Latest release** | 2.3.2 (2026-11-06) on npm `latest`, a security patch: hostile files can no longer hang a scan, secrets stay masked in what reports quote, and a dependency file Penthera can't read fails the check. 2.3.0 brought: GitHub Actions workflow checks, less noise on the first run, a verdict-first repo scan, no runtime dependencies, and an install line per agent | [CHANGELOG](CHANGELOG.md), [roadmap](ROADMAP.md) |
+| **Latest release** | 2.4.0 (2026-11-08) on npm `latest`: `penthera --card` makes a security receipt to post, and 13 ways to hide a finding or stall a scan, found by Vercel Security Review, are closed. Crafted files that took seconds to hours now take under a second, and a file too big to finish makes the scan incomplete (exit 2). 2.3.2 brought: hostile files can no longer hang a scan, secrets stay masked in what reports quote | [CHANGELOG](CHANGELOG.md), [roadmap](ROADMAP.md) |
 | **Research** | Public benchmarks (E11b) published: on a sealed half of four public datasets, 1st of the free tools on npm and PyPI malware (tied 1st to 3rd), 1st on JS library injection bugs (tied 1st to 4th), 2nd on leaked secrets ([summary](#public-benchmarks)). E10 pilot published: precision 0.88, recall 0.07 to 0.71 on two known-vulnerable apps after fixes (one labeller, not independent; a re-run is pending because default scans no longer send login checks). E1 on real code is pre-registered; E8 (agent guardrails) is a draft | [E11b results](bench/public/RESULTS.md), [E10 results](bench/known-vuln/RESULTS.md), [E1 pre-registration](docs/research/prereg/E1-real-world-accuracy.md), [agents safely](docs/agents-safely.md) |
 | **Next** | Real-world precision and recall with intervals (E1), published whatever the result | [Roadmap: next](ROADMAP.md#next), [research plan](docs/vision-2.0.md) |
 

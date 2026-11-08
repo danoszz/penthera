@@ -4,6 +4,323 @@ All notable changes to Penthera are documented here. Versioning follows [SemVer]
 
 ## [Unreleased]
 
+## [2.4.0] - 2026-11-08
+
+2.4.0 makes Penthera harder to fool and adds a receipt you can post. Vercel Security Review found 13 ways to hide a finding or stall a scan in this hardening work. Every one is fixed, each with a regression test that fails on the old code. Reviews by Claude Opus 5.5 and Mythos found more, also fixed with tests. Crafted files that took seconds to hours now take under a second. 8,000 nested object literals went from 15.6 s to 69 ms. A 4 MiB line of `[/]` went from an estimated hour and a half to under a tenth of a second. 4,000 linked skill files went from 18.5 s and 2 GB to under a second. When a file is too big to finish, the scan says so and exits 2, except in the two cases below. New: `penthera --card` writes a security receipt for your repo, and every surface (the scan, `penthera ui`, the MCP tools, the reports and `penthera fix`) now counts one set of problems with the same words.
+
+Known limits: the checks read code token by token, without a full parser. Some shapes are still missed, to keep scans fast: a ternary inside a default parameter, `arguments[n]` in a helper, and a helper that passes its argument on to another helper. A skill file past the walk's file cap, and a symlinked command file inside the project, are skipped without a note. Both are older than 2.4 and planned for 2.4.1.
+
+### Security
+
+- **A pipe into a shell is read by two checks, and either one reports it.** The
+  stage parser from 2.3.2 now runs beside the regex from 2.3.1, so nothing the
+  old check caught is lost. The parser now reads quotes and escapes as the shell
+  does, takes redirections off the command word (`bash>/var/log/x`), and sees a
+  shell behind `nohup`, `exec`, `command`, `time`, `nice`, `timeout`, `{ }` and
+  `( )`, and after a quoted assignment like `FOO="a b"`. Repeated `env -S` and
+  `--split-string` now take linear time.
+- **A secret is hidden in its encoded forms too.** A finding that quotes a
+  command hides a known secret when it appears percent-encoded, base64 or hex.
+- **`penthera fix` exits 2 when its run is incomplete.** Cookie calls it could
+  not read, and the scan's or report's unread files, were dropped before. Now
+  it names them.
+- **The command-injection check stays fast on crafted files.** Now that minified
+  files are scanned and files up to 4 MiB are read, a long string, a long name
+  or a long run of blank space could make it run for hours. Each such file now
+  takes well under a second.
+- **Request data is followed however far it goes.** The command-injection
+  check followed a value only 300 characters into its statement, a
+  destructured list only 300 characters, and only 6 steps of assignments, so
+  padding past those limits made a tainted command look clean. It now reads
+  every value and list whole, in one pass, and follows chains to the end.
+- **Library mode has no silent limits either.** A long value, list, index,
+  pushed value or helper call no longer drops a parameter's taint. When a file
+  needs more work than the check allows, or more than 200 helper calls, the
+  run says so and exits 2.
+- **An apostrophe in prose no longer hides a pipe into a shell.** In a skill or
+  instruction file, `it's` or `don't` before `curl … | sudo -u root bash` read
+  as an open quote, and the rest of the line was skipped. Both readings are
+  checked now.
+- **Library mode finds functions with long TypeScript types.** A return type
+  longer than 400 characters, a parameter list longer than 20,000, and any
+  arrow function with a return type (`(cmd: string): void => …`) were skipped,
+  so their parameters were never followed. They are read whole now; a file
+  that would cost more than the check allows exits 2.
+- **A Python package's file list is read as Python reads it.** A path in RECORD
+  with a comma, a doubled quote or text after its quotes was dropped from the
+  scan. A row Python can't read leaves the package unscanned, and the run exits 2.
+- **A line separator inside a JavaScript string no longer hides code.** The
+  dependency scan ended a string at U+2028 or U+2029, so code after it could
+  pass as a comment.
+- **A pipe into a shell is read once per stage.** Escaped and quoted pipes no
+  longer make the check slow, and `X=/usr/bin/timeout bash` is read as an
+  assignment and a shell. A long stage is read word by word.
+- **Secret redaction runs in one pass.** A finding that quotes a command hides a
+  secret percent-encoded twice, and a known secret written out again raw. When
+  a file holds too many secret values to check, the quote is withheld.
+- **A padded import or destructure no longer hides a shell function.** The
+  command-injection check read only the first 2,000 characters of an import
+  list, and 400 of a destructure or object. `import { …, exec as runTask }`
+  past that was never bound, so `runTask(req.body.c)` passed. Lists are now
+  read whole.
+- **Four ways to hide a finding, closed.** In library mode, a ternary such as `flag ? (a) : (cmd) => exec(cmd)` was read as a typed arrow and took the arrow's parameters away, and a TypeScript conditional return type (`T extends U ? X : Y`) dropped the whole method; both are reported again. Generic functions, methods and arrows are read too, nested generics (`<T extends Array<string>>`) included, and so is an arrow in either branch of a ternary, typed or not; a generic list too long to read makes the file incomplete (exit 2). A hook that pipes into `/usr/bin/env bash` or `sudo -u root bash` inside `"$(...)"` or a backtick in double quotes is found. `require("child_process") .exec(req.body.cmd)` with a space, a comment or a line break before the dot, `require ("child_process")`, `require("child_process")?.exec(…)` and `require("child_process")["exec"](…)` no longer hide a request-fed shell command. Found by Vercel Security Review.
+- **Crafted files can't slow a scan down.** Deeply nested destructured parameters, functions nested in default parameters, nested assignments past the work budget, nested object literals, an unclosed regex character class repeated on one line, and hook text full of escaped and in-word apostrophes between pipes each cost linear time now; a library file past its work budget is still reported as incomplete (exit 2). Found by Vercel Security Review.
+- **A template literal can't fake a test account.** A password in a test script went to Check first when the three lines above it sat inside a template literal opened further up, holding text like `email: "a@example.com",`. The lines must now read as code from the start of the file. Found by Vercel Security Review.
+- **A line of `[/]` repeated no longer holds the lexer.** The regex-literal scan that lexes server code and dependencies rescanned the line once per slash on that shape (81 seconds at 512 KiB, hours at the 4 MiB cap). A failed scan now remembers where it has been, so every crafted line costs linear time. Found in the final review.
+- **The Vercel check passes only a scan that read the deployment.** A
+  deployment that answered with a bot challenge, a block page, a 401 or 403, or
+  nothing at all could pass the check, because the scan only warned "Site not
+  read" and still succeeded. The workflow now reads Penthera's report and
+  reports failed unless it proves the site was read, and the check says why:
+  "Site not read: ...". Copy the workflow again from Penthera's setup page.
+- **A pass counts only for the deployment's own address.** The address the
+  workflow scanned comes from Vercel's dispatch, which nobody signs. The
+  workflow now sends a SHA-256 fingerprint of it (never the address), and the
+  server passes the check only when it matches the deployment's URL in Vercel's
+  record. A workflow from before this change reports failed, "Scanned URL is
+  not this deployment", until you copy it again.
+- **The Action fails a gated scan that did not read the site.** With `fail-on`
+  set, a URL scan exits 2 (incomplete), as the CLI does for an input it could
+  not read, unless its report proves a read: a 2xx home page, no bot challenge
+  or block page, no rate limiting, and the app scan done. This reaches the
+  Vercel workflow with the next release of the Action; until then the
+  workflow's own report check covers it.
+- **The share card never shows a URL, a credential or a path from your
+  project.** An old lockfile can store a package's version as a download URL
+  with a user name, password or token in it, and a card could show that URL
+  after the package name. A card now names only the package and drops every
+  word that holds a URL, a `user:password@` part, a `key:value` pair, a
+  percent escape or a path (route paths such as `app/[slug]/page.tsx`, home and
+  Windows paths included). The value after a key like `password:`, `token=` or
+  `Authorization:` is hidden whole, and a key split by dots is still hidden.
+  Invisible characters are removed before these checks, so they can't hide a
+  URL from them. "Not checked" lines such as the MCP note stay on the card
+  however short it gets.
+
+### Added
+
+- **`--card`: a security receipt to post.** `penthera --card` scans the folder
+  you are in and writes one image of the result, 1080 × 1350 for X and
+  1200 × 630 for link previews, as PNG and SVG. It shows the brief's own
+  verdict, what was read (code, dependencies, AI-agent configs, the live
+  site), what was not checked, the number to fix first and the top fix. On
+  `penthera agents . --card` the audit's grade is the big letter, with its
+  score out of 100; repo and URL cards have no score, and none is made up.
+  It also works on URL scans and on `penthera brief <reports...> --card`, which puts a repo, deps and agents scan
+  on one card. It is made on your machine with Penthera's own renderer and
+  pixel font: nothing is fetched or uploaded, and there is no new dependency.
+  A run that read nothing shows a `?`, never a 0, and the card carries no file
+  paths, file contents, hidden characters or key-shaped strings. See
+  [docs/commands/scan.md](../docs/commands/scan.md#share-card).
+- **The Vercel integration server has a small home page.** Opening
+  `vercel.penthera.org` now shows a minimal black page with a shrug and a link to
+  the repo, instead of a 404. Static, no script, no data.
+- **A server for a Vercel Marketplace integration, in `integrations/vercel/`.**
+  It registers Penthera's GitHub Action as a Vercel Deployment Check on the
+  projects you pick, and links you to GitHub with the workflow file filled in.
+  Scans still run in your own GitHub Actions. The server keeps one encrypted
+  install token per installation and deletes it when you uninstall. It is
+  deployed on its own and is not in the npm package. A setup session ends
+  when the installation is transferred or reinstalled. Not live yet: the
+  integration still needs a live scope test and the maintainer's go.
+- **Scans behind Vercel Deployment Protection.** Set Vercel's Protection Bypass
+  for Automation secret in `PENTHERA_VERCEL_BYPASS`, or pass it to the Action
+  as `vercel-bypass-secret`. Penthera sends it as the
+  `x-vercel-protection-bypass` header to an `https://*.vercel.app` target's own
+  origin only, never to another host or after a redirect to one, and replaces
+  it with `[redacted]` anywhere in the report. It is read from the environment,
+  never from a flag, never sent in an MCP scan, and must be 16 to 128
+  characters of `A-Z a-z 0-9 . _ ~ -`, as Vercel generates it.
+- **The Vercel integration's workflow uses it.** Store the secret as the repo
+  secret `VERCEL_AUTOMATION_BYPASS_SECRET`; it never reaches Penthera's server.
+  Without it, a protected deployment fails the check with the steps to add it.
+
+### Detection
+
+- **A Secret Manager reference is not a secret, and a test account's password is checked first.** A real run on a Firebase app put two false positives in Act on. A value that is wholly a Google Secret Manager resource name (`projects/<project>/secrets/<name>/versions/<n>`, as Firebase Extensions write into `extensions/*.env`) is now read as a pointer and not reported. Penthera parses it: a project ID or number, a secret name that doesn't look machine-made, and a version number or `latest`. A key pasted into the name slot is still reported. A hardcoded password in a test location (a test folder, a `*.test.*` or `*.spec.*` file, or a `scripts/verify-*` or `scripts/smoke-*` script) stays high but moves to Check first when, within three lines, an email, user or login field is set to an address at a test domain such as `example.com` in code. The finding says why. A comment, a real domain, any other `scripts/` file, or another password in the same file keeps it in Act on.
+
+### Changed
+
+- **One count everywhere.** A repo scan now runs the checks `penthera fix` uses:
+  security headers, cookie flags, CORS and login rate limits as your code sets
+  them, including in `next.config.mjs`. The scan, `penthera ui`, the MCP tools,
+  the JSON and SARIF reports, `penthera fix` and the fix loop count one set of
+  findings with the same words: a *problem* is a finding to act on or to check
+  first, and one *fix planned* can cover several problems. On the Next.js
+  fixture the scan used to say 2 problems while `fix --plan` planned 5 fixes for
+  10 findings; every surface now says 8 problems, and the plan says
+  `5 fixes planned for 8 problems`. The scan's fix line counts only problems
+  a recipe can change: likely noise, and a secret in a `.env` file, no longer
+  show as fixable after you fixed the rest. `penthera fix --plan` counts a fix
+  only when it changes a problem, and lists fixes for likely noise apart. Headers read from code are marked
+  `potential`, since a host or CDN may still add them. The new findings are
+  medium or lower, so no exit code changes.
+- **The fix planner's checks are bounded.** Now that every scan runs them, each
+  code file is read once and dropped, a long line can no longer make the CORS
+  or cookie check quadratic (80 KB took seven seconds before; 5 MiB now takes
+  milliseconds), each check keeps the 25 worst hits per file, and a link is
+  followed only inside the project. A code file that check could not read
+  (over the size limit, a device or FIFO, a link out of the project,
+  unreadable) or never reached (past the 5,000-file walk, which leaves out
+  generated and git-ignored folders) makes the scan incomplete and exits 2, as
+  a refused route file already did. Cookie calls written over several lines
+  (the Prettier style) are now checked and reported, to fix by hand: the fix
+  edits one-line calls, so they are not counted as fixable. `vercel.json`
+  headers count only when set for every route. Any number of `cookies()` stores is read, padding inside
+  `.get( "origin" )` is read as before, and a file with many hits holds only
+  the 25 worst in memory.
+- **Words an agent can act on.** In the JSON a repo finding also has `path`
+  (the file `url` already held, which stays) and every finding has
+  `exploitability`: `not-assessed` for a rule match, so `confidence: confirmed`
+  no longer reads as a verdict. Text reports say `pattern matched`,
+  `likely match`, `possible match` or `needs a person`. The brief says how to
+  suppress a problem you checked by its fid with a reason (`set_aside` in its
+  JSON), and `penthera fix --plan` prints its headline again at the end.
+- **Nothing to fix now.** A run with nothing to act on and only things to check
+  first (headers read from code, which your host may still add) says `Nothing
+  to fix now`, and its share card `Nothing to fix now · 4 to check`. Medium
+  or low things to check first and likely noise no longer lower the
+  agent-config grade; a finding to act on, or any critical or high finding,
+  still does. A confirmed problem still says `Fix now` or `Review`, and
+  suppressed findings keep their own verdict. The brief's JSON adds
+  `verdict_id`, a stable name for the verdict.
+- **The Claude plugin ships Markdown and JSON only.** Anthropic's plugin directory takes only Markdown, text, JSON, YAML and images from an unverified publisher, and held the plugin for its `.sh` and `.mjs` scripts. The plugin's skill no longer has a `scripts/` folder: the preflight is now four plain checks in SKILL.md (Node.js 22 or later, a working `penthera` command, a `reports/` folder, an authorized target), the same in the skill you add with `npx skills add`. A checkout and `npx skills add` keep `scripts/preflight.sh` and `validate-report`.
+- **The Claude plugin's live branch moves only when the plugin changed.** Before, every merge to main moved it, and each move asked Anthropic's directory to review a new version with the same plugin.
+- **The skill no longer tells the agent to put credentials in the environment.** Anthropic's plugin directory held the plugin because the skill showed `PENTHERA_BEARER` and `PENTHERA_COOKIE` and a fix example that read a key with `process.env`. For an authenticated scan, the skill now gives the `--auth-cookie` or `--auth-bearer` command for you to run with your own value, and the agent never asks for it. The hardcoded-secret fix is described in words. The environment variables still work, and docs/commands/scan.md still documents them.
+- **The Claude plugin's skill links to the docs for logins and signing keys.** Anthropic's plugin directory still held the plugin because the skill showed `--auth-bearer` and `--auth-cookie`, the home config files `penthera agents --home` reads, and a signing key path. The skill now points to the scan, agents and evidence docs for these, and its fix examples call your auth library instead of reading a request header. The CLI and the docs are unchanged.
+- **The Claude Code plugin is skill-only.** It no longer starts Penthera's MCP
+  server: Anthropic's plugin directory accepts an MCP server that runs on your
+  computer only from verified publishers, and refused the plugin for it. The
+  skill runs the pinned CLI (`npx -y penthera@2.4.0`), and you approve each run.
+  To keep the MCP tools, add the server yourself:
+  `claude mcp add penthera -- npx -y penthera@2.4.0 mcp`. The same goes for the
+  Agent Plugins copy that GitHub Copilot and Codex read. The repo's own
+  `.mcp.json` stays: it is this repo's project config, not part of the plugin.
+- **A closed setup page no longer says Penthera is still installed.** The page
+  you see after 30 minutes, after an uninstall, or after a reinstall now says
+  which of those can have happened and what each leaves behind. The note
+  about Vercel's automatic production aliasing on the Workflow and Done pages
+  now says what it means for your deploys.
+- **Configure on Vercel now reports in.** Without a confirmed session, the
+  page says where things are (Penthera, Vercel, GitHub), what you can do and
+  where, and offers one button to show your projects. The workflow sits
+  behind "Copy the workflow again". Once a check is on, the setup page lists
+  each project with its check, a link to its workflow runs on GitHub, and
+  one Turn on or Turn off button, instead of starting the wizard again.
+- **The Vercel integration's terms, privacy notice and guide give team@penthera.org** as the contact for support and data requests.
+- **The Vercel integration says what it asks for, and why.** Pick your
+  projects, Add the workflow and Configure now have a short panel: the two
+  Vercel scopes, what the server stores and when it is deleted, what the
+  workflow does and never does, and why you commit the workflow yourself,
+  with links to the terms, privacy notice and source. It opens without a
+  script.
+- **The Vercel integration's error pages explain what happened.** Each one
+  says what happened in your setup, what is left behind on Penthera's side
+  and on Vercel's, and why the check exists, with one button that goes
+  where the next step happens. A refused install says nothing was stored and
+  that Vercel may still list Penthera under Settings, Integrations. When the
+  only next step is to wait (too many tries, Vercel not answering), the page
+  moves on by itself, without a script.
+- **The Vercel integration turns its check on by itself.** Vercel does not
+  let an integration import a GitHub check, so "Turn on the check" now adds a
+  check the integration owns. For each production deploy, the workflow's last
+  step sends `vercel.penthera.org/report` the deployment id, the project id and
+  pass or fail, with a token GitHub signs for your repo and that one
+  deployment. The server checks the
+  token, the repo, the project and the deployment against Vercel, sets the
+  check's result, and keeps nothing about the deploy. Findings stay in GitHub. The commit status
+  stays too, for a GitHub check added by hand. The workflow now needs
+  `id-token: write`. For upkeep the server counts anonymous daily totals
+  (received, passed, failed, refused by reason), with no ids and no IP,
+  deleted after 90 days.
+- **The Vercel install journey says what happens next.** After "Turn on the
+  check", a Done page now always shows: the projects it is on for, what
+  happens on the next production deploy (the scan usually takes under a
+  minute), and links to each repo's GitHub Actions runs. Its one blue button
+  finishes the install in Vercel. Every error page says what to do in one
+  line and offers the way out as a button. Notes sit in a full block, with
+  no thin left line.
+- **The Vercel integration's pages use Penthera's design.** Every page the
+  integration server shows, from the project picker to the error pages, now
+  has the metal wordmark, large Helvetica titles, Departure Mono labels and
+  one blue button, on the black ground of penthera.org. The pages still run
+  no script; the font and favicon come from the server itself. Error pages
+  that have a way out now show it as a button, and the footer links the
+  terms and privacy notice.
+- **The Vercel integration's tests hold every request to what Vercel accepts.**
+  Twice a value passed Vercel's published spec and was refused live. Each field
+  the integration sends now has its allowed values and their source, from
+  Vercel's docs, its spec and what live Vercel refused, and the test fake refuses
+  anything else the way Vercel does. A new test walks the whole journey from the
+  listing page to uninstall, and a local script runs the real server against the
+  same fakes, so the pages can be clicked through by hand.
+- **The Vercel integration's runtime logs show the good events too, and no
+  ids.** An install, a check turned on or off, a result passed on and an
+  uninstall each log an event name with at most a count or pass/fail. Error
+  lines no longer carry the installation id, and any id in Vercel's error text
+  is replaced, as the privacy notice promises: an error code and Vercel's
+  error text at most.
+
+### Fixed
+
+- **Turn on the check works on live Vercel.** Vercel refused the check with
+  "Only deployment-alias and none are currently supported for blocks". The
+  check now uses `deployment-alias`: a failing production deployment stays off
+  your production domain until it passes, and Force Promote still overrides it.
+- **Installing from Penthera's listing page on Vercel is no longer refused.**
+  Vercel sends that install back with no CSRF state, and it was refused as
+  "Part of your install link is missing". It now takes the same path as a
+  Marketplace install. An install that does carry a state is still checked
+  against this browser's cookie.
+- **"Turn on the check" no longer guesses the integration id.** The Vercel
+  integration reads it from Vercel's record of your installation instead of
+  sending the OAuth client id, and a failed create now logs Vercel's own error
+  code and message (never a token). If Vercel refuses the check's 20-minute
+  timeout, it retries once with Vercel's default.
+- **The Vercel relay reads a deployment's project in every view Vercel
+  answers.** Vercel's reduced public view of a deployment names the project as
+  `project.id`, not `projectId`. Penthera read only `projectId`, so it would
+  have refused every scan result and held production deploys. A new end-to-end
+  test walks the whole install against a fake Vercel that checks each request
+  against Vercel's published API spec, and lints the workflow with actionlint.
+- **The Vercel integration server reads `INTEGRATION_CLIENT_ID` and
+  `INTEGRATION_CLIENT_SECRET`.** Vercel reserves environment variable names
+  that start with `VERCEL_`, so the old names could not be set.
+- **The Vercel integration's setup form works in real browsers.** With
+  `Referrer-Policy: no-referrer`, browsers send `Origin: null` on a form post,
+  so "Next" failed with "Form check failed". The pages now use `same-origin`,
+  a `null` origin is decided by the session's form token, and the setup pages
+  use Penthera's black style.
+- **Installing Penthera from the Vercel Marketplace no longer fails with "This
+  install timed out".** That happened in a browser that had started an install
+  from Penthera's own link before. The install now goes through and clears the
+  leftover check. An install from Penthera's own link has 30 minutes, as long as
+  Vercel's install code, instead of 15. When an install is refused, the page now
+  says which of three things happened, and that nothing was added to your
+  projects.
+- **"Turn on the check" in the Vercel integration says what went wrong and
+  how to fix it.** Each project that fails now gets Vercel's answer in plain
+  words, what to do, a link to the right Vercel page, and a code you can send
+  us. It offers "Try again" only when that can help. On a reinstall, a Penthera
+  check left over from your earlier install is removed first, so it can't hold
+  production deploys forever. Penthera never removes a check it did not add.
+
+### Docs
+
+- **Where AI fits, said the same way everywhere.** `--help`, the README and the AI mode page now give the three roles: the rules decide every finding; `--ai` looks further, with a model that only proposes and rules that check each proposal; your own coding agent fixes, through the MCP server, the skill or `penthera fix --plan`. `--ai` finds; it doesn't fix.
+- **Simple diagram first, advanced views under toggles.** The README's "What
+  it does" diagram is shorter and reads left to right in one pass. The black
+  box, white box and engine views each sit in their own toggle under it, as
+  compact horizontal diagrams.
+- **Under the hood: the black-box and white-box view.** The README and
+  METHODOLOGY.md now have three diagrams for developers and security
+  specialists: every check the URL scan and the repo scan run, which ones are
+  opt-in and behind the active-scan gate, and how the engine turns rule matches
+  into findings, an exit code and reports. The simple diagram stays as it was.
+- **The Action examples and `penthera init` pin the v2.3.2 commit.**
+- **A user guide for the Vercel integration.** [docs.penthera.org/vercel](https://docs.penthera.org/vercel) covers install, the workflow commit, what a blocked deploy looks like, uninstall, and every Turn on and install error page.
+- **The Vercel integration's terms and privacy notice are published.** Read them at [docs.penthera.org/vercel/terms](https://docs.penthera.org/vercel/terms) and [docs.penthera.org/vercel/privacy](https://docs.penthera.org/vercel/privacy). The integration's functions now run in Frankfurt (`fra1`), so its data stays in the EU.
+
 ## [2.3.2] - 2026-11-06
 
 ### Security
