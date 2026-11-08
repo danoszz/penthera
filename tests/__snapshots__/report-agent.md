@@ -1,4 +1,4 @@
-**Penthera: Fix now.** 3 to act on, 2 to check first, 0 likely noise. Scanned: live URL, repo.
+**Penthera: Fix now.** 5 problems (3 to act on, 2 to check first), 0 likely noise. Scanned: live URL, repo.
 
 ### Act on
 
@@ -8,8 +8,10 @@
 
 ### Check first
 
-- **Possible IDOR on /api/orders/:id** [high, needs-human-review] in `https://shop.example/api/orders/1001`.
-- **DMARC policy is p=none** [low, confirmed] in `https://shop.example`.
+- **Possible IDOR on /api/orders/:id** [high, needs a person] in `https://shop.example/api/orders/1001`.
+- **DMARC policy is p=none** [low, pattern matched] in `https://shop.example`.
+
+Checked one and it is not a problem? `penthera memory suppress <fid> --reason "<why>"`. It sets the finding aside on this machine; add the fid and reason to penthera.suppress.json to share that with your team. Both apply to scans with --memory, and the report lists what they hide. The fid is next to each finding in the JSON and Markdown reports.
 
 ### Not checked
 

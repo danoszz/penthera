@@ -1,6 +1,7 @@
 /**
  * Human-readable Markdown security report.
  */
+import { matchLabel } from "../../lib/provenance.js";
 import { writeFileSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { buildWstgCoverage, formatWstgMarkdown } from "../../lib/owasp-wstg.js";
@@ -165,11 +166,11 @@ export function formatMarkdownReport(result, opts = {}) {
 
       lines.push(`### ${SEV_TAG[sev]} ${sev.charAt(0).toUpperCase() + sev.slice(1)} (${group.length})`);
       lines.push("");
-      lines.push("| Finding | URL | Confidence | Source | Id |");
+      lines.push("| Finding | URL | Match | Source | Id |");
       lines.push("|---------|-----|-----------|--------|----|");
 
       for (const f of group) {
-        lines.push(`| **${mdEscape(f.title)}**${f.alsoProposedBy?.length ? " (also proposed by AI)" : ""} | ${f.url ? `[link](${f.url})` : "-"} | ${f.confidence || "-"} | ${mdEscape(f.source || "-")}${foundByText(f) ? ` (${mdEscape(foundByText(f))})` : ""} | \`${f.fid || findingId(f)}\` |`);
+        lines.push(`| **${mdEscape(f.title)}**${f.alsoProposedBy?.length ? " (also proposed by AI)" : ""} | ${f.url ? `[link](${f.url})` : "-"} | ${f.confidence ? matchLabel(f.confidence) : "-"} | ${mdEscape(f.source || "-")}${foundByText(f) ? ` (${mdEscape(foundByText(f))})` : ""} | \`${f.fid || findingId(f)}\` |`);
       }
       lines.push("");
 

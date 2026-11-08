@@ -13,6 +13,7 @@ import { postLayout, ogLayout, SIZES } from "../src/card/layout.js";
 import { toSvg, rasterize, pathPolygons } from "../src/card/draw.js";
 import { encodePng } from "../src/card/png.js";
 import { GLYPHS } from "../src/card/font.js";
+import { gradeFindings } from "../lib/agents/grade.js";
 
 const ROOT = join(import.meta.dirname, "..");
 const FIXTURES = join(ROOT, "tests", "fixtures", "card");
@@ -52,6 +53,19 @@ const STATES = {
   unread: [
     { target: "https://my-saas-app.com", mode: "url", reachable: true, httpStatus: 403, challenge: { provider: "Vercel" }, findings: [] },
   ],
+  // Only things to check first: a minimal Express app whose headers are read from code (the host may add them).
+  check: [
+    repo(["Content-Security-Policy", "X-Frame-Options", "X-Content-Type-Options", "Strict-Transport-Security"].map((h) => f({
+      url: "server.js", severity: "medium", confidence: "potential", category: "headers", source: "fix-probe:headers",
+      title: `Missing ${h} header`, remediation: "Set it in the app, or check that your host sends it.",
+    }))),
+  ],
+  // A hundred to check: the verdict no longer fits beside the number, so it takes its own line.
+  check100: [
+    repo(Array.from({ length: 100 }, (_, i) => f({
+      url: `src/s${i}.js`, severity: "medium", confidence: "potential", category: "headers", source: "fix-probe:headers", title: "Missing Content-Security-Policy header",
+    }))),
+  ],
   // An agent-config audit alone, shaped like `penthera agents` on a setup with a hidden instruction.
   agents: [
     agents({
@@ -74,7 +88,46 @@ const textsOf = (card) => card.ops.filter((o) => o.op === "text").map((o) => o.s
 describe("card model: the verdict is the brief's", () => {
   it("uses the brief's verdict for every state", () => {
     for (const results of Object.values(STATES)) {
-      expect(modelOf(results).verdict).toBe(buildBrief(results).verdict);
+      // A check-only card adds how many to check: "Nothing to fix now · 4 to check".
+      expect(modelOf(results).verdict.startsWith(buildBrief(results).verdict)).toBe(true);
+    }
+  });
+
+  it("only things to check first: Nothing to fix now · N to check, and the count under it (Daan, 9 Nov)", () => {
+    const m = modelOf(STATES.check);
+    expect(buildBrief(STATES.check).verdict).toBe(VERDICTS.check);
+    expect(m).toMatchObject({ tone: "check", verdict: "Nothing to fix now · 4 to check", hero: { value: "4", label: "to check first" } });
+    // A confirmed problem still leads: Fix now.
+    const withOne = [repo([...STATES.check[0].findings, f({ url: "src/a.ts", severity: "high" })])];
+    expect(modelOf(withOne).verdict).toBe(VERDICTS.fix);
+  });
+
+  it("medium or low things to check first and likely noise do not lower the grade; a problem to act on, or any critical or high, does", () => {
+    expect(gradeFindings([f({ severity: "medium", confidence: "potential" }), f({ severity: "low" }), f({ severity: "medium", url: "test/fixtures/a.js" })])).toEqual({ grade: "A", score: 100 });
+    expect(gradeFindings([f({ severity: "high" })])).toEqual({ grade: "B", score: 85 });
+    // A critical or high fails the run (exit 1) wherever it is, so it lowers the grade too (review, 9 Nov).
+    expect(gradeFindings([f({ severity: "high", url: "skills/x/tests/setup.sh" })])).toEqual({ grade: "B", score: 85 });
+    expect(gradeFindings([f({ severity: "critical", confidence: "potential" })]).grade).toBe("F");
+  });
+
+  it("suppressed findings keep their own verdict, never Nothing to fix now", () => {
+    const b = buildBrief([{ ...STATES.check[0], suppressed: [f({ severity: "critical" })] }]);
+    expect(b.verdict).not.toBe(VERDICTS.check);
+    expect(b.verdict_id).toBe("review");
+  });
+
+  it("the brief names its verdict with a stable id", () => {
+    expect(buildBrief(STATES.check).verdict_id).toBe("check");
+    expect(buildBrief(STATES.findings).verdict_id).toBe("fix");
+    expect(buildBrief(STATES.clean).verdict_id).toBe("clean");
+    expect(buildBrief(STATES.unread).verdict_id).toBe("unread");
+  });
+
+  it("a long count puts the verdict on its own line, whole, at both sizes", () => {
+    for (const layout of [postLayout, ogLayout]) {
+      const texts = textsOf(layout(modelOf(STATES.check100)));
+      expect(texts).toContain("VERDICT: NOTHING TO FIX NOW");
+      expect(texts.some((t) => /NOTHING TO…|TO…/.test(t))).toBe(false);
     }
   });
 

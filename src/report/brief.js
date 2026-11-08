@@ -2,7 +2,7 @@
  * The agent brief (docs/research/spec-agent-brief.md): one short, fixed-shape
  * summary an AI assistant can pass on as it is. Rules fill every section:
  *
- *   Verdict       Fix now | Review | Nothing to fix | Nothing to assess | Site not read, with the counts behind it
+ *   Verdict       Fix now | Review | Nothing to fix now | Nothing to fix | Nothing to assess | Site not read | N suppressed, with the counts behind it; `verdict_id` names it without string matching
  *   Act on        findings that need a change, grouped by place and fix
  *   Check first   heuristic, low or dependency-capability findings
  *   Likely noise  findings demoted by a deterministic reason, one line per group
@@ -20,27 +20,27 @@ import { exitCodeOf, exitReason, isSevere } from "./exit.js";
 import { hintCommand } from "../utils/invocation.js";
 import { notRead, readNothing, siteUnread, SITE_NOT_READ } from "./unread.js";
 import { unreachableText } from "./reach.js";
+import { bucketOf, pathOf, plural, problemsText } from "./counts.js";
+import { exploitabilityFor, matchLabel } from "../../lib/provenance.js";
+
+export { bucketOf };
 
 export const BRIEF_SCHEMA = "penthera.brief/1";
 // Exit 0 is not "safe to publish". Penthera tests these from outside; a pass shows
 // only that no rule matched, with or without a session cookie.
 export const NOT_PROVEN_NOTE = "This run does not prove login, access rules or payments are right.";
 
-export const VERDICTS = { fix: "Fix now", review: "Review", clean: "Nothing to fix", none: "Nothing to assess", unread: "Site not read" };
+// check: only things to check first (a header read from code, which the host
+// may still add) and nothing to act on: not a problem yet, and not clean either.
+export const VERDICTS = { fix: "Fix now", review: "Review", check: "Nothing to fix now", clean: "Nothing to fix", none: "Nothing to assess", unread: "Site not read" };
 
 const SEV_ORDER = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
 const MAX_ITEMS = 8;
 const MAX_EXAMPLES = 3;
 const MAX_NEXT = 3;
 
-// Generated or build output: nobody edits these files, so a hit in them is noise.
-const GENERATED = /(?:^|\/)(?:\.next[^/]*|dist|build|out|\.turbo|\.svelte-kit|\.nuxt|\.output|__pycache__|coverage)\//;
-const FIXTURE = /(?:^|\/)(?:fixtures?|__fixtures__|testdata|__mocks__)\//;
-// Test code: a key here is a test's own sample. A fixtures folder keeps its own reason, so FIXTURE is checked first.
-const TEST_FILE = /(?:^|\/)(?:tests|__tests__)\/|(?:^|\/)[^/]*\.(?:test|spec)\.[^/]+$/;
 // An info finding that says something was not found or not run belongs under Not checked.
 const GAP = /^no\b|not (?:found|run|read|checked|supported)|did not|skipped|unreachable/i;
-const URL_RE = /^[a-z][a-z0-9+.-]*:\/\//i;
 
 const NOISE_REASONS = {
   "local-only": "in files git ignores, never committed",
@@ -56,34 +56,17 @@ const SKIP_LABELS = {
   "sink-file-cap": "past the eval and exec check's 5,000-file limit",
   "no-api-surface": "not analysed because no API routes were found",
   "language-not-supported": "in a language route analysis does not support",
+  "settings-file-cap": "past the settings check's 5,000-file limit",
+  refused: "refused (a link out of the project, a device or a FIFO)",
+  unreadable: "that could not be read",
 };
 
 const text = (s, max = 300) => cleanText(String(s ?? ""), max);
-
-function pathOf(f) {
-  const u = f.file || f.url;
-  return u && !URL_RE.test(String(u)) ? String(u) : null;
-}
 
 function whereOf(f) {
   const p = pathOf(f);
   if (p) return Number.isInteger(f.line) && f.line > 0 ? `${p}:${f.line}` : p;
   return f.url ? String(f.url) : null;
-}
-
-/** Which bucket a finding goes in, and for noise, why. First match wins. */
-export function bucketOf(f, { skillTarget = false } = {}) {
-  const p = pathOf(f) || "";
-  if (f.localOnly) return { bucket: "noise", reason: "local-only" };
-  // A skill ships its dist/ and build/, so in a named skill those are real code.
-  if (!skillTarget && GENERATED.test(p)) return { bucket: "noise", reason: "generated" };
-  if (FIXTURE.test(p)) return { bucket: "noise", reason: "fixture" };
-  if (TEST_FILE.test(p)) return { bucket: "noise", reason: "test-file" };
-  if (f.severity === "info") return { bucket: "info" };
-  if (["potential", "needs-human-review"].includes(f.confidence)) return { bucket: "check" };
-  if (f.severity === "low") return { bucket: "check" };
-  if (f.category === "dependency-risk") return { bucket: "check" };
-  return { bucket: "act" };
 }
 
 /** A title with its own path taken out, so one rule across many files reads as one line. */
@@ -127,6 +110,9 @@ function severityMix(group) {
   return names.length > 1 ? names.map((n) => `${n} ${counts[n]}`).join(", ") : null;
 }
 
+export const SUPPRESS_COMMAND = 'penthera memory suppress <fid> --reason "<why>"';
+const SUPPRESS_WHY = "It sets the finding aside on this machine; add the fid and reason to penthera.suppress.json to share that with your team. Both apply to scans with --memory, and the report lists what they hide. The fid is next to each finding in the JSON and Markdown reports";
+
 function item(group) {
   const f = group[0];
   const paths = [...new Set(group.map(whereOf).filter(Boolean))];
@@ -137,6 +123,7 @@ function item(group) {
     severity: f.severity,
     mix: severityMix(group),
     confidence: f.confidence || "likely",
+    exploitability: f.exploitability || exploitabilityFor(f),
     count: group.length,
     where: paths.slice(0, MAX_EXAMPLES).map((p) => text(p, 300)),
     more: Math.max(0, paths.length - MAX_EXAMPLES),
@@ -193,7 +180,9 @@ function coverageLines(coverage) {
       out.push(`${fam.label} did not run${why ? `: ${why}` : ""}.`);
       continue;
     }
-    for (const [k, n] of Object.entries(fam.skipped || {})) {
+    for (const [k, count] of Object.entries(fam.skipped || {})) {
+      // A file that is not a route but was read by the settings check was read.
+      const n = k === "not-a-route" ? count - (fam.notRouteReadBySettings || 0) : count;
       if (n > 0) out.push(`${fam.label}: ${filesText(n)} ${SKIP_LABELS[k] || k.replace(/-/g, " ")} ${n === 1 ? "was" : "were"} not read.`);
     }
   }
@@ -244,8 +233,10 @@ export function buildBrief(results, { reports = [], fixes = null, limits = [], m
   for (const r of list) notChecked.push(...coverageLines(r.coverage), ...(r.agents?.notChecked || []).map((l) => text(l, 300)), ...(r.notChecked || []).map((l) => text(l, 300)));
   const next = [];
   if (fixes) {
-    const lead = fixes.count ? `${fixes.count} may be fixable. ` : "";
-    next.push({ command: text(fixes.command, 200), why: `${lead}The fix plan also checks cookie flags, CORS and rate limits in your code` });
+    const problems = by.act.length + by.check.length;
+    // How many a recipe matches; `penthera fix --plan` says how many fixes it plans for them.
+    const lead = fixes.count ? `A fix recipe matches ${fixes.count} of the ${plural(problems, "problem")}. ` : "Plans a fix for each problem it can. ";
+    next.push({ command: text(fixes.command, 200), why: `${lead}It shows each diff and changes nothing until you approve one` });
   }
   for (const f of by.info) {
     const cmd = commandIn(f);
@@ -259,6 +250,11 @@ export function buildBrief(results, { reports = [], fixes = null, limits = [], m
     }
   }
   next.push(...moreNext);
+  // How to set aside a problem you checked: by its fid (in the JSON and the
+  // Markdown report), with a reason. Only where the findings carry one.
+  const setAside = (act.length || check.length) && findings.some((f) => typeof f.fid === "string")
+    ? { command: SUPPRESS_COMMAND, why: SUPPRESS_WHY }
+    : null;
   for (const r of list) if (r.challenge) notChecked.unshift(`${SITE_NOT_READ} ${siteUnread(r).text}`);
   if (!notChecked.length) notChecked.push("The scan reported nothing it skipped. No finding is still not proof of safety: Penthera reports what its rules match.");
 
@@ -283,16 +279,24 @@ export function buildBrief(results, { reports = [], fixes = null, limits = [], m
   // First in the list, because the brief prints only the first few.
   if (hidden.length) notChecked.unshift(`${hiddenText}: not counted here. Review them with \`penthera memory show --repo .\` and penthera.suppress.json.`);
   const quiet = hidden.length ? hiddenText : VERDICTS.clean;
-  const verdict = actHigh ? VERDICTS.fix : unread ? VERDICTS.unread : act.length || check.length || exitCode || forbidden.length || partly ? VERDICTS.review : nothingRead ? VERDICTS.none : quiet;
+  // Only things to check first, on a run that passes: "Nothing to fix now". Anything to act
+  // on, a failing exit code, a 403 or a partly read site still reads as Review.
+  // Suppressed findings keep their own verdict ("N suppressed"): they may hide something serious.
+  const onlyCheck = !act.length && check.length && !exitCode && !forbidden.length && !partly && !hidden.length;
+  const verdict = actHigh ? VERDICTS.fix : unread ? VERDICTS.unread : onlyCheck ? VERDICTS.check : act.length || check.length || exitCode || forbidden.length || partly ? VERDICTS.review : nothingRead ? VERDICTS.none : quiet;
 
   return {
     schema: BRIEF_SCHEMA,
     verdict,
+    // Added in 2.4.0: a stable name for the verdict (fix, review, check, clean, none, unread, suppressed).
+    verdict_id: Object.keys(VERDICTS).find((k) => VERDICTS[k] === verdict) || "suppressed",
     exit_code: exitCode,
     exit_reason: exitCode === 2 || !actHigh ? exitReason(list) : null,
     target: text(targets.join(", "), 500),
     scanned: unread ? modes.filter((m) => m !== "url") : modes,
     counts: {
+      // Problems: act on plus check first, the number every surface shows (src/report/counts.js).
+      problems: by.act.length + by.check.length,
       act: by.act.length,
       check: by.check.length,
       noise: by.noise.length,
@@ -305,6 +309,8 @@ export function buildBrief(results, { reports = [], fixes = null, limits = [], m
     likely_noise: noise,
     not_checked: [...new Set(notChecked)],
     next: dedupeNext(next).slice(0, MAX_NEXT),
+    // Added in 2.4.1: how to suppress a problem you checked, by fid with a reason.
+    ...(setAside ? { set_aside: setAside } : {}),
     reports: reports.map((p) => text(p, 300)),
   };
 }
@@ -330,7 +336,7 @@ function whereText(i) {
 export function formatBrief(b, { footer = false } = {}) {
   const L = [];
   const c = b.counts;
-  const parts = [`${c.act} to act on`, `${c.check} to check first`, `${c.noise} likely noise`];
+  const parts = [problemsText({ problems: c.problems ?? c.act + c.check, act: c.act, check: c.check }), `${c.noise} likely noise`];
   if (c.info) parts.push(`${c.info} info in the full report`);
   const scanned = b.scanned.length ? ` Scanned: ${b.scanned.map((m) => MODE_NAMES[m] || m).join(", ")}.` : "";
   L.push(`**Penthera: ${b.verdict}.** ${parts.join(", ")}.${scanned}`, "");
@@ -351,11 +357,13 @@ export function formatBrief(b, { footer = false } = {}) {
     L.push("### Check first", "");
     for (const i of b.check_first.slice(0, MAX_ITEMS)) {
       const where = whereText(i);
-      L.push(`- **${md(i.title)}**${i.count > 1 ? ` (${i.count})` : ""} [${i.mix || i.severity}, ${i.confidence}]${where ? ` in ${where}` : ""}.${i.why ? ` ${md(i.why)}` : ""}`);
+      L.push(`- **${md(i.title)}**${i.count > 1 ? ` (${i.count})` : ""} [${i.mix || i.severity}, ${matchLabel(i.confidence)}]${where ? ` in ${where}` : ""}.${i.why ? ` ${md(i.why)}` : ""}`);
     }
     if (b.check_first.length > MAX_ITEMS) L.push(`- ${b.check_first.length - MAX_ITEMS} more in the full report.`);
     L.push("");
   }
+  // Plain, like the brief's other in-text commands: the same words however Penthera was started.
+  if (b.set_aside) L.push(`Checked one and it is not a problem? ${code(b.set_aside.command)}. ${md(b.set_aside.why)}.`, "");
   if (b.likely_noise.length) {
     L.push("### Likely noise", "");
     for (const g of b.likely_noise.slice(0, MAX_ITEMS)) {

@@ -327,7 +327,7 @@ describe("plans never print a secret", () => {
 
 describe("the scan's fix line", () => {
   it("counts findings a recipe could take, without reading the repo", () => {
-    expect(fixSummary([{ title: "Missing Content-Security-Policy", category: "headers" }, { title: "x", category: "secrets" }, { title: "x", category: "code-pattern" }])).toBe(2);
+    expect(fixSummary([{ title: "Missing Content-Security-Policy", category: "headers" }, { title: "x", category: "secrets", url: "src/a.ts" }, { title: "x", category: "secrets", url: ".env" }, { title: "x", category: "code-pattern" }])).toBe(2);
   });
 
   it("does not slow a repo scan on a big, secret-heavy repo", () => {
@@ -371,11 +371,11 @@ describe("the scan's fix line", () => {
       } catch (e) { return { status: e.status, out: e.stdout }; }
     };
     const text = scan();
-    expect(text.out).toMatch(/\d+ may be fixable:/);
+    expect(text.out).toMatch(/A fix recipe matches \d+ of the \d+ problems?:/);
     expect(text.out).toContain("penthera fix --plan --repo");
     const json = scan("--json");
     expect(json.status).toBe(text.status);
-    expect(json.out).not.toMatch(/fixable:/);
+    expect(json.out).not.toMatch(/problems?: /);
     expect(JSON.parse(json.out).brief.next[0].command).toContain("penthera fix --plan --repo");
   });
 });

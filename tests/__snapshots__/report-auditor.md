@@ -26,7 +26,7 @@ Every finding carries a confidence label that says how sure the scanner is that 
 
 | Label | Meaning | This scan |
 |-------|---------|-----------|
-| `confirmed` | Deterministic evidence: a header is absent, a certificate has expired, a secret is in the file. | 4 |
+| `confirmed` | The pattern matched exactly: a header is absent, a certificate has expired, a key in the file has a provider's format. A rule match, not a verdict that it can be exploited. | 4 |
 | `likely` | A strong signal with a small chance of a false positive. | 0 |
 | `potential` | A heuristic or timing signal. It needs a second source before anyone acts on it. | 0 |
 | `needs-human-review` | A scanner cannot judge exploitability here (access control, IDOR). A person has to look. | 1 |

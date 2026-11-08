@@ -93,7 +93,10 @@ const BENCH_MAX_DROP = 0.02;
 // Raised again for the fixes to Vercel's two DoS findings on PR 312 (env-name groups and caps,
 // identifiers cut at 63 bytes: ~12 KB unpacked, ~3 KB packed), which put the package at ~1,154 KB /
 // ~3,286 KB; was 1_160_000 / 3_285_000. Same standing rule.
-const PACK_BUDGET = { packedBytes: 1_170_000, unpackedBytes: 3_300_000, files: 360 };
+// Raised when main's 2.4 one-count batch (PR 314: app-settings coverage, exploitability) was merged
+// in: the merged package is ~1,170 KB packed / ~3,332 KB unpacked, 355 files; was 1_170_000 /
+// 3_300_000. Same standing rule (under 5 MB unpacked).
+const PACK_BUDGET = { packedBytes: 1_185_000, unpackedBytes: 3_345_000, files: 360 };
 
 /** Paths the npm package may contain. Anything else fails the packaging gate. */
 const PACK_ALLOW = [

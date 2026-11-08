@@ -141,7 +141,7 @@ Every tool is read-only. None writes a file, applies a fix, or runs a shell.
 
 | Tool | What it does | Network |
 |---|---|---|
-| `scan_repo` | Secrets, code-execution sinks, API routes, runtime version pins in a project folder, plus a coverage ledger of what ran and what was skipped | none |
+| `scan_repo` | Secrets, code-execution sinks, API routes, runtime version pins, and security headers, cookie flags, CORS and login rate limits as the code sets them, in a project folder, plus a coverage ledger of what ran and what was skipped. The brief counts problems the way every surface does ([brief](brief.md#how-penthera-counts)) | none |
 | `check_dependencies` | What each npm or Python package can do (install scripts, shell, network, eval, credential access), known-malicious packages, typosquats | none |
 | `audit_ai_tooling` | The project's skills, MCP servers, hooks, permissions and rule files, graded A to F, or no grade if it finds no agent config. A `path` other than the workspace root can also be a skill folder or its `SKILL.md` | none |
 | `runtime_advisories` | Advisories and end of life for the PHP, nginx, Apache, Node.js, Python, OpenSSL or MongoDB a project pins, or the PHP, nginx, Apache or OpenSSL a `Server` or `X-Powered-By` header shows | none |
@@ -155,7 +155,10 @@ assistant to pass the brief on as it is and to put its own view under "My
 read". Every
 finding has a `rule` (such as `openapi-exposed`, `gha-pwn-request`, `supabase-rls-disabled` or `agents/mcp-unpinned`, or
 its category when no narrower rule applies; `explain_finding` takes any of them), a severity, a confidence label (`confirmed`, `likely`,
-`potential`, `needs-human-review`), and evidence at `file:line` or a URL. Each
+`potential`, `needs-human-review`), `exploitability`, and evidence at `file:line` or a URL.
+Confidence is about the rule's match, not a verdict: `exploitability` is
+`not-assessed` for a rule match and `needs-human-review` where a scanner cannot
+judge it. Each
 result also lists what the tool did not check. By default a tool returns the 50
 most severe findings; ask for up to 200 with `max_findings`.
 
