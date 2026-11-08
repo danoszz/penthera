@@ -170,7 +170,7 @@ function agentGrade(audits) {
  * score, and none is invented). A suppressed, unread or empty run keeps its own big sign.
  */
 function cardGrade(results, tone) {
-  if (!["fix", "review", "clean"].includes(tone)) return null;
+  if (!["fix", "review", "check", "clean"].includes(tone)) return null;
   const modes = results.flatMap((r) => r.modes || [r.mode]).flatMap((m) => String(m).split("+"));
   if (!modes.length || modes.some((m) => m !== "agents")) return null;
   if (results.some((r) => r.agents?.unparsed)) return null;
@@ -246,6 +246,7 @@ function heroOf(brief, tone) {
 function toneOf(verdict) {
   if (verdict === VERDICTS.fix) return "fix";
   if (verdict === VERDICTS.review) return "review";
+  if (verdict === VERDICTS.check) return "check";
   if (verdict === VERDICTS.clean) return "clean";
   if (verdict === VERDICTS.none) return "none";
   if (verdict === VERDICTS.unread) return "unread";
@@ -307,7 +308,8 @@ export function buildCardModel(brief, results, { version, date } = {}) {
   return {
     schema: CARD_SCHEMA,
     tone,
-    verdict: publicText(brief.verdict, 40),
+    // Only things to check: "Nothing to fix now · 4 to check" (Daan, 9 Nov).
+    verdict: publicText(tone === "check" ? `${brief.verdict} · ${brief.counts.check} to check` : brief.verdict, 40),
     hero: heroOf(brief, tone),
     grade,
     toFix: brief.counts.act ? { value: brief.counts.act, label: "To fix first" } : brief.counts.check ? { value: brief.counts.check, label: "To check first" } : { value: 0, label: "To fix" },
@@ -317,7 +319,7 @@ export function buildCardModel(brief, results, { version, date } = {}) {
     version: publicText(version, 20),
     checked,
     notChecked: notCheckedLines(brief, checked, tone, list),
-    top: top && (tone === "fix" || tone === "review")
+    top: top && (tone === "fix" || tone === "review" || tone === "check")
       ? { title: titleCase(publicText(top.title, 90)) || "Finding", fix: top.fix ? publicText(top.fix, 180) : null, severity: top.severity }
       : null,
   };

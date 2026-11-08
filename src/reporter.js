@@ -17,6 +17,7 @@ import { exitCodeOf, exitNote, exitReason } from "./report/exit.js";
 import { toolById } from "../lib/giants/tools.js";
 import { colorOff } from "./cli/ansi.js";
 import { trimEndChars, trimStartChars } from "../lib/linear-text.js";
+import { problemCounts, problemsText, plural } from "./report/counts.js";
 
 const PKG_VERSION = JSON.parse(
   readFileSync(new URL("../package.json", import.meta.url), "utf-8"),
@@ -553,6 +554,9 @@ function printSummaryLine(result, w, opts = {}) {
     w("  Nothing found in what Penthera checked.");
   } else {
     w(`  ${[...parts, ...(result.suppressed?.length ? [c.yellow(`${result.suppressed.length} suppressed`)] : [])].join(c.dim(" \u00b7 "))}`);
+    // The same number the brief, the dashboard, the MCP tools and the fix plan show.
+    const pc = problemCounts(findings);
+    if (pc.problems) w(`  ${c.bold(problemsText(pc))}`);
   }
   if (note) w(`  ${c.red(printable(note))}`);
   const unread = result.deps || (result.agents && !result.agents.unparsed) ? null : notRead(result);
@@ -572,8 +576,9 @@ function printSummaryLine(result, w, opts = {}) {
   if (opts.fixes) {
     const { count, command } = opts.fixes;
     w("");
-    w(`  ${c.bold(count ? `${count} may be fixable:` : "Fixes:")} ${printable(hintCommand(command))}`);
-    w(`  ${c.dim("The fix plan also checks cookie flags, CORS and rate limits in your code, which this scan does not list.")}`);
+    const problems = problemCounts(result.findings || []).problems;
+    w(`  ${c.bold(count ? `A fix recipe matches ${count} of the ${plural(problems, "problem")}:` : "Fixes:")} ${printable(hintCommand(command))}`);
+    w(`  ${c.dim("It shows each diff and changes nothing until you approve one.")}`);
   }
   const other = result.giants?.findings || [];
   if (other.length) {
@@ -765,6 +770,8 @@ export function formatSarif(result) {
         },
       },
       results,
+      // The run's counts in the words every surface uses (src/report/counts.js).
+      properties: { counts: problemCounts(result.findings || [], { suppressed: (result.suppressed || []).length }) },
       invocations: [{
         executionSuccessful: exitCodeOf(result) !== 2 && !siteUnread(result),
         startTimeUtc: result.timestamp,

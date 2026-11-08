@@ -249,13 +249,23 @@ function initArgs(argv) {
   return null;
 }
 
-/** The scan's "N may be fixable" line. It never fails a scan: without it the report is still complete. */
+/**
+ * The scan's fix line: how many of this run's problems a fix recipe matches.
+ * It reads nothing (planning reads the repo again per problem, which a crafted
+ * repo can make slow), so `penthera fix --plan` gives the exact count. A
+ * recipe matches only what it can change (a secret in a code file, not in a
+ * .env file), and likely noise and info are not problems. It never fails a
+ * scan: without it the report is still complete.
+ */
 async function fixLine(repo, findings) {
+  const command = `penthera fix --plan --repo ${repo}`;
   try {
     const { fixSummary } = await import("../lib/fix/index.js");
-    return { count: fixSummary(findings), command: `penthera fix --plan --repo ${repo}` };
+    const { isProblem } = await import("./report/counts.js");
+    const problems = findings.filter((f) => isProblem(f));
+    return { count: fixSummary(problems), problems: problems.length, command };
   } catch {
-    return null;
+    return { command };
   }
 }
 

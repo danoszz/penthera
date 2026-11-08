@@ -19,6 +19,7 @@ import { discoverFrameworkRoutes } from "../lib/whitebox/frameworks.js";
 import { runtimeAdvisoriesForRepo } from "../lib/advisories/index.js";
 import { buildCoverage } from "../lib/coverage.js";
 import { readRepoFile, isRefused } from "../lib/fs-safe.js";
+import { probeRepoDetailed, findingKey } from "../lib/fix/index.js";
 
 /** Source and config files the route scan reads are capped at 5 MiB. */
 const SOURCE_MAX_BYTES = 5 * 1024 * 1024;
@@ -46,6 +47,30 @@ function refusedFileFinding(e, repoPath) {
     category: "config",
     source: "repo-scan",
   };
+}
+
+const SEV_RANK = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
+
+/**
+ * Add the settings checks' findings to the scan's. A wildcard CORS hit the
+ * route scan already reported for the same file is the same problem: the route
+ * scan's finding stays (baselines and suppressions know it), unless the
+ * settings check rates it worse. Repeats within the checks go too.
+ */
+function mergeSettings(result, findings) {
+  const corsFiles = new Map();
+  for (const f of result.findings) {
+    if (f.category === "code-pattern" && f.pattern === "cors-wildcard" && f.file) corsFiles.set(f.file, f);
+  }
+  const seen = new Set(result.findings.map(findingKey));
+  for (const f of findings) {
+    const same = f.category === "cors" ? corsFiles.get(f.file) : null;
+    if (same && (SEV_RANK[same.severity] ?? 5) <= (SEV_RANK[f.severity] ?? 5)) continue;
+    const k = findingKey(f);
+    if (seen.has(k)) continue;
+    seen.add(k);
+    result.findings.push(f);
+  }
 }
 
 /**
@@ -150,7 +175,9 @@ export async function scanRepo(repoPath, opts = {}) {
     (result.incomplete ||= []).push({ file: f.file, reason: e.reason || e.message });
   };
 
+  let settings = null;
   const finish = () => {
+    if (settings) mergeSettings(result, settings.findings);
     result.coverage = buildCoverage(repoPath, result, { ignored });
     delete result.sinkMinified; // in the coverage ledger now
     result.duration = Date.now() - startTime;
@@ -188,6 +215,39 @@ export async function scanRepo(repoPath, opts = {}) {
   progress("Checking GitHub Actions workflows...");
   result.findings.push(...scanWorkflows(repoPath));
   result.executedProbes.push("ci-workflows");
+
+  // Files a check would have read but refused: one info finding per file, and
+  // the run is incomplete (noteRefused). Never a silent pass.
+  const refused = [];
+  const reportRefused = () => {
+    for (const e of refused.splice(0)) noteRefused(e);
+  };
+
+  // ── Phase 1e: the fix planner's static checks ─────────────────────────
+  // Headers, cookie flags, CORS and login rate limits, read from the code. The
+  // fix plan reads the same findings from this scan, so both count the same.
+  progress("Checking headers, cookies, CORS and login rate limits...");
+  settings = probeRepoDetailed(repoPath, undefined, { ignored });
+  // A code file this check could not read, or never reached past its cap, was
+  // not checked: the run is incomplete (exit 2), as for the route scan's files.
+  for (const n of settings.notRead) noteRefused({ path: n.file, reason: n.reason });
+  // A file it read but could not fully check (the cookie check's read budget) too.
+  for (const f of settings.findings) if (f.incomplete) (result.incomplete ||= []).push({ file: f.incomplete.file, reason: f.incomplete.reason });
+  if (settings.coverage.over) {
+    const { over, firstOver, cap } = settings.coverage;
+    const first = String(firstOver).split(sep).join("/");
+    result.findings.push({
+      severity: "info",
+      title: `Settings check stopped at ${cap.toLocaleString("en-US")} code files`,
+      description: `${over} more code ${over === 1 ? "file was" : "files were"} not checked for headers, cookie flags, CORS or login rate limits, starting with \`${first}\`. The scan is incomplete and exits 2. Scan each app folder on its own with \`--repo <folder>\`.`,
+      category: "config",
+      source: "repo-scan",
+    });
+    (result.incomplete ||= []).push({ file: first, reason: `past the settings check's ${cap}-file limit (${over} not read)` });
+  }
+  // Kept off the JSON report (it lists every file read); the ledger reads it.
+  Object.defineProperty(result, "settingsCoverage", { value: settings.coverage, enumerable: false });
+  result.executedProbes.push("app-settings");
   if (library.enabled) {
     result.executedProbes.push("library-mode");
     result.findings.push({
@@ -214,13 +274,6 @@ export async function scanRepo(repoPath, opts = {}) {
     });
     return finish();
   }
-
-  // Files the route scan would have read but refused: one info finding per file,
-  // and the run is incomplete (noteRefused). Never a silent pass.
-  const refused = [];
-  const reportRefused = () => {
-    for (const e of refused.splice(0)) noteRefused(e);
-  };
 
   if (apiRoot) {
     // ── Phase 2: Discover attack surface ───────────────────────────────────

@@ -105,9 +105,10 @@ describe("verdict and exit code on every severity and place", () => {
       ...[...noise, ...uncertain].map((p) => [sev, p, VERDICTS.review, 1, "The CLI exits 1 on this: 1 critical or high finding outside Act on. Fix it, or write down why you accept it."]),
     ]),
     ["medium", {}, VERDICTS.review, 0, null],
-    ...uncertain.map((p) => ["medium", p, VERDICTS.review, 0, null]),
+    // Only things to check first, and the run passes: "Nothing to fix now" (Daan, 9 Nov).
+    ...uncertain.map((p) => ["medium", p, VERDICTS.check, 0, null]),
     ...noise.map((p) => ["medium", p, VERDICTS.clean, 0, null]),
-    ["low", {}, VERDICTS.review, 0, null],
+    ["low", {}, VERDICTS.check, 0, null],
     ...noise.map((p) => ["low", p, VERDICTS.clean, 0, null]),
     ["info", {}, VERDICTS.clean, 0, null],
     ...noise.map((p) => ["info", p, VERDICTS.clean, 0, null]),

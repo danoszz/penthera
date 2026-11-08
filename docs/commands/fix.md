@@ -17,10 +17,22 @@ a changed line was masked. The diff that gets applied is the real one. The dashb
 approval window also shows the unchanged lines around a fix, with the same masks, on
 your local screen only.
 
-A repo scan ends with `N may be fixable: penthera fix --plan --repo <path>`. The
-count is the scan's findings a recipe could take. `penthera fix` also checks cookie
-flags, CORS and rate limits in your code, which do not change a scan's findings or
-exit code.
+A repo scan runs the same checks the fix planner uses (security headers, cookie
+flags, CORS and login rate limits), so `penthera fix --plan` works on the scan's
+own findings and counts them the same way. The scan ends with `A fix recipe
+matches N of the M problems: penthera fix --plan --repo <path>`. It reads
+nothing to say so, so a large repo never makes the scan slow; the plan then
+opens with the exact count, `5 fixes planned for 8 problems`, or `1 fix planned
+for 4 of 5 problems` when some have no fix. A problem is a finding to act on or
+to check first, so info and likely noise are not counted. A secret outside a
+code file (a `.env` file) has no recipe, and a fix that touches only likely
+noise is listed apart (`and 1 for likely noise or info`). A cookie call written
+over several lines is reported but not edited, so the plan leaves it to you.
+One fix can cover several problems: one `next.config.mjs` change adds five
+missing headers.
+`--json` adds `counts`: `problems`, `covered`, `fixes`, `other` (fixes for
+likely noise or info only) and `findings`. The plan prints its headline again
+at the end, so the last lines of the output say what it holds.
 
 `penthera fix` exits 2 when its run is incomplete: the repo scan, a report given
 with `-o`, or the cookie check left a file unread or not fully checked. It names
