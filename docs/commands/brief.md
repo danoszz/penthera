@@ -41,7 +41,9 @@ penthera brief reports/repo.json reports/deps.json reports/agents.json
 ```
 
 `penthera brief --json` prints the merged brief as JSON. `penthera brief`
-reads only the files you name and runs no scan.
+reads only the files you name and runs no scan. `penthera brief --card` also
+writes the merged result as a share card, and `--card-out <path>` picks where
+([scan.md](scan.md#share-card)).
 
 ## How an assistant should reply
 

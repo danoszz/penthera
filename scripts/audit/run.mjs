@@ -82,12 +82,15 @@ const BENCH_MAX_DROP = 0.02;
 // Raised for the 2.4 hardening (code-sinks, hidden-content, library, linear-text: ~110 KB
 // unpacked, ~32 KB packed), 9 Nov 2026: was 1_070_000 / 3_010_000. Raised 120 KB unpacked
 // and 35 KB packed, approved by Daan 8 Nov 2026.
+// Raised for the share card (src/card: renderer, pixel font, PNG encoder, ~51 KB unpacked,
+// ~19 KB packed), 8 Nov 2026: was 1_105_000 / 3_130_000. Raised 25 KB packed and 65 KB
+// unpacked; under the 5 MB line, so no separate approval needed (package-size rule).
 // Raised for the Supabase rules (lib/whitebox/supabase.js and its docs: ~88 KB unpacked,
 // ~27 KB packed, 1 file, no dependencies; ~22 KB is the SQL reader and ~23 KB the
-// reachability walk and finding text), PR 312, merged with 2.4 hardening 8 Nov 2026; was
-// 1_105_000 / 3_130_000. Raised under Daan's standing rule of 8 Nov (engineers may raise it
+// reachability walk and finding text), PR 312, merged with the share card 8 Nov 2026; was
+// 1_130_000 / 3_195_000; the merged package is ~1,151 KB packed / ~3,274 KB unpacked. Raised under Daan's standing rule of 8 Nov (engineers may raise it
 // with a written reason while the package stays under 5 MB unpacked).
-const PACK_BUDGET = { packedBytes: 1_140_000, unpackedBytes: 3_230_000, files: 360 };
+const PACK_BUDGET = { packedBytes: 1_160_000, unpackedBytes: 3_285_000, files: 360 };
 
 /** Paths the npm package may contain. Anything else fails the packaging gate. */
 const PACK_ALLOW = [
