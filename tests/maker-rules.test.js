@@ -187,6 +187,20 @@ describe("server-action-no-auth: one file", () => {
     expect(serverActions(ACTION_FILES.directiveInString).actions).toEqual([]);
     expect(unchecked(ACTION_FILES.notExported)).toEqual([]);
   });
+  // A side-effect import (`import "x"`) padded with a long comment has no `from`,
+  // which made the old lazy import regex backtrack cubically (Vercel DoS). The
+  // bounded token walk stays linear; measured by the doubling method so it does
+  // not flake under parallel CI.
+  it("stays linear on a side-effect import padded with a long comment", () => {
+    const gen = (n) => `'use server';\nexport async function act(id){ await db.delete(id); }\nimport /*${"x".repeat(n)}*/ "some-module";\n`;
+    const ms = (n) => { const s = process.hrtime.bigint(); for (let k = 0; k < 3; k++) uncheckedActions(gen(n)); return Number(process.hrtime.bigint() - s) / 1e6; };
+    const small = Math.max(ms(8000), 0.5);
+    const big = ms(64000); // 8x the size; linear is ~8x, the old path never returned
+    expect(big / small, `grew ${(big / small).toFixed(1)}x over 8x the input`).toBeLessThan(24);
+    expect(unchecked(gen(64000))).toEqual(["act:a database write"]); // still found
+  });
+  it("a side-effect import of an auth module binds no names, so the action is still reported", () =>
+    expect(unchecked("'use server';\nimport '@/lib/auth';\nexport async function x(id){ await db.delete(id); }\n")).toEqual(["x:a database write"]));
 });
 
 describe("server-action-no-auth: findings", () => {

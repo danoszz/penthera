@@ -163,21 +163,21 @@ export async function scanRepo(repoPath, opts = {}) {
   // ── Phase 1b2: Framework versions (next, React Server Components) vs advisories
   progress("Checking framework versions in the lockfile against advisories...");
   const refusedLock = [];
-  result.findings.push(...frameworkAdvisoriesForRepo(repoPath, { refused: refusedLock }));
+  for (const f of frameworkAdvisoriesForRepo(repoPath, { refused: refusedLock })) result.findings.push(f);
   nameRefused(refusedLock);
   result.executedProbes.push("framework-advisories");
 
   // ── Phase 1b3: Server secrets behind a public env prefix (NEXT_PUBLIC_, VITE_, ...)
   progress("Checking env names that ship to the browser...");
   const refusedEnv = [];
-  result.findings.push(...scanPublicEnv(repoPath, { refused: refusedEnv, ignoredDirs: ignored?.dirs }));
+  for (const f of scanPublicEnv(repoPath, { refused: refusedEnv, ignoredDirs: ignored?.dirs })) result.findings.push(f);
   nameRefused(refusedEnv);
   result.executedProbes.push("public-env");
 
   // ── Phase 1b4: Server Actions that write without an auth check ────────
   progress("Checking Server Actions for an auth check...");
   const refusedActions = [];
-  result.findings.push(...scanServerActions(repoPath, { refused: refusedActions, ignoredDirs: ignored?.dirs }));
+  for (const f of scanServerActions(repoPath, { refused: refusedActions, ignoredDirs: ignored?.dirs })) result.findings.push(f);
   nameRefused(refusedActions);
   result.executedProbes.push("server-actions");
 
