@@ -37,6 +37,8 @@ export function mergeResults(results) {
       egress: results.find((r) => r.egress)?.egress || null,
       coverage: results.find((r) => r.coverage)?.coverage || null,
       errors: results.flatMap((r) => r.errors || []),
+      // A refused input in any part makes the whole run incomplete: exit 2.
+      ...(results.some((r) => r.incomplete?.length) ? { incomplete: results.flatMap((r) => r.incomplete || []) } : {}),
       findings: dedupeFindings(results.flatMap((r) => r.findings || [])),
       // A refused input in any target makes the merged run incomplete (exit 2).
       ...(results.some((r) => r.incomplete?.length) ? { incomplete: results.flatMap((r) => r.incomplete || []) } : {}),

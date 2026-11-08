@@ -50,6 +50,8 @@ export function parseTemplate(src) {
   let target = root.body;
   let line = 1;
   let last = 0;
+  // The template is the user's own --report-template file, never scanned input.
+  // eslint-disable-next-line regexp/no-super-linear-move
   const re = /\{\{([\s\S]*?)\}\}/g;
   let m;
   while ((m = re.exec(src))) {

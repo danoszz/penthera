@@ -89,10 +89,12 @@ not read. The report lists it as an info finding, `File not read: <file>`, and
 the rest of the scan goes on. An `-r` include like that skips only the include:
 the other pins in the file that has it are still checked. Either way the scan
 is incomplete, so it exits 2, even when nothing else was found. A file Penthera
-could not read never passes CI as an empty tree. A venv's `METADATA` or
-`PKG-INFO` that is not read (over the cap, a FIFO, no permission) keeps its
-package, named from its `.dist-info` or `.egg-info` folder and listed as
-unscanned, and the scan exits 2 as well.
+could not read never passes CI as an empty tree. In a virtualenv, a package
+whose `METADATA`, `PKG-INFO` or `RECORD` is not read (over 16 MiB, a FIFO, a
+device, no permission) stays in the report, named from its `.dist-info` or
+`.egg-info` folder and marked as not scanned, and the run exits 2. So does a
+startup `.pth` file in `site-packages` that is not read. A package with a code
+file Penthera could not read is not scanned, never clean.
 
 ```bash
 penthera deps                          # uv.lock + .venv
@@ -140,9 +142,14 @@ penthera deps --license-policy legal/policy.json # a file with a "licenses" sect
 
 Without the flag, `penthera deps` applies the `licenses` section of
 `penthera.policy.json` when there is one. A policy file that is not a regular
-file inside the project, or is over 1 MiB, is not read: `deps`, `install` and
-`--giants` print a warning and use the default policy, and AI mode does not
+file inside the project, or is over 1 MiB, is not read. A policy can tighten
+the gate, so this never passes quietly: `deps` and `--giants` check with the
+default policy and exit 2 as incomplete, `install` stops, and AI mode does not
 run.
+
+An installed package is read in full. A link inside the package folder is
+followed and read. A link out of the package, a link to nothing, or a FIFO or
+device in the folder makes the package "could not be scanned", never clean.
 
 ```json
 {
