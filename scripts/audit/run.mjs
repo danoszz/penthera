@@ -84,8 +84,11 @@ const BENCH_MAX_DROP = 0.02;
 // unpacked, ~23 KB packed with its docs, 1 file, no dependencies), 8 Nov 2026: the
 // package went to ~1,087 KB packed / ~3,078 KB unpacked; was 1_070_000 / 3_010_000.
 // Raised under Daan's standing rule of 8 Nov (engineers may raise it with a written
-// reason while the package stays under 5 MB unpacked).
-const PACK_BUDGET = { packedBytes: 1_095_000, unpackedBytes: 3_090_000, files: 360 };
+// reason while the package stays under 5 MB unpacked). Raised again the same day for
+// Vercel's DoS fix on PR 312 (grouped findings, the 50,000-object cap and the pass past
+// it: ~12 KB unpacked, ~3 KB packed), which put it at ~1,090 KB / ~3,090 KB; was
+// 1_095_000 / 3_090_000.
+const PACK_BUDGET = { packedBytes: 1_100_000, unpackedBytes: 3_110_000, files: 360 };
 
 /** Paths the npm package may contain. Anything else fails the packaging gate. */
 const PACK_ALLOW = [
