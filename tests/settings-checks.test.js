@@ -437,4 +437,29 @@ describe("review re-check fixes (9 Nov)", () => {
     expect(fixSummary(cookies)).toBe(1);
     expect(cookies[1].description).toMatch(/add the flags by hand/);
   });
+
+  // Vercel Security Review on PR 314: the entry-file anchors ran with the m flag over the
+  // whole file, so `^(\s*)` rescanned every blank-line run (quadratic).
+  for (const fw of ["express", "hono"]) {
+    it(`${fw}: a server.js of blank lines with no app declaration is read in linear time (doubling check)`, () => {
+      const time = (n) => {
+        const root = repo({ "package.json": JSON.stringify({ dependencies: { [fw]: "4.0.0" } }), "server.js": `${"\n".repeat(n)}x` });
+        const t = process.hrtime.bigint();
+        probeRepoDetailed(root);
+        return Number(process.hrtime.bigint() - t) / 1e6;
+      };
+      time(1000); // warm up
+      const small = time(1024 * 1024);
+      const big = time(4 * 1024 * 1024);
+      expect(big).toBeLessThan(2_000);
+      // Four times the input: linear is about 4x, quadratic 16x. Allow noise.
+      expect(big).toBeLessThan(Math.max(10 * small, 400));
+    }, 60_000);
+  }
+
+  it("the entry anchors still find the app line, with blank lines around it", async () => {
+    const { findEntryFile, lineAnchor } = await import("../lib/fix/util.js");
+    const root = repo({ ...EXPRESS, "server.js": `${"\n".repeat(5000)}  const app = express();\r\n${"\n".repeat(5000)}app.listen(3000);\n` });
+    expect(findEntryFile(root, lineAnchor(/^(\s*)(?:const|let|var)\s+(\w+)\s*=\s*express\(\s*\)(?:\s*;)?\s*$/))?.file).toBe("server.js");
+  });
 });
