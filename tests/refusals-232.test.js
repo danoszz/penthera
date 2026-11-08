@@ -954,8 +954,11 @@ describe("pipe to a shell: every form main caught, and more, in linear time (pre
       await time("5 MiB CLAUDE.md", () => scanAgents(d));
       console.log(JSON.stringify(out));`], { encoding: "utf-8", timeout: 60_000 });
     expect(r.status, r.stderr || "timed out").toBe(0);
-    for (const [n, ms] of Object.entries(JSON.parse(r.stdout.trim()))) expect(ms, n).toBeLessThan(1500);
-  });
+    // The 5 s limit of the slowest linear cases: the whole test takes about 0.5 s here,
+    // and one 5 MiB case took 1.68 s once on CI's Node 22 runner with the code unchanged.
+    // The quadratic each case guards against took minutes, so 5 s still catches it.
+    for (const [n, ms] of Object.entries(JSON.parse(r.stdout.trim()))) expect(ms, n).toBeLessThan(5000);
+  }, 60_000);
   // Vercel Security Review: runs of pipes with partial env forms and no shell.
   // Each is timed at n and 4n: linear grows about 4x, quadratic 16x.
   it("runs of `|` with partial env forms stay linear (n and 4n)", () => {
