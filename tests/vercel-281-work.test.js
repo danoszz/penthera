@@ -195,3 +195,21 @@ describe("Mythos: escaped slashes, huge files, CRLF", () => {
     expect(findSecretsInText(head + "// pad\n".repeat(700_000), { path: "tests/a.test.js", fromFileStart: true }).some((h) => h.testAccount)).toBe(false);
   });
 });
+
+// Vercel review of 300413f: the skill-file cache kept whole bodies alive
+// (300 distinct 4 MiB SKILL.md files: 1.34 GB retained). Only frontmatter is kept.
+describe("agents: the skill-file cache keeps frontmatter, not bodies", () => {
+  it("20 distinct 1 MiB SKILL.md files leave no body in the cache", async () => {
+    const { discoverAgentConfig } = await import("../lib/agents/discover.js");
+    const d = mkdtempSync(join(tmpdir(), "penthera-281m-"));
+    const body = "x".repeat(1024 * 1024);
+    for (let i = 0; i < 20; i++) {
+      mkdirSync(join(d, `.claude/skills/s${i}`), { recursive: true });
+      writeFileSync(join(d, `.claude/skills/s${i}/SKILL.md`), `---\nname: s${i}\ndescription: x\n---\n${body}\n`);
+    }
+    const inv = discoverAgentConfig(d, { home: false });
+    expect(inv.skills.length).toBe(20);
+    const cached = JSON.stringify([...(inv.skillFileCache?.values() || [])]);
+    expect(cached.length).toBeLessThan(64 * 1024);
+  });
+});
