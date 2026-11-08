@@ -23,8 +23,9 @@ section: Changed
   unreadable) or never reached (past the 5,000-file walk, which leaves out
   generated and git-ignored folders) makes the scan incomplete and exits 2, as
   a refused route file already did. Cookie calls written over several lines
-  (the Prettier style) are now checked, and `vercel.json` headers count only
-  when set for every route. Any number of `cookies()` stores is read, padding inside
+  (the Prettier style) are now checked and reported, to fix by hand: the fix
+  edits one-line calls, so they are not counted as fixable. `vercel.json`
+  headers count only when set for every route. Any number of `cookies()` stores is read, padding inside
   `.get( "origin" )` is read as before, and a file with many hits holds only
   the 25 worst in memory.
 - **Words an agent can act on.** In the JSON a repo finding also has `path`

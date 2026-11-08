@@ -405,4 +405,36 @@ describe("review re-check fixes (9 Nov)", () => {
     expect(plans.flatMap((p) => p.findings.map((f) => f.file))).toEqual(["a.js"]);
     expect(unmatched.map((f) => f.file)).toEqual(["b.js"]);
   });
+
+  it("a regex with // inside a one-line cookie call is code, not a comment (re-check 3)", async () => {
+    const src = 'res.cookie("session", p.replace(/\\/\\//g, "/"));\nres.cookie("sid", /^https?:\\/\\//.test(u) ? a : b);\n';
+    expect(probeCookies("app.js", src).map((f) => f.title)).toEqual([
+      'Cookie "session" missing HttpOnly, missing Secure, missing SameSite',
+      'Cookie "sid" missing HttpOnly, missing Secure, missing SameSite',
+    ]);
+    const root = repo({ ...EXPRESS, "app.js": src });
+    const { plans } = await planFixes(root, probeRepoDetailed(root).findings.filter((f) => f.category === "cookie"));
+    expect(plans.map((p) => p.recipe)).toEqual(["cookie-flags", "cookie-flags"]);
+  });
+
+  it("unclosed mentions in comments do not mark a normal file as not fully checked (re-check 3)", async () => {
+    // Nine unclosed mentions at the top of a 13 KB file: read over many lines,
+    // each would run to the end of the file and use up the read budget.
+    const lines = Array.from({ length: 9 }, (_, i) => `// call res.cookie( with an empty value ${i}`);
+    for (let k = 0; k < 280; k++) lines.push(`const v${k} = compute(${k}, "some text here");`);
+    lines.push('res.cookie("session", t);');
+    const root = repo({ ...EXPRESS, "app.js": `${lines.join("\n")}\n` });
+    const r = await scanRepo(root);
+    expect(r.incomplete ?? []).toEqual([]);
+    expect(r.findings.filter((f) => f.category === "cookie").map((f) => f.title)).toEqual(['Cookie "session" missing HttpOnly, missing Secure, missing SameSite']);
+  });
+
+  it("the scan's count leaves out a multi-line cookie call no recipe changes (re-check 3)", async () => {
+    const { fixSummary } = await import("../lib/fix/index.js");
+    const root = repo({ ...EXPRESS, "a.js": 'res.cookie("session", t);\n', "b.js": 'res.cookie("token", t, {\n  maxAge: 1,\n});\n' });
+    const cookies = probeRepoDetailed(root).findings.filter((f) => f.category === "cookie");
+    expect(cookies.map((f) => [f.file, Boolean(f.multiline)])).toEqual([["a.js", false], ["b.js", true]]);
+    expect(fixSummary(cookies)).toBe(1);
+    expect(cookies[1].description).toMatch(/add the flags by hand/);
+  });
 });
