@@ -63,6 +63,16 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # npm test lints the Vercel workflow template with actionlint, same pin as ci.yml.
+      - name: Install actionlint (pinned)
+        run: |
+          v=1.7.12
+          sum=8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+          curl -fsSL -o "$RUNNER_TEMP/actionlint.tgz" "https://github.com/rhysd/actionlint/releases/download/v$v/actionlint_${v}_linux_amd64.tar.gz"
+          echo "$sum  $RUNNER_TEMP/actionlint.tgz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/actionlint.tgz" -C "$RUNNER_TEMP" actionlint
+          echo "ACTIONLINT=$RUNNER_TEMP/actionlint" >> "$GITHUB_ENV"
+
       - name: Run tests
         run: npm test
 
