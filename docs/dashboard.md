@@ -66,7 +66,11 @@ of 3 waiting for you", when a change waits), and **Offline** or **Online** for
 scans started here (click to switch).
 
 **Projects** (left, `[` to hide). **New scan…** on top, then "All projects"
-and every project with its A to F grade, open problems and last check. A
+and every project with its A to F grade, open problems and last check. Open
+problems are the brief's problems, to act on plus to check first, so the
+dashboard, the CLI and `penthera fix` give the same number
+([how Penthera counts](commands/brief.md#how-penthera-counts)). The Simple list
+names likely noise and notes beside them. A
 project with a run in progress shows a blinking square.
 
 **The document** (centre). For a project, or all of them:

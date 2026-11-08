@@ -105,9 +105,10 @@ describe("verdict and exit code on every severity and place", () => {
       ...[...noise, ...uncertain].map((p) => [sev, p, VERDICTS.review, 1, "The CLI exits 1 on this: 1 critical or high finding outside Act on. Fix it, or write down why you accept it."]),
     ]),
     ["medium", {}, VERDICTS.review, 0, null],
-    ...uncertain.map((p) => ["medium", p, VERDICTS.review, 0, null]),
+    // Only things to check first, and the run passes: "Nothing to fix now" (Daan, 9 Nov).
+    ...uncertain.map((p) => ["medium", p, VERDICTS.check, 0, null]),
     ...noise.map((p) => ["medium", p, VERDICTS.clean, 0, null]),
-    ["low", {}, VERDICTS.review, 0, null],
+    ["low", {}, VERDICTS.check, 0, null],
     ...noise.map((p) => ["low", p, VERDICTS.clean, 0, null]),
     ["info", {}, VERDICTS.clean, 0, null],
     ...noise.map((p) => ["info", p, VERDICTS.clean, 0, null]),
@@ -441,8 +442,10 @@ describe.skipIf(asRoot)("a named skill Penthera could not read in full", () => {
     shut(join(dir, ".claude/skills/demo/run.sh"), 0o000);
     const r = await scan(dir);
     expect(r.agents.skillTarget).toBe(false);
-    expect(r.findings.filter((x) => x.url.includes("run.sh"))).toEqual([]);
+    // 2.3.2: a file there but not read is named (info) and makes the run incomplete.
+    expect(r.findings.filter((x) => x.url.includes("run.sh")).map((x) => x.severity)).toEqual(["info"]);
     expect(r.findings.find((x) => x.url.includes("big.md")).severity).toBe("medium");
+    expect(r.incomplete.map((x) => x.file).sort()).toEqual([".claude/skills/demo/big.md", ".claude/skills/demo/run.sh"]);
   }, 60_000);
 
   it("lists node_modules under Not read and leaves the grade alone, as the docs say", async () => {

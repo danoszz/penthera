@@ -62,3 +62,15 @@ describe("agents know every verdict", () => {
     }
   });
 });
+
+// docs.penthera.org serves docs/skill.md to agents (Hermes, `npx skills add
+// https://docs.penthera.org`) in place of a skill Mintlify would generate from
+// the docs. It must be our real skill, with only its relative links made
+// absolute, so it carries the authorization gate and the current pin.
+describe("the docs site's copy of the skill", () => {
+  it("is skills/penthera/SKILL.md with absolute links to references and scripts", () => {
+    const base = "https://github.com/danoszz/penthera/blob/main/skills/penthera/";
+    const docs = readFileSync(join(ROOT, "docs/skill.md"), "utf-8").replaceAll(`](${base}`, "](");
+    expect(docs).toBe(readFileSync(join(ROOT, "skills/penthera/SKILL.md"), "utf-8"));
+  });
+});

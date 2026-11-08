@@ -11,7 +11,7 @@ assistant to pass on as it is. Penthera's rules fill it; no model is involved.
 
 | Section | What is in it |
 |---|---|
-| Verdict | `Fix now` when Act on holds a critical or high finding. `Review` when anything is in Act on or Check first, or the run exits 1 or 2. `Nothing to fix` otherwise. `Site not read` when a firewall answered instead of the site, unless a critical or high finding says `Fix now`; the exit code doesn't change. With the counts. `Nothing to assess` when `penthera agents` found no agent config. Never `Nothing to fix` when a finding or a required tool makes the scan exit 1 or 2: it says `Review` and gives the reason on the next line. A failure after the brief prints, such as an output file it can't write, exits 2 with an error of its own |
+| Verdict | `Fix now` when Act on holds a critical or high finding. `Review` when anything is in Act on, or the run exits 1 or 2. `Nothing to fix now` when only Check first holds something (headers read from code, say, which your host may still add) and the run exits 0: the count to check is beside it. `Nothing to fix` otherwise. `Site not read` when a firewall answered instead of the site, unless a critical or high finding says `Fix now`; the exit code doesn't change. With the counts. `Nothing to assess` when `penthera agents` found no agent config. Never `Nothing to fix` when a finding or a required tool makes the scan exit 1 or 2: it says `Review` and gives the reason on the next line. A failure after the brief prints, such as an output file it can't write, exits 2 with an error of its own |
 | Act on | Findings that need a change: where, why, the fix, the rule id |
 | Check first | Heuristic and low findings, and what a dependency *can* do |
 | Likely noise | Hits in files git ignores, generated build output, test fixtures or test files, one line per group |
@@ -29,7 +29,7 @@ full list stays in the JSON and Markdown reports.
 | A scan, in a terminal | `penthera --repo . --brief` |
 | A scan, from an agent | Nothing to add: with no terminal on stdout, a scan prints the brief instead of the terminal report. `PENTHERA_BRIEF=0` or `--verbose` turns that off, `PENTHERA_BRIEF=1` turns it on anywhere, and CI keeps the terminal report. `--json`, `--audience` and `--report-template` print their own output instead |
 | A report file | `penthera --repo . --audience agent --markdown reports/brief.md` |
-| JSON | The `brief` field of `-o report.json` (schema `penthera.brief/1`). `exit_code` is the code the findings give, `exit_reason` the line under the verdict or null, and `likely_noise[].severe` the critical or high findings in that group. Top-level fields: `schema`, `verdict`, `exit_code`, `exit_reason`, `target`, `scanned`, `counts` (`act`, `check`, `noise`, `info`, `total`), `act_on`, `check_first`, `likely_noise`, `not_checked`, `next`, `reports` |
+| JSON | The `brief` field of `-o report.json` (schema `penthera.brief/1`). `exit_code` is the code the findings give, `exit_reason` the line under the verdict or null, and `likely_noise[].severe` the critical or high findings in that group. Top-level fields: `schema`, `verdict`, `verdict_id` (a stable name: `fix`, `review`, `check`, `clean`, `none`, `unread` or `suppressed`), `exit_code`, `exit_reason`, `target`, `scanned`, `counts` (`problems`, `act`, `check`, `noise`, `info`, `suppressed`, `total`), `act_on`, `check_first`, `likely_noise`, `not_checked`, `next`, `set_aside` (how to suppress a problem you checked, by fid with a reason; only when findings carry a fid), `reports`. Each item in `act_on` and `check_first` has `confidence` and `exploitability` |
 | Several scans in one | `penthera brief reports/repo.json reports/deps.json reports/agents.json` |
 | MCP | The text of every scan tool's result is the brief; `structuredContent.brief` holds the object. `explain_finding` has no brief |
 
@@ -41,7 +41,9 @@ penthera brief reports/repo.json reports/deps.json reports/agents.json
 ```
 
 `penthera brief --json` prints the merged brief as JSON. `penthera brief`
-reads only the files you name and runs no scan.
+reads only the files you name and runs no scan. `penthera brief --card` also
+writes the merged result as a share card, and `--card-out <path>` picks where
+([scan.md](scan.md#share-card)).
 
 ## How an assistant should reply
 
@@ -52,6 +54,21 @@ The MCP server and the Agent Skill ask the assistant to:
 3. Put anything it checked itself under a last section, **My read**, and say
    what it looked at. That section is the assistant's view, not Penthera's.
 4. Ask before changing files.
+
+## How Penthera counts
+
+Every surface counts one run's findings the same way and uses the same words:
+the brief, the terminal report, `penthera ui`, the MCP tools, the JSON and
+SARIF reports, `penthera fix` and the fix loop.
+
+| Word | What it counts |
+|---|---|
+| finding | Anything a rule reported, info and likely noise included |
+| problem | A finding to act on or to check first. Info, likely noise and suppressed findings are not problems |
+| fix planned | One diff from `penthera fix` that fixes at least one problem. One fix can cover several problems. A finding a recipe matches but cannot change is not fixable |
+
+The verdict line reads `8 problems (4 to act on, 4 to check first), 0 likely
+noise`. SARIF carries the same counts in `runs[0].properties.counts`.
 
 ## Which section a finding goes in
 

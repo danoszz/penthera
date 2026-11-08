@@ -36,7 +36,7 @@ export const DEPS_UNSUPPORTED = [
  * The license policy for this run: `--license-policy <preset|file>`, else the
  * `licenses` section of penthera.policy.json, else none.
  */
-export async function resolveLicensePolicy(root, flag, { onWarning = (m) => process.stderr.write(`\n  \x1b[33mwarning\x1b[0m ${m}\n`) } = {}) {
+export async function resolveLicensePolicy(root, flag, { onWarning = (m) => process.stderr.write(`\n  \x1b[33mwarning\x1b[0m ${m}\n`), onRefused = () => {} } = {}) {
   const { normalizeLicensePolicy, LICENSE_PRESETS } = await import("../../lib/deps/license.js");
   if (flag) {
     if (LICENSE_PRESETS[flag]) return normalizeLicensePolicy({ preset: flag }, "--license-policy");
@@ -47,8 +47,9 @@ export async function resolveLicensePolicy(root, flag, { onWarning = (m) => proc
     return normalizeLicensePolicy(raw && typeof raw === "object" && "licenses" in raw ? raw.licenses : raw, `${flag}: licenses`);
   }
   const { loadPolicy } = await import("../../lib/install/policy.js");
-  const { policy, warning } = loadPolicy(root);
+  const { policy, warning, refused } = loadPolicy(root);
   if (warning) onWarning(warning);
+  if (refused) onRefused(refused);
   return policy.licenses;
 }
 
@@ -86,8 +87,9 @@ export async function runDeps(args, opts, { version }) {
 
   const { scanDeps } = await import("../../lib/deps/index.js");
   let result;
+  let policyRefused = null; // penthera.policy.json there but not read: the run is incomplete
   try {
-    const licensePolicy = await resolveLicensePolicy(root, opts["license-policy"]);
+    const licensePolicy = await resolveLicensePolicy(root, opts["license-policy"], { onRefused: (r) => { policyRefused = r; } });
     result = await scanDeps(root, {
       licensePolicy,
       diff: opts.diff || null,
@@ -103,6 +105,7 @@ export async function runDeps(args, opts, { version }) {
   }
 
   const merged = mergeResults([result]);
+  if (policyRefused) merged.incomplete = [...(merged.incomplete || []), policyRefused];
   merged.actionPlan = buildActionPlan(merged.findings);
 
   let baselineStats = null;

@@ -1,0 +1,32 @@
+{
+  "findings": {
+    "og_svg": "99f859c190441d52c21f62be9fd3d828d0b084eb13c6984512c994f9d8f117e8",
+    "post_pixels": "19a744fc63a281a8739a41749c22785ed8fa18d90aae08318168dd79abef41b8",
+    "og_pixels": "399de24ad2db0aa58a00891db9d40499f391536c96f46ba98584798973762fcf"
+  },
+  "clean": {
+    "og_svg": "364c397641b66c7bba55d872f046f6055142b9fe5bb403d84b9835496d643fbb",
+    "post_pixels": "f13ba0ee66e5026a177c93e8041f5fca36f990686371ded743697e1e2485e4cc",
+    "og_pixels": "8064afeedaa9392a0b4e0d14b1130558a44e2e825dd2427f648d222e6d1f5b35"
+  },
+  "unread": {
+    "og_svg": "b0d15dc2cb37fe1fa78193c4eadf9fcb057cfc10911814881d95e47083738ed2",
+    "post_pixels": "0171a88f059f01d4fac97aa760efa1f6adc7b297b5b3de320caab66ad5d536ef",
+    "og_pixels": "acd8c3f009df812a897e9fbee409bc1f864813288fa99fbec74a657730d1c728"
+  },
+  "agents": {
+    "og_svg": "4cff73bdb3d3df2507d961c57bcc8fc816fe56c5cd5f8e3fbf65f6fddb87557e",
+    "post_pixels": "9487b58159d1250060f37d3163c53aa3a6f0b03fd34eee25252e4de9311d7af4",
+    "og_pixels": "f7d94a6870108706b11069c60a6d3f52d4d8160799dbe98d2ff6726218a8b42c"
+  },
+  "check": {
+    "og_svg": "2c0b2dd5c06eb15061a6cb2ba8d4298cf88a09bb6d3c03202c338414bba8cc54",
+    "post_pixels": "9387593bafb0e7ca811929d0e394c02a255c29a1011ee8e0b8b87ed2acc4e096",
+    "og_pixels": "4c5a906d47b1b13177ef6f0913321cb4fd3be8862404a841c2130afe1d5238bf"
+  },
+  "check100": {
+    "og_svg": "bd7ead41a2b79f1d790bb8444b04a4946dac643f6e23cd9e5ee23328ccaa48de",
+    "post_pixels": "7df29c2b4a0584116e4a9337a1b0b277db7f5a5ae3cc7952437daefa112f3022",
+    "og_pixels": "f1a8e17cceeef49c5710fba32a6fcf23c08321e922b09f22ea63a35d203e9a09"
+  }
+}

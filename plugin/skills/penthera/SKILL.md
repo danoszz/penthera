@@ -15,11 +15,11 @@ description: >
   of their own app, staging URL, localhost, repo, dependencies, or agent setup. Do
   NOT use for targets without explicit authorization.
 license: MIT
-compatibility: Node.js 22+, the Penthera CLI (npx -y penthera@2.3.2, npm install -g, or node bin/penthera.js from a checkout), network access to the target for URL scans. macOS only for --machine.
+compatibility: Node.js 22+, the Penthera CLI (npx -y penthera@2.4.0, npm install -g, or node bin/penthera.js from a checkout), network access to the target for URL scans. macOS only for --machine.
 allowed-tools: "Read"
 metadata:
   author: danoszz
-  version: 2.3.2
+  version: 2.4.0
   category: security
 ---
 
@@ -57,17 +57,17 @@ Fix anything that fails before you scan.
 Use whichever is available:
 
 ```bash
-penthera --version          # installed (npm install -g penthera@2.3.2, or npm link)
-npx -y penthera@2.3.2 --version   # nothing installed: npx fetches it
+penthera --version          # installed (npm install -g penthera@2.4.0, or npm link)
+npx -y penthera@2.4.0 --version   # nothing installed: npx fetches it
 node bin/penthera.js --version   # from a Penthera checkout
 ```
 
-All examples below use `penthera`; substitute `npx -y penthera@2.3.2` or `node bin/penthera.js` when needed.
+All examples below use `penthera`; substitute `npx -y penthera@2.4.0` or `node bin/penthera.js` when needed.
 
 This skill needs no MCP server: it runs the CLI, and the user approves each run. If the user wants Penthera's read-only MCP tools as well, they add the server themselves (the Penthera plugin doesn't start one):
 
 ```bash
-claude mcp add penthera -- npx -y penthera@2.3.2 mcp
+claude mcp add penthera -- npx -y penthera@2.4.0 mcp
 ```
 
 For other agents, see https://github.com/danoszz/penthera/blob/main/docs/commands/mcp.md.
@@ -118,6 +118,7 @@ The verdict decides how you open. Only `Nothing to fix` is a clean result, and e
 |---|---|---|
 | `Fix now` | A critical or high finding is in Act on | Lead with those findings |
 | `Review` | Something needs a look, or the run exits 1 or 2. The line under it gives the reason | Give the reason, then Act on and Check first |
+| `Nothing to fix now` | Nothing to act on; only things to check first (a header read from code that the host may add), and the run exits 0 | Say there is nothing to fix now, then read out Check first. Don't call it clean |
 | `Site not read` | A firewall answered instead of the site | Say the site wasn't checked. Findings cover only what Penthera could still read, such as SPF and DMARC. Exit 0 here says nothing about the site. Don't try to get past the firewall: ask the user to scan a local or staging copy, or their own allowlisted address |
 | `Nothing to assess` | There was nothing to read: no agent config, or no package code | Say nothing was checked, and name what to run or install first |
 | `N suppressed` | Findings exist, and the user set them aside | Say how many, and how many are critical or high. Point to `penthera memory show --repo .` and `penthera.suppress.json`. Never say clean. A plain scan counts them anyway; `--memory` applies them |

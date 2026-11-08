@@ -12,7 +12,7 @@ description: "penthera mcp runs Penthera as an MCP server."
 server. Your agent (Claude Code, Codex, GitHub Copilot, Cursor, Windsurf, Gemini CLI) starts it
 and calls its tools. It needs Node.js 22 or later.
 
-The commands below pin 2.3.2, so an update never reaches you unless you change the pin.
+The commands below pin 2.4.0, so an update never reaches you unless you change the pin.
 
 Always pin the version. An unpinned `npx penthera` runs whatever version is
 newest on npm each time your agent starts, which is the risk that
@@ -21,7 +21,7 @@ newest on npm each time your agent starts, which is the risk that
 ### Claude Code
 
 ```bash
-claude mcp add penthera -- npx -y penthera@2.3.2 mcp
+claude mcp add penthera -- npx -y penthera@2.4.0 mcp
 ```
 
 Add `--scope project` to write it to `.mcp.json` for the whole team. The
@@ -41,7 +41,7 @@ Inside a session, the same is `/plugin marketplace add danoszz/penthera` and
 ### Codex
 
 ```bash
-codex mcp add penthera -- npx -y penthera@2.3.2 mcp
+codex mcp add penthera -- npx -y penthera@2.4.0 mcp
 ```
 
 Or add it to `~/.codex/config.toml`:
@@ -49,7 +49,7 @@ Or add it to `~/.codex/config.toml`:
 ```toml
 [mcp_servers.penthera]
 command = "npx"
-args = ["-y", "penthera@2.3.2", "mcp"]
+args = ["-y", "penthera@2.4.0", "mcp"]
 ```
 
 Checked against [Codex's MCP docs](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
@@ -65,12 +65,12 @@ copilot plugin install penthera@penthera
 ```
 
 For the MCP tools in Copilot CLI, add the server in its MCP settings with the
-same `npx -y penthera@2.3.2 mcp` launch line.
+same `npx -y penthera@2.4.0 mcp` launch line.
 
 In VS Code, add the server to your user profile:
 
 ```bash
-code --add-mcp '{"name":"penthera","type":"stdio","command":"npx","args":["-y","penthera@2.3.2","mcp"]}'
+code --add-mcp '{"name":"penthera","type":"stdio","command":"npx","args":["-y","penthera@2.4.0","mcp"]}'
 ```
 
 Or put the JSON under **VS Code** below in `.vscode/mcp.json`. Checked against
@@ -86,7 +86,7 @@ Cursor reads `.cursor/mcp.json`, and Windsurf `~/.codeium/windsurf/mcp_config.js
   "mcpServers": {
     "penthera": {
       "command": "npx",
-      "args": ["-y", "penthera@2.3.2", "mcp"]
+      "args": ["-y", "penthera@2.4.0", "mcp"]
     }
   }
 }
@@ -102,7 +102,7 @@ Checked against [Cursor's MCP docs](https://cursor.com/docs/context/mcp).
     "penthera": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "penthera@2.3.2", "mcp"]
+      "args": ["-y", "penthera@2.4.0", "mcp"]
     }
   }
 }
@@ -141,7 +141,7 @@ Every tool is read-only. None writes a file, applies a fix, or runs a shell.
 
 | Tool | What it does | Network |
 |---|---|---|
-| `scan_repo` | Secrets, code-execution sinks, API routes, runtime version pins in a project folder, plus a coverage ledger of what ran and what was skipped | none |
+| `scan_repo` | Secrets, code-execution sinks, API routes, runtime version pins, and security headers, cookie flags, CORS and login rate limits as the code sets them, in a project folder, plus a coverage ledger of what ran and what was skipped. The brief counts problems the way every surface does ([brief](brief.md#how-penthera-counts)) | none |
 | `check_dependencies` | What each npm or Python package can do (install scripts, shell, network, eval, credential access), known-malicious packages, typosquats | none |
 | `audit_ai_tooling` | The project's skills, MCP servers, hooks, permissions and rule files, graded A to F, or no grade if it finds no agent config. A `path` other than the workspace root can also be a skill folder or its `SKILL.md` | none |
 | `runtime_advisories` | Advisories and end of life for the PHP, nginx, Apache, Node.js, Python, OpenSSL or MongoDB a project pins, or the PHP, nginx, Apache or OpenSSL a `Server` or `X-Powered-By` header shows | none |
@@ -155,7 +155,10 @@ assistant to pass the brief on as it is and to put its own view under "My
 read". Every
 finding has a `rule` (such as `openapi-exposed`, `gha-pwn-request` or `agents/mcp-unpinned`, or
 its category when no narrower rule applies), a severity, a confidence label (`confirmed`, `likely`,
-`potential`, `needs-human-review`), and evidence at `file:line` or a URL. Each
+`potential`, `needs-human-review`), `exploitability`, and evidence at `file:line` or a URL.
+Confidence is about the rule's match, not a verdict: `exploitability` is
+`not-assessed` for a rule match and `needs-human-review` where a scanner cannot
+judge it. Each
 result also lists what the tool did not check. By default a tool returns the 50
 most severe findings; ask for up to 200 with `max_findings`.
 
@@ -163,11 +166,13 @@ The brief's `exit_code` is the code the CLI would exit with. A
 `check_dependencies` result is incomplete when a lockfile or requirements file
 could not be read (a FIFO, a device, a link out of the project, over the 64 MiB
 cap, or an `-r` include like that), or when a venv's `METADATA` or `PKG-INFO`
-could not be read. A `scan_repo` result is incomplete when a route or server
-file was not read (over the 5 MiB cap, a FIFO, a link out of the project). Its
-brief then has `exit_code` 2, a verdict of Review, and an `exit_reason` that
-names the file, and the findings list it as `File not read: <file>`. Never read
-that as clean.
+could not be read. Its brief then has `exit_code` 2, a verdict of Review, and an
+`exit_reason` that names the file, and the findings list it as
+`File not read: <file>`. Never read that as clean. `scan_repo` and
+`audit_ai_tooling` work the same way for a source or agent config file they
+could not read, such as a route file over 5 MiB, a FIFO or a link out of the
+project. Each tool reads a file whole under a size limit and matches it in
+linear time, so a padded file or a crafted header can't stall the server.
 
 Arguments: `path` and `max_findings` on the file tools, `prod` on
 `check_dependencies`, `url` and `profile` (`quick` or `standard`) on `scan_url`,
@@ -188,7 +193,7 @@ true.
   you write, not the model:
 
 ```bash
-npx -y penthera@2.3.2 mcp --allow-host staging.example.com
+npx -y penthera@2.4.0 mcp --allow-host staging.example.com
 ```
 
   Only list hosts you are authorized to test. The same limit holds on every
@@ -211,8 +216,8 @@ npx -y penthera@2.3.2 mcp --allow-host staging.example.com
 ## Options
 
 ```bash
-npx -y penthera@2.3.2 mcp --offline
-npx -y penthera@2.3.2 mcp --help
+npx -y penthera@2.4.0 mcp --offline
+npx -y penthera@2.4.0 mcp --help
 ```
 
 | Flag | Meaning |

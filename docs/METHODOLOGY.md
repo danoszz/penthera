@@ -32,7 +32,7 @@ software. The metadata are in [CITATION.cff](https://github.com/danoszz/penthera
 renders as "Cite this repository".
 
 ```text
-van der Zwaag, D. (2026). Penthera: An offline security scanner for web apps and AI-built code (Version 2.3.2) [Computer software]. https://github.com/danoszz/penthera
+van der Zwaag, D. (2026). Penthera: An offline security scanner for web apps and AI-built code (Version 2.4.0) [Computer software]. https://github.com/danoszz/penthera
 ```
 
 ```bibtex
@@ -40,7 +40,7 @@ van der Zwaag, D. (2026). Penthera: An offline security scanner for web apps and
   author  = {van der Zwaag, Daan},
   title   = {Penthera: An Offline Security Scanner for Web Apps and {AI}-Built Code},
   year    = {2026},
-  version = {2.3.2},
+  version = {2.4.0},
   license = {MIT},
   url     = {https://github.com/danoszz/penthera}
 }
@@ -526,13 +526,16 @@ notifications sent to site operators mostly do not arrive (Stock et al., 2016).
 
 ## Confidence model
 
-Severity says how bad a finding would be if real. Confidence says how likely it
-is to be real. Penthera reports both and never lets a heuristic look like a
-fact. The labels are defined in [lib/provenance.js](https://github.com/danoszz/penthera/blob/main/lib/provenance.js):
+Severity says how bad a finding would be if real. Confidence says how sure the
+rule is about what it matched, not whether the finding can be exploited in your
+app: every finding also has `exploitability`, which is `not-assessed` for a rule
+match and `needs-human-review` where a scanner cannot judge it. Penthera reports
+both and never lets a heuristic look like a fact. Text reports say
+`pattern matched` for `confirmed`, so a match does not read as a verdict. The labels are defined in [lib/provenance.js](https://github.com/danoszz/penthera/blob/main/lib/provenance.js):
 
 | Label | Meaning | Typical sources |
 |---|---|---|
-| `confirmed` | Deterministic evidence. The header is absent, the certificate expired, the key matches a provider format. | Header audit, TLS check, cookie audit, secret scan, OpenAPI exposure |
+| `confirmed` | The pattern matched exactly. The header is absent, the certificate expired, the key matches a provider format. A match, not a verdict that it can be exploited. | Header audit, TLS check, cookie audit, secret scan, OpenAPI exposure |
 | `likely` | A strong signal with a small false-positive chance. | Injection probes with a verified canary, auth and JWT probes, framework checks |
 | `potential` | A heuristic or one-shot signal that needs corroboration. | Fuzzer, adaptive probes |
 | `needs-human-review` | Exploitability cannot be judged from outside. | IDOR/BOLA, client-side-only auth |

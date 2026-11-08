@@ -8,6 +8,7 @@
  */
 import { createHash } from "node:crypto";
 import { fingerprintFinding } from "../../lib/audit-loop.js";
+import { exploitabilityFor } from "../../lib/provenance.js";
 import { referenceKeysFor } from "../../lib/references.js";
 import { buildBrief, formatBrief } from "../report/brief.js";
 
@@ -16,8 +17,9 @@ export const MAX_RESULT_BYTES = 256 * 1024;
 export const DEFAULT_FINDINGS = 50;
 export const MAX_FINDINGS = 200;
 
+/** What each confidence value means. Every one is about the rule's match, not about exploitability (`exploitability`). */
 export const CONFIDENCE_LEVELS = {
-  confirmed: "Deterministic evidence: the header is absent, the key matches a provider format.",
+  confirmed: "The pattern matched exactly: the header is absent, the key matches a provider format. Not a verdict that it can be exploited.",
   likely: "A strong signal with a small false-positive chance.",
   potential: "A heuristic signal that needs corroboration.",
   "needs-human-review": "Exploitability cannot be judged by a scanner; a person has to look.",
@@ -78,6 +80,8 @@ export function toMcpFinding(f) {
     rule: cleanText(rule, 200),
     severity: SEVERITIES.includes(f.severity) ? f.severity : "info",
     confidence: f.confidence || "likely",
+    // Added in 2.4.1: confidence is the rule's match, never a verdict on exploitability.
+    exploitability: f.exploitability || exploitabilityFor(f),
     title: cleanText(f.title, 300),
     description: cleanText(f.description),
     evidence: location ? (location.url || `${location.file}${line ? `:${line}` : ""}`) : null,

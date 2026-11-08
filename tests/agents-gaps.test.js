@@ -791,7 +791,10 @@ describe("instruction files and agent folders outside the project are not read",
     }
     const r = await scanAgents(root);
     expect(JSON.stringify(r.findings)).not.toMatch(/private\.corp|leak\.invalid/);
-    expect(r.findings.filter((f) => !/^agents\/lock-/.test(f.templateId))).toEqual([]);
+    // 2.3.2: each one is also an info finding, and the run is incomplete (exit 2).
+    const notRead = r.findings.filter((f) => !/^agents\/lock-/.test(f.templateId));
+    expect(notRead.every((f) => f.severity === "info" && f.title === "Config file not read")).toBe(true);
+    expect(r.incomplete.map((x) => x.file).sort()).toEqual(Object.keys(links).sort());
     for (const rel of Object.keys(links)) {
       expect(r.agents.notChecked.some((l) => l.startsWith(`${rel}: resolves outside the project`)), rel).toBe(true);
     }

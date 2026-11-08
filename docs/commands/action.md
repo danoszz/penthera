@@ -14,7 +14,7 @@ pull requests, a scan step in your own workflow, and the
 
 ```yaml
 - name: "Penthera: your open-source cyber security agent"
-  uses: danoszz/penthera@f7dee0f4adef277e781cc0bd9c3902a2e6d1f4c4 # v2.3.2
+  uses: danoszz/penthera@9b67e8dce0267e587deb5ccebd5ffa7a15235806 # v2.4.0
   with:
     mode: deps        # deps | agents | scan (scan also needs url:)
     fail-on: none     # none | high | critical
@@ -22,7 +22,7 @@ pull requests, a scan step in your own workflow, and the
 
 Pin the action to a release commit SHA, not a tag: a tag can be moved, a
 commit cannot. Find the SHA for a release with
-`git ls-remote https://github.com/danoszz/penthera refs/tags/v2.3.2`.
+`git ls-remote https://github.com/danoszz/penthera refs/tags/v2.4.0`.
 
 The action's name contains a colon, so a `name:` line that holds it needs
 quotes. The snippet on the GitHub Marketplace page may print the name without
@@ -77,7 +77,7 @@ SARIF to code scanning. Copy it into `.github/workflows/`, or let
 `penthera init` write it when the repo has agent config. The step it runs:
 
 ```yaml
-- run: npx --yes penthera@2.3.2 agents "$GITHUB_WORKSPACE" --sarif "$RUNNER_TEMP/penthera-agents.sarif"
+- run: npx --yes penthera@2.4.0 agents "$GITHUB_WORKSPACE" --sarif "$RUNNER_TEMP/penthera-agents.sarif"
 ```
 
 The rules that [`penthera agents`](agents.md#rules-for-auto-run-registries-and-environment)

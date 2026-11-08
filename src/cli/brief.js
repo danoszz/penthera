@@ -9,9 +9,10 @@ import { parseArgs } from "node:util";
 import { readFileSync } from "node:fs";
 import { buildBrief, formatBrief } from "../report/brief.js";
 import { markdownPathFromJson } from "../report/markdown.js";
+import { writeCards, DEFAULT_CARD_OUT } from "../card/index.js";
 
 const HELP = `
-  penthera brief <report.json...> [--json]
+  penthera brief <report.json...> [--json] [--card] [--card-out <path>]
 
   Merges Penthera JSON reports (written with -o) into one short brief:
   verdict, act on, check first, likely noise, not checked, next. Built for
@@ -22,11 +23,14 @@ const HELP = `
     $ penthera agents . -o reports/agents.json
     $ penthera brief reports/repo.json reports/deps.json reports/agents.json
 
-  --json  Print the brief as JSON (schema penthera.brief/1).
+  --json             Print the brief as JSON (schema penthera.brief/1).
+  --card             Also write a share card of all the reports together:
+                     penthera-card.png and penthera-card-og.png, each with an .svg.
+  --card-out <path>  Where to write the card (default: penthera-card).
   See docs/commands/brief.md.
 `;
 
-export function runBrief(argv, { out = process.stdout, err = process.stderr } = {}) {
+export function runBrief(argv, { out = process.stdout, err = process.stderr, version = "", date } = {}) {
   let parsed;
   try {
     parsed = parseArgs({
@@ -34,6 +38,8 @@ export function runBrief(argv, { out = process.stdout, err = process.stderr } = 
       allowPositionals: true,
       options: {
         json: { type: "boolean", default: false },
+        card: { type: "boolean", default: false },
+        "card-out": { type: "string" },
         help: { type: "boolean", short: "h", default: false },
       },
     });
@@ -67,6 +73,15 @@ export function runBrief(argv, { out = process.stdout, err = process.stderr } = 
   }
   const brief = buildBrief(results, { reports: files.map(markdownPathFromJson) });
   out.write(opts.json ? JSON.stringify(brief, null, 2) + "\n" : formatBrief(brief));
+  if (opts.card || opts["card-out"]) {
+    try {
+      const { paths } = writeCards(brief, results, { version, out: opts["card-out"] || DEFAULT_CARD_OUT, date });
+      err.write(`  Share card ${paths.filter((p) => p.endsWith(".png")).join(", ")} (and .svg; made offline, nothing uploaded)\n`);
+    } catch (e) {
+      err.write(`  ${e.code === "ECARDREFUSED" ? e.message : `The share card was not written: ${e.message}`}\n`);
+      return 2;
+    }
+  }
   return 0;
 }
 

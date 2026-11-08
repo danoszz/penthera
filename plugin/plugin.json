@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "penthera",
-  "version": "2.3.2",
+  "version": "2.4.0",
   "description": "Offline cyber security agent for your apps and AI coding tools. Open R&D: measured in public, improved every release.",
   "author": {
     "name": "Daan van der Zwaag",

@@ -1,6 +1,6 @@
 {
   "name": "penthera",
-  "version": "2.3.2",
+  "version": "2.4.0",
   "type": "module",
   "description": "Offline cyber security agent for your apps and AI coding tools. Open R&D: measured in public, improved every release.",
   "repository": {
@@ -103,6 +103,7 @@
     "acorn": "8.19.0",
     "ajv": "^8.20.0",
     "eslint": "10.13.0",
+    "eslint-plugin-regexp": "3.3.1",
     "fast-check": "^4.10.2",
     "globals": "17.13.0",
     "rolldown": "1.2.15",

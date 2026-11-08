@@ -14,6 +14,7 @@ import {
   buildOverview, buildFindings, locateFinding, findingDetail, buildDeps, buildAi, loopSummary,
   explainFinding, buildScanHistory, latestScan, slug, buildGiantsCoverage,
 } from "./summarize.js";
+import { trimEndChars } from "../../../lib/linear-text.js";
 
 const DAY = 86_400_000;
 const HOUR = 3_600_000;
@@ -396,8 +397,9 @@ export function demoRunDeps({ pace = 1 } = {}) {
       }
       const remaining = n === 1 ? 9 : 4;
       const fixable = rounds[n - 1].length;
-      log(`  scan: ${remaining} findings (1 suppressed), ${fixable} fixable`);
-      it.findings = { total: remaining, suppressed: 1, fixable };
+      // The real loop's line (src/agent/loop.js), so the demo emits the same `scanned` event.
+      log(`  scan: ${remaining} problem${remaining === 1 ? "" : "s"} (1 suppressed), ${fixable} fix${fixable === 1 ? "" : "es"} planned`);
+      it.findings = { total: remaining, problems: remaining, suppressed: 1, fixable };
       totals.planned += fixable;
       if (!fixable) { stopReason = totals.declined || totals.failed ? "declined-or-failed-left" : "no-fixable-findings"; it.durationMs = Date.now() - t; break; }
       for (let i = 0; i < rounds[n - 1].length; i++) {
@@ -467,7 +469,7 @@ export function demoRunDeps({ pace = 1 } = {}) {
 
   // The demo folders do not exist: same rule as confineDir, on the path string.
   function confineDir(input) {
-    const p = String(input).trim().replace(/\/+$/, "");
+    const p = trimEndChars(String(input).trim(), "/");
     if (!p.startsWith("/Users/demo/code/") || p.includes("..")) {
       throw new Error("That folder is outside the project folders this dashboard was started with. In the demo, try /Users/demo/code/acme-shop.");
     }

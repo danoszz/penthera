@@ -278,10 +278,11 @@ function groupOf(f, easy) {
   return f.severity === "info" ? "Notes" : "When you have time";
 }
 
-/** The same count as the verdict's "to fix", with the notes named beside it. */
+/** The same count as the verdict's "to fix" (problems), with likely noise and notes named beside it. */
 function simpleCount(rows) {
-  const notes = rows.filter((f) => f.severity === "info").length;
-  return [plural(rows.length - notes, "problem"), notes ? plural(notes, "note") : null].filter(Boolean).join(", ");
+  const notes = rows.filter((f) => (f.bucket || (f.severity === "info" ? "info" : "act")) === "info").length;
+  const noise = rows.filter((f) => f.bucket === "noise").length;
+  return [plural(rows.length - notes - noise, "problem"), noise ? `${noise} likely noise` : null, notes ? plural(notes, "note") : null].filter(Boolean).join(", ");
 }
 
 /** The end of a check, in the list's own words: notes are not problems, and critical is not "serious". */
@@ -629,7 +630,7 @@ function pastRunView(col, ctx) {
       h("div", { class: "ln cmd" }, `penthera agent --loop --repo ${l.target.repo}${l.target.url ? ` --url ${l.target.url}` : ""}`),
       l.iterations.flatMap((it) => [
         h("div", { class: "ln hl" }, `iteration ${it.n}`),
-        it.findings ? h("div", { class: "ln dim" }, `scan: ${it.findings.total} findings (${it.findings.suppressed} suppressed), ${it.findings.fixable} fixable`) : null,
+        it.findings ? h("div", { class: "ln dim" }, `scan: ${plural(it.findings.problems ?? it.findings.total, "problem")} (${it.findings.suppressed} suppressed), ${it.findings.fixable} ${it.findings.fixable === 1 ? "fix" : "fixes"} planned`) : null,
         ...it.fixes.map((f) => h("div", { class: `ln ${f.status === "verified" ? "ok" : f.status === "failed" ? "bad" : "dim"}` },
           `${f.status === "verified" ? "OK " : f.status === "failed" ? "!! " : "-- "}${f.title} :: ${f.decision}${f.commit ? ` :: ${f.commit.slice(0, 10)}` : ""}`)),
       ]),

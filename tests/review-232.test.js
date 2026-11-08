@@ -75,9 +75,11 @@ describe.skipIf(!posix)("2: repo-controlled reads never hang", () => {
     const d = tmp();
     execFileSync("mkfifo", [join(d, "penthera.policy.json")]);
     const r = inChild(`const { loadPolicy } = await m("lib/install/policy.js");
-      const p = loadPolicy(args[0]); return { path: p.path, warning: p.warning, allow: p.policy.allow };`, [d]);
+      const p = loadPolicy(args[0]); return { path: p.path, warning: p.warning, allow: p.policy.allow, refused: p.refused };`, [d]);
     expect(r.path).toBe(null);
-    expect(r.warning).toMatch(/penthera\.policy\.json was not read: it is not a regular file.*default policy applies/);
+    // 2.3.2: never the defaults without a word; the run is incomplete (exit 2).
+    expect(r.warning).toMatch(/penthera\.policy\.json was not read: it is not a regular file.*incomplete: it exits 2/);
+    expect(r.refused).toMatchObject({ file: "penthera.policy.json" });
     expect(r.allow).toEqual([]);
   });
 
