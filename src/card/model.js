@@ -17,12 +17,10 @@ export const CARD_SCHEMA = "penthera.card/1";
 
 // A long run of key-like characters with at least one digit: an API key, a token, a hash.
 const TOKEN = /[A-Za-z0-9_\-+/=]{20,}/g;
-const PATHISH = /(?:^|[\s(`'"])(?:\.{0,2}\/)?(?:[\w@.-]+\/)+[\w@.-]+(?::\d+)?/g;
-// Keys whose value is a secret: the next word after one (or after "key:" / "key=") is hidden.
-const SENSITIVE = new Set(["authorization", "bearer", "basic", "token", "accesstoken", "refreshtoken", "apikey",
-  "key", "secret", "clientsecret", "password", "passwd", "pwd", "pw", "pass", "passphrase", "auth", "cookie",
-  "session", "sessionid", "sig", "signature", "credential", "credentials", "privatekey"]);
-const AUTH_SCHEMES = new Set(["bearer", "basic"]);
+const AUTH_SCHEMES = new Set(["bearer", "basic", "token", "digest", "negotiate"]);
+const SECRET_PARTS = ["password", "passwd", "pwd", "token", "secret", "key", "auth", "cookie", "session", "credential", "signature"];
+// A scoped package name, with its version already cut at "@": "@scope/pkg" plus trailing punctuation.
+const SCOPED = /^["'(]?@[\w.-]+\/[\w.-]+["'),:;]?$/;
 /** A word's key name without quotes, brackets or a trailing ":" / "=", and whether it ended in one. */
 function keyOf(word) {
   let w = word.toLowerCase().replace(/^["'{(\[]+/, "");
@@ -52,7 +50,11 @@ function redactWord(word) {
   const end = /[:,;]$/.test(w) ? w[w.length - 1] : "";
   const at = w.indexOf("@", 1);
   if (at > 0) w = w.slice(0, at) + end;
-  if (w.startsWith("//")) return "";
+  // Any path or URL piece: a slash or backslash anywhere, or a home path. Only a scoped
+  // package name (@scope/pkg) is kept, since it is public.
+  if (w.startsWith("~")) return "";
+  if (w.includes("\\")) return "";
+  if (w.includes("/") && !SCOPED.test(w)) return "";
   for (let i = 0; i < w.length - 1; i++) {
     const next = w[i + 1];
     if (w[i] === ":" && next !== ":") return "";
@@ -67,27 +69,36 @@ function redactWord(word) {
   return w;
 }
 
+/** True for a key name that holds a secret: DB_PASSWORD, x-api-key, X-Auth-Token, secret_key. */
+const isSecretKey = (name) => name === "pw" || name === "pass" || SECRET_PARTS.some((p) => name.includes(p));
+
 /**
- * Hide the value after a sensitive key written with a separator: `password: x`,
- * `token= x`, `pw = x`, and after `Bearer` or `Basic`. A key named in prose
- * ("a hardcoded key in source") hides nothing.
+ * Hide the value after a sensitive key written with a separator (`password:
+ * x`, `token= x`, `pw = x`, `DB_PASSWORD: x`) and after an auth scheme
+ * (`Bearer x`). The whole value goes, up to the next word ending in "," or ";"
+ * (or the closing quote of a quoted value), as one "[hidden]". A key named in
+ * prose ("a hardcoded key in source") hides nothing.
  */
 function hideValues(words) {
   const out = [];
-  let hide = false;
-  words.forEach((w, i) => {
-    if (hide && (w === ":" || w === "=")) { out.push(w); return; }
+  for (let i = 0; i < words.length; i++) {
+    const w = words[i];
     const { name, sep } = keyOf(w);
-    const next = words[i + 1];
-    const keyed = (SENSITIVE.has(name) && (sep || next === ":" || next === "=")) || AUTH_SCHEMES.has(name);
-    if (hide) {
-      out.push("[hidden]");
-      hide = AUTH_SCHEMES.has(name);
-      return;
+    let j = i + 1;
+    while (j < words.length && (words[j] === ":" || words[j] === "=")) j++;
+    const keyed = (isSecretKey(name) && (sep || j > i + 1)) || AUTH_SCHEMES.has(name) && i > 0 && isSecretKey(keyOf(words[i - 1]).name);
+    out.push(...words.slice(i, j));
+    if (!keyed || j >= words.length) { i = j - 1; continue; }
+    // The value: up to a closing quote, or to a word ending a clause, or to the end.
+    const quote = /^["']/.test(words[j]) ? words[j][0] : null;
+    let k = j;
+    for (; k < words.length; k++) {
+      const v = words[k];
+      if (quote ? (k > j || v.length > 1) && v.endsWith(quote) : /[,;]$/.test(v)) break;
     }
-    out.push(w);
-    hide = keyed;
-  });
+    out.push("[hidden]");
+    i = Math.min(k, words.length - 1);
+  }
   return out;
 }
 
@@ -100,15 +111,23 @@ export function publicText(s, max = 120) {
   // is dropped anyway (backticks, emphasis, anything the pixel font can't draw,
   // zero-width characters) BEFORE the checks: removing them later could join
   // pieces into a URL or a key the checks never saw.
-  let t = String(s ?? "").slice(0, max * 4)
+  const raw = String(s ?? "");
+  let t = raw.slice(0, max * 4);
+  // A cut in the middle of a word could leave the visible start of a key: drop that piece.
+  if (raw.length > t.length && !/\s/.test(raw[t.length])) {
+    let k = t.length;
+    while (k > 0 && !/\s/.test(t[k - 1])) k--;
+    t = t.slice(0, k);
+  }
+  t = t
     .replace(/[\u0000-\u001f\u007f]/g, " ")
     .replace(/[—]/g, "-").replace(/[‘’]/g, "'").replace(/[“”]/g, '"')
     .replace(/[`*_]/g, "")
     .replace(NOT_DRAWN, "");
   t = hideValues(t.split(/\s+/).map(redactWord).filter(Boolean)).join(" ")
-    // A scoped package name (@scope/pkg) looks like a path but is public; keep it.
-    .replace(PATHISH, (m) => (/^[\s(`'"]?@[\w.-]+\/[\w.-]+$/.test(m) ? m : m.match(/^[\s(`'"]/) ? m[0] : ""))
     .replace(TOKEN, (m) => (/\d/.test(m) ? "[hidden]" : m))
+    // A key split by dots or dashes (ghp.ABC...123.xyz) is still a key.
+    .split(" ").map((w) => { const bare = w.replace(/[.-]/g, ""); return bare.length >= 20 && /\d/.test(bare) && /^[A-Za-z0-9+/=]+$/.test(bare) ? "[hidden]" : w; }).join(" ")
     .replace(/\s+/g, " ")
     .trim();
   // A title whose path was taken out can end on "in", "at" or "from": drop that word.

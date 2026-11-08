@@ -257,13 +257,45 @@ describe("card model: safe to post", () => {
     expect(publicText("left-pad 1.0.0 → 2.0.0 gained network")).toBe("left-pad 1.0.0 → 2.0.0 gained network");
   });
 
-  it("hides the value after a sensitive key, and only then", () => {
-    expect(publicText("Authorization: Bearer abcdEFGH1234 sent")).toBe("Authorization: [hidden] [hidden] sent");
-    expect(publicText("password: hunter2 in config")).toBe("password: [hidden] in config");
+  it("hides the whole value after a sensitive key, and only then", () => {
+    expect(publicText("Authorization: Bearer abcdEFGH1234 sent")).toBe("Authorization: [hidden]");
+    expect(publicText("Authorization: Token abc123xyz")).toBe("Authorization: [hidden]");
+    expect(publicText("password: hunter2, then rotate")).toBe("password: [hidden] then rotate");
+    expect(publicText("password: correct horse battery staple")).toBe("password: [hidden]");
+    expect(publicText("password = 'a b c' and more")).toBe("password = [hidden] and more");
     expect(publicText("pw = hunter3")).toBe("pw = [hidden]");
-    expect(publicText("token= abc123 leaked")).toBe("token= [hidden] leaked");
+    expect(publicText("token= abc123 leaked")).toBe("token= [hidden]");
+    expect(publicText("DB_PASSWORD: hunter2!xyz")).toBe("DBPASSWORD: [hidden]");
+    expect(publicText("x-api-key: abc.def")).toBe("x-api-key: [hidden]");
+    expect(publicText("X-Auth-Token: abcd1234efgh")).toBe("X-Auth-Token: [hidden]");
+    expect(publicText("secret_key: abc!xyz")).toBe("secretkey: [hidden]");
     expect(publicText("A hardcoded password in source")).toBe("A hardcoded password in source");
     expect(publicText("Supabase service-role key in src/lib/x.ts")).toBe("Supabase service-role key");
+  });
+
+  it("drops route paths, home paths, Windows paths and URL fragments", () => {
+    const cases = [
+      "eval in app/[slug]/page.tsx", "eval in app/(auth)/login/[id]/route.ts", "File not read: secrets/[id]/prod.env",
+      "reads ~/.aws/credentials", "[/Users/someone/.ssh/id_rsa]", "a,/Users/someone/x", "\\\\fileserver\\finance\\payroll.xlsx",
+      "Users\\someone\\AppData\\token.txt", "open /secrets now", "(//evil.example/x?y)", "'//evil.example/a'", "x//evil.example/path",
+      "https\uff1a//evil.example/a",
+    ];
+    for (const c of cases) expect(publicText(c), c).not.toMatch(/slug|auth\)|\[id\]|aws|someone|fileserver|payroll|AppData|secrets|evil/);
+    expect(publicText("@scope/pkg@1.2.3 is pinned")).toBe("@scope/pkg is pinned");
+  });
+
+  it("hides keys split by dots or dashes, and never shows the start of a cut key", () => {
+    const split = ["ghp", "ABCDEFGHIJ1234567", "890abcdefghijklmnop"].join(".");
+    expect(publicText(`token ${split} found`)).toBe("token [hidden] found");
+    const long = `${"word ".repeat(90)}${"AKIA".concat("Z".repeat(40))}`;
+    expect(publicText(long, 120)).not.toMatch(/AKIA/);
+  });
+
+  it("keeps the honesty lines on a short card, however many files were unreadable", () => {
+    const m = modelOf(STATES.agents);
+    m.notChecked = ["a.json could not be read", "b.json could not be read", "c.json could not be read",
+      "MCP tool descriptions: servers are not started, so tool-description poisoning is not checked"];
+    for (const layout of [postLayout, ogLayout]) expect(textsOf(layout(m)).join(" ")).toContain("MCP tool descriptions");
   });
 
   it("a megabyte-long repo-controlled title is cleaned in bounded time", () => {
