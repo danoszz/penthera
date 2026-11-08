@@ -14,6 +14,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { scanRepo } from "../src/scan-repo.js";
 import { lexJs } from "../lib/whitebox/js-lex.js";
+import { findSinks } from "../lib/whitebox/code-sinks.js";
+import { firstShellPipe } from "../lib/agents/hidden-content.js";
 
 const HEAD = 'const { exec } = require("child_process");\n';
 const libRepo = (code) => {
@@ -64,5 +66,43 @@ describe("6: an unclosed regex class is not rescanned per slash", () => {
   });
   it("a valid literal after a failed class is still a regex", () => {
     expect(lexJs('( /[a ( /x"y/ ; z').code).toBe("( /[a ( /   / ; z");
+  });
+});
+
+describe("3: exported functions nested in default parameters", () => {
+  it("are charged to the budget: linear, and incomplete past it", async () => {
+    const r = await linear((n) => `${Array.from({ length: n }, (_, i) => `exports.f${i} = function (a${i} = `).join("")}1${") { exec(a0); }".repeat(n)};\n`, 2000);
+    expect(r.incomplete?.length).toBeGreaterThan(0);
+  }, 60_000);
+});
+
+describe("9: nested object literals in server code are split once", () => {
+  const t = (n) => {
+    const src = 'const cp = require("child_process");\n' + Array.from({ length: n }, (_, i) => `v${i} = { k${i}: cp.exec, a: `).join("") + "1" + " }".repeat(n) + ";\n";
+    const s = performance.now(); findSinks(src); return performance.now() - s;
+  };
+  it("stays linear", () => {
+    t(500);
+    const a = t(2000), b = t(8000);
+    expect(b / Math.max(a, 5)).toBeLessThan(9);
+    expect(b).toBeLessThan(3000);
+  });
+  it("still binds a shell function held in an object, next to nested ones", () => {
+    expect(findSinks('const cp = require("child_process");\nconst tools = { run: cp.exec, nested: { x: 1 } };\ntools.run(req.body.cmd);\n').map((f) => f.pattern)).toEqual(["command-injection"]);
+    expect(findSinks('const cp = require("child_process");\nconst opts = { ...{ shell: true } };\ncp.spawn(req.body.cmd, [], opts);\n').map((f) => f.pattern)).toEqual(["command-injection"]);
+  });
+});
+
+describe("6: pipes only the prose pass marks are read with the prose reading", () => {
+  const unit = "a\\'b'c|";
+  const t = (n) => { const s = performance.now(); firstShellPipe(unit.repeat(n)); return performance.now() - s; };
+  it("stays linear on escaped and intra-word apostrophes", () => {
+    t(500);
+    const a = t(4000), b = t(16000);
+    expect(b / Math.max(a, 5)).toBeLessThan(9);
+    expect(b).toBeLessThan(2000);
+  });
+  it("prose and shell pipes are still found", () => {
+    for (const s of ["don't worry | sh", "echo it's | sh", "a'b | /usr/bin/env bash"]) expect(firstShellPipe(s), s).not.toBe(-1);
   });
 });
