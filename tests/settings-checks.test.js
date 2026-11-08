@@ -1,0 +1,312 @@
+/**
+ * The fix planner's static checks (headers, cookies, CORS, login rate limits)
+ * now run in every repo scan, so they are decision code on untrusted input.
+ * These tests are the bypass checklist's rows for them (docs/team/BYPASS-CHECKLIST.md):
+ * bounded time on a crafted file at the size cap, the worst kept under the
+ * per-file cap, refused and linked files counted, the rewrite of the CORS
+ * fallback regex checked against the old regex, and nothing the scan found
+ * before lost.
+ */
+import { describe, it, expect, afterAll } from "vitest";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, symlinkSync, realpathSync, readFileSync, chmodSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
+import { join, dirname, resolve } from "node:path";
+import { tmpdir } from "node:os";
+import { probeRepoDetailed, planFixes, findingKey } from "../lib/fix/index.js";
+import { fallbackSites, probeCors } from "../lib/fix/recipes/cors.js";
+import { probeCookies } from "../lib/fix/recipes/cookies.js";
+import { PROBE_CAP, keepWorst, worstKeeper } from "../lib/fix/probe-cap.js";
+import { scanRepo } from "../src/scan-repo.js";
+import { mulberry32 } from "../bench/prng.js";
+
+const temps = [];
+afterAll(() => temps.forEach((d) => rmSync(d, { recursive: true, force: true })));
+
+function repo(files) {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "penthera-settings-")));
+  temps.push(root);
+  for (const [rel, text] of Object.entries(files)) {
+    mkdirSync(dirname(join(root, rel)), { recursive: true });
+    writeFileSync(join(root, rel), text);
+  }
+  return root;
+}
+
+const NEXT = { "package.json": JSON.stringify({ dependencies: { next: "15.0.0" } }) };
+const EXPRESS = { "package.json": JSON.stringify({ dependencies: { express: "4.0.0" } }) };
+
+describe("the CORS fallback finder (row 16: a rewrite is checked against the old check)", () => {
+  // The regex it replaces, as it stood in lib/fix/recipes/cors.js.
+  const OLD = /([\w$.]+(?:\.get\(\s*['"]origin['"]\s*\))?)\s*\|\|\s*(['"])\*\2/g;
+  const old = (s) => [...s.matchAll(OLD)].map((m) => ({ index: m.index, length: m[0].length, expr: m[1] }));
+  const PIECES = ["a", "b", "$", ".", "_", "1", " ", "\n", "\t", "|", "||", "'", "\"", "*", "\"*\"", "'*'", "(", ")", ".get(", "\"origin\"", "'origin'", "origin", "x.get(\"origin\")", "headers", "=", ";", ",", "-", " ".repeat(20), "\n\t ".repeat(9)];
+
+  it("finds the same sites as the old regex on 20,000 random inputs", () => {
+    const rand = mulberry32(0x0c0de);
+    for (let n = 0; n < 20_000; n++) {
+      let s = "";
+      const len = 1 + Math.floor(rand() * 24);
+      for (let i = 0; i < len; i++) s += PIECES[Math.floor(rand() * PIECES.length)];
+      expect(fallbackSites(s), JSON.stringify(s)).toEqual(old(s));
+    }
+  });
+
+  it("finds the same sites on the shapes real code has", () => {
+    for (const s of [
+      'const o = request.headers.get("origin") || "*";',
+      "headers: { 'Access-Control-Allow-Origin': origin || '*' }",
+      'x.get( "origin" ) || "*"',
+      `res.set("Access-Control-Allow-Origin", req.get(${" ".repeat(20)}"origin") || "*")`,
+      `req.get(${" ".repeat(40)}'origin'${"\n".repeat(40)}) || '*'`,
+      '.get("origin") || "*"',
+      'a||"*"b||"*"',
+      'a || "*" || "*"',
+      '|| "*"',
+    ]) expect(fallbackSites(s)).toEqual(old(s));
+  });
+
+  it("reads any number of blanks inside .get( \"origin\" ), as the old regex did (review, 7 Nov)", () => {
+    const src = `res.set("Access-Control-Allow-Origin", req.get(${" ".repeat(20)}"origin") || "*");`;
+    expect(fallbackSites(src)).toEqual([expect.objectContaining({ expr: `req.get(${" ".repeat(20)}"origin")` })]);
+    expect(probeCors("a.js", src)).toHaveLength(1);
+  });
+
+  it("takes linear time on blanks inside .get( ... ) too", () => {
+    const t = Date.now();
+    const src = `x.get(${" ".repeat(1024 * 1024)}"origin") || "*" `.repeat(4);
+    expect(fallbackSites(src)).toHaveLength(4);
+    expect(Date.now() - t).toBeLessThan(2000);
+  });
+
+  it("takes linear time: 5 MiB of letters, where the old regex needed hours (row 15)", () => {
+    const t = Date.now();
+    fallbackSites(`${"a".repeat(5 * 1024 * 1024)} || "*"`);
+    expect(Date.now() - t).toBeLessThan(2000);
+  });
+});
+
+describe("work per file is bounded at the size cap (rows 4, 15)", () => {
+  const MiB = 1024 * 1024;
+  const cases = {
+    "a run of word characters (the old CORS regex)": "a".repeat(5 * MiB - 16),
+    "cookie calls on one long line": 'a.cookie("s", v '.repeat(Math.floor((5 * MiB - 16) / 16)),
+    "origin: true on one long line, with cors imported": `import cors from "cors";${" origin: true,".repeat(Math.floor((5 * MiB - 64) / 14))}`,
+    "many cookies() stores": "const s1 = cookies();\n".repeat(Math.floor((5 * MiB - 16) / 22)),
+    "wildcard fallbacks on every line": 'h(origin || "*");\n'.repeat(Math.floor((5 * MiB - 16) / 18)),
+  };
+  for (const [name, text] of Object.entries(cases)) {
+    it(`${name}: scanned in bounded time, findings capped`, () => {
+      const root = repo({ ...EXPRESS, "server.js": text });
+      const t = Date.now();
+      const { findings, coverage } = probeRepoDetailed(root);
+      expect(Date.now() - t).toBeLessThan(15_000);
+      expect(coverage.examined).toContain("server.js");
+      const perRecipe = new Map();
+      for (const f of findings) perRecipe.set(f.source, (perRecipe.get(f.source) || 0) + 1);
+      for (const n of perRecipe.values()) expect(n).toBeLessThanOrEqual(PROBE_CAP + 6);
+    }, 60_000);
+  }
+});
+
+describe("memory per file is bounded (row 4; review, 7 Nov)", () => {
+  // 5 MiB of one hit per line: the checks used to collect every hit (about
+  // 200,000) before keeping 25, and peaked at 350 to 460 MB. Run in a child
+  // with a 128 MB heap: collecting them all runs out of memory there.
+  const run = (code) => spawnSync(process.execPath, ["--max-old-space-size=128", "--input-type=module", "-e", code], { encoding: "utf-8", timeout: 60_000 });
+  const lib = (f) => JSON.stringify(resolve("lib/fix/recipes", f));
+  const MiB = 1024 * 1024;
+  it("a cookie-dense 5 MiB file", () => {
+    const r = run(`const { probeCookies } = await import(${lib("cookies.js")}); console.log(probeCookies("a.js", 'res.cookie("session", v);\\n'.repeat(${Math.floor((5 * MiB) / 26)})).length);`);
+    expect(r.stderr).not.toMatch(/heap out of memory/);
+    expect(r.stdout.trim()).toBe(String(PROBE_CAP));
+  }, 60_000);
+  it("a 5 MiB file of wildcard fallbacks", () => {
+    const r = run(`const { probeCors } = await import(${lib("cors.js")}); console.log(probeCors("a.js", 'a || "*";\\n'.repeat(${Math.floor((5 * MiB) / 10)})).length);`);
+    expect(r.stderr).not.toMatch(/heap out of memory/);
+    expect(r.stdout.trim()).toBe(String(PROBE_CAP));
+  }, 60_000);
+});
+
+describe("the per-file cap keeps the worst (row 13)", () => {
+  it("a session cookie after 100 harmless ones is still reported", () => {
+    const decoys = Array.from({ length: 100 }, (_, i) => `res.cookie("pref${i}", v);`).join("\n");
+    const found = probeCookies("app.js", `${decoys}\nres.cookie("session", token);\n`);
+    expect(found).toHaveLength(PROBE_CAP);
+    expect(found[0]).toMatchObject({ title: expect.stringContaining('"session"'), severity: "medium", line: 101 });
+    expect(found.at(-1).description).toMatch(/76 more like these in app\.js are not listed/);
+  });
+
+  it("reads origin: true on the first line, a middle line and a last line with no newline (row 12)", () => {
+    const src = 'import cors from "cors"; app.use(cors({ origin: true }));\nconst o = { origin: true };\napp.use(cors({ origin: "*" }))';
+    expect(probeCors("a.js", src).map((f) => f.line)).toEqual([1, 3]);
+    expect(probeCors("b.js", `${src}\n`).map((f) => f.line)).toEqual([1, 3]);
+  });
+
+  it("a cookie set through a 21st cookies() store is still reported (review, 7 Nov: no cap on stores)", () => {
+    const decl = Array.from({ length: 20 }, (_, i) => `const s${i} = cookies();`).join("\n");
+    const found = probeCookies("app.ts", `${decl}\nconst jar = cookies();\njar.set("session", token);\n`);
+    expect(found).toEqual([expect.objectContaining({ title: 'Cookie "session" missing HttpOnly, missing Secure, missing SameSite', line: 22 })]);
+    // Any number of stores, and a .set( on a name that is not a store is not a cookie.
+    const many = Array.from({ length: 500 }, (_, i) => `const s${i} = await cookies();`).join("\n");
+    expect(probeCookies("b.ts", `${many}\nmap.set("session", 1);\ns499.set("sid", v);\n`).map((f) => f.title)).toEqual(['Cookie "sid" missing HttpOnly, missing Secure, missing SameSite']);
+  });
+
+  it("a store named cookieStore is reported once, and its fix edits the call once", async () => {
+    const src = 'const cookieStore = await cookies();\ncookieStore.set("session", t);\n';
+    expect(probeCookies("a.ts", src)).toHaveLength(1);
+    const root = repo({ ...NEXT, "app/api/login/route.ts": src });
+    const { plans } = await planFixes(root, probeRepoDetailed(root).findings.filter((f) => f.category === "cookie"));
+    const diff = plans.find((p) => p.recipe === "cookie-flags").diff;
+    expect(diff.match(/^\+.*httpOnly/gm)).toHaveLength(1);
+    expect(diff).toContain('cookieStore.set("session", t, { httpOnly: true, secure: true, sameSite: "lax" });');
+  });
+
+  it("the running keeper keeps what keepWorst keeps, in the same order", () => {
+    const rand = mulberry32(0xbeef);
+    const sevs = ["critical", "high", "medium", "low", "info"];
+    for (let n = 0; n < 500; n++) {
+      const len = Math.floor(rand() * 60);
+      const fs = Array.from({ length: len }, (_, i) => ({ severity: sevs[Math.floor(rand() * 5)], title: `t${i}`, description: "d" }));
+      const w = worstKeeper("f.js");
+      // Added out of order, as the cookie and CORS checks add them: the order key decides ties.
+      const order = fs.map((_, i) => i).sort(() => rand() - 0.5);
+      for (const i of order) w.add(fs[i], i);
+      expect(w.result()).toEqual(keepWorst(fs, "f.js"));
+    }
+  });
+
+  it("a short list is left as it is", () => {
+    expect(probeCors("a.js", 'const o = origin || "*";')).toEqual([expect.objectContaining({ file: "a.js", line: 1 })]);
+  });
+});
+
+describe("refused and linked files (row 2)", () => {
+  it("counts a FIFO, a file over the limit and files past the walk's cap; never follows a link", () => {
+    const root = repo({ ...EXPRESS, "big.js": "x".repeat(5 * 1024 * 1024 + 1), "app.js": 'res.cookie("sid", v);\n' });
+    execFileSync("mkfifo", [join(root, "pipe.js")]);
+    const outside = repo({ "secret.js": 'res.cookie("token", v);\n' });
+    symlinkSync(join(outside, "secret.js"), join(root, "link.js"));
+    symlinkSync(outside, join(root, "linked-dir"));
+    const { findings, coverage } = probeRepoDetailed(root);
+    expect(coverage.skipped).toEqual({ "too-large": 1, refused: 1 });
+    expect(coverage.examined).toEqual(["app.js"]);
+    // Nothing from the linked file or folder; the header findings name no file (no entry file here).
+    expect(findings.filter((f) => f.category !== "headers").map((f) => f.file)).toEqual(["app.js"]);
+  });
+
+  it("puts what it did not read in the scan's coverage, and makes the scan incomplete (exit 2)", async () => {
+    const root = repo({ ...EXPRESS, "big.js": "x".repeat(5 * 1024 * 1024 + 1) });
+    const r = await scanRepo(root);
+    const fam = r.coverage.families.find((f) => f.id === "app-settings");
+    expect(fam.skipped["too-large"]).toBe(1);
+    // Named once, by whichever check refused it first (the secret scan's limit is 4 MiB).
+    expect(r.incomplete).toEqual([{ file: "big.js", reason: expect.stringMatching(/over the .*limit/) }]);
+    expect(r.findings).toContainEqual(expect.objectContaining({ title: "File not read: big.js", severity: "info" }));
+  });
+
+  it("a FIFO among the code files makes the scan incomplete; a file two checks refuse is named once", async () => {
+    const root = repo({ ...EXPRESS, "server.js": "const express = require('express');\nconst app = express();\napp.listen(3000);\n" });
+    execFileSync("mkfifo", [join(root, "pipe.js")]);
+    const r = await scanRepo(root);
+    expect(r.incomplete.filter((x) => x.file === "pipe.js")).toHaveLength(1);
+    expect(r.findings.filter((f) => f.title === "File not read: pipe.js")).toHaveLength(1);
+  });
+
+  it.skipIf(process.getuid?.() === 0)("a folder or file it cannot read is named; an unreadable file makes the scan incomplete", async () => {
+    const root = repo({ ...EXPRESS, "locked/server.js": 'res.cookie("session", v);\n', "secret.js": 'res.cookie("sid", v);\n' });
+    chmodSync(join(root, "secret.js"), 0o000);
+    chmodSync(join(root, "locked"), 0o000);
+    try {
+      const { notRead, coverage } = probeRepoDetailed(root);
+      expect(notRead).toEqual([
+        { file: "locked", reason: expect.stringMatching(/folder that could not be read \(EACCES\)/) },
+        { file: "secret.js", reason: expect.stringMatching(/could not be read \(EACCES\)/) },
+      ]);
+      expect(coverage.skipped).toEqual({ unreadable: 2 });
+      // The scan as a whole (its sink check lists folders too) on the unreadable file alone.
+      chmodSync(join(root, "locked"), 0o755);
+      const r = await scanRepo(root);
+      expect(r.incomplete).toEqual([{ file: "secret.js", reason: expect.stringMatching(/could not be read|EACCES/) }]);
+    } finally {
+      chmodSync(join(root, "locked"), 0o755);
+      chmodSync(join(root, "secret.js"), 0o644);
+    }
+  });
+
+  it("a file whose cookie calls were not all read (the read budget) makes the scan incomplete", async () => {
+    const root = repo({ ...NEXT, "app/a.ts": `const s = cookies();\n${"s.set(".repeat(400_000)}\n` });
+    const t = Date.now();
+    const r = await scanRepo(root);
+    expect(Date.now() - t).toBeLessThan(20_000);
+    expect(r.incomplete).toContainEqual({ file: "app/a.ts", reason: "not all cookie calls read" });
+    expect(r.findings).toContainEqual(expect.objectContaining({ title: "Cookie calls not all checked: app/a.ts", severity: "info" }));
+  }, 60_000);
+
+  it("2,000 decoy files ahead of the real server: incomplete, exit 2, and the first file not read is named (review, 7 Nov)", () => {
+    const files = { ...EXPRESS };
+    for (let i = 0; i < 2001; i++) files[`aaa/f${String(i).padStart(4, "0")}.js`] = "";
+    files["zserver.js"] = 'const cors = require("cors");\napp.use(cors({ origin: "*" }));\nres.cookie("session", "x");\n';
+    const root = repo(files);
+    const report = join(root, "..", `${root.split("/").pop()}.json`);
+    temps.push(report);
+    const out = spawnSync(process.execPath, [resolve("bin/penthera.js"), "--repo", root, "-o", report], { encoding: "utf-8", env: { ...process.env, HOME: root, NO_COLOR: "1", CI: "1" }, timeout: 120_000 });
+    expect(out.status).toBe(2);
+    expect(out.stdout + out.stderr).toMatch(/aaa\/f2000\.js/);
+    const json = JSON.parse(readFileSync(report, "utf-8"));
+    expect(json.incomplete).toEqual([{ file: "aaa/f2000.js", reason: "past the settings check's 2000-file limit (2 not read)" }]);
+    expect(json.findings).toContainEqual(expect.objectContaining({ title: "Settings check stopped at 2,000 code files", severity: "info" }));
+  }, 120_000);
+
+  it("counts code files past the 2,000-file walk", () => {
+    const files = { ...EXPRESS };
+    for (let i = 0; i < 2003; i++) files[`src/f${String(i).padStart(4, "0")}.js`] = "";
+    const { coverage } = probeRepoDetailed(repo(files));
+    expect(coverage.over).toBe(3);
+    expect(coverage.firstOver).toBe("src/f2000.js");
+    expect(coverage.examined).toHaveLength(2000);
+  });
+});
+
+describe("headers set where a host or framework sets them", () => {
+  it("reads vercel.json, so a Next.js app that sets its headers there gets no missing-header finding", () => {
+    const vercel = { headers: [{ source: "/(.*)", headers: ["Content-Security-Policy", "X-Frame-Options", "X-Content-Type-Options", "Strict-Transport-Security", "Referrer-Policy"].map((key) => ({ key, value: "x" })) }] };
+    const root = repo({ ...NEXT, "vercel.json": JSON.stringify(vercel, null, 2), "next.config.mjs": "export default {};\n" });
+    expect(probeRepoDetailed(root).findings.filter((f) => f.category === "headers")).toEqual([]);
+  });
+
+  it("marks headers read from code as potential, with the file to change", () => {
+    const root = repo({ ...NEXT, "next.config.mjs": "export default {};\n" });
+    const csp = probeRepoDetailed(root).findings.find((f) => /Content-Security-Policy/.test(f.title));
+    expect(csp).toMatchObject({ confidence: "potential", file: "next.config.mjs", severity: "medium" });
+  });
+
+  it("gathers an Express app's headers on the same walk, from any file", () => {
+    const root = repo({ ...EXPRESS, "server.js": "const express = require('express');\nconst app = express();\napp.listen(3000);\n", "lib/h.js": "const helmet = require('helmet');\napp.use(helmet());\n" });
+    expect(probeRepoDetailed(root).findings.filter((f) => f.category === "headers").map((f) => f.title)).toEqual([]);
+  });
+});
+
+describe("nothing the scan found before is lost, and the fix plan sees the scan's set", () => {
+  it("the scan's findings are the fix plan's findings", async () => {
+    const root = repo({
+      ...NEXT,
+      "next.config.mjs": "export default {};\n",
+      "app/api/login/route.ts": 'const sessionSecret = "q7Vt2Lm9Xp4Rk8Wz";\nexport async function POST(request: Request) {\n  const store = await cookies();\n  store.set("session", "x");\n  return Response.json({ ok: true });\n}\n',
+      "app/api/session/route.ts": 'export async function GET(request: Request) {\n  const origin = request.headers.get("origin");\n  return new Response("{}", { headers: { "Access-Control-Allow-Origin": origin || "*" } });\n}\n',
+    });
+    const scan = await scanRepo(root);
+    const keys = new Set(scan.findings.map(findingKey));
+    const { plans } = await planFixes(root, scan.findings);
+    for (const p of plans) for (const f of p.findings) expect(keys.has(findingKey(f)), f.title).toBe(true);
+    // The route scan's own CORS finding stands; the settings check's copy of it is dropped.
+    const cors = scan.findings.filter((f) => /cors/i.test(f.title));
+    expect(cors).toEqual([expect.objectContaining({ category: "code-pattern", pattern: "cors-wildcard" })]);
+    expect(plans.map((p) => p.recipe).sort()).toEqual(["auth-rate-limit", "cookie-flags", "cors-allowlist", "secret-to-env", "security-headers"]);
+  });
+
+  it("a CORS wildcard only the settings check sees (a bare cors()) is reported once", async () => {
+    const root = repo({ ...EXPRESS, "server.js": "const cors = require('cors');\nconst express = require('express');\nconst app = express();\napp.use(cors());\napp.listen(3000);\n" });
+    const scan = await scanRepo(root);
+    expect(scan.findings.filter((f) => f.category === "cors")).toHaveLength(1);
+  });
+});

@@ -371,11 +371,11 @@ describe("the scan's fix line", () => {
       } catch (e) { return { status: e.status, out: e.stdout }; }
     };
     const text = scan();
-    expect(text.out).toMatch(/\d+ may be fixable:/);
+    expect(text.out).toMatch(/\d+ fix(?:es)? planned for (?:\d+ of )?\d+ problems?:/);
     expect(text.out).toContain("penthera fix --plan --repo");
     const json = scan("--json");
     expect(json.status).toBe(text.status);
-    expect(json.out).not.toMatch(/fixable:/);
+    expect(json.out).not.toMatch(/problems?: /);
     expect(JSON.parse(json.out).brief.next[0].command).toContain("penthera fix --plan --repo");
   });
 });

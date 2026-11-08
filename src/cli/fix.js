@@ -13,8 +13,9 @@ import { parseArgs } from "node:util";
 import { resolve } from "node:path";
 import { readFileSync, existsSync, statSync } from "node:fs";
 import { scanRepo } from "../scan-repo.js";
-import { planFixes, probeRepo, redactPlan, applyDiff, assertCleanTree, findingKey, createModelFixer } from "../../lib/fix/index.js";
+import { planFixes, redactPlan, applyDiff, assertCleanTree, findingKey, createModelFixer } from "../../lib/fix/index.js";
 import { bold, dim, green, red, yellow, cyan } from "./ansi.js";
+import { isProblem, fixesText, plural } from "../report/counts.js";
 
 const HELP = `
   ${bold("penthera fix")} — plan and apply local fix recipes
@@ -40,10 +41,10 @@ const HELP = `
 `;
 
 /**
- * Findings for the repo: a report's findings, or a fresh scan plus recipe
- * probes. `incomplete` lists what was not read or not checked (the scan's own
- * list, and probe findings that say so): never dropped with the info notes,
- * it makes the run exit 2.
+ * Findings for the repo: a report's findings, or a fresh repo scan. The scan
+ * runs the recipes' static checks itself, so the plan and the scan count the
+ * same findings. `incomplete` lists what was not read or not checked (the
+ * scan's own list): never dropped with the info notes, it makes the run exit 2.
  */
 async function gatherFindings(repo, input) {
   if (input) {
@@ -51,10 +52,10 @@ async function gatherFindings(repo, input) {
     return { findings: report.findings || [], fresh: false, incomplete: Array.isArray(report.incomplete) ? report.incomplete : [] };
   }
   const result = await scanRepo(repo, {});
-  const probes = probeRepo(repo);
-  const incomplete = [...(result.incomplete || []), ...probes.filter((f) => f.incomplete).map((f) => ({ ...f.incomplete, title: f.title }))];
+  // The scan's own list, which holds the settings checks' too (a file they could not read or not fully check).
+  const incomplete = [...(result.incomplete || [])];
   const seen = new Set();
-  const findings = [...result.findings, ...probes].filter((f) => {
+  const findings = result.findings.filter((f) => {
     if (f.severity === "info" && f.category === "config") return false;
     const k = findingKey(f);
     if (seen.has(k)) return false;
@@ -69,6 +70,20 @@ function reportIncomplete(incomplete) {
   if (!incomplete.length) return;
   process.stderr.write(`\n  ${yellow("Incomplete")} ${incomplete.length} input${incomplete.length === 1 ? " was" : "s were"} not read or not fully checked, so this plan may miss fixes (exit 2):\n`);
   for (const x of incomplete.slice(0, 20)) process.stderr.write(`    ${visible(x.file || x.title || "?")}${x.reason ? `: ${visible(x.reason)}` : ""}\n`);
+}
+
+/**
+ * The plan's counts in the words every surface uses (src/report/counts.js):
+ * problems in the run, how many of them a plan fixes, and the fixes planned.
+ * A fix counts only when it covers a problem; `other` counts plans that touch
+ * only likely noise or info (a cookie set in a test file), so a fix for noise
+ * never shows as a fix still to do. The repo scan's fix line uses this too.
+ */
+export function planCounts(findings, plans) {
+  const problems = new Set(findings.filter((f) => isProblem(f)).map(findingKey));
+  const covered = new Set(plans.flatMap((p) => p.findings.map(findingKey)).filter((k) => problems.has(k)));
+  const fixes = plans.filter((p) => p.findings.some((f) => problems.has(findingKey(f)))).length;
+  return { problems: problems.size, covered: covered.size, fixes, other: plans.length - fixes, findings: findings.length };
 }
 
 const NAMED = { "\0": "\\0", "\b": "\\b", "\t": "\\t", "\n": "\\n", "\v": "\\v", "\f": "\\f", "\r": "\\r", "\x1b": "\\e" };
@@ -165,22 +180,28 @@ export async function runFix(argv) {
     process.exit(2);
   }
   const { plans, unmatched, refused } = await planFixes(repo, gathered.findings, { model });
+  const counts = planCounts(gathered.findings, plans);
 
   if (!opts.apply) {
     if (opts.json) {
-      console.log(JSON.stringify({ repo, plans: plans.map(redactPlan), unmatched: unmatched.map((f) => ({ title: f.title, category: f.category, severity: f.severity, url: f.url || null })), refused: refused.map((r) => ({ title: r.finding.title, reason: r.reason })), incomplete: gathered.incomplete.map((x) => ({ file: x.file || null, reason: x.reason || null })) }, null, 2));
+      console.log(JSON.stringify({ repo, counts, plans: plans.map(redactPlan), unmatched: unmatched.map((f) => ({ title: f.title, category: f.category, severity: f.severity, url: f.url || null })), refused: refused.map((r) => ({ title: r.finding.title, reason: r.reason })), incomplete: gathered.incomplete.map((x) => ({ file: x.file || null, reason: x.reason || null })) }, null, 2));
       process.exit(gathered.incomplete.length ? 2 : 0);
     }
     process.stdout.write(`\n  ${bold("penthera fix")} ${dim(repo)}\n`);
-    process.stdout.write(`  ${plans.length} fix${plans.length === 1 ? "" : "es"} planned for ${gathered.findings.length} finding${gathered.findings.length === 1 ? "" : "s"}${gathered.fresh ? " (fresh repo scan)" : ` (from ${opts.input})`}\n`);
+    const other = counts.other ? `, and ${counts.other} for likely noise or info` : "";
+    const headline = `${fixesText(counts.fixes, counts.covered, counts.problems)}${other}`;
+    process.stdout.write(`  ${headline}${gathered.fresh ? " (fresh repo scan)" : ` (from ${opts.input})`}\n`);
     for (const p of plans) printPlan(redactPlan(p));
     for (const r of refused) process.stdout.write(`\n  ${yellow("Refused")} the model's fix for ${visible(r.finding.title)}: ${visible(r.reason)}\n`);
-    const manual = unmatched.filter((f) => f.severity !== "info");
+    const manual = unmatched.filter((f) => isProblem(f));
     if (manual.length) {
-      process.stdout.write(`\n  ${dim(`${manual.length} finding${manual.length === 1 ? "" : "s"} without a recipe; fix by hand (\`penthera --repo . -o report.json\` writes an action plan)${model ? "" : " or try --fix-model <name>"}:`)}\n`);
+      process.stdout.write(`\n  ${dim(`${plural(manual.length, "problem")} without a recipe; fix by hand (\`penthera --repo . -o report.json\` writes an action plan)${model ? "" : " or try --fix-model <name>"}:`)}\n`);
       for (const f of manual.slice(0, 20)) process.stdout.write(`    [${visible(f.severity)}] ${visible(f.title)}\n`);
     }
-    if (plans.length) process.stdout.write(`\n  Apply one:  penthera fix --apply <id>${opts.repo ? ` --repo ${opts.repo}` : ""}${opts.input ? ` -o ${opts.input}` : ""}\n\n`);
+    // The headline again at the end, so the last lines (`tail`) say what the plan holds.
+    process.stdout.write(`\n  ${bold(headline)}\n`);
+    if (plans.length) process.stdout.write(`  Apply one:  penthera fix --apply <id>${opts.repo ? ` --repo ${opts.repo}` : ""}${opts.input ? ` -o ${opts.input}` : ""}\n`);
+    process.stdout.write("\n");
     reportIncomplete(gathered.incomplete);
     process.exit(gathered.incomplete.length ? 2 : 0);
   }
