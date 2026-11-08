@@ -661,6 +661,30 @@ drop policy if exists gone on public.t;`)).toEqual([]);
     expect(lf.title.length).toBeLessThan(300);
   }, 120_000);
 
+  it("review of the DoS fixes: long config.toml schemas, server reads, overflow confidence, ASCII-only folding", () => {
+    // A schema over 63 bytes in config.toml is cut like the same name in SQL, so its tables still match.
+    const sch = "é".repeat(40);
+    const a = scanSupabase(repo({ "supabase/config.toml": `[api]\nschemas = ["public", "${sch}"]\n`, "supabase/migrations/001.sql": `create table "${sch}".profiles (id uuid, email text);` }));
+    expect(a.findings.map((f) => f.templateId)).toEqual(["supabase-rls-disabled"]);
+    // 1,025 route handlers reading the server-only key don't take the slots; the client file is named.
+    const files = { "app/page.tsx": `"use client";\nconst k = process.env.${SERVER_NAME};\n` };
+    for (let i = 0; i < 1025; i++) files[`app/api/r${i}/route.js`] = `export const k = process.env.${SERVER_NAME};\n`;
+    const b = scanSupabase(repo(files, { pkg: NEXT }));
+    expect(b.findings.map((f) => `${f.file}:${f.severity}`)).toEqual(["app/page.tsx:medium"]);
+    expect(b.incomplete).toEqual([]);
+    // PostgreSQL folds only ASCII in an unquoted name: ÄRGER is Ärger, not ärger.
+    const c = checkMigrations([{ rel: "1.sql", text: "create table public.ÄRGER (id int);\nalter table if exists public.ärger enable row level security;" }]);
+    expect(c.findings.filter((f) => f.kind === "rls").map((f) => f.table.name)).toEqual(["Ärger"]); // Ä stays, RGER folds
+  });
+
+  it("the public-name overflow finding is likely unless every file in it is a test", async () => {
+    const files = {};
+    for (let i = 0; i < 1002; i++) files[`cfg/c${i}.json`] = JSON.stringify({ a: `${PUB("NEXT_PUBLIC_")}_${i}` });
+    const r = scanSupabase(repo(files));
+    const o = r.findings.find((f) => / more files use public env names/.test(f.title));
+    expect([o.severity, o.confidence]).toEqual(["high", "likely"]);
+  }, 60_000);
+
   it("a few names in one file are one finding whose id follows the set", () => {
     const ids = (text) => scanSupabase(repo({ ".env": text })).findings.map((f) => `${f.title}|${f.severity}`);
     const two = ids(`${PUB("NEXT_PUBLIC_")}=\n${PUB("VITE_")}=\n`);
