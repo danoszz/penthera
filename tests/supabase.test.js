@@ -381,6 +381,8 @@ describe("supabase-rls-disabled", () => {
       regrant: [`create table public.users (email text);\nrevoke all on table public.users from anon, authenticated;\nset search_path to private;\n${decoys}`, "grant select on public.users to anon;"],
       open_policy: [`create table public.users (email text);\nalter table public.users enable row level security;\nset search_path to private;\n${decoys}`, "create policy p on public.users for all to anon using (true) with check (true);"],
       opened_policy: [`create table public.users (email text);\nalter table public.users enable row level security;\ncreate policy p on public.users for select to anon using (false);\nset search_path to private;\n${decoys}`, "alter policy p on public.users using (true);"],
+      quoted_role: [`create table public.users (email text);\nrevoke all on table public.users from anon, authenticated;\nset search_path to private;\n${decoys}`, 'grant select on public.users to "anon";'],
+      one_eq_one: [`create table public.users (email text);\nalter table public.users enable row level security;\nset search_path to private;\n${decoys}`, "create policy p on public.users for all to anon using (1 = 1) with check (1 = 1);"],
       recreate: [`create table public.users (email text);\nalter table public.users enable row level security;\nset search_path to private;\n${decoys}`, "drop table public.users;\ncreate table public.users (password text);"],
     });
     for (const [name, [a, b]] of Object.entries(cases)) {
