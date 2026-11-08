@@ -17,7 +17,8 @@ import { scanSupabase, findServiceKeys, checkMigrations, sqlTokens, alwaysTrue, 
 import { scanRepo } from "../src/scan-repo.js";
 import { cpuMs } from "./fixtures/cpu-time.js";
 import { compareWithBaseline } from "../src/cli/baseline.js";
-import { findingId } from "../lib/memory/views.js";
+import { findingId, isSuppressed } from "../lib/memory/views.js";
+import { spawnSync } from "node:child_process";
 
 const b64 = (o) => Buffer.from(JSON.stringify(o)).toString("base64url");
 const SIG = "ZmFrZS1zaWduYXR1cmUtZm9yLWEtdGVzdC1maXh0dXJl";
@@ -502,6 +503,33 @@ drop policy if exists gone on public.t;`)).toEqual([]);
       expect(compareWithBaseline(scan(narrow), base).newFindings, name).toEqual([]);
     }
   });
+
+  it("two anon UPDATE policies broadened to ALL: a grouped suppression no longer covers them, and --baseline -q shows them (Vercel, PR 312)", () => {
+    const table = "create table public.t (id int);\nalter table public.t enable row level security;\n";
+    const narrow = `${table}create policy a on public.t for update to anon using (true);\ncreate policy b on public.t for update to anon using (true);\n`;
+    const broad = `${table}create policy a on public.t for all to anon using (true);\ncreate policy b on public.t for all to anon using (true);\n`;
+    const root = repo({ "supabase/migrations/001.sql": narrow, "package.json": "{}" });
+    const policyOf = (findings) => findings.filter((f) => f.templateId === "supabase-policy-open");
+    // (b) a suppression of the narrow group, at its severity, doesn't cover the broadened group.
+    const [before] = policyOf(scanSupabase(root).findings);
+    const views = { suppressions: [{ id: findingId(before), severity: before.severity }] };
+    expect(isSuppressed(before, views)).toBeTruthy();
+    writeFileSync(join(root, "supabase/migrations/001.sql"), broad);
+    const [after] = policyOf(scanSupabase(root).findings);
+    expect(after.severity).toBe(before.severity);
+    expect(isSuppressed(after, views)).toBe(null);
+    // (a) through the CLI: a baseline of the narrow scan, then --baseline -q on the broadened one.
+    const home = mkdtempSync(join(tmpdir(), "penthera-supabase-home-"));
+    const env = { PATH: process.env.PATH, HOME: home, NO_COLOR: "1", PENTHERA_NO_ONBOARDING: "1" };
+    const cli = (...args) => spawnSync(process.execPath, ["bin/penthera.js", "--repo", root, "--offline", "--json", ...args], { env, encoding: "utf-8", maxBuffer: 64 * 1024 * 1024 });
+    writeFileSync(join(root, "supabase/migrations/001.sql"), narrow);
+    const base = join(home, "base.json");
+    writeFileSync(base, cli().stdout);
+    expect(policyOf(JSON.parse(cli("--baseline", base, "-q").stdout).findings)).toEqual([]);
+    writeFileSync(join(root, "supabase/migrations/001.sql"), broad);
+    const shown = policyOf(JSON.parse(cli("--baseline", base, "-q").stdout).findings);
+    expect(shown.map((f) => f.title)).toEqual([after.title]);
+  }, 60_000);
 
   it("policy ids ignore roles that don't matter, and titles stay short (review of PR 312)", () => {
     const table = "create table public.t (id int);\nalter table public.t enable row level security;\n";
