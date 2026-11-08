@@ -536,8 +536,9 @@ drop policy if exists gone on public.t;`)).toEqual([]);
 
   it("a shortened name can't impersonate another table's finding (Vercel, PR 312)", () => {
     const one = (sql) => scanSupabase(repo({ "supabase/migrations/001.sql": sql })).findings.filter((f) => f.templateId === "supabase-rls-disabled");
-    const long = (tail) => `"${"a".repeat(80)}${tail}"`;
-    // Two long names sharing an 80-character prefix: distinct ids, and a suppression of one doesn't cover the other.
+    // PostgreSQL keeps 63 bytes of a name, so names that differ inside them (and show hashed: uppercase) are distinct.
+    const long = (tail) => `"${"A".repeat(60)}${tail}"`;
+    // Two long names sharing a 60-character prefix: distinct ids, and a suppression of one doesn't cover the other.
     const [a] = one(`create table public.${long("x")} (id int);`);
     const [b] = one(`create table public.${long("y")} (id int);`);
     expect(findingId(a)).not.toBe(findingId(b));
@@ -545,12 +546,12 @@ drop policy if exists gone on public.t;`)).toEqual([]);
     expect(isSuppressed(a, views)).toBeTruthy();
     expect(isSuppressed(b, views)).toBe(null);
     // A table literally named like another's shortened form doesn't share its id.
-    const forged = shown("a".repeat(81));
-    const [c] = one(`create table public."${"a".repeat(81)}" (id int);`);
+    const forged = shown("A".repeat(61));
+    const [c] = one(`create table public."${"A".repeat(61)}" (id int);`);
     const [d] = one(`create table public."${forged}" (id int);`);
     expect(findingId(c)).not.toBe(findingId(d));
     // The hash is at least 16 hex characters of the whole name.
-    expect(shown("a".repeat(81))).toMatch(/…[0-9a-f]{16}$/);
+    expect(shown("A".repeat(61))).toMatch(/…[0-9a-f]{16}$/);
   });
 
   it("a quoted mixed-case name, a NUL and the all-tables marker each keep their own id (review of PR 312)", () => {
@@ -568,6 +569,34 @@ drop policy if exists gone on public.t;`)).toEqual([]);
     expect(all.map(findingId)).not.toEqual(star.map(findingId));
     expect(all[0].description).toContain("`public.* (all tables)`");
   }, 60_000);
+
+  it("names are cut at 63 bytes as PostgreSQL does; a rename to a multi-MiB name stays bounded and marks the file (Vercel, PR 312)", async () => {
+    const r = checkMigrations([{ rel: "001.sql", text: `create table public."${"x".repeat(70)}" (id int);` }]);
+    expect(r.findings[0].table.name).toBe("x".repeat(63));
+    // UTF-8: cut on a character boundary within 63 bytes.
+    expect(Buffer.byteLength(checkMigrations([{ rel: "1.sql", text: `create table public."${"é".repeat(40)}" (id int);` }]).findings[0].table.name)).toBeLessThanOrEqual(63);
+    const pols = Array.from({ length: 5000 }, (_, i) => `create policy p${i} on public.t for update to anon using (true);`).join("\n");
+    const huge = "N".repeat(4 * 1024 * 1024);
+    const root = repo({ "supabase/migrations/001.sql": `create table public.t (id int);\nalter table public.t enable row level security;\n${pols}\nalter table public.t rename to "${huge}";\n` });
+    const before = process.memoryUsage().rss;
+    const t0 = Date.now();
+    const scan = await scanRepo(root);
+    expect(Date.now() - t0).toBeLessThan(20_000);
+    expect(process.memoryUsage().rss - before).toBeLessThan(512 * 1024 * 1024);
+    expect(scan.incomplete.map((i) => i.file)).toContain("supabase/migrations/001.sql");
+    const pf = scan.findings.filter((f) => f.templateId === "supabase-policy-open");
+    expect(pf).toHaveLength(1);
+    expect(JSON.stringify(pf).length).toBeLessThan(64 * 1024);
+    // Through the CLI and MCP too.
+    const home = mkdtempSync(join(tmpdir(), "penthera-supabase-home-"));
+    const out = spawnSync(process.execPath, ["bin/penthera.js", "--repo", root, "--offline", "--json"], {
+      env: { PATH: process.env.PATH, HOME: home, NO_COLOR: "1", PENTHERA_NO_ONBOARDING: "1" }, encoding: "utf-8", maxBuffer: 64 * 1024 * 1024,
+    });
+    expect(out.status).toBe(2);
+    expect(out.stdout.length).toBeLessThan(1024 * 1024);
+    const res = await TOOL_BY_NAME.get("scan_repo").run({ path: realpathSync(root) }, { roots: async () => [realpathSync(root)] });
+    expect(JSON.stringify(res).length).toBeLessThan(512 * 1024);
+  }, 120_000);
 
   it("a dot inside a quoted name is not a schema separator (review of PR 312)", () => {
     // public."x.y" has no RLS; enabling RLS on "public.x".y must not hide it.
