@@ -337,7 +337,29 @@ describe("supabase-rls-disabled", () => {
   it("moves policies with SET SCHEMA and marks DO '...' strings and EXECUTE ... CREATE (review 10)", () => {
     const r = mig({ "001.sql": "create table private.t (id int);\nalter table private.t enable row level security;\ncreate policy p on private.t for all to anon using (true);\nalter table private.t set schema public;\ndo 'begin execute ''create table public.x(id int)''; end';\ncreate function f() returns void language plpgsql as $$ begin execute 'create ' || 'table public.y(id int)'; end $$;" });
     expect(r.findings.filter((f) => f.kind === "policy").map((f) => f.policy.table)).toEqual(["public.t"]);
-    expect(r.unchecked).toHaveLength(2);
+    expect(r.unchecked.map((u) => u.count)).toEqual([2]); // one entry per file and reason, counted
+  });
+
+  it("200k short public tables in one migration: one grouped finding, bounded, and an incomplete scan (Vercel, PR 312)", async () => {
+    const text = Array.from({ length: 200_000 }, (_, i) => `create table public.t${i} (id int${i === 150 ? ", email text" : ""});`).join("\n");
+    const root = repo({ "supabase/migrations/001.sql": text });
+    const r = await scanRepo(root);
+    const rls = r.findings.filter((f) => f.templateId === "supabase-rls-disabled");
+    expect(rls).toHaveLength(1);
+    // The table with a private-looking column is named first; the count stops at the cap.
+    expect(rls[0].title).toMatch(/^50001 tables in `supabase\/migrations\/001\.sql`/);
+    expect(rls[0].description).toMatch(/^`supabase\/migrations\/001\.sql` creates or changes 50001 tables in exposed schemas that no migration puts under row-level security: `public\.t150`/);
+    expect(rls[0].lines.length).toBeLessThanOrEqual(20);
+    expect(r.incomplete).toEqual([expect.objectContaining({ file: "supabase", reason: expect.stringContaining("more than 50000 tables and policies") })]);
+  }, 60_000);
+
+  it("groups many open policies per file and severity", () => {
+    const pols = Array.from({ length: 30 }, (_, i) => `create policy p${i} on public.t for update to anon using (true);`).join("\n");
+    const root = repo({ "supabase/migrations/001.sql": `create table public.t (id int);\nalter table public.t enable row level security;\n${pols}` });
+    const f = scanSupabase(root).findings;
+    expect(f.map((x) => `${x.templateId}:${x.severity}`)).toEqual(["supabase-policy-open:high"]);
+    expect(f[0].title).toBe("30 policies in `supabase/migrations/001.sql` check nothing");
+    expect(f[0].description).toContain("and 10 more");
   });
 
   it("treats a table anon and authenticated can't reach as not exposed", () => {

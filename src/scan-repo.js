@@ -24,6 +24,15 @@ import { readRepoFile, isRefused } from "../lib/fs-safe.js";
 /** Source and config files the route scan reads are capped at 5 MiB. */
 const SOURCE_MAX_BYTES = 5 * 1024 * 1024;
 
+/**
+ * Append findings one by one. A spread (push(...list)) passes every item as an argument, and
+ * a list an attacker can grow (200k findings from one crafted file) passes V8's argument limit
+ * and aborts the scan with no report (Vercel, PR 312).
+ */
+function append(target, items) {
+  for (const item of items) target.push(item);
+}
+
 /** A file the route scan would have read but refused: a link out, a device, a FIFO, too large. */
 function refusedFileFinding(e, repoPath) {
   const name = relative(resolve(repoPath), resolve(repoPath, e.path)).split(sep).join("/") || e.path;
@@ -136,12 +145,12 @@ export async function scanRepo(repoPath, opts = {}) {
 
   // ── Phase 1: Secret scanning (whole repo) ─────────────────────────────
   progress("Scanning for hardcoded secrets...");
-  result.findings.push(...scanSecrets(repoPath, { ignored }));
+  append(result.findings, scanSecrets(repoPath, { ignored }));
   result.executedProbes.push("secret-scanning");
 
   // ── Phase 1b: Runtime pins (Dockerfile, .tool-versions, ...) vs advisories
   progress("Checking pinned runtime versions against advisories...");
-  result.findings.push(...runtimeAdvisoriesForRepo(repoPath));
+  append(result.findings, runtimeAdvisoriesForRepo(repoPath));
   result.executedProbes.push("runtime-advisories");
 
   // ── Phase 1c: Code-execution sinks (all server code, not just routes) ──
@@ -150,12 +159,12 @@ export async function scanRepo(repoPath, opts = {}) {
   const library = detectLibrary(repoPath, opts.library);
   result.library = { enabled: library.enabled, reason: library.reason };
   if (library.refused) result.findings.push(refusedFileFinding(library.refused, repoPath));
-  result.findings.push(...scanCodeSinks(repoPath, { library, ignored }));
+  append(result.findings, scanCodeSinks(repoPath, { library, ignored }));
   result.executedProbes.push("code-sinks");
 
   // ── Phase 1d: GitHub Actions workflows (.github/workflows) ────────────
   progress("Checking GitHub Actions workflows...");
-  result.findings.push(...scanWorkflows(repoPath));
+  append(result.findings, scanWorkflows(repoPath));
   result.executedProbes.push("ci-workflows");
   if (library.enabled) {
     result.executedProbes.push("library-mode");
@@ -174,7 +183,7 @@ export async function scanRepo(repoPath, opts = {}) {
   // ── Phase 1e: Supabase: service-role key in client code, tables without RLS
   progress("Checking Supabase keys and row-level security...");
   const supabase = scanSupabase(repoPath, { ignored });
-  result.findings.push(...supabase.findings);
+  append(result.findings, supabase.findings);
   // The SQL files it read, so Coverage reports what was read, not what exists (row 23).
   result.supabase = { migrations: supabase.migrations, read: supabase.read };
   // What it couldn't read whole (a refused, oversized or over-budget
