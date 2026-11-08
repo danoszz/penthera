@@ -60,6 +60,12 @@ const STATES = {
       title: `Missing ${h} header`, remediation: "Set it in the app, or check that your host sends it.",
     }))),
   ],
+  // A hundred to check: the verdict no longer fits beside the number, so it takes its own line.
+  check100: [
+    repo(Array.from({ length: 100 }, (_, i) => f({
+      url: `src/s${i}.js`, severity: "medium", confidence: "potential", category: "headers", source: "fix-probe:headers", title: "Missing Content-Security-Policy header",
+    }))),
+  ],
   // An agent-config audit alone, shaped like `penthera agents` on a setup with a hidden instruction.
   agents: [
     agents({
@@ -96,10 +102,33 @@ describe("card model: the verdict is the brief's", () => {
     expect(modelOf(withOne).verdict).toBe(VERDICTS.fix);
   });
 
-  it("things to check first and likely noise do not lower the grade; a problem to act on does", () => {
-    expect(gradeFindings([f({ severity: "critical", confidence: "potential" }), f({ severity: "high", url: "test/fixtures/a.js" })])).toEqual({ grade: "A", score: 100 });
+  it("medium or low things to check first and likely noise do not lower the grade; a problem to act on, or any critical or high, does", () => {
+    expect(gradeFindings([f({ severity: "medium", confidence: "potential" }), f({ severity: "low" }), f({ severity: "medium", url: "test/fixtures/a.js" })])).toEqual({ grade: "A", score: 100 });
     expect(gradeFindings([f({ severity: "high" })])).toEqual({ grade: "B", score: 85 });
-    expect(gradeFindings([f({ severity: "critical" })]).grade).toBe("F");
+    // A critical or high fails the run (exit 1) wherever it is, so it lowers the grade too (review, 9 Nov).
+    expect(gradeFindings([f({ severity: "high", url: "skills/x/tests/setup.sh" })])).toEqual({ grade: "B", score: 85 });
+    expect(gradeFindings([f({ severity: "critical", confidence: "potential" })]).grade).toBe("F");
+  });
+
+  it("suppressed findings keep their own verdict, never Nothing to fix now", () => {
+    const b = buildBrief([{ ...STATES.check[0], suppressed: [f({ severity: "critical" })] }]);
+    expect(b.verdict).not.toBe(VERDICTS.check);
+    expect(b.verdict_id).toBe("review");
+  });
+
+  it("the brief names its verdict with a stable id", () => {
+    expect(buildBrief(STATES.check).verdict_id).toBe("check");
+    expect(buildBrief(STATES.findings).verdict_id).toBe("fix");
+    expect(buildBrief(STATES.clean).verdict_id).toBe("clean");
+    expect(buildBrief(STATES.unread).verdict_id).toBe("unread");
+  });
+
+  it("a long count puts the verdict on its own line, whole, at both sizes", () => {
+    for (const layout of [postLayout, ogLayout]) {
+      const texts = textsOf(layout(modelOf(STATES.check100)));
+      expect(texts).toContain("VERDICT: NOTHING TO FIX NOW");
+      expect(texts.some((t) => /NOTHING TO…|TO…/.test(t))).toBe(false);
+    }
   });
 
   it("findings: the number to fix first and the top fix", () => {

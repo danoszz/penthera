@@ -37,7 +37,9 @@ section: Changed
   JSON), and `penthera fix --plan` prints its headline again at the end.
 - **Nothing to fix now.** A run with nothing to act on and only things to check
   first (headers read from code, which your host may still add) says `Nothing
-  to fix now`, and its share card `Nothing to fix now · 4 to check`. Things to
-  check first and likely noise no longer lower the agent-config grade; a
-  finding to act on still does, and a confirmed problem still says `Fix now`
-  or `Review`.
+  to fix now`, and its share card `Nothing to fix now · 4 to check`. Medium
+  or low things to check first and likely noise no longer lower the
+  agent-config grade; a finding to act on, or any critical or high finding,
+  still does. A confirmed problem still says `Fix now` or `Review`, and
+  suppressed findings keep their own verdict. The brief's JSON adds
+  `verdict_id`, a stable name for the verdict.

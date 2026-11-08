@@ -14,13 +14,17 @@ import { C, logoOp, mosaicRows, mosaicSize, wrap, textRight, textCenter } from "
 /**
  * The verdict line: "VERDICT: NOTHING TO FIX NOW". On a check-only card the
  * number to check is the big block beside it, so the line keeps the verdict
- * itself; and when the prefix would cut it, the verdict stands alone.
+ * itself. It sits beside the number when it fits there on one line (without
+ * the prefix if need be), or null: then it goes on its own line under the
+ * number, never cut and never over the label.
  */
-function verdictLine(m, cols) {
+function verdictBeside(m, cols) {
   const v = upper(String(m.verdict).split(" · ")[0]);
   const full = `VERDICT: ${v}`;
-  return wrap(full, cols, 1)[0] === full ? full : wrap(v, cols, 1)[0];
+  if (wrap(full, cols, 1)[0] === full) return full;
+  return wrap(v, cols, 1)[0] === v ? v : null;
 }
+const verdictText = (m) => `VERDICT: ${upper(String(m.verdict).split(" · ")[0])}`;
 const firstLabel = (m) => (m.tone === "check" ? "CHECK FIRST" : "FIX FIRST");
 
 export const SIZES = { post: { w: 1080, h: 1350 }, og: { w: 1200, h: 630 } };
@@ -87,9 +91,14 @@ function slipBody(m, { L, R, CX, y }, budget) {
   } else {
     wrap(upper(m.hero.label), leftCols(21), 2).forEach((l, i) => ops.push({ op: "text", s: l, x: L, y: y + i * 46, k: 3, fill: C.ink }));
   }
-  ops.push({ op: "text", s: verdictLine(m, leftCols(14)), x: L, y: y + sz.h - 28, k: 2, fill: C.blue });
+  const beside = verdictBeside(m, leftCols(14));
+  if (beside) ops.push({ op: "text", s: beside, x: L, y: y + sz.h - 28, k: 2, fill: C.blue });
   ops.push({ op: "cells", x: R - sz.w, y, k, gap: g, rows, fill: C.blue });
   y += sz.h + 36;
+  if (!beside) {
+    for (const l of wrap(verdictText(m), Math.floor((R - L) / 14), 2)) { ops.push({ op: "text", s: l, x: L, y: y - 8, k: 2, fill: C.blue }); y += 30; }
+    y += 6;
+  }
   ops.push({ op: "rect", x: L, y, w: R - L, h: 8, fill: C.ink });
   y += 44;
   if (graded) {
@@ -189,9 +198,14 @@ export function ogLayout(m) {
   } else {
     wrap(upper(m.hero.label), leftCols(21), 2).forEach((l, i) => ops.push({ op: "text", s: l, x: L, y: y + i * 42, k: 3, fill: C.ink }));
   }
-  ops.push({ op: "text", s: verdictLine(m, leftCols(14)), x: L, y: y + sz.h - 28, k: 2, fill: C.blue });
+  const beside = verdictBeside(m, leftCols(14));
+  if (beside) ops.push({ op: "text", s: beside, x: L, y: y + sz.h - 28, k: 2, fill: C.blue });
   ops.push({ op: "cells", x: R - sz.w, y, k, gap: g, rows, fill: C.blue });
   y += sz.h + 20;
+  if (!beside) {
+    for (const l of wrap(verdictText(m), cols2, 2)) { ops.push({ op: "text", s: l, x: L, y, k: 2, fill: C.blue }); y += 30; }
+    y += 4;
+  }
   ops.push({ op: "rect", x: L, y, w: R - L, h: 6, fill: C.ink });
   y += 24;
   // Not checked comes before the fix here: on a short card it is the line that must stay.

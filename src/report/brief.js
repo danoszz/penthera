@@ -2,7 +2,7 @@
  * The agent brief (docs/research/spec-agent-brief.md): one short, fixed-shape
  * summary an AI assistant can pass on as it is. Rules fill every section:
  *
- *   Verdict       Fix now | Review | Nothing to fix | Nothing to assess | Site not read, with the counts behind it
+ *   Verdict       Fix now | Review | Nothing to fix now | Nothing to fix | Nothing to assess | Site not read | N suppressed, with the counts behind it; `verdict_id` names it without string matching
  *   Act on        findings that need a change, grouped by place and fix
  *   Check first   heuristic, low or dependency-capability findings
  *   Likely noise  findings demoted by a deterministic reason, one line per group
@@ -281,12 +281,15 @@ export function buildBrief(results, { reports = [], fixes = null, limits = [], m
   const quiet = hidden.length ? hiddenText : VERDICTS.clean;
   // Only things to check first, on a run that passes: "Nothing to fix now". Anything to act
   // on, a failing exit code, a 403 or a partly read site still reads as Review.
-  const onlyCheck = !act.length && check.length && !exitCode && !forbidden.length && !partly;
+  // Suppressed findings keep their own verdict ("N suppressed"): they may hide something serious.
+  const onlyCheck = !act.length && check.length && !exitCode && !forbidden.length && !partly && !hidden.length;
   const verdict = actHigh ? VERDICTS.fix : unread ? VERDICTS.unread : onlyCheck ? VERDICTS.check : act.length || check.length || exitCode || forbidden.length || partly ? VERDICTS.review : nothingRead ? VERDICTS.none : quiet;
 
   return {
     schema: BRIEF_SCHEMA,
     verdict,
+    // Added in 2.4.0: a stable name for the verdict (fix, review, check, clean, none, unread, suppressed).
+    verdict_id: Object.keys(VERDICTS).find((k) => VERDICTS[k] === verdict) || "suppressed",
     exit_code: exitCode,
     exit_reason: exitCode === 2 || !actHigh ? exitReason(list) : null,
     target: text(targets.join(", "), 500),
