@@ -217,6 +217,13 @@ penthera https://my-app.example --repo . --card
 `--card-out <path>` picks another place and name: `--card-out reports/card`
 writes `reports/card.png`, `reports/card-og.png` and their SVGs.
 
+The card never writes through a symbolic link. If a folder on the way is a
+link, or a card name is a folder, nothing is written and the run exits 2; a
+link planted at a card's name is replaced, and the file it pointed to is left
+as it was. `--card` does not work with `penthera deps` (write `-o deps.json`
+and use `penthera brief deps.json --card`) or with `--baseline` and `-q`
+together, which counts only new findings; both exit 2.
+
 The card is built on your machine from the brief, so it shows the same
 verdict as the brief, and no model is involved. Penthera draws it with its own
 renderer and pixel font: nothing is fetched or uploaded, and it adds no

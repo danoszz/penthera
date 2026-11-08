@@ -17,13 +17,16 @@ export const CARD_SCHEMA = "penthera.card/1";
 // A long run of key-like characters with at least one digit: an API key, a token, a hash.
 const TOKEN = /[A-Za-z0-9_\-+/=]{20,}/g;
 const PATHISH = /(?:^|[\s(`'"])(?:\.{0,2}\/)?(?:[\w@.-]+\/)+[\w@.-]+(?::\d+)?/g;
-const URLISH = /\b[a-z][a-z0-9+.-]*:\/\/\S+/gi;
+// The scheme is bounded and must follow a delimiter, so the match never rescans a long run.
+const URLISH = /(^|[\s(`'"<])[a-z][a-z0-9+.-]{0,31}:\/\/\S*/gi;
 
 /** Make a string safe to post: no URLs, paths, key-like tokens, backticks or control characters. */
 export function publicText(s, max = 120) {
-  let t = String(s ?? "")
+  // Cut first: a title is repo-controlled and can be megabytes long, and every
+  // regex below must run on a bounded string.
+  let t = String(s ?? "").slice(0, max * 4)
     .replace(/[\u0000-\u001f\u007f]/g, " ")
-    .replace(URLISH, "")
+    .replace(URLISH, "$1")
     .replace(PATHISH, (m) => (m.match(/^[\s(`'"]/) ? m[0] : ""))
     .replace(TOKEN, (m) => (/\d/.test(m) ? "[hidden]" : m))
     .replace(/[`*_]/g, "")

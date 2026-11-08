@@ -435,6 +435,19 @@ export async function run() {
     process.exit(0);
   }
 
+  // A card is drawn from a scan's brief. Commands that never build one refuse the flag
+  // instead of exiting 0 without it; a baseline with -q drops known findings, so its
+  // brief would read cleaner than the code is.
+  if (opts.card || opts["card-out"]) {
+    const noCard = positionals[0] === "deps" ? "penthera deps (write -o deps.json, then penthera brief deps.json --card)"
+      : ["incident", "incident-init", "assessment-init", "cra", "cra-init", "suppliers"].find((k) => opts[k]) ? "this command"
+        : opts.baseline && opts.quiet ? "--baseline with -q (it counts only new findings; drop -q)" : null;
+    if (noCard) {
+      printError(`--card does not work with ${noCard}. It cards a scan: penthera --card, penthera agents . --card, or penthera brief <reports...> --card.`);
+      process.exit(2);
+    }
+  }
+
   // --rules <dir>: verified rule packs, added before any engine runs.
   if (opts.rules) {
     const { activateRules, printRuleWarnings } = await import("./cli/rules.js");

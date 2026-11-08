@@ -72,7 +72,10 @@ function safeDir(dir, cwd) {
       st = lstatSync(cur);
     }
     if (st.isSymbolicLink()) {
-      if (!insideCwd && st.uid === 0) continue;
+      // A root-owned link is the system's own only when we are not root: run as root
+      // (a container), every link a checkout makes is root's. Windows has no getuid.
+      const uid = typeof process.getuid === "function" ? process.getuid() : 0;
+      if (!insideCwd && uid !== 0 && st.uid === 0) continue;
       throw new CardWriteError(cur, "is a symbolic link; pick a real folder with --card-out");
     }
     if (!st.isDirectory()) throw new CardWriteError(cur, "is not a folder");
@@ -80,29 +83,33 @@ function safeDir(dir, cwd) {
 }
 
 /**
- * Write `buf` to `file` without ever opening what is already there: a new
- * temp file is created exclusively (O_EXCL, O_NOFOLLOW) next to it and renamed
- * over the name. A rename replaces a planted link itself, never its target.
+ * Write all files without ever opening what is already there. Every
+ * destination is checked first, then each file goes to a new temp file
+ * created exclusively (O_EXCL, O_NOFOLLOW) next to it, and only when all are
+ * written are they renamed over their names. A rename replaces a planted link
+ * itself, never its target, and a failure leaves no half-written set.
  */
-function replaceFile(file, buf) {
-  const tmp = join(dirname(file), `.${basename(file)}.${randomBytes(6).toString("hex")}.tmp`);
-  const fd = openSync(tmp, FS.O_WRONLY | FS.O_CREAT | FS.O_EXCL | (FS.O_NOFOLLOW || 0), 0o644);
-  try {
-    let off = 0;
-    while (off < buf.length) off += writeSync(fd, buf, off, buf.length - off);
-  } catch (e) {
-    closeSync(fd);
-    try { unlinkSync(tmp); } catch { /* already gone */ }
-    throw e;
-  }
-  closeSync(fd);
-  try {
+function replaceFiles(files) {
+  for (const { file } of files) {
     const st = (() => { try { return lstatSync(file); } catch { return null; } })();
     if (st && st.isDirectory()) throw new CardWriteError(file, "is a folder");
-    renameSync(tmp, file);
-  } catch (e) {
-    try { unlinkSync(tmp); } catch { /* already gone */ }
-    throw e;
+  }
+  const temps = [];
+  try {
+    for (const { file, buf } of files) {
+      const tmp = join(dirname(file), `.${basename(file)}.${randomBytes(6).toString("hex")}.tmp`);
+      const fd = openSync(tmp, FS.O_WRONLY | FS.O_CREAT | FS.O_EXCL | (FS.O_NOFOLLOW || 0), 0o644);
+      temps.push(tmp);
+      try {
+        let off = 0;
+        while (off < buf.length) off += writeSync(fd, buf, off, buf.length - off);
+      } finally {
+        closeSync(fd);
+      }
+    }
+    files.forEach(({ file }, i) => { renameSync(temps[i], file); temps[i] = null; });
+  } finally {
+    for (const t of temps) if (t) { try { unlinkSync(t); } catch { /* already gone */ } }
   }
 }
 
@@ -116,12 +123,10 @@ export function writeCards(brief, results, { version, out = DEFAULT_CARD_OUT, da
   safeDir(dirname(base), cwd);
   const model = buildCardModel(brief, results, { version, date });
   const cards = renderCards(model);
-  const paths = [];
-  for (const [name, c] of Object.entries(cards)) {
+  const files = Object.entries(cards).flatMap(([name, c]) => {
     const stem = name === "post" ? base : `${base}-og`;
-    replaceFile(`${stem}.png`, c.png);
-    replaceFile(`${stem}.svg`, Buffer.from(c.svg, "utf8"));
-    paths.push(`${stem}.png`, `${stem}.svg`);
-  }
-  return { model, paths };
+    return [{ file: `${stem}.png`, buf: c.png }, { file: `${stem}.svg`, buf: Buffer.from(c.svg, "utf8") }];
+  });
+  replaceFiles(files);
+  return { model, paths: files.map((f) => f.file) };
 }

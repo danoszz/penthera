@@ -4,6 +4,7 @@ import { mkdtempSync, readFileSync, writeFileSync, existsSync, readdirSync, mkdi
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { inflateSync } from "node:zlib";
+import { spawnSync } from "node:child_process";
 import { buildBrief, VERDICTS } from "../src/report/brief.js";
 import { runBrief } from "../src/cli/brief.js";
 import { buildCardModel, publicText } from "../src/card/model.js";
@@ -189,6 +190,13 @@ describe("card model: safe to post", () => {
     const { post, og } = renderCards(modelOf(results));
     for (const svg of [post.svg, og.svg]) expect(svg).not.toContain(key);
     expect(JSON.stringify(modelOf(results))).not.toContain(key);
+  });
+
+  it("a megabyte-long repo-controlled title is cleaned in bounded time", () => {
+    const t0 = performance.now();
+    const out = publicText(`MCP server "${"a.".repeat(500_000)}" runs npx`, 90);
+    expect(performance.now() - t0).toBeLessThan(500);
+    expect(out.length).toBeLessThanOrEqual(90);
   });
 
   it("draws only characters the pixel font has", () => {
@@ -382,11 +390,11 @@ describe("card writes never follow a planted link", () => {
     expect(readdirSync(join(outside, "sub"))).toEqual([]);
   });
 
-  it("refuses a folder planted where a card file goes", () => {
+  it("refuses a folder planted where a card file goes, before writing any card file", () => {
     const { repo } = setup();
-    mkdirSync(join(repo, "penthera-card.png"));
+    mkdirSync(join(repo, "penthera-card.svg"));
     expect(() => write("penthera-card", repo)).toThrow(/is a folder/);
-    expect(readdirSync(repo).filter((f) => f.endsWith(".tmp"))).toEqual([]);
+    expect(readdirSync(repo).sort()).toEqual(["penthera-card.svg"]);
   });
 
   it("creates missing folders one level at a time", () => {
@@ -405,5 +413,24 @@ describe("card writes never follow a planted link", () => {
     expect(code).toBe(2);
     expect(err).toMatch(/share card was not written: .*reports is a symbolic link/);
     expect(readdirSync(outside)).toEqual(["keep.txt"]);
+  });
+});
+
+describe("--card on commands that cannot draw one", () => {
+  const run = (args, cwd) => spawnSync(process.execPath, [join(ROOT, "bin", "penthera.js"), ...args], { cwd, encoding: "utf-8", env: { ...process.env, PENTHERA_NO_ONBOARDING: "1" } });
+  it("penthera deps --card exits 2 instead of skipping the card", () => {
+    const dir = mkdtempSync(join(tmpdir(), "penthera-card-deps-"));
+    writeFileSync(join(dir, "package-lock.json"), JSON.stringify({ name: "x", lockfileVersion: 3, packages: { "": { name: "x" } } }));
+    const r = run(["deps", ".", "--card"], dir);
+    expect(r.status).toBe(2);
+    expect(r.stderr + r.stdout).toMatch(/--card does not work with penthera deps/);
+    expect(readdirSync(dir)).toEqual(["package-lock.json"]);
+  });
+  it("--baseline with -q refuses --card", () => {
+    const dir = mkdtempSync(join(tmpdir(), "penthera-card-base-"));
+    writeFileSync(join(dir, "base.json"), JSON.stringify({ findings: [] }));
+    const r = run(["--repo", ".", "--baseline", "base.json", "-q", "--card"], dir);
+    expect(r.status).toBe(2);
+    expect(r.stderr + r.stdout).toMatch(/--baseline with -q/);
   });
 });
