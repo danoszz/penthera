@@ -266,3 +266,28 @@ describe("in a repo scan", () => {
     expect(r.incomplete).toBeUndefined();
   });
 });
+
+// An unreadable file (EACCES) in any of the three maker checks is named as
+// refused, so the scan is incomplete (exit 2): never a crash, never a silent pass.
+describe("maker checks: an unreadable file is named, not a crash", () => {
+  const isRoot = typeof process.getuid === "function" && process.getuid() === 0;
+  it.skipIf(isRoot || process.platform === "win32")("public env, Server Actions and the lockfile check each name it", async () => {
+    const { chmodSync } = await import("node:fs");
+    const dir = repo({
+      "app/actions.ts": "'use server';\nexport async function x(id){ await db.delete(id); }\n",
+      "app/page.ts": "const k = process.env.NEXT_PUBLIC_STRIPE_SECRET_KEY;\n",
+      "package-lock.json": "{}",
+    });
+    for (const f of ["app/actions.ts", "app/page.ts", "package-lock.json"]) chmodSync(join(dir, f), 0o000);
+    try {
+      for (const scan of [(r) => scanPublicEnv(dir, { refused: r }), (r) => scanServerActions(dir, { refused: r }), (r) => frameworkAdvisoriesForRepo(dir, { refused: r })]) {
+        const refused = [];
+        expect(() => scan(refused)).not.toThrow();
+        expect(refused.length).toBeGreaterThan(0);
+        expect(String(refused[0].reason || refused[0].message)).toMatch(/could not be read|EACCES|refus/i);
+      }
+    } finally {
+      for (const f of ["app/actions.ts", "app/page.ts", "package-lock.json"]) chmodSync(join(dir, f), 0o644);
+    }
+  });
+});
