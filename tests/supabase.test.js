@@ -718,6 +718,28 @@ drop policy if exists gone on public.t;`)).toEqual([]);
     expect(JSON.stringify(res).length).toBeLessThan(256 * 1024);
   }, 120_000);
 
+  it.skipIf(process.platform === "win32")("thousands of folder links and 60k imports: bounded time, and imports through a link still followed (Vercel, PR 312)", () => {
+    const root = repo({ "shared/k.js": `export const k = "${SERVICE}";\n`, "lib/real/x.js": "export {};\n" }, { pkg: NEXT });
+    mkdirSync(join(root, "links"), { recursive: true });
+    for (let i = 0; i < 3000; i++) symlinkSync(join(root, "lib/real"), join(root, `links/l${i}`));
+    symlinkSync(join(root, "shared"), join(root, "app-shared"));
+    // 60,000 imports (under the 2 MiB a file's imports are read from): 3,000 distinct ones through
+    // the folder links, the rest repeats.
+    const imports = Array.from({ length: 60_000 }, (_, i) => `import "../links/l${i % 3000}/x.js";`).join("\n");
+    expect(imports.length).toBeLessThan(2 * 1024 * 1024);
+    mkdirSync(join(root, "app"), { recursive: true });
+    writeFileSync(join(root, "app/page.tsx"), `"use client";\nimport { k } from "../app-shared/k.js";\n${imports}\n`);
+    expect(cpuMs(() => scanSupabase(root), { runs: 1 })).toBeLessThan(5000);
+    // The import through the app-shared link reaches shared/k.js: client code, so critical.
+    expect(hits(root)).toEqual(["supabase-service-role-exposed:critical:shared/k.js:1"]);
+  }, 60_000);
+
+  it("more than 5,000 distinct imports in one client file: the rest aren't followed, and the file is named", () => {
+    const imports = Array.from({ length: 5100 }, (_, i) => `import "./m${i}.js";`).join("\n");
+    const r = scanSupabase(repo({ "app/page.tsx": `"use client";\n${imports}\n` }, { pkg: NEXT }));
+    expect(r.incomplete).toEqual([expect.objectContaining({ file: "app/page.tsx", partial: true })]);
+  });
+
   it("a few names in one file are one finding whose id follows the set", () => {
     const ids = (text) => scanSupabase(repo({ ".env": text })).findings.map((f) => `${f.title}|${f.severity}`);
     const two = ids(`${PUB("NEXT_PUBLIC_")}=\n${PUB("VITE_")}=\n`);
