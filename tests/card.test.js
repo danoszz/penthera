@@ -232,6 +232,40 @@ describe("card model: safe to post", () => {
     expect(publicText("Sign in at login?session=abc")).toBe("Sign in at login");
   });
 
+  it("characters stripped for the font can't join pieces into a URL or key", () => {
+    const zw = "\u200b", shy = "\u00ad";
+    const pw = ["p", "w"].join("");
+    for (const glue of ["`", "*", zw, shy]) {
+      const out = publicText(`see https:${glue}//u5er:${pw}${glue}@evil.example/x now`);
+      expect(out, `glue ${JSON.stringify(glue)}`).not.toMatch(/u5er|evil\.example|:\/\//);
+    }
+    const key = ["sk-abc", "def", "ghi1", "jklmnopqrstuv"];
+    expect(publicText(`key ${key.join(zw)} here`)).not.toContain(key.join(""));
+  });
+
+  it("drops credentials, file paths and URLs without a scheme or with odd passwords", () => {
+    const cases = [
+      `left-pad 1.0.0 → u5er:pa$$@registry.example.com/x.tgz gained network`,
+      "left-pad 1.0.0 → file:/Users/someone/secret-proj/x.tgz",
+      "left-pad 1.0.0 → file:../vendor/x.tgz",
+      "visit //evil.example/phish now",
+      "uses github:org/private-repo",
+      "go to https%3A%2F%2Fu%3Ap%40evil.example",
+      `config {"token":"abc123xyz"}`,
+    ];
+    for (const c of cases) expect(publicText(c), c).not.toMatch(/u5er|pa\$\$|someone|secret-proj|vendor|evil\.example|private-repo|abc123xyz/);
+    expect(publicText("left-pad 1.0.0 → 2.0.0 gained network")).toBe("left-pad 1.0.0 → 2.0.0 gained network");
+  });
+
+  it("hides the value after a sensitive key, and only then", () => {
+    expect(publicText("Authorization: Bearer abcdEFGH1234 sent")).toBe("Authorization: [hidden] [hidden] sent");
+    expect(publicText("password: hunter2 in config")).toBe("password: [hidden] in config");
+    expect(publicText("pw = hunter3")).toBe("pw = [hidden]");
+    expect(publicText("token= abc123 leaked")).toBe("token= [hidden] leaked");
+    expect(publicText("A hardcoded password in source")).toBe("A hardcoded password in source");
+    expect(publicText("Supabase service-role key in src/lib/x.ts")).toBe("Supabase service-role key");
+  });
+
   it("a megabyte-long repo-controlled title is cleaned in bounded time", () => {
     const t0 = performance.now();
     const out = publicText(`MCP server "${"a.".repeat(500_000)}" runs npx`, 90);

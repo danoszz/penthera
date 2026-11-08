@@ -18,58 +18,102 @@ export const CARD_SCHEMA = "penthera.card/1";
 // A long run of key-like characters with at least one digit: an API key, a token, a hash.
 const TOKEN = /[A-Za-z0-9_\-+/=]{20,}/g;
 const PATHISH = /(?:^|[\s(`'"])(?:\.{0,2}\/)?(?:[\w@.-]+\/)+[\w@.-]+(?::\d+)?/g;
-const NAME_CHAR = /[\w.\-)]/;
+// Keys whose value is a secret: the next word after one (or after "key:" / "key=") is hidden.
+const SENSITIVE = new Set(["authorization", "bearer", "basic", "token", "accesstoken", "refreshtoken", "apikey",
+  "key", "secret", "clientsecret", "password", "passwd", "pwd", "pw", "pass", "passphrase", "auth", "cookie",
+  "session", "sessionid", "sig", "signature", "credential", "credentials", "privatekey"]);
+const AUTH_SCHEMES = new Set(["bearer", "basic"]);
+/** A word's key name without quotes, brackets or a trailing ":" / "=", and whether it ended in one. */
+function keyOf(word) {
+  let w = word.toLowerCase().replace(/^["'{(\[]+/, "");
+  let sep = false;
+  while (w && "\"':=".includes(w[w.length - 1])) {
+    if (w.endsWith(":") || w.endsWith("=")) sep = true;
+    w = w.slice(0, -1);
+  }
+  return { name: w, sep };
+}
 
 /**
- * One word made safe to post, before any other rule runs. Dependency titles are
- * `name@version`, and a lockfile version can be a URL with credentials in it
- * (`pkg@https://user:pw@host/pkg.tgz?token=x`), so:
- * - a word is cut at its first "@" after a name character (a package's version,
- *   an email's domain); if the part before it has a ":", it was userinfo
- *   (`user:pw@host`) and the whole word is dropped;
- * - then a word with "://" anywhere is dropped, wherever the URL starts;
+ * One word made safe to post. Dependency titles are `name@version` or
+ * `name from → to`, and a lockfile version can be a URL with credentials in it
+ * (`pkg@https://user:pw@host/pkg.tgz?token=x`, `file:/Users/me/x.tgz`), so:
+ * - a word is cut at its first "@" (a package's version, an email's domain),
+ *   keeping a scoped package's leading "@";
+ * - then any word left with a ":" inside it (not only at its end) is dropped:
+ *   schemes, `user:pw`, `file:../path`, `github:org/repo`, JSON pairs, host:port;
+ * - a word starting with "//" (a scheme-relative URL) or holding a percent
+ *   escape is dropped;
  * - a query string or fragment is cut off, and a `key=value` keeps only the key.
- * No regex scans the word, so its length cannot slow this down.
+ * Only plain loops scan the word, so its length cannot slow this down.
  */
 function redactWord(word) {
   let w = word;
   const end = /[:,;]$/.test(w) ? w[w.length - 1] : "";
-  for (let i = 1; i < w.length; i++) {
-    if (w[i] === "@" && NAME_CHAR.test(w[i - 1])) {
-      const before = w.slice(0, i);
-      if (before.includes(":")) return "";
-      w = before + end;
-      break;
-    }
+  const at = w.indexOf("@", 1);
+  if (at > 0) w = w.slice(0, at) + end;
+  if (w.startsWith("//")) return "";
+  for (let i = 0; i < w.length - 1; i++) {
+    const next = w[i + 1];
+    if (w[i] === ":" && next !== ":") return "";
+    if (w[i] === "%" && i + 2 < w.length && /[0-9a-f]{2}/i.test(w.slice(i + 1, i + 3))) return "";
   }
-  if (w.includes("://")) return "";
   for (const mark of ["?", "#"]) {
-    const at = w.indexOf(mark);
-    if (at > 0 && at < w.length - 1) w = w.slice(0, at);
+    const cut = w.indexOf(mark);
+    if (cut > 0 && cut < w.length - 1) w = w.slice(0, cut);
   }
   const eq = w.indexOf("=");
   if (eq > 0 && eq < w.length - 1) w = `${w.slice(0, eq)}=[hidden]`;
   return w;
 }
 
+/**
+ * Hide the value after a sensitive key written with a separator: `password: x`,
+ * `token= x`, `pw = x`, and after `Bearer` or `Basic`. A key named in prose
+ * ("a hardcoded key in source") hides nothing.
+ */
+function hideValues(words) {
+  const out = [];
+  let hide = false;
+  words.forEach((w, i) => {
+    if (hide && (w === ":" || w === "=")) { out.push(w); return; }
+    const { name, sep } = keyOf(w);
+    const next = words[i + 1];
+    const keyed = (SENSITIVE.has(name) && (sep || next === ":" || next === "=")) || AUTH_SCHEMES.has(name);
+    if (hide) {
+      out.push("[hidden]");
+      hide = AUTH_SCHEMES.has(name);
+      return;
+    }
+    out.push(w);
+    hide = keyed;
+  });
+  return out;
+}
+
+const NOT_DRAWN = /[^\x20-\x7e·×→←•…–]/g;
+
 /** Make a string safe to post: no URLs, credentials, versions, paths, key-like tokens, backticks or control characters. */
 export function publicText(s, max = 120) {
   // Cut first: a title is repo-controlled and can be megabytes long, and every
-  // regex below must run on a bounded string.
+  // regex below must run on a bounded string. Then remove every character that
+  // is dropped anyway (backticks, emphasis, anything the pixel font can't draw,
+  // zero-width characters) BEFORE the checks: removing them later could join
+  // pieces into a URL or a key the checks never saw.
   let t = String(s ?? "").slice(0, max * 4)
     .replace(/[\u0000-\u001f\u007f]/g, " ")
-    .split(/\s+/).map(redactWord).filter(Boolean).join(" ")
+    .replace(/[—]/g, "-").replace(/[‘’]/g, "'").replace(/[“”]/g, '"')
+    .replace(/[`*_]/g, "")
+    .replace(NOT_DRAWN, "");
+  t = hideValues(t.split(/\s+/).map(redactWord).filter(Boolean)).join(" ")
     // A scoped package name (@scope/pkg) looks like a path but is public; keep it.
     .replace(PATHISH, (m) => (/^[\s(`'"]?@[\w.-]+\/[\w.-]+$/.test(m) ? m : m.match(/^[\s(`'"]/) ? m[0] : ""))
     .replace(TOKEN, (m) => (/\d/.test(m) ? "[hidden]" : m))
-    .replace(/[`*_]/g, "")
     .replace(/\s+/g, " ")
     .trim();
   // A title whose path was taken out can end on "in", "at" or "from": drop that word.
   const tail = t.slice(t.lastIndexOf(" ") + 1).toLowerCase();
   if (t.includes(" ") && ["in", "at", "from"].includes(tail)) t = t.slice(0, t.lastIndexOf(" ")).trimEnd();
-  // The pixel font has no glyphs past this set; keep what it can draw.
-  t = t.replace(/[—]/g, "-").replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/[^\x20-\x7e·×→←•…–]/g, "");
   if ([...t].length > max) t = `${dropLastWord([...t].slice(0, max - 1).join(""))}…`;
   return t;
 }
