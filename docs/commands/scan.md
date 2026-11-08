@@ -248,8 +248,9 @@ What a card always shows:
   finding that needs a change.
 - The command that made it, at the bottom.
 
-What it never shows: file paths, file contents, hidden characters or anything
-shaped like a key.
+What it never shows: file paths, file contents, hidden characters, URLs,
+credentials, package versions or anything shaped like a key. A dependency's
+version can be a URL with a password in it, so a card names only the package.
 A finding's title loses its path, and long key-like strings are replaced with
 `[hidden]`. The target is the folder name or the host, not the full path.
 
