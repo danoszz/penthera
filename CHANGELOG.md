@@ -6,9 +6,9 @@ All notable changes to Penthera are documented here. Versioning follows [SemVer]
 
 ## [2.4.0] - 2026-11-08
 
-2.4.0 makes Penthera harder to fool and adds a receipt you can post. Vercel Security Review found 13 ways to hide a finding or stall a scan in this hardening work; every one is fixed, each with a regression test that fails on the old code. Independent reviews by Claude Opus 5.5 and Mythos found three more, also fixed. Crafted files that took minutes or hours now take milliseconds: 8,000 nested object literals went from 15.6 s to 69 ms, a 4 MiB line of `[/]` from about an hour and a half to under a tenth of a second, and 4,000 linked skill files from 18.5 s and 2 GB to under a second. When a file is too big or too strange to finish, the scan now says so and exits 2; it never passes quietly. New: `penthera --card` writes a security receipt for your repo.
+2.4.0 makes Penthera harder to fool and adds a receipt you can post. Vercel Security Review found 13 ways to hide a finding or stall a scan in this hardening work. Every one is fixed, each with a regression test that fails on the old code. Reviews by Claude Opus 5.5 and Mythos found more, also fixed with tests. Crafted files that took seconds to hours now take under a second. 8,000 nested object literals went from 15.6 s to 69 ms. A 4 MiB line of `[/]` went from an estimated hour and a half to under a tenth of a second. 4,000 linked skill files went from 18.5 s and 2 GB to under a second. When a file is too big to finish, the scan says so and exits 2, except in the two cases below. New: `penthera --card` writes a security receipt for your repo.
 
-Known limits: the checks are lexical, not a full parser, so some shapes are still missed on purpose rather than slow: a ternary inside a default parameter, `arguments[n]` in a helper, and a helper that passes its argument on to another helper. A skill file past the walk's file cap, and a symlinked command file inside the project, are skipped without a note; both are older than 2.4 and planned for 2.4.1.
+Known limits: the checks read code token by token, without a full parser. Some shapes are still missed, to keep scans fast: a ternary inside a default parameter, `arguments[n]` in a helper, and a helper that passes its argument on to another helper. A skill file past the walk's file cap, and a symlinked command file inside the project, are skipped without a note. Both are older than 2.4 and planned for 2.4.1.
 
 ### Security
 
@@ -137,9 +137,9 @@ Known limits: the checks are lexical, not a full parser, so some shapes are stil
 - **The Claude Code plugin is skill-only.** It no longer starts Penthera's MCP
   server: Anthropic's plugin directory accepts an MCP server that runs on your
   computer only from verified publishers, and refused the plugin for it. The
-  skill runs the pinned CLI (`npx -y penthera@2.3.2`), and you approve each run.
+  skill runs the pinned CLI (`npx -y penthera@2.4.0`), and you approve each run.
   To keep the MCP tools, add the server yourself:
-  `claude mcp add penthera -- npx -y penthera@2.3.2 mcp`. The same goes for the
+  `claude mcp add penthera -- npx -y penthera@2.4.0 mcp`. The same goes for the
   Agent Plugins copy that GitHub Copilot and Codex read. The repo's own
   `.mcp.json` stays: it is this repo's project config, not part of the plugin.
 - **A closed setup page no longer says Penthera is still installed.** The page
