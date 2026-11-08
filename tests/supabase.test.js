@@ -734,6 +734,14 @@ drop policy if exists gone on public.t;`)).toEqual([]);
     expect(hits(root)).toEqual(["supabase-service-role-exposed:critical:shared/k.js:1"]);
   }, 60_000);
 
+  it("a large real-looking app with thousands of client pages and unresolved @/ imports stays within the budget (review of PR 312)", () => {
+    const files = { "lib/zz/late.ts": `"use client";\nconst k = process.env.${SERVER_NAME};\n` };
+    for (let i = 0; i < 3000; i++) files[`app/p${i}/page.tsx`] = `"use client";\n${[0, 1, 2].map((j) => `import "@/public/images/marketing/campaign-${i}/hero-variant-${j}.webp";`).join("\n")}\n`;
+    const r = scanSupabase(repo(files, { pkg: NEXT }));
+    expect(r.incomplete).toEqual([]);
+    expect(r.findings.map((f) => `${f.severity}:${f.file}`)).toEqual(["medium:lib/zz/late.ts"]);
+  }, 60_000);
+
   it("more than 5,000 distinct imports in one client file: the rest aren't followed, and the file is named", () => {
     const imports = Array.from({ length: 5100 }, (_, i) => `import "./m${i}.js";`).join("\n");
     const r = scanSupabase(repo({ "app/page.tsx": `"use client";\n${imports}\n` }, { pkg: NEXT }));
