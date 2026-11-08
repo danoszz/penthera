@@ -192,6 +192,46 @@ describe("card model: safe to post", () => {
     expect(JSON.stringify(modelOf(results))).not.toContain(key);
   });
 
+  // Vercel finding 01M6Y25Q32PW72S9M471MRKPNV: a v1 lockfile keeps URL versions, and a
+  // dependency title is name@version, so a URL with credentials sat right after "@".
+  it("dependency titles with URL versions lose the URL, userinfo, query and version", () => {
+    // Built at run time, so no credential-shaped literal sits in the repo.
+    const user = "u5er", pw = "pw", tok = ["tok", "3n", "v"].join("");
+    const versions = [
+      `https://${user}:${pw}@registry.example.com/left-pad/-/left-pad-1.3.0.tgz?token=${tok}`,
+      `git+https://${user}:${pw}@git.example.com/org/repo.git#${tok}`,
+      `${user}:${pw}@registry.example.com/left-pad.tgz`,
+      `file:../vendor/left-pad.tgz?token=${tok}`,
+    ];
+    const results = [deps({ findings: versions.map((v) => f({
+      category: "dependency-risk", severity: "critical", confidence: "confirmed", url: "package-lock.json",
+      title: `left-pad@${v}: runs a risky install script`,
+      remediation: `Pin left-pad@${v} to a registry version, see https://${user}:${pw}@docs.example.com/x?token=${tok}.`,
+    })) })];
+    const m = modelOf(results);
+    const { post, og } = renderCards(m);
+    const surfaces = {
+      model: JSON.stringify(m),
+      text: [...textsOf(postLayout(m)), ...textsOf(ogLayout(m))].join("\n"),
+      svg: post.svg + og.svg,
+    };
+    for (const [where, text] of Object.entries(surfaces)) {
+      for (const secret of [`${user}:`, `:${pw}@`, tok, "registry.example.com", "git.example.com", "docs.example.com", "token="]) {
+        expect(text.includes(secret), `${where} contains ${secret}`).toBe(false);
+      }
+    }
+    expect(m.top.title).toBe("left-pad: runs a risky install script");
+    expect(post.svg).toContain("<desc>");
+  });
+
+  it("redacts URLs wherever they start, and keeps a scoped package's name", () => {
+    expect(publicText("x=https://a.example/p and @https://b.example/q and #ftp://c.example/r")).toBe("and and");
+    expect(publicText("@scope/pkg@1.2.3 is pinned")).toBe("@scope/pkg is pinned");
+    expect(publicText("left-pad@1.3.0: runs a script")).toBe("left-pad: runs a script");
+    expect(publicText("mail admin@example.com now")).toBe("mail admin now");
+    expect(publicText("Sign in at login?session=abc")).toBe("Sign in at login");
+  });
+
   it("a megabyte-long repo-controlled title is cleaned in bounded time", () => {
     const t0 = performance.now();
     const out = publicText(`MCP server "${"a.".repeat(500_000)}" runs npx`, 90);
