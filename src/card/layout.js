@@ -26,10 +26,14 @@ function itemValue(it) {
   return "NOT RUN";
 }
 
-/** Keep the first lines and always the last (login, access rules, payments: not proven). */
+// Lines that must stay on a card however short it gets.
+const MUST_KEEP = [/not proven/i, /MCP tool descriptions/i, /couldn't see your site/i, /read nothing/i, /suppressed/i];
+
+/** At most n lines, the ones that must stay first (so they get the room), then the rest. */
 function keepNotChecked(lines, n) {
-  if (lines.length <= n) return lines;
-  return [...lines.slice(0, n - 1), lines[lines.length - 1]];
+  const must = lines.filter((l) => MUST_KEEP.some((re) => re.test(l)));
+  const rest = lines.filter((l) => !must.includes(l));
+  return [...must, ...rest].slice(0, Math.max(n, must.length));
 }
 
 /** Torn edge: a row of pixel teeth under the slip. */
@@ -190,7 +194,7 @@ export function ogLayout(m) {
   const lines = [];
   for (const l of keepNotChecked(m.notChecked, 3)) {
     const w = wrap(l, cols2, 4);
-    if (lines.length + w.length > room) break;
+    if (lines.length + w.length > room) continue;
     lines.push(...w);
   }
   for (const l of lines) { ops.push({ op: "text", s: l, x: L, y, k: 2, fill: C.ink }); y += 30; }
