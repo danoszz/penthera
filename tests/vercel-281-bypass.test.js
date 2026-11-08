@@ -83,3 +83,35 @@ describe("9: whitespace around require(...) and its dot", () => {
     });
   }
 });
+
+// The blind review of ee65d4b and 6361a49 (9 Nov 2026): the same class, open on main too.
+describe("generics, typed ternary branches and require member forms", () => {
+  const ts = (code) => lib(`import { exec } from "child_process";\n${code}\n`);
+  const js = (code) => lib(`const { exec } = require("child_process");\n${code}\n`, "index.js");
+  for (const [name, files] of Object.entries({
+    "a generic arrow": ts(`export const run = <T>(cmd: string) => { exec(cmd); };`),
+    "a generic arrow with a comma": ts(`export const run = <T,>(cmd: string) => { exec(cmd); };`),
+    "a nested generic": ts(`export function run<T extends Array<string>>(cmd: string) { exec(cmd); }`),
+    "a nested generic on a method": ts(`export class R { run<T extends Record<string, number>>(cmd: string) { exec(cmd); } }`),
+    "a generic with parentheses": ts(`export function run<T extends (x: string) => void>(cmd: string) { exec(cmd); }`),
+    "a generic over 200 characters": ts(`export function run<T extends ${Array.from({ length: 40 }, (_, i) => `"v${i}"`).join(" | ")}>(cmd: string) { exec(cmd); }`),
+    "a typed second branch": ts(`export const run = flag ? (a: any) : (cmd: string): void => { exec(cmd); };`),
+    "two typed branches": ts(`export const run = flag ? (a: number) : (cmd: string) => { exec(cmd); };`),
+    "an arrow in both branches": js(`exports.run = flag ? (a) => 1 : (cmd) => exec(cmd);`),
+    "a comparison in the condition": js(`exports.run = x === 1 ? noop : (cmd) => exec(cmd);`),
+    "a nested ternary": js(`exports.run = a ? b : c >= 2 ? d : (cmd) => exec(cmd);`),
+  })) {
+    it(name, async () => { expect(await injection(files)).not.toEqual([]); });
+  }
+  for (const [name, body] of Object.entries({
+    "require(…)?.exec": `router.post("/run", (req, res) => { require("child_process")?.exec(req.body.cmd); });`,
+    'require(…)["exec"]': `router.post("/run", (req, res) => { require("child_process")["exec"](req.body.cmd); });`,
+    "an alias from require(…)?.[\"execSync\"]": `const run = require("child_process")?.["execSync"];\nrouter.post("/run", (req, res) => { run(req.body.cmd); });`,
+  })) {
+    it(name, async () => { expect((await injection(route(body)))[0]?.severity).toBe("critical"); });
+  }
+  it("a generic too long to skip after `function name` makes the file incomplete", async () => {
+    const r = await scanRepo(repo(ts(`export function run<T extends ${"A | ".repeat(2000)}B>(cmd: string) { exec(cmd); }`)));
+    expect(r.incomplete?.length).toBeGreaterThan(0);
+  });
+});
