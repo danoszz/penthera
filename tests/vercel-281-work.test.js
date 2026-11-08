@@ -106,3 +106,21 @@ describe("6: pipes only the prose pass marks are read with the prose reading", (
     for (const s of ["don't worry | sh", "echo it's | sh", "a'b | /usr/bin/env bash"]) expect(firstShellPipe(s), s).not.toBe(-1);
   });
 });
+
+// Vercel review of 8b7af83 (row 15): a helper with thousands of parameters, called
+// with thousands of copies of an exported parameter, scanned every parameter per argument.
+describe("15: helper arguments map to parameters by position", () => {
+  // Spread copies: each one named every later parameter (quadratic before).
+  const gen = (n) => `function helper(${Array.from({ length: n }, (_, i) => `p${i}`).join(", ")}) { exec(p${n - 1}); }\nexports.run = function (...cmd) { helper(${Array(n).fill("...cmd").join(", ")}); };\n`;
+  it("stays linear and still finds the sink", async () => {
+    const r = await linear(gen, 1500);
+    expect(r.findings.some((f) => /command-injection/.test(f.title) && f.severity !== "info") || r.incomplete?.length > 0).toBe(true);
+  }, 60_000);
+  it("position, rest and spread still map; a safe slot stays clean", async () => {
+    const found = async (code) => (await scanRepo(libRepo(code))).findings.some((f) => /command-injection/.test(f.title) && f.severity !== "info");
+    expect(await found(`function helper(a, b, c) { exec(c); }\nexports.run = function (cmd) { helper(1, 2, cmd); };\n`)).toBe(true);
+    expect(await found(`function helper(a, ...rest) { exec(rest[1]); }\nexports.run = function (cmd) { helper(1, 2, cmd); };\n`)).toBe(true);
+    expect(await found(`function helper(a, b, c) { exec(c); }\nexports.run = function (...cmd) { helper(...cmd); };\n`)).toBe(true);
+    expect(await found(`function helper(a, b) { exec(b); }\nexports.run = function (cmd) { helper(cmd, "ls"); };\n`)).toBe(false);
+  });
+});

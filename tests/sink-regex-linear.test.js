@@ -19,7 +19,8 @@ const run = (body, timeout = 120_000) => {
   const r = spawnSync(process.execPath, ["--input-type=module", "-e", `
     const { findSinks } = await import(${JSON.stringify(LIB)});
     const SINK = '\\nconst cp = require("child_process");\\napp.post("/x", (req, res) => { cp.exec(req.body.c); });\\n';
-    const time = (src) => { const s = performance.now(); const hits = findSinks(src).length; return { ms: performance.now() - s, hits }; };
+    // Best of two: one sample on a loaded machine flaked a linear case (49 ms at n, 556 ms at 4n).
+    const time = (src) => { let ms = Infinity, hits = 0; for (let k = 0; k < 2; k++) { const s = performance.now(); hits = findSinks(src).length; ms = Math.min(ms, performance.now() - s); } return { ms, hits }; };
     ${body}`], { encoding: "utf-8", timeout, maxBuffer: 1 << 24 });
   expect(r.status, r.stderr || "timed out").toBe(0);
   return JSON.parse(r.stdout);

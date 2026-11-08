@@ -148,3 +148,21 @@ describe("an unreadable return type keeps the function", () => {
     expect(await injection(ts("export function run(cmd: string): Foo = Bar { return cmd; }"))).toEqual([]);
   });
 });
+
+// Vercel review of 8b7af83 (row 16): a standalone array statement after a typed
+// function was read as more type, and the function's body was lost.
+describe("an array statement after a typed function keeps the body", () => {
+  const ts = (code) => lib(`import { exec } from "child_process";\n${code}\n`);
+  for (const [name, code] of Object.entries({
+    "a primitive return type": "export function f(x: string): string { exec(x); return x; }\n[1, 2].forEach(() => {});",
+    "void, then an array statement": "export function f(x: string): void { exec(x); } [1, 2];",
+    "a named generic type": "export function f(x: string): Promise<void> { exec(x); return null as any; } [a, b];",
+    "a union": "export function f(x: string): A | B { exec(x); return null as any; } [a];",
+    "a method": "export class K { f(x: string): string { exec(x); return x; } }\n[1].map(String);",
+    "a type literal return still works": "export function f(x: string): { ok: boolean } { exec(x); return { ok: true }; }",
+    "an array of type literals": "export function f(x: string): { ok: boolean }[] { exec(x); return []; }",
+    "a conditional holding a literal": "export class R { run(cmd: string): A extends B ? { x: 1 } : C { exec(cmd); } }",
+  })) {
+    it(name, async () => { expect(await injection(ts(code))).not.toEqual([]); });
+  }
+});
