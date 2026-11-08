@@ -44,7 +44,7 @@ describe("audience reports", () => {
         { severity: "low", title: "Server banner discloses its version", url: "https://shop.example/", confidence: "likely", source: "headers" },
       ],
     }, { version: REPORT_VERSION });
-    expect(md).toContain("| Finding | URL | Confidence | Source | Id |");
+    expect(md).toContain("| Finding | URL | Match | Source | Id |");
     expect(md).toContain("| `0123456789abcdef` |");
     // a finding without a stored fid gets the id `memory suppress` would compute for it
     expect(md).toContain(`| \`${findingId({ severity: "low", title: "Server banner discloses its version", url: "https://shop.example/", confidence: "likely", source: "headers" })}\` |`);

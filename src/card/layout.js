@@ -11,6 +11,22 @@
 import { textWidth } from "./draw.js";
 import { C, logoOp, mosaicRows, mosaicSize, wrap, textRight, textCenter } from "./kit.js";
 
+/**
+ * The verdict line: "VERDICT: NOTHING TO FIX NOW". On a check-only card the
+ * number to check is the big block beside it, so the line keeps the verdict
+ * itself. It sits beside the number when it fits there on one line (without
+ * the prefix if need be), or null: then it goes on its own line under the
+ * number, never cut and never over the label.
+ */
+function verdictBeside(m, cols) {
+  const v = upper(String(m.verdict).split(" · ")[0]);
+  const full = `VERDICT: ${v}`;
+  if (wrap(full, cols, 1)[0] === full) return full;
+  return wrap(v, cols, 1)[0] === v ? v : null;
+}
+const verdictText = (m) => `VERDICT: ${upper(String(m.verdict).split(" · ")[0])}`;
+const firstLabel = (m) => (m.tone === "check" ? "CHECK FIRST" : "FIX FIRST");
+
 export const SIZES = { post: { w: 1080, h: 1350 }, og: { w: 1200, h: 630 } };
 
 const MARK = { read: "■", partly: "▪", nothing: "□", "not-run": "□", unread: "□" };
@@ -26,10 +42,14 @@ function itemValue(it) {
   return "NOT RUN";
 }
 
-/** Keep the first lines and always the last (login, access rules, payments: not proven). */
+// Lines that must stay on a card however short it gets.
+const MUST_KEEP = [/not proven/i, /MCP tool descriptions/i, /couldn't see your site/i, /read nothing/i, /suppressed/i];
+
+/** At most n lines, the ones that must stay first (so they get the room), then the rest. */
 function keepNotChecked(lines, n) {
-  if (lines.length <= n) return lines;
-  return [...lines.slice(0, n - 1), lines[lines.length - 1]];
+  const must = lines.filter((l) => MUST_KEEP.some((re) => re.test(l)));
+  const rest = lines.filter((l) => !must.includes(l));
+  return [...must, ...rest].slice(0, Math.max(n, must.length));
 }
 
 /** Torn edge: a row of pixel teeth under the slip. */
@@ -75,10 +95,14 @@ function slipBody(m, { L, R, CX, y }, budget) {
   } else {
     wrap(upper(m.hero.label), leftCols(21), 2).forEach((l, i) => ops.push({ op: "text", s: l, x: L, y: y + i * 46, k: 3, fill: C.ink }));
   }
-  wrap(`VERDICT: ${upper(m.verdict)}`, leftCols(14), 1)
-    .forEach((l) => ops.push({ op: "text", s: l, x: L, y: y + sz.h - 28, k: 2, fill: C.blue }));
+  const beside = verdictBeside(m, leftCols(14));
+  if (beside) ops.push({ op: "text", s: beside, x: L, y: y + sz.h - 28, k: 2, fill: C.blue });
   ops.push({ op: "cells", x: R - sz.w, y, k, gap: g, rows, fill: C.blue });
   y += sz.h + 36;
+  if (!beside) {
+    for (const l of wrap(verdictText(m), Math.floor((R - L) / 14), 2)) { ops.push({ op: "text", s: l, x: L, y: y - 8, k: 2, fill: C.blue }); y += 30; }
+    y += 6;
+  }
   ops.push({ op: "rect", x: L, y, w: R - L, h: 8, fill: C.ink });
   y += 44;
   if (graded) {
@@ -89,7 +113,7 @@ function slipBody(m, { L, R, CX, y }, budget) {
   const cols2 = Math.floor((R - L) / 14), cols3 = Math.floor((R - L) / 21);
   if (m.top && budget.title > 0) {
     // A graded card names the fix right under its "to fix first" line.
-    if (!graded) { ops.push({ op: "text", s: "FIX FIRST", x: L, y, k: 2, fill: C.ink, alpha: 0.6 }); y += 34; }
+    if (!graded) { ops.push({ op: "text", s: firstLabel(m), x: L, y, k: 2, fill: C.ink, alpha: 0.6 }); y += 34; }
     if (graded) for (const l of wrap(`→ ${m.top.title}`, cols2, budget.title)) { ops.push({ op: "text", s: l, x: L, y, k: 2, fill: C.ink }); y += 32; }
     else for (const l of wrap(m.top.title, cols3, budget.title)) { ops.push({ op: "text", s: l, x: L, y, k: 3, fill: C.ink }); y += 44; }
     if (m.top.fix && budget.fix > 0) for (const l of wrap(m.top.fix, cols2, budget.fix)) { ops.push({ op: "text", s: l, x: L, y, k: 2, fill: C.ink, alpha: 0.72 }); y += 30; }
@@ -178,9 +202,14 @@ export function ogLayout(m) {
   } else {
     wrap(upper(m.hero.label), leftCols(21), 2).forEach((l, i) => ops.push({ op: "text", s: l, x: L, y: y + i * 42, k: 3, fill: C.ink }));
   }
-  wrap(`VERDICT: ${upper(m.verdict)}`, leftCols(14), 1).forEach((l) => ops.push({ op: "text", s: l, x: L, y: y + sz.h - 28, k: 2, fill: C.blue }));
+  const beside = verdictBeside(m, leftCols(14));
+  if (beside) ops.push({ op: "text", s: beside, x: L, y: y + sz.h - 28, k: 2, fill: C.blue });
   ops.push({ op: "cells", x: R - sz.w, y, k, gap: g, rows, fill: C.blue });
   y += sz.h + 20;
+  if (!beside) {
+    for (const l of wrap(verdictText(m), cols2, 2)) { ops.push({ op: "text", s: l, x: L, y, k: 2, fill: C.blue }); y += 30; }
+    y += 4;
+  }
   ops.push({ op: "rect", x: L, y, w: R - L, h: 6, fill: C.ink });
   y += 24;
   // Not checked comes before the fix here: on a short card it is the line that must stay.
@@ -190,13 +219,13 @@ export function ogLayout(m) {
   const lines = [];
   for (const l of keepNotChecked(m.notChecked, 3)) {
     const w = wrap(l, cols2, 4);
-    if (lines.length + w.length > room) break;
+    if (lines.length + w.length > room) continue;
     lines.push(...w);
   }
   for (const l of lines) { ops.push({ op: "text", s: l, x: L, y, k: 2, fill: C.ink }); y += 30; }
   if (m.top && y + 76 <= H - 16) {
     y += 14;
-    ops.push({ op: "text", s: "FIX FIRST", x: L, y, k: 2, fill: C.ink, alpha: 0.6 }); y += 32;
+    ops.push({ op: "text", s: firstLabel(m), x: L, y, k: 2, fill: C.ink, alpha: 0.6 }); y += 32;
     ops.push({ op: "text", s: wrap(m.top.title, cols2, 1)[0], x: L, y, k: 2, fill: C.ink });
   }
   return { w: W, h: H, ops };

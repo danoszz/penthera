@@ -83,7 +83,7 @@ export const TOOLS = [
   {
     name: "scan_repo",
     title: "Scan a repository",
-    description: "White-box scan of a local project folder: hardcoded secrets, code-execution sinks, API routes and trust boundaries, runtime versions with known advisories. Offline and read-only. Returns findings with evidence at file:line and confidence labels.",
+    description: "White-box scan of a local project folder: hardcoded secrets, code-execution sinks, API routes and trust boundaries, runtime versions with known advisories, and security headers, cookie flags, CORS and login rate limits as the code sets them. Offline and read-only. Returns findings with evidence at file:line and confidence labels.",
     inputSchema: { type: "object", properties: { path: PATH, max_findings: MAX }, additionalProperties: false },
     annotations: { title: "Scan a repository", ...READ_ONLY },
     async run(args, ctx) {

@@ -36,10 +36,11 @@ import { randomUUID, createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { scanRepo as defaultScanRepo } from "../scan-repo.js";
+import { isProblem } from "../report/counts.js";
 import { scanUrl as defaultScanUrl } from "../scan-url.js";
 import { createEgressContext, runWithEgress, request } from "../utils/http.js";
 import {
-  planFixes, probeRepo, applyDiff, restoreFiles, redactPlan, findingKey, createModelFixer, parsePatch,
+  planFixes, applyDiff, restoreFiles, redactPlan, findingKey, createModelFixer, parsePatch,
 } from "../../lib/fix/index.js";
 import { assertLocalModelUrl } from "../../lib/fix/model.js";
 import { protectedReason } from "../../lib/fix/apply.js";
@@ -326,7 +327,8 @@ export async function runLoop(opts = {}) {
 
   async function scan() {
     const repoResult = await scanRepoFn(repo, {});
-    const stat = dedupe([...(repoResult?.findings || []), ...probeRepo(repo)]);
+    // The repo scan runs the recipes' static checks, so this is the same set the scan and the fix plan count.
+    const stat = dedupe(repoResult?.findings || []);
     let live = [];
     if (url) {
       const r = await scanUrlFn(url, scanOpts);
@@ -435,9 +437,11 @@ export async function runLoop(opts = {}) {
       if (loopRun.findings.initial == null) loopRun.findings.initial = actionable(current.all).length;
       const { ranked, suppressed } = await timed(it.steps, "triage", async () => triage(current));
       const candidates = await timed(it.steps, "plan", () => plan(ranked));
-      it.findings = { total: current.all.length, suppressed, fixable: candidates.length };
+      // Problems in the words every surface uses (src/report/counts.js); suppressed ones are not counted.
+      const problems = ranked.filter((f) => isProblem(f)).length;
+      it.findings = { total: current.all.length, problems, suppressed, fixable: candidates.length };
       loopRun.totals.planned += candidates.length;
-      log(`  scan: ${actionable(current.all).length} findings (${suppressed} suppressed), ${candidates.length} fixable`);
+      log(`  scan: ${problems} problem${problems === 1 ? "" : "s"} (${suppressed} suppressed), ${candidates.length} fix${candidates.length === 1 ? "" : "es"} planned`);
 
       if (!candidates.length) {
         stopReason = heldBack ? "declined-or-failed-left" : "no-fixable-findings";

@@ -13,6 +13,7 @@ import { postLayout, ogLayout, SIZES } from "../src/card/layout.js";
 import { toSvg, rasterize, pathPolygons } from "../src/card/draw.js";
 import { encodePng } from "../src/card/png.js";
 import { GLYPHS } from "../src/card/font.js";
+import { gradeFindings } from "../lib/agents/grade.js";
 
 const ROOT = join(import.meta.dirname, "..");
 const FIXTURES = join(ROOT, "tests", "fixtures", "card");
@@ -52,6 +53,19 @@ const STATES = {
   unread: [
     { target: "https://my-saas-app.com", mode: "url", reachable: true, httpStatus: 403, challenge: { provider: "Vercel" }, findings: [] },
   ],
+  // Only things to check first: a minimal Express app whose headers are read from code (the host may add them).
+  check: [
+    repo(["Content-Security-Policy", "X-Frame-Options", "X-Content-Type-Options", "Strict-Transport-Security"].map((h) => f({
+      url: "server.js", severity: "medium", confidence: "potential", category: "headers", source: "fix-probe:headers",
+      title: `Missing ${h} header`, remediation: "Set it in the app, or check that your host sends it.",
+    }))),
+  ],
+  // A hundred to check: the verdict no longer fits beside the number, so it takes its own line.
+  check100: [
+    repo(Array.from({ length: 100 }, (_, i) => f({
+      url: `src/s${i}.js`, severity: "medium", confidence: "potential", category: "headers", source: "fix-probe:headers", title: "Missing Content-Security-Policy header",
+    }))),
+  ],
   // An agent-config audit alone, shaped like `penthera agents` on a setup with a hidden instruction.
   agents: [
     agents({
@@ -74,7 +88,46 @@ const textsOf = (card) => card.ops.filter((o) => o.op === "text").map((o) => o.s
 describe("card model: the verdict is the brief's", () => {
   it("uses the brief's verdict for every state", () => {
     for (const results of Object.values(STATES)) {
-      expect(modelOf(results).verdict).toBe(buildBrief(results).verdict);
+      // A check-only card adds how many to check: "Nothing to fix now · 4 to check".
+      expect(modelOf(results).verdict.startsWith(buildBrief(results).verdict)).toBe(true);
+    }
+  });
+
+  it("only things to check first: Nothing to fix now · N to check, and the count under it (Daan, 9 Nov)", () => {
+    const m = modelOf(STATES.check);
+    expect(buildBrief(STATES.check).verdict).toBe(VERDICTS.check);
+    expect(m).toMatchObject({ tone: "check", verdict: "Nothing to fix now · 4 to check", hero: { value: "4", label: "to check first" } });
+    // A confirmed problem still leads: Fix now.
+    const withOne = [repo([...STATES.check[0].findings, f({ url: "src/a.ts", severity: "high" })])];
+    expect(modelOf(withOne).verdict).toBe(VERDICTS.fix);
+  });
+
+  it("medium or low things to check first and likely noise do not lower the grade; a problem to act on, or any critical or high, does", () => {
+    expect(gradeFindings([f({ severity: "medium", confidence: "potential" }), f({ severity: "low" }), f({ severity: "medium", url: "test/fixtures/a.js" })])).toEqual({ grade: "A", score: 100 });
+    expect(gradeFindings([f({ severity: "high" })])).toEqual({ grade: "B", score: 85 });
+    // A critical or high fails the run (exit 1) wherever it is, so it lowers the grade too (review, 9 Nov).
+    expect(gradeFindings([f({ severity: "high", url: "skills/x/tests/setup.sh" })])).toEqual({ grade: "B", score: 85 });
+    expect(gradeFindings([f({ severity: "critical", confidence: "potential" })]).grade).toBe("F");
+  });
+
+  it("suppressed findings keep their own verdict, never Nothing to fix now", () => {
+    const b = buildBrief([{ ...STATES.check[0], suppressed: [f({ severity: "critical" })] }]);
+    expect(b.verdict).not.toBe(VERDICTS.check);
+    expect(b.verdict_id).toBe("review");
+  });
+
+  it("the brief names its verdict with a stable id", () => {
+    expect(buildBrief(STATES.check).verdict_id).toBe("check");
+    expect(buildBrief(STATES.findings).verdict_id).toBe("fix");
+    expect(buildBrief(STATES.clean).verdict_id).toBe("clean");
+    expect(buildBrief(STATES.unread).verdict_id).toBe("unread");
+  });
+
+  it("a long count puts the verdict on its own line, whole, at both sizes", () => {
+    for (const layout of [postLayout, ogLayout]) {
+      const texts = textsOf(layout(modelOf(STATES.check100)));
+      expect(texts).toContain("VERDICT: NOTHING TO FIX NOW");
+      expect(texts.some((t) => /NOTHING TO…|TO…/.test(t))).toBe(false);
     }
   });
 
@@ -190,6 +243,112 @@ describe("card model: safe to post", () => {
     const { post, og } = renderCards(modelOf(results));
     for (const svg of [post.svg, og.svg]) expect(svg).not.toContain(key);
     expect(JSON.stringify(modelOf(results))).not.toContain(key);
+  });
+
+  // Vercel finding 01M6Y25Q32PW72S9M471MRKPNV: a v1 lockfile keeps URL versions, and a
+  // dependency title is name@version, so a URL with credentials sat right after "@".
+  it("dependency titles with URL versions lose the URL, userinfo, query and version", () => {
+    // Built at run time, so no credential-shaped literal sits in the repo.
+    const user = "u5er", pw = "pw", tok = ["tok", "3n", "v"].join("");
+    const versions = [
+      `https://${user}:${pw}@registry.example.com/left-pad/-/left-pad-1.3.0.tgz?token=${tok}`,
+      `git+https://${user}:${pw}@git.example.com/org/repo.git#${tok}`,
+      `${user}:${pw}@registry.example.com/left-pad.tgz`,
+      `file:../vendor/left-pad.tgz?token=${tok}`,
+    ];
+    const results = [deps({ findings: versions.map((v) => f({
+      category: "dependency-risk", severity: "critical", confidence: "confirmed", url: "package-lock.json",
+      title: `left-pad@${v}: runs a risky install script`,
+      remediation: `Pin left-pad@${v} to a registry version, see https://${user}:${pw}@docs.example.com/x?token=${tok}.`,
+    })) })];
+    const m = modelOf(results);
+    const { post, og } = renderCards(m);
+    const surfaces = {
+      model: JSON.stringify(m),
+      text: [...textsOf(postLayout(m)), ...textsOf(ogLayout(m))].join("\n"),
+      svg: post.svg + og.svg,
+    };
+    for (const [where, text] of Object.entries(surfaces)) {
+      for (const secret of [`${user}:`, `:${pw}@`, tok, "registry.example.com", "git.example.com", "docs.example.com", "token="]) {
+        expect(text.includes(secret), `${where} contains ${secret}`).toBe(false);
+      }
+    }
+    expect(m.top.title).toBe("left-pad: runs a risky install script");
+    expect(post.svg).toContain("<desc>");
+  });
+
+  it("redacts URLs wherever they start, and keeps a scoped package's name", () => {
+    expect(publicText("x=https://a.example/p and @https://b.example/q and #ftp://c.example/r")).toBe("and and");
+    expect(publicText("@scope/pkg@1.2.3 is pinned")).toBe("@scope/pkg is pinned");
+    expect(publicText("left-pad@1.3.0: runs a script")).toBe("left-pad: runs a script");
+    expect(publicText("mail admin@example.com now")).toBe("mail admin now");
+    expect(publicText("Sign in at login?session=abc")).toBe("Sign in at login");
+  });
+
+  it("characters stripped for the font can't join pieces into a URL or key", () => {
+    const zw = "\u200b", shy = "\u00ad";
+    const pw = ["p", "w"].join("");
+    for (const glue of ["`", "*", zw, shy]) {
+      const out = publicText(`see https:${glue}//u5er:${pw}${glue}@evil.example/x now`);
+      expect(out, `glue ${JSON.stringify(glue)}`).not.toMatch(/u5er|evil\.example|:\/\//);
+    }
+    const key = ["sk-abc", "def", "ghi1", "jklmnopqrstuv"];
+    expect(publicText(`key ${key.join(zw)} here`)).not.toContain(key.join(""));
+  });
+
+  it("drops credentials, file paths and URLs without a scheme or with odd passwords", () => {
+    const cases = [
+      `left-pad 1.0.0 → u5er:pa$$@registry.example.com/x.tgz gained network`,
+      "left-pad 1.0.0 → file:/Users/someone/secret-proj/x.tgz",
+      "left-pad 1.0.0 → file:../vendor/x.tgz",
+      "visit //evil.example/phish now",
+      "uses github:org/private-repo",
+      "go to https%3A%2F%2Fu%3Ap%40evil.example",
+      `config {"token":"abc123xyz"}`,
+    ];
+    for (const c of cases) expect(publicText(c), c).not.toMatch(/u5er|pa\$\$|someone|secret-proj|vendor|evil\.example|private-repo|abc123xyz/);
+    expect(publicText("left-pad 1.0.0 → 2.0.0 gained network")).toBe("left-pad 1.0.0 → 2.0.0 gained network");
+  });
+
+  it("hides the whole value after a sensitive key, and only then", () => {
+    expect(publicText("Authorization: Bearer abcdEFGH1234 sent")).toBe("Authorization: [hidden]");
+    expect(publicText("Authorization: Token abc123xyz")).toBe("Authorization: [hidden]");
+    expect(publicText("password: hunter2, then rotate")).toBe("password: [hidden] then rotate");
+    expect(publicText("password: correct horse battery staple")).toBe("password: [hidden]");
+    expect(publicText("password = 'a b c' and more")).toBe("password = [hidden] and more");
+    expect(publicText("pw = hunter3")).toBe("pw = [hidden]");
+    expect(publicText("token= abc123 leaked")).toBe("token= [hidden]");
+    expect(publicText("DB_PASSWORD: hunter2!xyz")).toBe("DBPASSWORD: [hidden]");
+    expect(publicText("x-api-key: abc.def")).toBe("x-api-key: [hidden]");
+    expect(publicText("X-Auth-Token: abcd1234efgh")).toBe("X-Auth-Token: [hidden]");
+    expect(publicText("secret_key: abc!xyz")).toBe("secretkey: [hidden]");
+    expect(publicText("A hardcoded password in source")).toBe("A hardcoded password in source");
+    expect(publicText("Supabase service-role key in src/lib/x.ts")).toBe("Supabase service-role key");
+  });
+
+  it("drops route paths, home paths, Windows paths and URL fragments", () => {
+    const cases = [
+      "eval in app/[slug]/page.tsx", "eval in app/(auth)/login/[id]/route.ts", "File not read: secrets/[id]/prod.env",
+      "reads ~/.aws/credentials", "[/Users/someone/.ssh/id_rsa]", "a,/Users/someone/x", "\\\\fileserver\\finance\\payroll.xlsx",
+      "Users\\someone\\AppData\\token.txt", "open /secrets now", "(//evil.example/x?y)", "'//evil.example/a'", "x//evil.example/path",
+      "https\uff1a//evil.example/a",
+    ];
+    for (const c of cases) expect(publicText(c), c).not.toMatch(/slug|auth\)|\[id\]|aws|someone|fileserver|payroll|AppData|secrets|evil/);
+    expect(publicText("@scope/pkg@1.2.3 is pinned")).toBe("@scope/pkg is pinned");
+  });
+
+  it("hides keys split by dots or dashes, and never shows the start of a cut key", () => {
+    const split = ["ghp", "ABCDEFGHIJ1234567", "890abcdefghijklmnop"].join(".");
+    expect(publicText(`token ${split} found`)).toBe("token [hidden] found");
+    const long = `${"word ".repeat(90)}${"AKIA".concat("Z".repeat(40))}`;
+    expect(publicText(long, 120)).not.toMatch(/AKIA/);
+  });
+
+  it("keeps the honesty lines on a short card, however many files were unreadable", () => {
+    const m = modelOf(STATES.agents);
+    m.notChecked = ["a.json could not be read", "b.json could not be read", "c.json could not be read",
+      "MCP tool descriptions: servers are not started, so tool-description poisoning is not checked"];
+    for (const layout of [postLayout, ogLayout]) expect(textsOf(layout(m)).join(" ")).toContain("MCP tool descriptions");
   });
 
   it("a megabyte-long repo-controlled title is cleaned in bounded time", () => {

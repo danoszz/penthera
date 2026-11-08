@@ -13,7 +13,7 @@ Black-box scans of a running app (localhost, preview, or staging) and white-box 
 | Mode | Command | Coverage |
 |------|---------|----------|
 | **URL scan** | `penthera https://example.com` | TLS, fingerprinting, endpoint discovery, templates, CORS, cookies, JS CVEs, param discovery, OpenAPI/FastAPI probes, security headers, auth hardening |
-| **Repo scan** | `penthera --repo ./my-app` | API route discovery (Next.js, Express, Hono, Fastify), trust-boundary mapping, hardcoded-secret scanning (including Anthropic, OpenAI, Gemini, Groq, Hugging Face and other AI provider keys), and your GitHub Actions workflows ([below](#github-actions-workflows)) |
+| **Repo scan** | `penthera --repo ./my-app` | API route discovery (Next.js, Express, Hono, Fastify), trust-boundary mapping, hardcoded-secret scanning (including Anthropic, OpenAI, Gemini, Groq, Hugging Face and other AI provider keys), security headers, cookie flags, CORS and login rate limits as your code sets them (the checks [`penthera fix`](fix.md) fixes), and your GitHub Actions workflows ([below](#github-actions-workflows)) |
 | **Combined** | `penthera https://staging.app --repo .` | Black-box and white-box in one run |
 | **Interactive** | `penthera` *(no args)* | Setup wizard: detects the project, runs the offline checks, offers the hook and workflow ([init.md](init.md)) |
 | **Machine audit** | `penthera --machine` | macOS checks (keyloggers, persistence, rootkits) |
@@ -157,7 +157,7 @@ baseline after the upgrade.
 |------|---------|
 | `0` | No critical or high rule fired. This run does not prove login, access rules or payments are right |
 | `1` | Critical or high findings detected (other tools' too, with `--giants`) |
-| `2` | Scan failed or is incomplete (unreachable target, missing path, bad config, a tool the policy requires did not run, a file the scan had to read but refused: a route or server file over 5 MiB, a FIFO or a link out of the project, a dependency input, agent config) |
+| `2` | Scan failed or is incomplete (unreachable target, missing path, bad config, a tool the policy requires did not run, a file the scan had to read but refused: a route, server or code file over 5 MiB, a FIFO or a link out of the project, a dependency input, agent config; or code files past the headers, cookies, CORS and login rate limit check's 5,000-file limit) |
 
 A firewall that refuses the scan isn't a failed scan. The verdict is `Site not read`,
 with no grade, and the exit code follows the findings Penthera could still make, such
@@ -174,9 +174,17 @@ not one per route.
 
 Every finding has an id, `fid` in `-o` JSON, beside the title in the terminal report and
 in the Id column of the Markdown report's findings tables.
-The brief doesn't print it. Use it with `penthera memory suppress <fid> --reason "..." --severity <level>`.
+The brief doesn't print it, but it says how to use it under its problems. Use it with `penthera memory suppress <fid> --reason "..." --severity <level>`, or add the fid and reason to `penthera.suppress.json` to share it with your team; both apply to scans with `--memory`.
 A suppression covers the finding up to that severity, and medium when you give
 none. If the finding escalates past it, it shows again.
+
+In `-o` JSON a repo finding also has `path`, its file (the same value `url`
+holds, which stays for older readers), and every finding has `exploitability`.
+`confidence` says how sure the rule is about what it matched, not whether it
+can be exploited in your app: `exploitability` is `not-assessed` for a rule
+match, and `needs-human-review` where a scanner cannot judge it. Text reports
+use the words `pattern matched`, `likely match`, `possible match` and
+`needs a person` for the four confidence values.
 
 ---
 
@@ -231,8 +239,9 @@ dependency.
 
 What a card always shows:
 
-- The verdict: Fix now, Review, Nothing to fix, Nothing to assess, Site not
-  read, or how many findings are suppressed.
+- The verdict: Fix now, Review, Nothing to fix now (only things to check
+  first, with how many: `Nothing to fix now · 4 to check`), Nothing to fix,
+  Nothing to assess, Site not read, or how many findings are suppressed.
 - On an agent-config card, the audit's grade as the big letter, with its score
   out of 100 next to it and the number to fix first as a line. Repo and URL
   scans have no score, so their card leads with the number to fix first; none
@@ -248,8 +257,9 @@ What a card always shows:
   finding that needs a change.
 - The command that made it, at the bottom.
 
-What it never shows: file paths, file contents, hidden characters or anything
-shaped like a key.
+What it never shows: file paths, file contents, hidden characters, URLs,
+credentials, package versions or anything shaped like a key. A dependency's
+version can be a URL with a password in it, so a card names only the package.
 A finding's title loses its path, and long key-like strings are replaced with
 `[hidden]`. The target is the folder name or the host, not the full path.
 
@@ -286,7 +296,8 @@ Each finding points to the file and line. `explain_finding` knows all four ids. 
 
 Every `--repo` scan adds a **Coverage** section to the terminal, Markdown and
 JSON (`coverage`) reports. For each check (the secret scan, route and
-code-pattern analysis, runtime versions) it says how many files were read and
+code-pattern analysis, runtime versions, and headers, cookies, CORS and login
+rate limits) it says how many files were read and
 why the others were not: file type not read, over the size limit, a language
 route analysis does not support, or no server routes found (a client-only app
 has none). Each file is read whole, up to a size limit: 64 MiB for the secret
@@ -300,7 +311,20 @@ nothing, or a linked folder outside it, is named the same way. Route analysis re
 Hono and Fastify routes. How many routes it found is part of Coverage, not a
 finding. Source files no code
 analysis read are listed as blind spots, up to 200. A file that was not read
-is unchecked, not clean. Dependency behaviour and agent config have their own
+is unchecked, not clean. Headers read from code are marked `potential`: your
+host or CDN may still add them, and a scan of the live address shows what it
+sends. The headers check reads `next.config.*`, `middleware.*` and `vercel.json`
+for a Next.js app, and every code file for Express, Hono and Fastify. That
+check reads up to 5,000 code files of up to 5 MiB each, leaving out
+dependencies, generated output (`dist`, `build`, `.next`, `out` and the like)
+and folders git ignores. A linked file is read when its target is inside the
+project. A file it refused (a link out of the project, a FIFO, over the size
+limit), one it could not fully check, or one past the 5,000, makes the scan
+incomplete (exit 2) and is named in the report; scan each app folder on its own
+with `--repo <folder>`. Cookie calls written over several lines are checked
+too; `penthera fix` edits only one-line calls. `vercel.json` headers count
+when they are set for every route (`/(.*)`), and HSTS with `max-age=0` does
+not count. Dependency behaviour and agent config have their own
 commands (`penthera deps`, `penthera agents`) and are listed as not part of a
 repo scan.
 
