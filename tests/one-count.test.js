@@ -218,3 +218,24 @@ describe("what an agent reads (gaia feedback, 8 Nov)", () => {
     expect(lines.slice(-2).join("\n")).toMatch(/5 fixes planned for 8 problems\n\s+Apply one:/);
   });
 });
+
+describe("small things from the re-check (9 Nov)", () => {
+  it("path is a file, never a route", async () => {
+    const { stampProvenance } = await import("../lib/provenance.js");
+    const [route, file, addr] = stampProvenance([{ url: "/api/orders", title: "a" }, { url: "src/a.ts", title: "b" }, { url: "https://x.test/", title: "c" }]);
+    expect(route.path).toBeUndefined();
+    expect(file.path).toBe("src/a.ts");
+    expect(addr.path).toBeUndefined();
+  });
+
+  it("the dashboard demo prints the fix loop's own scan line", async () => {
+    // The parser in runs.js, as it stands there, must read the line the demo prints.
+    const runs = readFileSync(resolve("src/ui/api/runs.js"), "utf-8");
+    const parser = new RegExp(runs.match(/\/(\^\\s\*scan: [^\n]*?planned)\//)[1]);
+    const demo = readFileSync(resolve("src/ui/api/demo.js"), "utf-8");
+    const tpl = demo.match(/log\(`( {2}scan: [^`]*)`\)/)[1];
+    const line = tpl.replace(/\$\{remaining\}/g, "9").replace(/\$\{fixable\}/g, "3").replace(/\$\{[^}]*\}/g, (m) => (m.includes("es") ? "es" : "s"));
+    expect(line).toBe("  scan: 9 problems (1 suppressed), 3 fixes planned");
+    expect(parser.test(line)).toBe(true);
+  });
+});

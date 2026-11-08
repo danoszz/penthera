@@ -17,11 +17,14 @@ section: Changed
 - **The fix planner's checks are bounded.** Now that every scan runs them, each
   code file is read once and dropped, a long line can no longer make the CORS
   or cookie check quadratic (80 KB took seven seconds before; 5 MiB now takes
-  milliseconds), each check keeps the 25 worst hits per file, and symbolic
-  links are no longer followed. A code file that check could not read (over
-  the size limit, a device or FIFO, unreadable) or never reached (past the
-  2,000-file walk) makes the scan incomplete and exits 2, as a refused route
-  file already did. Any number of `cookies()` stores is read, padding inside
+  milliseconds), each check keeps the 25 worst hits per file, and a link is
+  followed only inside the project. A code file that check could not read
+  (over the size limit, a device or FIFO, a link out of the project,
+  unreadable) or never reached (past the 5,000-file walk, which leaves out
+  generated and git-ignored folders) makes the scan incomplete and exits 2, as
+  a refused route file already did. Cookie calls written over several lines
+  (the Prettier style) are now checked, and `vercel.json` headers count only
+  when set for every route. Any number of `cookies()` stores is read, padding inside
   `.get( "origin" )` is read as before, and a file with many hits holds only
   the 25 worst in memory.
 - **Words an agent can act on.** In the JSON a repo finding also has `path`

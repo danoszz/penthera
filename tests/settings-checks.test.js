@@ -187,8 +187,10 @@ describe("refused and linked files (row 2)", () => {
     const outside = repo({ "secret.js": 'res.cookie("token", v);\n' });
     symlinkSync(join(outside, "secret.js"), join(root, "link.js"));
     symlinkSync(outside, join(root, "linked-dir"));
-    const { findings, coverage } = probeRepoDetailed(root);
-    expect(coverage.skipped).toEqual({ "too-large": 1, refused: 1 });
+    const { findings, coverage, notRead } = probeRepoDetailed(root);
+    // The FIFO, the linked file (its target is outside) and the linked folder (outside) are refused and named.
+    expect(coverage.skipped).toEqual({ "too-large": 1, refused: 3 });
+    expect(notRead.map((n) => n.file).sort()).toEqual(["big.js", "link.js", "linked-dir", "pipe.js"]);
     expect(coverage.examined).toEqual(["app.js"]);
     // Nothing from the linked file or folder; the header findings name no file (no entry file here).
     expect(findings.filter((f) => f.category !== "headers").map((f) => f.file)).toEqual(["app.js"]);
@@ -242,28 +244,51 @@ describe("refused and linked files (row 2)", () => {
     expect(r.findings).toContainEqual(expect.objectContaining({ title: "Cookie calls not all checked: app/a.ts", severity: "info" }));
   }, 60_000);
 
-  it("2,000 decoy files ahead of the real server: incomplete, exit 2, and the first file not read is named (review, 7 Nov)", () => {
+  it("5,000 decoy files ahead of the real server: incomplete, exit 2, and the first file not read is named (review, 7 Nov)", () => {
     const files = { ...EXPRESS };
-    for (let i = 0; i < 2001; i++) files[`aaa/f${String(i).padStart(4, "0")}.js`] = "";
+    for (let i = 0; i < 5001; i++) files[`aaa/f${String(i).padStart(4, "0")}.js`] = "";
     files["zserver.js"] = 'const cors = require("cors");\napp.use(cors({ origin: "*" }));\nres.cookie("session", "x");\n';
     const root = repo(files);
     const report = join(root, "..", `${root.split("/").pop()}.json`);
     temps.push(report);
     const out = spawnSync(process.execPath, [resolve("bin/penthera.js"), "--repo", root, "-o", report], { encoding: "utf-8", env: { ...process.env, HOME: root, NO_COLOR: "1", CI: "1" }, timeout: 120_000 });
     expect(out.status).toBe(2);
-    expect(out.stdout + out.stderr).toMatch(/aaa\/f2000\.js/);
+    expect(out.stdout + out.stderr).toMatch(/aaa\/f5000\.js/);
     const json = JSON.parse(readFileSync(report, "utf-8"));
-    expect(json.incomplete).toEqual([{ file: "aaa/f2000.js", reason: "past the settings check's 2000-file limit (2 not read)" }]);
-    expect(json.findings).toContainEqual(expect.objectContaining({ title: "Settings check stopped at 2,000 code files", severity: "info" }));
+    expect(json.incomplete).toContainEqual({ file: "aaa/f5000.js", reason: "past the settings check's 5000-file limit (2 not read)" });
+    expect(json.findings).toContainEqual(expect.objectContaining({ title: "Settings check stopped at 5,000 code files", severity: "info" }));
   }, 120_000);
 
-  it("counts code files past the 2,000-file walk", () => {
+  it("counts code files past the 5,000-file walk", () => {
     const files = { ...EXPRESS };
-    for (let i = 0; i < 2003; i++) files[`src/f${String(i).padStart(4, "0")}.js`] = "";
+    for (let i = 0; i < 5003; i++) files[`src/f${String(i).padStart(4, "0")}.js`] = "";
     const { coverage } = probeRepoDetailed(repo(files));
     expect(coverage.over).toBe(3);
-    expect(coverage.firstOver).toBe("src/f2000.js");
-    expect(coverage.examined).toHaveLength(2000);
+    expect(coverage.firstOver).toBe("src/f5000.js");
+    expect(coverage.examined).toHaveLength(5000);
+  });
+
+  it("generated and git-ignored folders do not count toward the cap (review re-check, 9 Nov)", async () => {
+    const files = { ...NEXT, ".gitignore": "local/\n" };
+    for (let i = 0; i < 800; i++) files[`src/m${i}.ts`] = "";
+    for (let i = 0; i < 4300; i++) files[`out/_next/c${i}.js`] = "";
+    for (let i = 0; i < 300; i++) files[`local/x${i}.js`] = "";
+    const root = repo(files);
+    execFileSync("git", ["init", "-q"], { cwd: root });
+    const r = await scanRepo(root);
+    expect(r.incomplete ?? []).toEqual([]);
+    expect(r.coverage.families.find((f) => f.id === "app-settings").skipped).not.toHaveProperty("settings-file-cap");
+  }, 120_000);
+
+  it("a linked code file inside the project is read; one outside it is named and the scan is incomplete", async () => {
+    const root = repo({ ...EXPRESS, "lib/real.js": 'res.cookie("session", v);\n' });
+    symlinkSync(join(root, "lib/real.js"), join(root, "server.js"));
+    const outside = repo({ "x.js": 'res.cookie("token", v);\n' });
+    const inner = probeRepoDetailed(root);
+    expect(inner.findings.filter((f) => f.category === "cookie").map((f) => f.file).sort()).toEqual(["lib/real.js", "server.js"]);
+    symlinkSync(join(outside, "x.js"), join(root, "out-link.js"));
+    const r = await scanRepo(root);
+    expect(r.incomplete).toContainEqual({ file: "out-link.js", reason: expect.stringMatching(/outside the project/) });
   });
 });
 
@@ -309,4 +334,45 @@ describe("nothing the scan found before is lost, and the fix plan sees the scan'
     const scan = await scanRepo(root);
     expect(scan.findings.filter((f) => f.category === "cors")).toHaveLength(1);
   });
+});
+
+describe("review re-check fixes (9 Nov)", () => {
+  it("vercel.json counts headers set for every route only; a single route, a comment key or HSTS max-age=0 do not", () => {
+    const vercel = {
+      comment: { key: "X-Content-Type-Options" },
+      headers: [
+        { source: "/never-used", headers: ["Content-Security-Policy", "X-Frame-Options"].map((key) => ({ key, value: "x" })) },
+        { source: "/(.*)", headers: [{ key: "Strict-Transport-Security", value: "max-age=0" }, { key: "Referrer-Policy", value: "no-referrer" }] },
+      ],
+    };
+    const root = repo({ ...NEXT, "vercel.json": JSON.stringify(vercel), "next.config.mjs": "export default {};\n" });
+    const titles = probeRepoDetailed(root).findings.filter((f) => f.category === "headers").map((f) => f.title).join("\n");
+    for (const h of ["Content-Security-Policy", "X-Frame-Options", "X-Content-Type-Options", "Strict-Transport-Security"]) expect(titles).toContain(h);
+    expect(titles).not.toContain("Referrer-Policy");
+  });
+
+  it("a cookie call written over several lines (Prettier) is reported, and the fix leaves it alone", async () => {
+    const src = 'res.cookie("session", token, {\n  maxAge: 1000,\n});\n';
+    expect(probeCookies("app.js", src)).toEqual([expect.objectContaining({ title: 'Cookie "session" missing HttpOnly, missing Secure, missing SameSite', line: 1 })]);
+    const root = repo({ ...EXPRESS, "app.js": src });
+    const { plans } = await planFixes(root, probeRepoDetailed(root).findings.filter((f) => f.category === "cookie"));
+    expect(plans).toEqual([]);
+  });
+
+  it("multi-line reading stays bounded: unclosed calls over many lines end in the read budget, not hours", () => {
+    const t = Date.now();
+    const found = probeCookies("a.js", 'res.cookie("s", v,\n'.repeat(200_000));
+    expect(Date.now() - t).toBeLessThan(15_000);
+    expect(found.at(-1)).toMatchObject({ title: "Cookie calls not all checked: a.js", incomplete: { file: "a.js" } });
+  }, 60_000);
+
+  it("the scan's fix line does not plan on a large repo: 4 files of 3.9 MB of cookies stay fast and uncounted", () => {
+    const files = { ...EXPRESS };
+    for (let i = 0; i < 4; i++) files[`s${i}.js`] = 'res.cookie("session","b");\n'.repeat(Math.floor(3.9e6 / 27));
+    const root = repo(files);
+    const t = Date.now();
+    const out = spawnSync(process.execPath, [resolve("bin/penthera.js"), "--repo", root], { encoding: "utf-8", env: { ...process.env, HOME: root, NO_COLOR: "1", CI: "1" }, timeout: 120_000 });
+    expect(Date.now() - t).toBeLessThan(30_000);
+    expect(out.stdout).toMatch(/Fixes: penthera fix --plan --repo/);
+  }, 120_000);
 });

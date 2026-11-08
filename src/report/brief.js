@@ -54,7 +54,7 @@ const SKIP_LABELS = {
   "sink-file-cap": "past the eval and exec check's 5,000-file limit",
   "no-api-surface": "not analysed because no API routes were found",
   "language-not-supported": "in a language route analysis does not support",
-  "settings-file-cap": "past the settings check's 2,000-file limit",
+  "settings-file-cap": "past the settings check's 5,000-file limit",
   refused: "refused (a link out of the project, a device or a FIFO)",
   unreadable: "that could not be read",
 };

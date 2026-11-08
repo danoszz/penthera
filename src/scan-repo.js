@@ -227,7 +227,7 @@ export async function scanRepo(repoPath, opts = {}) {
   // Headers, cookie flags, CORS and login rate limits, read from the code. The
   // fix plan reads the same findings from this scan, so both count the same.
   progress("Checking headers, cookies, CORS and login rate limits...");
-  settings = probeRepoDetailed(repoPath);
+  settings = probeRepoDetailed(repoPath, undefined, { ignored });
   // A code file this check could not read, or never reached past its cap, was
   // not checked: the run is incomplete (exit 2), as for the route scan's files.
   for (const n of settings.notRead) noteRefused({ path: n.file, reason: n.reason });

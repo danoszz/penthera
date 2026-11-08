@@ -244,8 +244,13 @@ function initArgs(argv) {
   return null;
 }
 
-/** Above this many problems the scan names `penthera fix` without counting: each problem's plan reads the repo. */
-const FIX_LINE_MAX_PROBLEMS = 50;
+/**
+ * The scan counts fixes only on a run this small: each problem's plan may read
+ * every code file again. Above either limit it names `penthera fix` without a
+ * number, so a large or crafted repo never makes every scan slow.
+ */
+const FIX_LINE_MAX_PROBLEMS = 30;
+const FIX_LINE_MAX_CODE_BYTES = 6 * 1024 * 1024;
 
 /**
  * The scan's fix line: the fixes `penthera fix --plan` would plan for this
@@ -258,11 +263,13 @@ async function fixLine(repo, findings) {
   const command = `penthera fix --plan --repo ${repo}`;
   try {
     const { planFixes } = await import("../lib/fix/index.js");
+    const { codeBytes } = await import("../lib/fix/util.js");
     const { isProblem } = await import("./report/counts.js");
     const { planCounts } = await import("./cli/fix.js");
     const problems = findings.filter((f) => isProblem(f));
     if (problems.length > FIX_LINE_MAX_PROBLEMS) return { command };
-    const { plans } = await planFixes(repo, problems);
+    if (problems.length && codeBytes(repo, FIX_LINE_MAX_CODE_BYTES) > FIX_LINE_MAX_CODE_BYTES) return { command };
+    const { plans } = await planFixes(repo, problems, { countOnly: true });
     const { fixes, covered } = planCounts(findings, plans);
     return { fixes, covered, problems: problems.length, command };
   } catch {

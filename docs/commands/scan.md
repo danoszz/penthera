@@ -157,7 +157,7 @@ baseline after the upgrade.
 |------|---------|
 | `0` | No critical or high rule fired. This run does not prove login, access rules or payments are right |
 | `1` | Critical or high findings detected (other tools' too, with `--giants`) |
-| `2` | Scan failed or is incomplete (unreachable target, missing path, bad config, a tool the policy requires did not run, a file the scan had to read but refused: a route, server or code file over 5 MiB, a FIFO or a link out of the project, a dependency input, agent config; or code files past the headers, cookies, CORS and login rate limit check's 2,000-file limit) |
+| `2` | Scan failed or is incomplete (unreachable target, missing path, bad config, a tool the policy requires did not run, a file the scan had to read but refused: a route, server or code file over 5 MiB, a FIFO or a link out of the project, a dependency input, agent config; or code files past the headers, cookies, CORS and login rate limit check's 5,000-file limit) |
 
 A firewall that refuses the scan isn't a failed scan. The verdict is `Site not read`,
 with no grade, and the exit code follows the findings Penthera could still make, such
@@ -244,9 +244,16 @@ is unchecked, not clean. Headers read from code are marked `potential`: your
 host or CDN may still add them, and a scan of the live address shows what it
 sends. The headers check reads `next.config.*`, `middleware.*` and `vercel.json`
 for a Next.js app, and every code file for Express, Hono and Fastify. That
-check reads up to 2,000 code files of up to 5 MiB each. A file it refused, or
-one past the 2,000, makes the scan incomplete (exit 2) and is named in the
-report; scan each app folder on its own with `--repo <folder>`. Dependency behaviour and agent config have their own
+check reads up to 5,000 code files of up to 5 MiB each, leaving out
+dependencies, generated output (`dist`, `build`, `.next`, `out` and the like)
+and folders git ignores. A linked file is read when its target is inside the
+project. A file it refused (a link out of the project, a FIFO, over the size
+limit), one it could not fully check, or one past the 5,000, makes the scan
+incomplete (exit 2) and is named in the report; scan each app folder on its own
+with `--repo <folder>`. Cookie calls written over several lines are checked
+too; `penthera fix` edits only one-line calls. `vercel.json` headers count
+when they are set for every route (`/(.*)`), and HSTS with `max-age=0` does
+not count. Dependency behaviour and agent config have their own
 commands (`penthera deps`, `penthera agents`) and are listed as not part of a
 repo scan.
 
