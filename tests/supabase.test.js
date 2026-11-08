@@ -637,6 +637,30 @@ drop policy if exists gone on public.t;`)).toEqual([]);
     expect(JSON.stringify(res).length).toBeLessThan(512 * 1024);
   }, 120_000);
 
+  it("names spread over 30k files, a burnt budget and a 300-character name (review of PR 312)", async () => {
+    // 30,000 files with two public names each: at most 1,000 file findings plus one overflow.
+    const files = {};
+    for (let i = 0; i < 30_000; i++) files[`cfg/c${i}.json`] = JSON.stringify({ a: `${PUB("NEXT_PUBLIC_")}_A${i}`, b: `${PUB("VITE_")}_B${i}` });
+    const root = repo(files);
+    const r = await scanRepo(root);
+    const exposed = r.findings.filter((f) => f.templateId === "supabase-service-role-exposed");
+    expect(exposed.length).toBeLessThanOrEqual(1001);
+    expect(exposed.some((f) => /^1000\+ more files use public env names/.test(f.title))).toBe(true);
+    expect(JSON.stringify(r).length).toBeLessThan(8 * 1024 * 1024);
+    expect(r.incomplete.length).toBeLessThanOrEqual(1001);
+    // Server-only reads that are never reported don't use up the budget of a real public name.
+    const burn = {};
+    for (let i = 0; i < 25; i++) burn[`server/s${i}.ts`] = Array.from({ length: 1000 }, (_, k) => `process.env.SUPABASE_SERVICE_ROLE_KEY_${i}_${k};`).join("\n");
+    burn[".env.production"] = `${PUB("NEXT_PUBLIC_")}=\n`;
+    const [real] = scanSupabase(repo(burn)).findings.filter((f) => f.file === ".env.production");
+    expect([real.title, real.line, real.severity]).toEqual([`Service-role key under a public env name: \`${PUB("NEXT_PUBLIC_")}\``, 1, "high"]);
+    // A name longer than any bound is still read.
+    const longName = `${PUB("NEXT_PUBLIC_")}_${"X".repeat(300)}`;
+    const [lf] = scanSupabase(repo({ ".env": `${longName}=\n` })).findings;
+    expect(lf.severity).toBe("high");
+    expect(lf.title.length).toBeLessThan(300);
+  }, 120_000);
+
   it("a few names in one file are one finding whose id follows the set", () => {
     const ids = (text) => scanSupabase(repo({ ".env": text })).findings.map((f) => `${f.title}|${f.severity}`);
     const two = ids(`${PUB("NEXT_PUBLIC_")}=\n${PUB("VITE_")}=\n`);
