@@ -172,7 +172,8 @@ export async function scanRepo(repoPath, opts = {}) {
   progress("Checking Supabase keys and row-level security...");
   const supabase = scanSupabase(repoPath, { ignored });
   result.findings.push(...supabase.findings);
-  result.supabase = { migrations: supabase.migrations };
+  // The SQL files it read, so Coverage reports what was read, not what exists (row 23).
+  result.supabase = { migrations: supabase.migrations, read: supabase.read };
   // What it couldn't read whole (a refused, oversized or over-budget
   // migration) makes the scan incomplete: exit 2, never a silent pass.
   for (const inc of supabase.incomplete) {

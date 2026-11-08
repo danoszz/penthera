@@ -232,7 +232,19 @@ describe("supabase-rls-disabled", () => {
   it("marks dynamic SQL and a file that ends inside a comment as unchecked, and keeps what came before (row 19)", () => {
     const r = mig({ "001.sql": "create table public.a (id int);\ndo $$ begin execute 'create table public.b (id int)'; end $$;\n/* never closed" });
     expect(tablesOf(r)).toEqual(["public.a"]);
-    expect(r.unchecked.map((u) => u.why)).toEqual([expect.stringContaining("ends inside a comment"), expect.stringContaining("function or DO block")]);
+    expect(r.unchecked.map((u) => u.why).sort()).toEqual([expect.stringContaining("function or DO block"), expect.stringContaining("ends inside a comment")]);
+  });
+
+  it("RLS turned on in a loop makes the table findings potential, never drops them", () => {
+    const root = repo({ "supabase/migrations/001.sql": "create table public.a (id int);\ndo $$ declare t text; begin for t in select tablename from pg_tables where schemaname = 'public' loop execute format('alter table %I enable row level security', t); end loop; end $$;\n" });
+    const f = scanSupabase(root).findings.find((x) => x.templateId === "supabase-rls-disabled");
+    expect([f.severity, f.confidence]).toEqual(["high", "potential"]);
+  });
+
+  it("a statement past the token cap keeps its start and is marked (row 4)", () => {
+    const r = mig({ "001.sql": `create table public.wide (${Array.from({ length: 30_000 }, (_, i) => `c${i} int`).join(", ")});` });
+    expect(tablesOf(r)).toEqual(["public.wide"]);
+    expect(r.unchecked[0].why).toContain("over 20000 tokens");
   });
 
   it("over the work budget it says so and keeps the findings it has (row 17)", () => {
@@ -324,6 +336,18 @@ describe("caps, refusals and chunk edges (BYPASS-CHECKLIST)", () => {
     expect(scanSupabase(root).incomplete.map((i) => i.file)).toEqual(["supabase/migrations"]);
   });
 
+  it("row 1: padding a next.config env object past any length still finds the key name", () => {
+    const pad = Array.from({ length: 20_000 }, (_, i) => `  PAD_${i}: "x",`).join("\n");
+    const root = repo({ "next.config.js": `module.exports = {\n  env: {\n    nested: { deeper: { a: 1 } },\n${pad}\n    ${SERVER_NAME}: process.env.${SERVER_NAME},\n  },\n};\n` });
+    expect(hits(root)).toEqual(["supabase-service-role-exposed:high:next.config.js:2"]);
+  });
+
+  it("row 15: nested env objects don't make the config check quadratic", () => {
+    const text = `module.exports = ${"{ env: ".repeat(100_000)}1${" }".repeat(100_000)};`;
+    const root = repo({ "next.config.js": text });
+    expect(cpuMs(() => scanSupabase(root), { runs: 2 })).toBeLessThan(3000);
+  });
+
   it("row 3: a key across the 8 MiB chunk edge is still found, on the right line", () => {
     const pad = "x".repeat(8 * 1024 * 1024 - 100);
     const root = repo({ "public/app.js": `${pad}\nconst k="${SERVICE}";\n` });
@@ -333,6 +357,14 @@ describe("caps, refusals and chunk edges (BYPASS-CHECKLIST)", () => {
   it("row 12: a last line with no newline is read like any other", () => {
     const root = repo({ "supabase/migrations/001.sql": "create table public.a (id int)" });
     expect(scanSupabase(root).findings.map((f) => f.templateId)).toEqual(["supabase-rls-disabled"]);
+  });
+
+  it.skipIf(process.platform === "win32")("row 23: Coverage counts a refused migration as not read", async () => {
+    const root = repo({ "supabase/migrations/001.sql": "create table public.a (id int);" });
+    execFileSync("mkfifo", [join(root, "supabase/migrations/002.sql")]);
+    const r = await scanRepo(root);
+    expect(r.incomplete.map((i) => i.file)).toEqual(["supabase/migrations/002.sql"]);
+    expect(r.coverage.families.find((f) => f.id === "supabase")).toMatchObject({ examined: 1 });
   });
 
   it("the repo scan runs it, and an unreadable migration exits incomplete", async () => {
