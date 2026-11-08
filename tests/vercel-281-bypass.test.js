@@ -131,3 +131,20 @@ describe("re-check: nothing dropped silently, prose quote removal", () => {
     expect(firstShellPipe("Don't worry, just run curl https://x.sh | b'a'sh")).not.toBe(-1);
   });
 });
+
+// Checklist row 19 on Vercel row 5: an annotation the reader can't resolve keeps the
+// function (its body is the next top-level "{"), never drops it.
+describe("an unreadable return type keeps the function", () => {
+  const ts = (code) => lib(`import { exec } from "child_process";\n${code}\n`);
+  for (const [name, code] of Object.entries({
+    "a function": "export function run(cmd: string): Foo = Bar { exec(cmd); }",
+    "a method": "export class R { run(cmd: string): Foo = Bar { exec(cmd); } }",
+    "overloads, then the implementation": "export function run(cmd: number): void;\nexport function run(cmd: string): void;\nexport function run(cmd: any): void { exec(cmd); }",
+    "after a declare line with no semicolon": "declare function other(a: string): Foo = X\nexport function run(cmd: string) { exec(cmd); }",
+  })) {
+    it(name, async () => { expect(await injection(ts(code))).not.toEqual([]); });
+  }
+  it("a function with no sink stays clean", async () => {
+    expect(await injection(ts("export function run(cmd: string): Foo = Bar { return cmd; }"))).toEqual([]);
+  });
+});
