@@ -285,7 +285,8 @@ describe("refused and linked files (row 2)", () => {
     symlinkSync(join(root, "lib/real.js"), join(root, "server.js"));
     const outside = repo({ "x.js": 'res.cookie("token", v);\n' });
     const inner = probeRepoDetailed(root);
-    expect(inner.findings.filter((f) => f.category === "cookie").map((f) => f.file).sort()).toEqual(["lib/real.js", "server.js"]);
+    // Listed once, by its real path, so a fix edits the real file.
+    expect(inner.findings.filter((f) => f.category === "cookie").map((f) => f.file)).toEqual(["lib/real.js"]);
     symlinkSync(join(outside, "x.js"), join(root, "out-link.js"));
     const r = await scanRepo(root);
     expect(r.incomplete).toContainEqual({ file: "out-link.js", reason: expect.stringMatching(/outside the project/) });
@@ -366,13 +367,42 @@ describe("review re-check fixes (9 Nov)", () => {
     expect(found.at(-1)).toMatchObject({ title: "Cookie calls not all checked: a.js", incomplete: { file: "a.js" } });
   }, 60_000);
 
-  it("the scan's fix line does not plan on a large repo: 4 files of 3.9 MB of cookies stay fast and uncounted", () => {
+  it("the scan does not plan fixes: 4 files of 3.9 MB of cookies stay fast", () => {
     const files = { ...EXPRESS };
     for (let i = 0; i < 4; i++) files[`s${i}.js`] = 'res.cookie("session","b");\n'.repeat(Math.floor(3.9e6 / 27));
     const root = repo(files);
     const t = Date.now();
     const out = spawnSync(process.execPath, [resolve("bin/penthera.js"), "--repo", root], { encoding: "utf-8", env: { ...process.env, HOME: root, NO_COLOR: "1", CI: "1" }, timeout: 120_000 });
     expect(Date.now() - t).toBeLessThan(30_000);
-    expect(out.stdout).toMatch(/Fixes: penthera fix --plan --repo/);
+    expect(out.stdout).toMatch(/A fix recipe matches \d+ of the \d+ problems?: penthera fix --plan --repo/);
   }, 120_000);
+
+  it("many small files each just under their read budget stay fast (re-check 2, 9 Nov)", () => {
+    const files = { ...NEXT };
+    const body = `const s = cookies();\n${'s.set("a",\n'.repeat(400)}`;
+    for (let i = 0; i < 1350; i++) files[`app/f${i}.ts`] = body;
+    const root = repo(files);
+    const t = Date.now();
+    const out = spawnSync(process.execPath, [resolve("bin/penthera.js"), "--repo", root], { encoding: "utf-8", env: { ...process.env, HOME: root, NO_COLOR: "1", CI: "1" }, timeout: 120_000 });
+    expect(Date.now() - t).toBeLessThan(30_000);
+    expect(out.status).toBe(2); // the calls do not close: not all read, so the run is incomplete
+  }, 120_000);
+
+  it("a src/out folder is source and is read; out/ next to package.json is output", () => {
+    const root = repo({ ...EXPRESS, "src/out/a.js": 'res.cookie("session", v);\n', "out/b.js": 'res.cookie("token", v);\n' });
+    expect(probeRepoDetailed(root).findings.filter((f) => f.category === "cookie").map((f) => f.file)).toEqual(["src/out/a.js"]);
+  });
+
+  it("a comment inside a multi-line options object neither drops the finding nor counts as a flag", () => {
+    const found = probeCookies("a.js", 'res.cookie("session", t, {\n  // don\'t (set by the proxy\n  maxAge: 1, /* httpOnly: true */\n});\n');
+    expect(found.map((f) => f.title)).toEqual(['Cookie "session" missing HttpOnly, missing Secure, missing SameSite']);
+  });
+
+  it("a multi-line call the fix does not edit is not counted as covered by another file's edit", async () => {
+    const root = repo({ ...EXPRESS, "a.js": 'res.cookie("session", t);\n', "b.js": 'res.cookie("session", t, {\n  maxAge: 1,\n});\n' });
+    const findings = probeRepoDetailed(root).findings.filter((f) => f.category === "cookie");
+    const { plans, unmatched } = await planFixes(root, findings);
+    expect(plans.flatMap((p) => p.findings.map((f) => f.file))).toEqual(["a.js"]);
+    expect(unmatched.map((f) => f.file)).toEqual(["b.js"]);
+  });
 });

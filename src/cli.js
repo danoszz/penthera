@@ -245,33 +245,20 @@ function initArgs(argv) {
 }
 
 /**
- * The scan counts fixes only on a run this small: each problem's plan may read
- * every code file again. Above either limit it names `penthera fix` without a
- * number, so a large or crafted repo never makes every scan slow.
- */
-const FIX_LINE_MAX_PROBLEMS = 30;
-const FIX_LINE_MAX_CODE_BYTES = 6 * 1024 * 1024;
-
-/**
- * The scan's fix line: the fixes `penthera fix --plan` would plan for this
- * run's problems, counted the way the plan counts them ("5 fixes planned for 8
- * problems"). It plans, so a finding a recipe matches but cannot change (a
- * secret in a .env file, cookie options in a variable) and likely noise never
- * count as fixable. It never fails a scan: without it the report is still complete.
+ * The scan's fix line: how many of this run's problems a fix recipe matches.
+ * It reads nothing (planning reads the repo again per problem, which a crafted
+ * repo can make slow), so `penthera fix --plan` gives the exact count. A
+ * recipe matches only what it can change (a secret in a code file, not in a
+ * .env file), and likely noise and info are not problems. It never fails a
+ * scan: without it the report is still complete.
  */
 async function fixLine(repo, findings) {
   const command = `penthera fix --plan --repo ${repo}`;
   try {
-    const { planFixes } = await import("../lib/fix/index.js");
-    const { codeBytes } = await import("../lib/fix/util.js");
+    const { fixSummary } = await import("../lib/fix/index.js");
     const { isProblem } = await import("./report/counts.js");
-    const { planCounts } = await import("./cli/fix.js");
     const problems = findings.filter((f) => isProblem(f));
-    if (problems.length > FIX_LINE_MAX_PROBLEMS) return { command };
-    if (problems.length && codeBytes(repo, FIX_LINE_MAX_CODE_BYTES) > FIX_LINE_MAX_CODE_BYTES) return { command };
-    const { plans } = await planFixes(repo, problems, { countOnly: true });
-    const { fixes, covered } = planCounts(findings, plans);
-    return { fixes, covered, problems: problems.length, command };
+    return { count: fixSummary(problems), problems: problems.length, command };
   } catch {
     return { command };
   }

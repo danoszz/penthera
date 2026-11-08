@@ -72,7 +72,7 @@ describe("one count everywhere (the next fixture)", () => {
     const report = join(root, "report.json");
     const brief = cli(["--repo", ".", "--brief", "-o", report, "--sarif", sarif]);
     expect(brief.out).toContain("8 problems (4 to act on, 4 to check first)");
-    expect(brief.out).toContain("5 fixes planned for 8 problems. It shows each diff");
+    expect(brief.out).toContain("A fix recipe matches 8 of the 8 problems. It shows each diff");
     expect(brief.out).not.toMatch(/may be fixable|also checks cookie flags/);
     const json = JSON.parse(readFileSync(report, "utf-8"));
     expect(json.brief.counts).toMatchObject({ problems: 8, act: 4, check: 4, info: 1 });
@@ -83,7 +83,7 @@ describe("one count everywhere (the next fixture)", () => {
   it("the terminal report says the same", () => {
     const text = cli(["--repo", "."]).out;
     expect(text).toContain("8 problems (4 to act on, 4 to check first)");
-    expect(text).toContain("5 fixes planned for 8 problems: penthera fix --plan --repo");
+    expect(text).toContain("A fix recipe matches 8 of the 8 problems: penthera fix --plan --repo");
   });
 
   it("the MCP scan_repo brief says 8 problems", async () => {
@@ -118,10 +118,11 @@ describe("one count everywhere (the next fixture)", () => {
   });
 });
 
-describe("the fix count is fixes planned for problems (gaia feedback, 8 Nov)", () => {
+describe("the fix count leaves out noise and what no recipe can change (gaia feedback, 8 Nov)", () => {
   // An agent on a real repo saw "6 may be fixable" stay after it fixed every
-  // fixable one: the line counted findings a recipe matches by category, even
-  // when no diff comes out (a secret in a .env file), and likely noise.
+  // fixable one: the line counted likely noise, and findings no recipe can
+  // change (a secret in a .env file). The scan counts recipe matches without
+  // reading the repo; fix --plan counts the fixes it really plans.
   let dir;
   beforeAll(() => {
     dir = realpathSync(mkdtempSync(join(tmpdir(), "penthera-fixcount-")));
@@ -148,10 +149,10 @@ describe("the fix count is fixes planned for problems (gaia feedback, 8 Nov)", (
     }
   };
 
-  it("the scan counts the one fix the plan makes, for 4 of the 5 problems; the .env secret and the fixture are not fixable", () => {
+  it("the scan counts 4 of the 5 problems as fixable; the .env secret and the fixture are not", () => {
     const out = run(["--repo", ".", "--brief"]);
     expect(out).toContain("5 problems (1 to act on, 4 to check first)");
-    expect(out).toContain("1 fix planned for 4 of 5 problems. It shows each diff");
+    expect(out).toContain("A fix recipe matches 4 of the 5 problems. It shows each diff");
     expect(out).not.toMatch(/matches 5 of the 5|may be fixable/);
   });
 
@@ -160,24 +161,6 @@ describe("the fix count is fixes planned for problems (gaia feedback, 8 Nov)", (
     expect(out).toContain("1 fix planned for 4 of 5 problems, and 1 for likely noise or info");
     const json = JSON.parse(run(["fix", "--plan", "--repo", ".", "--json"]));
     expect(json.counts).toMatchObject({ problems: 5, covered: 4, fixes: 1, other: 1 });
-  });
-});
-
-describe("the scan's fix line stays cheap", () => {
-  it("over 50 problems it names the command without counting", () => {
-    const dir = realpathSync(mkdtempSync(join(tmpdir(), "penthera-fixcap-")));
-    try {
-      writeFileSync(join(dir, "package.json"), JSON.stringify({ dependencies: { express: "4.0.0" } }));
-      mkdirSync(join(dir, "src"));
-      // 30 files with two cookies each: 60 problems.
-      for (let i = 0; i < 30; i++) writeFileSync(join(dir, "src", `r${i}.js`), `res.cookie("session${i}", v);\nres.cookie("token${i}", v);\n`);
-      const out = execFileSync(process.execPath, [BIN, "--repo", "."], { cwd: dir, encoding: "utf-8", env: { ...process.env, HOME: dir, NO_COLOR: "1", CI: "1" } });
-      expect(out).toMatch(/Fixes: penthera fix --plan --repo/);
-      expect(execFileSync(process.execPath, [BIN, "--repo", ".", "--brief"], { cwd: dir, encoding: "utf-8", env: { ...process.env, HOME: dir, NO_COLOR: "1", CI: "1" } })).toContain("Plans a fix for each problem it can.");
-      expect(out).not.toMatch(/fix(?:es)? planned for/);
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
   });
 });
 

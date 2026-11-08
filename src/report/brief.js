@@ -20,7 +20,7 @@ import { exitCodeOf, exitReason, isSevere } from "./exit.js";
 import { hintCommand } from "../utils/invocation.js";
 import { notRead, readNothing, siteUnread, SITE_NOT_READ } from "./unread.js";
 import { unreachableText } from "./reach.js";
-import { bucketOf, pathOf, problemsText, fixesText } from "./counts.js";
+import { bucketOf, pathOf, plural, problemsText } from "./counts.js";
 import { exploitabilityFor, matchLabel } from "../../lib/provenance.js";
 
 export { bucketOf };
@@ -231,8 +231,9 @@ export function buildBrief(results, { reports = [], fixes = null, limits = [], m
   for (const r of list) notChecked.push(...coverageLines(r.coverage), ...(r.agents?.notChecked || []).map((l) => text(l, 300)), ...(r.notChecked || []).map((l) => text(l, 300)));
   const next = [];
   if (fixes) {
-    // Counted: the plan's own headline. Not counted (a large run): what the command does, in one short sentence.
-    const lead = typeof fixes.fixes === "number" ? `${fixesText(fixes.fixes, fixes.covered, by.act.length + by.check.length)}. ` : "Plans a fix for each problem it can. ";
+    const problems = by.act.length + by.check.length;
+    // How many a recipe matches; `penthera fix --plan` says how many fixes it plans for them.
+    const lead = fixes.count ? `A fix recipe matches ${fixes.count} of the ${plural(problems, "problem")}. ` : "Plans a fix for each problem it can. ";
     next.push({ command: text(fixes.command, 200), why: `${lead}It shows each diff and changes nothing until you approve one` });
   }
   for (const f of by.info) {

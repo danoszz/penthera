@@ -17,7 +17,7 @@ const finding = (title, severity, where, extra = {}) => {
 };
 const scan = (findings, cov = { secrets: 7, routes: 2, "code-sinks": 2, "runtime-pins": 0 }) => {
   const r = { target: "/app", mode: "repo", timestamp: "2026-11-02T10:00:00Z", duration: 400, coverage: coverage(cov), findings };
-  return { ...r, brief: buildBrief(r, { fixes: { fixes: 1, covered: 1, problems: 1, command: "penthera fix --plan --repo ." } }) };
+  return { ...r, brief: buildBrief(r, { fixes: { count: 1, command: "penthera fix --plan --repo ." } }) };
 };
 const plain = (lines) => lines.join("\n");
 
@@ -79,7 +79,7 @@ describe("the first screen", () => {
   it("opens the terminal report, and the report's last word agrees with it", () => {
     const lines = [];
     const spy = vi.spyOn(process.stdout, "write").mockImplementation((l) => { lines.push(String(l)); return true; });
-    printReport(busy, { fixes: { fixes: 1, covered: 1, problems: 1, command: "penthera fix --plan --repo ." } });
+    printReport(busy, { fixes: { count: 1, command: "penthera fix --plan --repo ." } });
     spy.mockRestore();
     const out = lines.join("").replace(/\x1b\[[0-9;]*m/g, "");
     expect(out.indexOf("Fix now: 4 problems to act on.")).toBeLessThan(out.indexOf("Findings"));

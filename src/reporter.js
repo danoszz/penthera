@@ -17,7 +17,7 @@ import { exitCodeOf, exitNote, exitReason } from "./report/exit.js";
 import { toolById } from "../lib/giants/tools.js";
 import { colorOff } from "./cli/ansi.js";
 import { trimEndChars, trimStartChars } from "../lib/linear-text.js";
-import { problemCounts, problemsText, fixesText } from "./report/counts.js";
+import { problemCounts, problemsText, plural } from "./report/counts.js";
 
 const PKG_VERSION = JSON.parse(
   readFileSync(new URL("../package.json", import.meta.url), "utf-8"),
@@ -574,10 +574,10 @@ function printSummaryLine(result, w, opts = {}) {
     else w(`  ${c.dim("Next:")} npx penthera ui --open, then Check my app ${c.dim("to go through every problem")}`);
   }
   if (opts.fixes) {
-    const { fixes, covered, command } = opts.fixes;
+    const { count, command } = opts.fixes;
     w("");
     const problems = problemCounts(result.findings || []).problems;
-    w(`  ${c.bold(typeof fixes === "number" ? `${fixesText(fixes, covered, problems)}:` : "Fixes:")} ${printable(hintCommand(command))}`);
+    w(`  ${c.bold(count ? `A fix recipe matches ${count} of the ${plural(problems, "problem")}:` : "Fixes:")} ${printable(hintCommand(command))}`);
     w(`  ${c.dim("It shows each diff and changes nothing until you approve one.")}`);
   }
   const other = result.giants?.findings || [];

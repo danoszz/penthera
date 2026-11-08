@@ -19,15 +19,17 @@ your local screen only.
 
 A repo scan runs the same checks the fix planner uses (security headers, cookie
 flags, CORS and login rate limits), so `penthera fix --plan` works on the scan's
-own findings and counts them the same way. The scan plans the fixes too, so
-it ends with the line the plan opens with: `5 fixes planned for 8 problems:
-penthera fix --plan --repo <path>`, or `1 fix planned for 4 of 5 problems` when
-some have no fix. A problem is a finding to act on or to check first, so info
-and likely noise are not counted. A finding a recipe matches but cannot change
-(a secret in a `.env` file) is not counted as fixable, and a fix that touches
-only likely noise is listed apart (`and 1 for likely noise or info`). One fix
-can cover several problems: one `next.config.mjs` change adds five missing
-headers. Over 50 problems, the scan names the command without counting.
+own findings and counts them the same way. The scan ends with `A fix recipe
+matches N of the M problems: penthera fix --plan --repo <path>`. It reads
+nothing to say so, so a large repo never makes the scan slow; the plan then
+opens with the exact count, `5 fixes planned for 8 problems`, or `1 fix planned
+for 4 of 5 problems` when some have no fix. A problem is a finding to act on or
+to check first, so info and likely noise are not counted. A secret outside a
+code file (a `.env` file) has no recipe, and a fix that touches only likely
+noise is listed apart (`and 1 for likely noise or info`). A cookie call written
+over several lines is reported but not edited, so the plan leaves it to you.
+One fix can cover several problems: one `next.config.mjs` change adds five
+missing headers.
 `--json` adds `counts`: `problems`, `covered`, `fixes`, `other` (fixes for
 likely noise or info only) and `findings`. The plan prints its headline again
 at the end, so the last lines of the output say what it holds.
