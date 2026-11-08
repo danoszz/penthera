@@ -76,7 +76,10 @@ const BENCH_MAX_DROP = 0.02;
 // Both raises approved by the maintainer, 2 Nov 2026.
 // Raised for the 2.3.2 security fixes (safe file reads, redaction, review fixes): main
 // was ~1,051 KB packed, the fixes add ~6 KB packed, ~35 KB unpacked; was 1_050_000 / 2_950_000. Approved by the maintainer, 5 Nov 2026.
-const PACK_BUDGET = { packedBytes: 1_070_000, unpackedBytes: 3_000_000, files: 360 };
+// Raised for the 2.4 secret precision fixes (Secret Manager references, test-account
+// passwords: ~3 KB unpacked), 8 Nov 2026: main had ~3 KB of unpacked headroom; was
+// 3_000_000. Raised 10 KB, approved by Daan 8 Nov 2026.
+const PACK_BUDGET = { packedBytes: 1_070_000, unpackedBytes: 3_010_000, files: 360 };
 
 /** Paths the npm package may contain. Anything else fails the packaging gate. */
 const PACK_ALLOW = [
