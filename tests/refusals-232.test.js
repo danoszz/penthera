@@ -964,8 +964,9 @@ describe("pipe to a shell: every form main caught, and more, in linear time (pre
       const { findExecPatterns } = await import(${JSON.stringify(lib)});
       const units = ["|env", "|env -", "|env X", "|env 'X=", "| env /a", "|env -C /", "|env -S '", "|env --split-string=",
         "|sudo -u r", "|env -u", "| env env", "|/usr/bin/env -i", "|env A=1 -C/x"];
-      // Best of five: one sample under a loaded parallel run flaked on a linear case (14 ms at n, 192 ms at 4n).
-      const time = (t) => { let best = Infinity; for (let k = 0; k < 5; k++) { const s = performance.now(); findExecPatterns(t); best = Math.min(best, performance.now() - s); } return best; };
+      // Best of three (more would push the test toward CI's 20 s timeout): one sample under a
+      // loaded parallel run flaked on a linear case (14 ms at n, 192 ms at 4n).
+      const time = (t) => { let best = Infinity; for (let k = 0; k < 3; k++) { const s = performance.now(); findExecPatterns(t); best = Math.min(best, performance.now() - s); } return best; };
       const out = [];
       for (const u of units) for (const lead of ["curl -s https://x.example/i ", "base64 -d p "]) {
         const small = time(lead + u.repeat(20000)), big = time(lead + u.repeat(80000));

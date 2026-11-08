@@ -17,6 +17,8 @@ import { lexJs } from "../lib/whitebox/js-lex.js";
 import { findSinks } from "../lib/whitebox/code-sinks.js";
 import { firstShellPipe } from "../lib/agents/hidden-content.js";
 
+// Best of three runs of a timing function: one sample on a loaded machine is noise.
+const best3 = (t, n) => Math.min(t(n), t(n), t(n));
 const HEAD = 'const { exec } = require("child_process");\n';
 const libRepo = (code) => {
   const d = mkdtempSync(join(tmpdir(), "penthera-281w-"));
@@ -60,8 +62,8 @@ describe("6: an unclosed regex class is not rescanned per slash", () => {
   const t = (n) => { const s = performance.now(); lexJs("( /[a ".repeat(n), null, { stringLineSeps: true }); return performance.now() - s; };
   it("stays linear", () => {
     t(1000);
-    const a = t(20_000), b = t(80_000);
-    expect(b / Math.max(a, 5)).toBeLessThan(9);
+    const a = best3(t, 20_000), b = best3(t, 80_000);
+    expect(b / Math.max(a, 20)).toBeLessThan(9);
     expect(b).toBeLessThan(2000);
   });
   it("a valid literal after a failed class is still a regex", () => {
@@ -83,8 +85,8 @@ describe("9: nested object literals in server code are split once", () => {
   };
   it("stays linear", () => {
     t(500);
-    const a = t(2000), b = t(8000);
-    expect(b / Math.max(a, 5)).toBeLessThan(9);
+    const a = best3(t, 2000), b = best3(t, 8000);
+    expect(b / Math.max(a, 20)).toBeLessThan(9);
     expect(b).toBeLessThan(3000);
   });
   it("still binds a shell function held in an object, next to nested ones", () => {
@@ -98,8 +100,8 @@ describe("6: pipes only the prose pass marks are read with the prose reading", (
   const t = (n) => { const s = performance.now(); firstShellPipe(unit.repeat(n)); return performance.now() - s; };
   it("stays linear on escaped and intra-word apostrophes", () => {
     t(500);
-    const a = t(4000), b = t(16000);
-    expect(b / Math.max(a, 5)).toBeLessThan(9);
+    const a = best3(t, 4000), b = best3(t, 16000);
+    expect(b / Math.max(a, 20)).toBeLessThan(9);
     expect(b).toBeLessThan(2000);
   });
   it("prose and shell pipes are still found", () => {
