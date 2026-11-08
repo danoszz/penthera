@@ -14,6 +14,7 @@ import { scanSecrets } from "../lib/whitebox/secrets.js";
 import { gitIgnored } from "../lib/git.js";
 import { scanCodeSinks } from "../lib/whitebox/code-sinks.js";
 import { scanWorkflows } from "../lib/whitebox/workflows.js";
+import { scanSupabase } from "../lib/whitebox/supabase.js";
 import { detectLibrary } from "../lib/whitebox/library.js";
 import { discoverFrameworkRoutes } from "../lib/whitebox/frameworks.js";
 import { runtimeAdvisoriesForRepo } from "../lib/advisories/index.js";
@@ -166,6 +167,19 @@ export async function scanRepo(repoPath, opts = {}) {
       source: "repo-scan",
     });
   }
+
+  // ── Phase 1e: Supabase: service-role key in client code, tables without RLS
+  progress("Checking Supabase keys and row-level security...");
+  const supabase = scanSupabase(repoPath, { ignored });
+  result.findings.push(...supabase.findings);
+  result.supabase = { migrations: supabase.migrations };
+  // What it couldn't read whole (a refused, oversized or over-budget
+  // migration) makes the scan incomplete: exit 2, never a silent pass.
+  for (const inc of supabase.incomplete) {
+    result.findings.push(refusedFileFinding({ path: inc.file, reason: inc.reason }, repoPath));
+    (result.incomplete ||= []).push(inc);
+  }
+  result.executedProbes.push("supabase");
 
   // ── Phase 2: Locate API root ───────────────────────────────────────────
   progress("Locating API routes directory...");
