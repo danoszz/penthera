@@ -13,7 +13,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { createHmac } from "node:crypto";
-import { scanSupabase, findServiceKeys, checkMigrations, sqlTokens, alwaysTrue, directiveOf, exposedSchemas, isServiceRoleName } from "../lib/whitebox/supabase.js";
+import { shown, scanSupabase, findServiceKeys, checkMigrations, sqlTokens, alwaysTrue, directiveOf, exposedSchemas, isServiceRoleName } from "../lib/whitebox/supabase.js";
 import { scanRepo } from "../src/scan-repo.js";
 import { cpuMs } from "./fixtures/cpu-time.js";
 import { compareWithBaseline } from "../src/cli/baseline.js";
@@ -339,7 +339,7 @@ describe("supabase-rls-disabled", () => {
 
   it("moves policies with SET SCHEMA and marks DO '...' strings and EXECUTE ... CREATE (review 10)", () => {
     const r = mig({ "001.sql": "create table private.t (id int);\nalter table private.t enable row level security;\ncreate policy p on private.t for all to anon using (true);\nalter table private.t set schema public;\ndo 'begin execute ''create table public.x(id int)''; end';\ncreate function f() returns void language plpgsql as $$ begin execute 'create ' || 'table public.y(id int)'; end $$;" });
-    expect(r.findings.filter((f) => f.kind === "policy").map((f) => f.policy.table)).toEqual(["public.t"]);
+    expect(r.findings.filter((f) => f.kind === "policy").map((f) => `${f.table.schema}.${f.table.name}`)).toEqual(["public.t"]);
     expect(r.unchecked.map((u) => u.count)).toEqual([2]); // one entry per file and reason, counted
   });
 
@@ -530,6 +530,36 @@ drop policy if exists gone on public.t;`)).toEqual([]);
     const shown = policyOf(JSON.parse(cli("--baseline", base, "-q").stdout).findings);
     expect(shown.map((f) => f.title)).toEqual([after.title]);
   }, 60_000);
+
+  it("a shortened name can't impersonate another table's finding (Vercel, PR 312)", () => {
+    const one = (sql) => scanSupabase(repo({ "supabase/migrations/001.sql": sql })).findings.filter((f) => f.templateId === "supabase-rls-disabled");
+    const long = (tail) => `"${"a".repeat(80)}${tail}"`;
+    // Two long names sharing an 80-character prefix: distinct ids, and a suppression of one doesn't cover the other.
+    const [a] = one(`create table public.${long("x")} (id int);`);
+    const [b] = one(`create table public.${long("y")} (id int);`);
+    expect(findingId(a)).not.toBe(findingId(b));
+    const views = { suppressions: [{ id: findingId(a), severity: "high" }] };
+    expect(isSuppressed(a, views)).toBeTruthy();
+    expect(isSuppressed(b, views)).toBe(null);
+    // A table literally named like another's shortened form doesn't share its id.
+    const forged = shown("a".repeat(81));
+    const [c] = one(`create table public."${"a".repeat(81)}" (id int);`);
+    const [d] = one(`create table public."${forged}" (id int);`);
+    expect(findingId(c)).not.toBe(findingId(d));
+    // The hash is at least 16 hex characters of the whole name.
+    expect(shown("a".repeat(81))).toMatch(/…[0-9a-f]{16}$/);
+  });
+
+  it("a dot inside a quoted name is not a schema separator (review of PR 312)", () => {
+    // public."x.y" has no RLS; enabling RLS on "public.x".y must not hide it.
+    const r = checkMigrations([{ rel: "001.sql", text: 'create table public."x.y" (id int);\ncreate table "public.x".y (id int);\nalter table "public.x".y enable row level security;' }]);
+    expect(r.findings.filter((f) => f.kind === "rls").map((f) => [f.table.schema, f.table.name])).toEqual([["public", "x.y"]]);
+    // Both exposed: the two findings read differently, so neither's id covers the other.
+    const toml = '[api]\nschemas = ["public", "public.x"]\n';
+    const [f] = scanSupabase(repo({ "supabase/config.toml": toml, "supabase/migrations/001.sql": 'create table public."x.y" (id int);' })).findings;
+    const [g] = scanSupabase(repo({ "supabase/config.toml": toml, "supabase/migrations/001.sql": 'create table "public.x".y (id int);' })).findings;
+    expect(findingId(f)).not.toBe(findingId(g));
+  });
 
   it("policy ids ignore roles that don't matter, and titles stay short (review of PR 312)", () => {
     const table = "create table public.t (id int);\nalter table public.t enable row level security;\n";
