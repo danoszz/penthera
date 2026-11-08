@@ -19,7 +19,7 @@ function describe(m) {
   const title = `Penthera security receipt for ${m.target}`;
   const read = m.checked.filter((c) => c.state === "read" || c.state === "partly").map((c) => c.name.toLowerCase());
   const desc = [
-    `Verdict: ${m.verdict}. ${m.hero.value} ${m.hero.label}.`,
+    m.grade ? `Grade ${m.grade.letter}, ${m.grade.score} out of 100. Verdict: ${m.verdict}. ${m.toFix.label}: ${m.toFix.value}.` : `Verdict: ${m.verdict}. ${m.hero.value} ${m.hero.label}.`,
     read.length ? `Checked: ${read.join(", ")}.` : "Nothing was read.",
     `Not checked: ${m.notChecked.join("; ")}.`,
     m.top ? `Fix first: ${m.top.title}.` : "",

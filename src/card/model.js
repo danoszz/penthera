@@ -55,6 +55,34 @@ function targetName(results) {
 
 const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
+/** The worst agent-audit grade and its score out of 100, as the audit's rules set them, or null. */
+function agentGrade(audits) {
+  const graded = audits.filter((x) => /^[A-F]$/.test(String(x?.grade)) && Number.isInteger(x.score) && x.score >= 0 && x.score <= 100);
+  if (!graded.length) return null;
+  const worst = graded.reduce((w, x) => (x.score < w.score ? x : w));
+  return { letter: worst.grade, score: worst.score };
+}
+
+/**
+ * The grade that leads the card, or null. Only a deterministic grade that covers the whole
+ * card counts: today that is an agent-config audit on its own (repo and URL scans have no
+ * score, and none is invented). A suppressed, unread or empty run keeps its own big sign.
+ */
+function cardGrade(results, tone) {
+  if (!["fix", "review", "clean"].includes(tone)) return null;
+  const modes = results.flatMap((r) => r.modes || [r.mode]).flatMap((m) => String(m).split("+"));
+  if (!modes.length || modes.some((m) => m !== "agents")) return null;
+  if (results.some((r) => r.agents?.unparsed)) return null;
+  return agentGrade(results.map((r) => r.agents));
+}
+
+/** The command that made this kind of card, for its footer. */
+function commandOf(results) {
+  const modes = new Set(results.flatMap((r) => r.modes || [r.mode]).flatMap((m) => String(m).split("+")));
+  if (modes.size === 1 && modes.has("agents")) return "npx penthera agents --card";
+  return "npx penthera --card";
+}
+
 /** The four things a card reports on, each read, partly read, not read or not run. */
 function checkedList(results) {
   const modes = new Set(results.flatMap((r) => r.modes || (r.mode ? [r.mode] : [])).flatMap((m) => String(m).split("+")));
@@ -87,9 +115,9 @@ function checkedList(results) {
     const broken = a.reduce((n, x) => n + (x.unparsed || 0), 0);
     agents.state = broken ? "partly" : files ? "read" : "nothing";
     // The agent audit's own grade, from its rules; shown as it prints in the terminal.
-    const grades = a.map((x) => x.grade).filter((g) => /^[A-F]$/.test(String(g)));
-    const worst = grades.sort().pop();
-    agents.detail = broken ? `${plural(broken, "file")} unreadable` : worst ? `grade ${worst}` : files ? plural(files, "file") : "none found";
+    const g = agentGrade(a);
+    agents.detail = broken ? `${plural(broken, "file")} unreadable` : g ? `${g.letter} · ${g.score}/100` : files ? plural(files, "file") : "none found";
+    agents.files = files;
   }
 
   const site = { id: "site", name: "Live site", state: "not-run", detail: "not run, add a URL" };
@@ -123,11 +151,6 @@ function toneOf(verdict) {
   return "suppressed";
 }
 
-const listNames = (names) => {
-  const n = names.map((x, i) => (i ? x.toLowerCase() : x)).map((x) => x.replace(/^ai-/, "AI-"));
-  return n.length < 2 ? n.join("") : `${n.slice(0, -1).join(", ")} and ${n[n.length - 1]}`;
-};
-
 /** Short lines for what this run did not check. Always at least one. */
 function notCheckedLines(brief, checked, tone, results) {
   const out = [];
@@ -140,8 +163,7 @@ function notCheckedLines(brief, checked, tone, results) {
     if (k.state === "partly") out.push(`${k.name}: ${k.detail}`);
     else if (k.state === "unread" && tone !== "unread") out.push(`${k.name}: not read`);
   }
-  const notRun = checked.filter((k) => k.state === "not-run").map((k) => k.name);
-  if (notRun.length) out.push(`${listNames(notRun)}: not part of this run`);
+  // Checks that were not part of the run are already rows on the receipt ("NOT RUN").
   // As in the brief: only a repo or live-site run can be mistaken for a check of login and payments.
   const modes = results.flatMap((r) => r.modes || [r.mode]).flatMap((m) => String(m).split("+"));
   if (modes.includes("repo") || modes.includes("url")) out.push("Login, access rules and payments: not proven");
@@ -176,12 +198,19 @@ export function buildCardModel(brief, results, { version, date } = {}) {
   const tone = toneOf(brief.verdict);
   const checked = checkedList(list);
   const top = topFinding(list, brief);
+  const grade = cardGrade(list, tone);
+  // When the grade leads the card, its line shows what was read instead of repeating the grade.
+  if (grade) for (const c of checked) if (c.id === "agents") c.detail = plural(c.files, "file");
+  for (const c of checked) delete c.files;
   const day = date || String(list.map((r) => r.timestamp).filter(Boolean).sort().pop() || new Date().toISOString()).slice(0, 10);
   return {
     schema: CARD_SCHEMA,
     tone,
     verdict: publicText(brief.verdict, 40),
     hero: heroOf(brief, tone),
+    grade,
+    toFix: brief.counts.act ? { value: brief.counts.act, label: "To fix first" } : brief.counts.check ? { value: brief.counts.check, label: "To check first" } : { value: 0, label: "To fix" },
+    command: commandOf(list),
     target: targetName(list),
     date: day,
     version: publicText(version, 20),

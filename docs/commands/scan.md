@@ -226,15 +226,20 @@ What a card always shows:
 
 - The verdict: Fix now, Review, Nothing to fix, Nothing to assess, Site not
   read, or how many findings are suppressed.
+- On an agent-config card, the audit's grade as the big letter, with its score
+  out of 100 next to it and the number to fix first as a line. Repo and URL
+  scans have no score, so their card leads with the number to fix first; none
+  is made up.
 - What was read: code, dependencies, AI-agent configs and the live site, each
-  read, partly read or not run. AI-agent configs show the agent audit's own
-  grade, A to F.
+  read, partly read or not run. On a card that merges several scans, AI-agent
+  configs show the audit's grade and score on their line.
 - What was not checked, including what the checks themselves could not read
   (an agent audit starts no MCP server, so tool descriptions are not read). A
   repo or live-site card always adds that login, access rules and payments are
   not proven.
 - The number to fix first and, when there is one, the top fix: the most severe
   finding that needs a change.
+- The command that made it, at the bottom.
 
 What it never shows: file paths, file contents, hidden characters or anything
 shaped like a key.

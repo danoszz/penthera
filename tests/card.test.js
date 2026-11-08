@@ -118,17 +118,39 @@ describe("card model: the verdict is the brief's", () => {
     expect(m.notChecked.join(" ")).toMatch(/2 suppressed/);
   });
 
-  it("agents: the audit's grade, its not-read line and the most severe finding first", () => {
+  it("agents: the grade leads, with its score, the not-read line and the most severe finding first", () => {
     const m = modelOf(STATES.agents);
     expect(m.target).toBe("agent-demo-bad");
     expect(m.verdict).toBe(VERDICTS.fix);
-    expect(m.hero).toEqual({ value: "4", label: "to fix first" });
-    expect(m.checked.find((c) => c.id === "agents")).toMatchObject({ state: "read", detail: "grade F" });
+    expect(m.grade).toEqual({ letter: "F", score: 0 });
+    expect(m.toFix).toEqual({ value: 4, label: "To fix first" });
+    expect(m.checked.find((c) => c.id === "agents")).toMatchObject({ state: "read", detail: "2 files" });
     expect(m.top.title).toBe("Hidden text in Unicode tag characters");
     expect(m.notChecked[0]).toBe("MCP tool descriptions: servers are not started, so tool-description poisoning is not checked");
-    expect(m.notChecked).toContain("Code, dependencies and live site: not part of this run");
     // Only a repo or live-site run gets the login line, as in the brief.
     expect(m.notChecked.join(" ")).not.toMatch(/Login/);
+    expect(m.command).toBe("npx penthera agents --card");
+    const text = textsOf(postLayout(m)).join(" ");
+    expect(text).toContain("0/100");
+    expect(text).toContain("$ npx penthera agents --card");
+  });
+
+  it("no score is invented: repo and URL cards have no grade, and a mixed card keeps the count", () => {
+    expect(modelOf(STATES.findings).grade).toBeNull();
+    expect(modelOf(STATES.unread).grade).toBeNull();
+    const mixed = [repo([]), agents({ agents: { grade: "B", score: 80, unparsed: 0, inventory: { configFiles: ["a"] }, notChecked: [] } })];
+    const m = modelOf(mixed);
+    expect(m.grade).toBeNull();
+    expect(m.checked.find((c) => c.id === "agents").detail).toBe("B · 80/100");
+    expect(m.command).toBe("npx penthera --card");
+  });
+
+  it("a grade never hides suppressed findings or unreadable config", () => {
+    const sup = [agents({ agents: { grade: "A", score: 100, unparsed: 0, inventory: { configFiles: ["a"] }, notChecked: [] }, suppressed: [f({ severity: "critical" })] })];
+    expect(modelOf(sup).grade).toBeNull();
+    expect(modelOf(sup).hero.value).toBe("1");
+    const broken = [agents({ agents: { grade: "A", score: 100, unparsed: 1, inventory: { configFiles: ["a"] }, notChecked: [] } })];
+    expect(modelOf(broken).grade).toBeNull();
   });
 
   it("hidden characters never reach the card, in the image or its description", () => {
