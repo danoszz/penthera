@@ -30,7 +30,9 @@ export const BRIEF_SCHEMA = "penthera.brief/1";
 // only that no rule matched, with or without a session cookie.
 export const NOT_PROVEN_NOTE = "This run does not prove login, access rules or payments are right.";
 
-export const VERDICTS = { fix: "Fix now", review: "Review", clean: "Nothing to fix", none: "Nothing to assess", unread: "Site not read" };
+// check: only things to check first (a header read from code, which the host
+// may still add) and nothing to act on: not a problem yet, and not clean either.
+export const VERDICTS = { fix: "Fix now", review: "Review", check: "Nothing to fix now", clean: "Nothing to fix", none: "Nothing to assess", unread: "Site not read" };
 
 const SEV_ORDER = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
 const MAX_ITEMS = 8;
@@ -277,7 +279,10 @@ export function buildBrief(results, { reports = [], fixes = null, limits = [], m
   // First in the list, because the brief prints only the first few.
   if (hidden.length) notChecked.unshift(`${hiddenText}: not counted here. Review them with \`penthera memory show --repo .\` and penthera.suppress.json.`);
   const quiet = hidden.length ? hiddenText : VERDICTS.clean;
-  const verdict = actHigh ? VERDICTS.fix : unread ? VERDICTS.unread : act.length || check.length || exitCode || forbidden.length || partly ? VERDICTS.review : nothingRead ? VERDICTS.none : quiet;
+  // Only things to check first, on a run that passes: "Nothing to fix now". Anything to act
+  // on, a failing exit code, a 403 or a partly read site still reads as Review.
+  const onlyCheck = !act.length && check.length && !exitCode && !forbidden.length && !partly;
+  const verdict = actHigh ? VERDICTS.fix : unread ? VERDICTS.unread : onlyCheck ? VERDICTS.check : act.length || check.length || exitCode || forbidden.length || partly ? VERDICTS.review : nothingRead ? VERDICTS.none : quiet;
 
   return {
     schema: BRIEF_SCHEMA,

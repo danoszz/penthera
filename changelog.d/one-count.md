@@ -35,3 +35,9 @@ section: Changed
   `likely match`, `possible match` or `needs a person`. The brief says how to
   suppress a problem you checked by its fid with a reason (`set_aside` in its
   JSON), and `penthera fix --plan` prints its headline again at the end.
+- **Nothing to fix now.** A run with nothing to act on and only things to check
+  first (headers read from code, which your host may still add) says `Nothing
+  to fix now`, and its share card `Nothing to fix now · 4 to check`. Things to
+  check first and likely noise no longer lower the agent-config grade; a
+  finding to act on still does, and a confirmed problem still says `Fix now`
+  or `Review`.

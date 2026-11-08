@@ -11,6 +11,18 @@
 import { textWidth } from "./draw.js";
 import { C, logoOp, mosaicRows, mosaicSize, wrap, textRight, textCenter } from "./kit.js";
 
+/**
+ * The verdict line: "VERDICT: NOTHING TO FIX NOW". On a check-only card the
+ * number to check is the big block beside it, so the line keeps the verdict
+ * itself; and when the prefix would cut it, the verdict stands alone.
+ */
+function verdictLine(m, cols) {
+  const v = upper(String(m.verdict).split(" · ")[0]);
+  const full = `VERDICT: ${v}`;
+  return wrap(full, cols, 1)[0] === full ? full : wrap(v, cols, 1)[0];
+}
+const firstLabel = (m) => (m.tone === "check" ? "CHECK FIRST" : "FIX FIRST");
+
 export const SIZES = { post: { w: 1080, h: 1350 }, og: { w: 1200, h: 630 } };
 
 const MARK = { read: "■", partly: "▪", nothing: "□", "not-run": "□", unread: "□" };
@@ -75,8 +87,7 @@ function slipBody(m, { L, R, CX, y }, budget) {
   } else {
     wrap(upper(m.hero.label), leftCols(21), 2).forEach((l, i) => ops.push({ op: "text", s: l, x: L, y: y + i * 46, k: 3, fill: C.ink }));
   }
-  wrap(`VERDICT: ${upper(m.verdict)}`, leftCols(14), 1)
-    .forEach((l) => ops.push({ op: "text", s: l, x: L, y: y + sz.h - 28, k: 2, fill: C.blue }));
+  ops.push({ op: "text", s: verdictLine(m, leftCols(14)), x: L, y: y + sz.h - 28, k: 2, fill: C.blue });
   ops.push({ op: "cells", x: R - sz.w, y, k, gap: g, rows, fill: C.blue });
   y += sz.h + 36;
   ops.push({ op: "rect", x: L, y, w: R - L, h: 8, fill: C.ink });
@@ -89,7 +100,7 @@ function slipBody(m, { L, R, CX, y }, budget) {
   const cols2 = Math.floor((R - L) / 14), cols3 = Math.floor((R - L) / 21);
   if (m.top && budget.title > 0) {
     // A graded card names the fix right under its "to fix first" line.
-    if (!graded) { ops.push({ op: "text", s: "FIX FIRST", x: L, y, k: 2, fill: C.ink, alpha: 0.6 }); y += 34; }
+    if (!graded) { ops.push({ op: "text", s: firstLabel(m), x: L, y, k: 2, fill: C.ink, alpha: 0.6 }); y += 34; }
     if (graded) for (const l of wrap(`→ ${m.top.title}`, cols2, budget.title)) { ops.push({ op: "text", s: l, x: L, y, k: 2, fill: C.ink }); y += 32; }
     else for (const l of wrap(m.top.title, cols3, budget.title)) { ops.push({ op: "text", s: l, x: L, y, k: 3, fill: C.ink }); y += 44; }
     if (m.top.fix && budget.fix > 0) for (const l of wrap(m.top.fix, cols2, budget.fix)) { ops.push({ op: "text", s: l, x: L, y, k: 2, fill: C.ink, alpha: 0.72 }); y += 30; }
@@ -178,7 +189,7 @@ export function ogLayout(m) {
   } else {
     wrap(upper(m.hero.label), leftCols(21), 2).forEach((l, i) => ops.push({ op: "text", s: l, x: L, y: y + i * 42, k: 3, fill: C.ink }));
   }
-  wrap(`VERDICT: ${upper(m.verdict)}`, leftCols(14), 1).forEach((l) => ops.push({ op: "text", s: l, x: L, y: y + sz.h - 28, k: 2, fill: C.blue }));
+  ops.push({ op: "text", s: verdictLine(m, leftCols(14)), x: L, y: y + sz.h - 28, k: 2, fill: C.blue });
   ops.push({ op: "cells", x: R - sz.w, y, k, gap: g, rows, fill: C.blue });
   y += sz.h + 20;
   ops.push({ op: "rect", x: L, y, w: R - L, h: 6, fill: C.ink });
@@ -196,7 +207,7 @@ export function ogLayout(m) {
   for (const l of lines) { ops.push({ op: "text", s: l, x: L, y, k: 2, fill: C.ink }); y += 30; }
   if (m.top && y + 76 <= H - 16) {
     y += 14;
-    ops.push({ op: "text", s: "FIX FIRST", x: L, y, k: 2, fill: C.ink, alpha: 0.6 }); y += 32;
+    ops.push({ op: "text", s: firstLabel(m), x: L, y, k: 2, fill: C.ink, alpha: 0.6 }); y += 32;
     ops.push({ op: "text", s: wrap(m.top.title, cols2, 1)[0], x: L, y, k: 2, fill: C.ink });
   }
   return { w: W, h: H, ops };

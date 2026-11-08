@@ -66,6 +66,10 @@ export function firstScreen(result) {
   const claim = nothingClaim(result);
   if (b.verdict === VERDICTS.fix) {
     L.push(`  Fix now: ${plural(b.act_on.length, "problem")} to act on.`, "", ...itemLines(b.act_on));
+  } else if (b.verdict === VERDICTS.check) {
+    L.push(`  Nothing to fix now: ${plural(b.check_first.length, "thing")} to check first.`, "", ...itemLines(b.check_first));
+  } else if (b.verdict === VERDICTS.review && b.act_on.length) {
+    L.push(`  Review: ${plural(b.act_on.length, "problem")} to act on.`, "", ...itemLines(b.act_on));
   } else if (b.verdict === VERDICTS.review && b.check_first.length) {
     L.push(`  Review: ${plural(b.check_first.length, "thing")} to check first.`, "", ...itemLines(b.check_first));
   } else if (claim) {

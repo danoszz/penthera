@@ -239,8 +239,9 @@ dependency.
 
 What a card always shows:
 
-- The verdict: Fix now, Review, Nothing to fix, Nothing to assess, Site not
-  read, or how many findings are suppressed.
+- The verdict: Fix now, Review, Nothing to fix now (only things to check
+  first, with how many: `Nothing to fix now · 4 to check`), Nothing to fix,
+  Nothing to assess, Site not read, or how many findings are suppressed.
 - On an agent-config card, the audit's grade as the big letter, with its score
   out of 100 next to it and the number to fix first as a line. Repo and URL
   scans have no score, so their card leads with the number to fix first; none

@@ -23,7 +23,7 @@ function describe(m) {
     m.grade ? `Grade ${m.grade.letter}, ${m.grade.score} out of 100. Verdict: ${m.verdict}. ${m.toFix.label}: ${m.toFix.value}.` : `Verdict: ${m.verdict}. ${m.hero.value} ${m.hero.label}.`,
     read.length ? `Checked: ${read.join(", ")}.` : "Nothing was read.",
     `Not checked: ${m.notChecked.join("; ")}.`,
-    m.top ? `Fix first: ${m.top.title}.` : "",
+    m.top ? `${m.tone === "check" ? "Check first" : "Fix first"}: ${m.top.title}.` : "",
   ].filter(Boolean).join(" ");
   return { title, desc };
 }
