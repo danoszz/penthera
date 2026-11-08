@@ -291,3 +291,33 @@ describe("maker checks: an unreadable file is named, not a crash", () => {
     }
   });
 });
+
+// Vercel 01M6YHCR21FSCGD1SSF0WVKJ8H: the auth-name regex had overlapping `\w*`
+// spans, so a long uncalled name full of "Auth" backtracked quadratically.
+// Vercel 01M6YHC0DY36SDKCNAKEC8FN6B: the lockfile line lookup searched and
+// recounted from the start for every nested copy. Both are linear now; measured
+// by the doubling method so they don't flake under parallel CI.
+describe("maker checks stay linear on crafted input", () => {
+  const grows = (gen, run) => {
+    const ms = (n) => { const src = gen(n); run(src); const s = process.hrtime.bigint(); for (let k = 0; k < 3; k++) run(src); return Number(process.hrtime.bigint() - s) / 1e6; };
+    const small = Math.max(ms(4000), 0.5);
+    return ms(32000) / small; // 8x the input; linear is ~8x
+  };
+  it("an uncalled name full of Auth in a writing action", () => {
+    const gen = (n) => `'use server';\nexport async function act(id){ const getx${"Auth".repeat(n)}y = 1; await db.delete(id); }\n`;
+    expect(grows(gen, uncheckedActions)).toBeLessThan(24);
+    expect(unchecked(gen(4000))).toEqual(["act:a database write"]); // still reported: the name is not called
+  });
+  it("a lockfile with many nested Next.js copies", () => {
+    const gen = (n) => JSON.stringify({ lockfileVersion: 3, packages: Object.fromEntries(Array.from({ length: n / 40 }, (_, i) => [`node_modules/p${i}/node_modules/next`, { version: "15.5.9" }])) }, null, 2);
+    expect(grows(gen, installedFromNpm)).toBeLessThan(24);
+    const found = installedFromNpm(gen(400));
+    expect(found[0]).toMatchObject({ name: "next", version: "15.5.9", line: 4 });
+  });
+  it("auth calls are still recognised by name, by shape and as .auth()", () => {
+    const ok = ["await auth()", "await getServerSession()", "await requireAdminUser()", "ctx.getUser()", "await supabase.auth.getUser()", "await x.auth()", "await isWorkspaceMember(id)", "await checkAuth ()"];
+    const no = ["const getAuthorName = 1;", "obj.auth(id)", "await targetUser()", "await getStuff()", "await x.protect()"];
+    for (const c of ok) expect(unchecked(`'use server';\nexport async function a(id){ ${c}; await db.delete(id); }\n`), c).toEqual([]);
+    for (const c of no) expect(unchecked(`'use server';\nexport async function a(id){ ${c}; await db.delete(id); }\n`), c).toEqual(["a:a database write"]);
+  });
+});
