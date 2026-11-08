@@ -911,12 +911,19 @@ export async function run() {
     }
   }
 
+  let cardFailed = false;
   if (opts.card || opts["card-out"]) {
     // Loaded here: only a run that asks for the card pays for the renderer.
     const { writeCards, DEFAULT_CARD_OUT } = await import("./card/index.js");
-    const { paths } = writeCards(merged.brief, [merged], { version: pkg.version, out: opts["card-out"] || DEFAULT_CARD_OUT });
-    if (!opts.quiet && !opts.json) {
-      process.stderr.write(`  Share card     ${paths.filter((p) => p.endsWith(".png")).map((p) => relative(process.cwd(), p) || p).join(", ")} (and .svg; made offline, nothing uploaded)\n`);
+    try {
+      const { paths } = writeCards(merged.brief, [merged], { version: pkg.version, out: opts["card-out"] || DEFAULT_CARD_OUT });
+      if (!opts.quiet && !opts.json) {
+        process.stderr.write(`  Share card     ${paths.filter((p) => p.endsWith(".png")).map((p) => relative(process.cwd(), p) || p).join(", ")} (and .svg; made offline, nothing uploaded)\n`);
+      }
+    } catch (e) {
+      // The scan's own reports are written; the card you asked for is not, so the run fails.
+      printError(e.code === "ECARDREFUSED" ? e.message : `The share card was not written: ${e.message}`);
+      cardFailed = true;
     }
   }
 
@@ -1046,7 +1053,7 @@ export async function run() {
   // Exit code: 1 if critical or high findings, other tools' included unless
   // the policy says giants.failOn: never; 2 if a tool the policy requires did not run.
   if (merged.giants?.requiredNotRun?.length) printError(`The policy file requires ${merged.giants.requiredNotRun.join(", ")}, which did not run (see Coverage by area).`);
-  const code = exitCodeOf(merged);
+  const code = cardFailed ? 2 : exitCodeOf(merged);
   if (wantExitNote({ code, url, repo, opts, custom })) {
     const hidden = (merged.suppressed || []).filter(isSevere).length;
     process.stderr.write(`  ${hidden ? `${hidden} critical or high suppressed, so this exits 0.` : "No critical or high rule fired."} ${NOT_PROVEN_NOTE}\n\n`);

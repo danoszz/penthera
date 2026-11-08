@@ -74,8 +74,13 @@ export function runBrief(argv, { out = process.stdout, err = process.stderr, ver
   const brief = buildBrief(results, { reports: files.map(markdownPathFromJson) });
   out.write(opts.json ? JSON.stringify(brief, null, 2) + "\n" : formatBrief(brief));
   if (opts.card || opts["card-out"]) {
-    const { paths } = writeCards(brief, results, { version, out: opts["card-out"] || DEFAULT_CARD_OUT, date });
-    err.write(`  Share card ${paths.filter((p) => p.endsWith(".png")).join(", ")} (and .svg; made offline, nothing uploaded)\n`);
+    try {
+      const { paths } = writeCards(brief, results, { version, out: opts["card-out"] || DEFAULT_CARD_OUT, date });
+      err.write(`  Share card ${paths.filter((p) => p.endsWith(".png")).join(", ")} (and .svg; made offline, nothing uploaded)\n`);
+    } catch (e) {
+      err.write(`  ${e.code === "ECARDREFUSED" ? e.message : `The share card was not written: ${e.message}`}\n`);
+      return 2;
+    }
   }
   return 0;
 }

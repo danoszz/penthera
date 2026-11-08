@@ -1,13 +1,13 @@
 import { describe, it, expect } from "vitest";
 import { createHash } from "node:crypto";
-import { mkdtempSync, readFileSync, writeFileSync, existsSync, readdirSync, mkdirSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync, existsSync, readdirSync, mkdirSync, symlinkSync, lstatSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { inflateSync } from "node:zlib";
 import { buildBrief, VERDICTS } from "../src/report/brief.js";
 import { runBrief } from "../src/cli/brief.js";
 import { buildCardModel, publicText } from "../src/card/model.js";
-import { renderCards, writeCards } from "../src/card/index.js";
+import { renderCards, writeCards, CardWriteError } from "../src/card/index.js";
 import { postLayout, ogLayout, SIZES } from "../src/card/layout.js";
 import { toSvg, rasterize, pathPolygons } from "../src/card/draw.js";
 import { encodePng } from "../src/card/png.js";
@@ -271,7 +271,7 @@ describe("card renderer", () => {
     for (const file of readdirSync(dir)) {
       const src = readFileSync(join(dir, file), "utf8");
       const imports = [...src.matchAll(/from "([^"]+)"/g)].map((m) => m[1]);
-      for (const i of imports) expect(i.startsWith(".") || ["node:fs", "node:path", "node:url", "node:zlib"].includes(i), `${file} imports ${i}`).toBe(true);
+      for (const i of imports) expect(i.startsWith(".") || ["node:fs", "node:path", "node:url", "node:zlib", "node:crypto"].includes(i), `${file} imports ${i}`).toBe(true);
       expect(src).not.toMatch(/\bfetch\(|https?\.request|node:net|node:http/);
     }
   });
@@ -334,5 +334,76 @@ describe("penthera brief --card", () => {
     const dir = mkdtempSync(join(tmpdir(), "penthera-card-"));
     const { paths } = writeCards(buildBrief(STATES.clean), STATES.clean, { version: VERSION, out: join(dir, "x.png"), date: DATE });
     expect(paths.map((p) => p.slice(dir.length + 1)).sort()).toEqual(["x-og.png", "x-og.svg", "x.png", "x.svg"]);
+  });
+});
+
+// A scanned checkout controls the folder the card lands in. Vercel finding
+// 01M6XG3Z8WZKK62KD4D9KQ7GW4: a planted link must never be written through.
+describe("card writes never follow a planted link", () => {
+  const setup = () => {
+    const root = mkdtempSync(join(tmpdir(), "penthera-card-link-"));
+    const repo = join(root, "repo"), outside = join(root, "outside");
+    mkdirSync(repo);
+    mkdirSync(outside);
+    const secret = join(outside, "keep.txt");
+    writeFileSync(secret, "do not touch\n");
+    return { root, repo, outside, secret };
+  };
+  const write = (out, cwd) => writeCards(buildBrief(STATES.clean), STATES.clean, { version: VERSION, date: DATE, out, cwd });
+
+  it("a link planted at every card name stays a link's target untouched; the card replaces the link", () => {
+    const { repo, secret } = setup();
+    for (const name of ["penthera-card.png", "penthera-card.svg", "penthera-card-og.png", "penthera-card-og.svg"]) symlinkSync(secret, join(repo, name));
+    const before = readFileSync(secret);
+    write("penthera-card", repo);
+    expect(readFileSync(secret)).toEqual(before);
+    for (const name of ["penthera-card.png", "penthera-card.svg", "penthera-card-og.png", "penthera-card-og.svg"]) {
+      expect(lstatSync(join(repo, name)).isSymbolicLink()).toBe(false);
+      expect(lstatSync(join(repo, name)).isFile()).toBe(true);
+    }
+    expect(readdirSync(repo).filter((f) => f.endsWith(".tmp"))).toEqual([]);
+  });
+
+  it("refuses an output folder that is a link, inside the working directory", () => {
+    const { repo, outside } = setup();
+    symlinkSync(outside, join(repo, "reports"));
+    expect(() => write("reports/card", repo)).toThrow(CardWriteError);
+    expect(() => write("reports/card", repo)).toThrow(/reports is a symbolic link/);
+    expect(readdirSync(outside)).toEqual(["keep.txt"]);
+  });
+
+  it("refuses a link in the middle of the path, even when the folder behind it exists", () => {
+    const { repo, outside } = setup();
+    mkdirSync(join(outside, "sub"));
+    symlinkSync(outside, join(repo, "reports"));
+    expect(() => write("reports/sub/card", repo)).toThrow(CardWriteError);
+    // The same path given as an absolute path from somewhere else.
+    expect(() => write(join(repo, "reports", "sub", "card"), mkdtempSync(join(tmpdir(), "penthera-cwd-")))).toThrow(CardWriteError);
+    expect(readdirSync(join(outside, "sub"))).toEqual([]);
+  });
+
+  it("refuses a folder planted where a card file goes", () => {
+    const { repo } = setup();
+    mkdirSync(join(repo, "penthera-card.png"));
+    expect(() => write("penthera-card", repo)).toThrow(/is a folder/);
+    expect(readdirSync(repo).filter((f) => f.endsWith(".tmp"))).toEqual([]);
+  });
+
+  it("creates missing folders one level at a time", () => {
+    const { repo } = setup();
+    const { paths } = write("a/b/card", repo);
+    expect(paths.every((p) => existsSync(p))).toBe(true);
+  });
+
+  it("penthera brief --card exits 2 with a clear line when the folder is a link", () => {
+    const { repo, outside } = setup();
+    symlinkSync(outside, join(repo, "reports"));
+    const report = join(repo, "r.json");
+    writeFileSync(report, JSON.stringify(STATES.clean[0]));
+    let err = "";
+    const code = runBrief([report, "--card-out", join(repo, "reports", "card")], { out: { write() {} }, err: { write: (t) => { err += t; } } });
+    expect(code).toBe(2);
+    expect(err).toMatch(/share card was not written: .*reports is a symbolic link/);
+    expect(readdirSync(outside)).toEqual(["keep.txt"]);
   });
 });
