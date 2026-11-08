@@ -90,7 +90,10 @@ const BENCH_MAX_DROP = 0.02;
 // reachability walk and finding text), PR 312, merged with the share card 8 Nov 2026; was
 // 1_130_000 / 3_195_000; the merged package is ~1,151 KB packed / ~3,274 KB unpacked. Raised under Daan's standing rule of 8 Nov (engineers may raise it
 // with a written reason while the package stays under 5 MB unpacked).
-const PACK_BUDGET = { packedBytes: 1_160_000, unpackedBytes: 3_285_000, files: 360 };
+// Raised again for the fixes to Vercel's two DoS findings on PR 312 (env-name groups and caps,
+// identifiers cut at 63 bytes: ~12 KB unpacked, ~3 KB packed), which put the package at ~1,154 KB /
+// ~3,286 KB; was 1_160_000 / 3_285_000. Same standing rule.
+const PACK_BUDGET = { packedBytes: 1_170_000, unpackedBytes: 3_300_000, files: 360 };
 
 /** Paths the npm package may contain. Anything else fails the packaging gate. */
 const PACK_ALLOW = [
