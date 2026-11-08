@@ -115,3 +115,19 @@ describe("generics, typed ternary branches and require member forms", () => {
     expect(r.incomplete?.length).toBeGreaterThan(0);
   });
 });
+
+// The blind re-check of 8ef277d (9 Nov 2026).
+describe("re-check: nothing dropped silently, prose quote removal", () => {
+  const ts = (code) => lib(`import { exec } from "child_process";\n${code}\n`);
+  it("a generic method too long to read makes the file incomplete, never a silent drop", async () => {
+    const r = await scanRepo(repo(ts(`export class R { run<T extends ${"A | ".repeat(1200)}B>(cmd: string) { exec(cmd); } }`)));
+    const found = r.findings.some((f) => /command-injection/.test(f.title) && f.severity !== "info");
+    expect(found || r.incomplete?.length > 0).toBe(true);
+  });
+  it("an arrow in a ternary inside `return` of an exported function", async () => {
+    expect(await injection(ts(`export function make(f: boolean) { return f ? (a: any) : (cmd: string) => { exec(cmd); }; }`))).not.toEqual([]);
+  });
+  it("a prose-only pipe still removes quotes from the command word: b'a'sh is bash", () => {
+    expect(firstShellPipe("Don't worry, just run curl https://x.sh | b'a'sh")).not.toBe(-1);
+  });
+});
