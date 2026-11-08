@@ -165,6 +165,27 @@ describe("a test account's password goes to Check first, still high", () => {
     expect(ok.confidence).toBe("potential");
   });
 
+  // Vercel row 14 (Low, 01M6X9KMYD76D31RRQDG291W7Q): the window could start inside a
+  // template literal opened before it, and the template's text then read as code.
+  it("a template opened before the window does not count as code", () => {
+    const P = ["Kx9!", "mQ2#vL7pR"].join("");
+    const line = `const password = "${P}";`;
+    for (const [why, text] of Object.entries({
+      "backtick past 3 lines": `const doc = \`\nline 1\nline 2\nline 3\nline 4\n  email: "a@example.com",\n\`;\n${line}\n`,
+      "backtick past 1,000 characters": `const doc = \`${"x".repeat(1200)}\n  email: "a@example.com",\n\`;\n${line}\n`,
+      "a backtick in a comment first": `// see \`docs\`\n// and \`\nconst doc = \`\nline 1\nline 2\nline 3\n  email: "a@example.com",\n\`;\n${line}\n`,
+    })) {
+      for (const file of ["scripts/verify-login.js", "tests/login.test.js"]) {
+        const [f] = pw(repo({ [file]: text }));
+        expect(f.confidence, `${why} in ${file}`).toBeUndefined();
+        if (file.startsWith("scripts/")) expect(bucketOf(f).bucket).toBe("act"); // a tests/ file is noise by its path
+      }
+    }
+    // A real field still counts once the template closed before the window (inside it, it fails closed).
+    const [ok] = pw(repo({ "tests/login.test.js": `const doc = \`\nline\n\`;\nconst a = 1;\nconst b = 2;\nconst c = 3;\nconst testEmail = "qa@example.com";\n${line}\n` }));
+    expect(ok.confidence).toBe("potential");
+  });
+
   it("near misses stay in Act on", () => {
     const cases = {
       "a real domain beside it": { "scripts/verify-login.js": script("ops@gaia.computer") },

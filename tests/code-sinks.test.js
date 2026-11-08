@@ -54,7 +54,9 @@ afterAll(() => rmSync(repo, { recursive: true, force: true }));
 describe("code-sink scan", () => {
   it("reports each sink file once, with the confidence its evidence supports", () => {
     const byFile = Object.fromEntries(scanCodeSinks(repo).map((f) => [f.file, f]));
-    expect(Object.keys(byFile).sort()).toEqual(["core/handler.js", "lib/render.js", "routes/b2b.ts"]);
+    // lib/bundle.js is minified and still scanned (Red Team E23): its request-fed eval is found.
+    expect(Object.keys(byFile).sort()).toEqual(["core/handler.js", "lib/bundle.js", "lib/render.js", "routes/b2b.ts"]);
+    expect(byFile["lib/bundle.js"]).toMatchObject({ title: "eval in lib/bundle.js", confidence: "likely" });
     expect(byFile["core/handler.js"]).toMatchObject({
       title: "command-injection in core/handler.js", severity: "critical", confidence: "likely",
       line: 3, category: "code-pattern", source: "static-analysis", pattern: "command-injection",

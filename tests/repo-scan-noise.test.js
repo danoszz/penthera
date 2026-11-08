@@ -71,24 +71,22 @@ describe("scanSecrets: git-ignored files", () => {
 });
 
 describe("scanSecrets: large files", () => {
-  it("scans a file in chunks and finds a key that straddles a chunk boundary", () => {
+  it("reads a large file whole and finds a key where an old 64 KB chunk edge was", () => {
     withDir((dir) => {
       const chunk = 64 * 1024;
       const pad = "x".repeat(chunk - 20) + "\n";
       put(dir, "big.json", `${pad}{"k": "${ANTHROPIC}"}\n${"y".repeat(chunk)}\n`);
-      const findings = scanSecrets(dir, { chunkBytes: chunk });
+      const findings = scanSecrets(dir);
       expect(findings).toMatchObject([{ url: "big.json", severity: "critical", line: 2 }]);
     });
   });
 
-  it("keeps line numbers right in later chunks", () => {
+  it("keeps line numbers right deep in a large file", () => {
     withDir((dir) => {
-      const chunk = 64 * 1024;
       const lines = Array.from({ length: 3000 }, (_, i) => `line ${i + 1} ${"z".repeat(90)}`);
       lines[2499] = `const k = "${ANTHROPIC}";`;
       put(dir, "big.js", lines.join("\n") + "\n");
-      // ~290 KB in 64 KB chunks: the key is in the fifth chunk.
-      expect(scanSecrets(dir, { chunkBytes: chunk })).toMatchObject([{ url: "big.js", line: 2500 }]);
+      // ~290 KB, read whole since 2.3.2 (it was read in 64 KB chunks here before).
       expect(scanSecrets(dir)).toMatchObject([{ url: "big.js", line: 2500 }]);
     });
   });

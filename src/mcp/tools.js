@@ -93,7 +93,7 @@ export const TOOLS = [
       return buildResult({
         tool: "scan_repo", target: display, findings: merged.findings, limits: REPO_LIMITS, maxFindings: args.max_findings,
         extra: { routes: Array.isArray(raw.attackSurface) ? raw.attackSurface.length : 0, coverage: coverageOf(raw.coverage) },
-        // incomplete: a refused route or server file; the brief then exits 2 and lists it as not checked.
+        // incomplete: a refused file; the brief then has exit_code 2.
         scan: { mode: "repo", coverage: raw.coverage, ...(raw.incomplete ? { incomplete: raw.incomplete } : {}) },
       });
     },
@@ -177,7 +177,8 @@ export const TOOLS = [
       return buildResult({
         tool: "audit_ai_tooling", target: display, findings: stampProvenance(raw.findings, raw.timestamp), limits: AGENTS_LIMITS, maxFindings: args.max_findings,
         extra: { grade: a.grade ?? null, score: a.score ?? null, inventory: a.inventory ? { ...a.inventory, configFiles: (a.inventory.configFiles || []).slice(0, 50).map((f) => cleanText(f, 300)) } : null },
-        scan: { mode: "agents", agents: a },
+        // incomplete: agent config that was there but not read; the brief then has exit_code 2.
+        scan: { mode: "agents", agents: a, ...(raw.incomplete ? { incomplete: raw.incomplete } : {}) },
       });
     },
   },
@@ -220,7 +221,7 @@ export const TOOLS = [
       if (args.headers && args.path !== undefined) throw new ToolInputError("Pass either path or headers, not both.");
       if (args.headers) {
         const headers = Object.fromEntries(Object.entries(args.headers).map(([k, v]) => [k.toLowerCase(), v]));
-        const cookieNames = String(headers["set-cookie"] || "").split(/,(?=[^;]*=)/).map((c) => c.split("=")[0].trim()).filter(Boolean);
+        const cookieNames = splitSetCookie(String(headers["set-cookie"] || "")).map((c) => c.split("=")[0].trim()).filter(Boolean);
         const findings = runtimeAdvisoriesForResponse({ headers, cookieNames });
         return buildResult({ tool: "runtime_advisories", target: "response headers", findings: stampProvenance(findings, new Date().toISOString()), limits: ADVISORY_LIMITS, maxFindings: args.max_findings });
       }
@@ -308,3 +309,23 @@ function explain(id) {
 }
 
 export { callResult };
+
+/**
+ * A joined Set-Cookie header split into cookies: at each comma followed by
+ * `name=` before the next `;` (an Expires date's comma is not). In one pass
+ * from the end; a lookahead per comma was quadratic on a crafted header.
+ */
+function splitSetCookie(s) {
+  const cuts = [];
+  let eq = false;
+  for (let i = s.length - 1; i >= 0; i--) {
+    if (s[i] === "," && eq) cuts.push(i);
+    if (s[i] === ";") eq = false;
+    else if (s[i] === "=") eq = true;
+  }
+  const out = [];
+  let start = 0;
+  for (const c of cuts.reverse()) { out.push(s.slice(start, c)); start = c + 1; }
+  out.push(s.slice(start));
+  return out;
+}

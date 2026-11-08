@@ -2,6 +2,7 @@
  * What a run reached and what it did not, in a line or two, so a quiet result
  * is never read as a full check. Printed on every scan.
  */
+import { trimEndChars, globMatcher } from "../../lib/linear-text.js";
 
 /** Why a live scan read nothing, for a target that didn't answer or answered with a server error. */
 export function unreachableText({ httpStatus }, url) {
@@ -9,10 +10,23 @@ export function unreachableText({ httpStatus }, url) {
 }
 
 /** Does a discovered path answer a route such as /api/users/:id? */
+// `:name` is one segment, `*` any characters, `?` makes the character before
+// it optional (as the regex this replaces read it). Matched in linear time: the
+// route comes from the scanned code, and as a regex a route with many stars
+// backtracked without end (Vercel Security Review, 2.3.2).
 function matches(route, path) {
-  const bare = path.split("?")[0].replace(/\/+$/, "") || "/";
-  const pattern = route.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/:[^/]+/g, "[^/]+").replace(/\*/g, ".*");
-  return new RegExp(`^${pattern}$`).test(bare);
+  const bare = trimEndChars(path.split("?")[0], "/") || "/";
+  const tokens = [];
+  for (let i = 0; i < route.length; i++) {
+    if (route[i] === ":" && i + 1 < route.length && route[i + 1] !== "/") {
+      while (i + 1 < route.length && route[i + 1] !== "/") i++;
+      tokens.push({ plus: "seg" });
+    } else if (route[i] === "*") tokens.push({ star: "any" });
+    else if (route[i] === "?" && tokens.at(-1)?.lit !== undefined) tokens[tokens.length - 1] = { maybe: tokens.at(-1) };
+    else if (route[i] === "?" && tokens.length) continue; // after `*`, `:name` or `?`: lazy, the same paths
+    else tokens.push({ lit: route[i] });
+  }
+  return globMatcher(tokens).test(bare);
 }
 
 /**
