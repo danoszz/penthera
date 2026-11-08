@@ -347,10 +347,10 @@ describe("supabase-rls-disabled", () => {
     const rls = r.findings.filter((f) => f.templateId === "supabase-rls-disabled");
     // The tracked ones as one group, and those past the cap as one more, counted, at potential.
     expect(rls.map((f) => f.confidence).sort()).toEqual(["likely", "potential"]);
-    expect(rls.find((f) => f.confidence === "potential").title).toMatch(/^149999 tables created after Penthera's 50000-object limit/);
+    expect(rls.find((f) => f.confidence === "potential").title).toMatch(/^149999 tables changed after Penthera's 50000-object limit/);
     // The table with a private-looking column is named first; the count stops at the cap.
     rls.sort((a, b) => (a.confidence === "likely" ? -1 : 1) - (b.confidence === "likely" ? -1 : 1));
-    expect(rls[0].title).toMatch(/^50001 tables in `supabase\/migrations\/001\.sql` have no row-level security \(list [0-9a-f]{8}\)$/);
+    expect(rls[0].title).toMatch(/^50001 tables in `supabase\/migrations\/001\.sql` have no row-level security \(list [0-9a-f]{16}\)$/);
     expect(rls[0].description).toMatch(/^`supabase\/migrations\/001\.sql` creates or changes 50001 tables in exposed schemas that no migration puts under row-level security: `public\.t150`/);
     expect(rls[0].lines.length).toBeLessThanOrEqual(20);
     expect(r.incomplete).toEqual([expect.objectContaining({ file: "supabase/migrations/001.sql", reason: expect.stringContaining("more than 50000 tables and policies") })]);
@@ -370,6 +370,25 @@ describe("supabase-rls-disabled", () => {
     expect(r.coverage.families.find((x) => x.id === "supabase")).toMatchObject({ examined: 1 });
   }, 60_000);
 
+  it("past the cap, search_path, DISABLE RLS, SET SCHEMA and a private-looking column still surface (recheck of PR 312)", async () => {
+    const decoys = Array.from({ length: 50_001 }, (_, i) => `create table d${i} (id int);`).join("\n");
+    const cases = {
+      search_path: [`set search_path to private;\n${decoys}`, "set search_path to public;\ncreate table users (password text);"],
+      disable: [`create table public.users (email text);\nalter table public.users enable row level security;\nset search_path to private;\n${decoys}`, "alter table public.users disable row level security;"],
+      set_schema: [`create table private.users (email text);\nset search_path to private;\n${decoys}`, "alter table private.users set schema public;"],
+    };
+    for (const [name, [a, b]] of Object.entries(cases)) {
+      const r = scanSupabase(repo({ "supabase/migrations/001.sql": a, "supabase/migrations/002.sql": b }));
+      const f = r.findings.filter((x) => x.templateId === "supabase-rls-disabled");
+      expect(f.map((x) => x.description).join(" "), name).toContain("`public.users`");
+    }
+    // 1,000 harmless names first can't push a table with a private-looking column out of the names.
+    const many = Array.from({ length: 1001 }, (_, i) => `create table public.o${i} (id int);`).join("\n");
+    const r = scanSupabase(repo({ "supabase/migrations/001.sql": `set search_path to private;\n${decoys}`, "supabase/migrations/002.sql": `${many}\ncreate table public.users (password text);` }));
+    const o = r.findings.find((x) => x.title.includes("after Penthera's"));
+    expect(o.description).toMatch(/: `public\.users`/);
+  }, 120_000);
+
   it("a grouped finding's id changes when its set of tables changes, so a suppression doesn't carry over (review of PR 312)", () => {
     const title = (sql) => scanSupabase(repo({ "supabase/migrations/001.sql": sql })).findings[0].title;
     const a = title("create table public.logs (id int);\ncreate table public.events (id int);");
@@ -383,7 +402,7 @@ describe("supabase-rls-disabled", () => {
     const root = repo({ "supabase/migrations/001.sql": `create table public.t (id int);\nalter table public.t enable row level security;\n${pols}` });
     const f = scanSupabase(root).findings;
     expect(f.map((x) => `${x.templateId}:${x.severity}`)).toEqual(["supabase-policy-open:high"]);
-    expect(f[0].title).toMatch(/^30 policies in `supabase\/migrations\/001\.sql` check nothing \(list [0-9a-f]{8}\)$/);
+    expect(f[0].title).toMatch(/^30 policies in `supabase\/migrations\/001\.sql` check nothing \(list [0-9a-f]{16}\)$/);
     expect(f[0].description).toContain("and 10 more");
   });
 
