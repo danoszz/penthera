@@ -353,7 +353,9 @@ live once a maintainer approves it with 2FA. **Do not run `npm publish` locally.
      (a copy of the skill, whose `npx -y penthera@<version>` lines are the
      plugin's pin), plus the Agent Plugins copy `plugin/plugin.json`; a test keeps
      them equal. The plugin is skill-only: no `.mcp.json` or `mcp.json` in `plugin/`,
-     because Anthropic's directory refuses local MCP servers from unverified publishers
+     because Anthropic's directory refuses local MCP servers from unverified publishers.
+     It also ships only Markdown, text, JSON, YAML and images (plus the licence and
+     readme), so the copy leaves out `skills/penthera/scripts/`; a test checks both
    - `CITATION.cff` (`version`)
    - `docs/METHODOLOGY.md` (the "How to cite" block)
    - `server.json` (`version` and `packages[0].version`) and the pins in

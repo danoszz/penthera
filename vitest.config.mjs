@@ -60,7 +60,8 @@ export default defineConfig({
           ...shared,
           name: "unit",
           env: TEST_ENV,
-          include: ["tests/**/*.test.{js,ts}"],
+          // integrations/*/test: the Vercel integration server's own offline tests.
+          include: ["tests/**/*.test.{js,ts}", "integrations/*/test/**/*.test.js"],
           exclude: SPAWN_HEAVY,
           testTimeout: 20_000,
           hookTimeout: 20_000,

@@ -40,6 +40,8 @@ export function mergeResults(results) {
       // A refused input in any part makes the whole run incomplete: exit 2.
       ...(results.some((r) => r.incomplete?.length) ? { incomplete: results.flatMap((r) => r.incomplete || []) } : {}),
       findings: dedupeFindings(results.flatMap((r) => r.findings || [])),
+      // A refused input in any target makes the merged run incomplete (exit 2).
+      ...(results.some((r) => r.incomplete?.length) ? { incomplete: results.flatMap((r) => r.incomplete || []) } : {}),
     };
   }
 

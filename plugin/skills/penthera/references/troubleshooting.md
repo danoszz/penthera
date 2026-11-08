@@ -43,25 +43,10 @@ cd /path/to/penthera && npm link
 penthera --version
 ```
 
-## Auth failures / empty authenticated findings
+## Pages behind a login were not checked
 
-**Symptoms:** Scan completes but misses protected endpoints
-
-**Causes:** Expired token, wrong cookie format, missing Bearer prefix
-
-**Solutions:**
-
-```bash
-# Bearer, prefix added automatically if missing
-penthera https://myapp.com --auth-bearer "eyJ..."
-
-# Or via env
-export PENTHERA_BEARER="eyJ..."
-penthera https://myapp.com -o reports/scan.json
-
-# Cookie, full header value
-penthera https://myapp.com --auth-cookie "session=abc123; path=/"
-```
+The skill does not handle logins. See [the scan docs](https://docs.penthera.org/commands/scan) for scanning
+behind a login.
 
 ## Site not read
 
@@ -102,12 +87,13 @@ penthera https://myapp.com -o reports/previous.json
 - the `github/codeql-action/upload-sarif` step has `if: always()`
 - Repository has code scanning enabled
 
-## Preflight script failures
+## Preflight failures
 
-Run manually for diagnostics, from the project folder (the script is in this skill's folder):
+Run each preflight check in SKILL.md by hand, from the project folder:
 
 ```bash
-bash <this skill's folder>/scripts/preflight.sh https://myapp.com
+node --version      # v22 or later
+mkdir -p reports
 ```
 
-Fix each reported check before scanning.
+Then run the `--version` line from "Resolve CLI command" in SKILL.md. Fix each one that fails before scanning.

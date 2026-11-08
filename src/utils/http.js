@@ -70,6 +70,8 @@ export function createEgressContext(opts = {}) {
   const targetHost = target ? target.hostname.toLowerCase() : null;
   return {
     targetHost,
+    targetOrigin: target?.origin,
+    targetHeaders: Object.entries(opts.targetHeaders || {}),
     targetPort: target ? effectivePort(target) : null,
     targetDomain: targetHost ? registrableDomain(targetHost) : null,
     offline: opts.offline === true,
@@ -192,6 +194,14 @@ function withUserAgent(headers, userAgent) {
   return h;
 }
 
+// targetHeaders: target origin only, every hop.
+function forOrigin(init, url, ctx) {
+  if (!ctx?.targetHeaders?.length) return init;
+  const h = new Headers(init.headers);
+  for (const [k, v] of ctx.targetHeaders) if (sameOrigin(url, ctx.targetOrigin)) h.set(k, v); else h.delete(k);
+  return { ...init, headers: h };
+}
+
 function describeError(err, timeoutMs) {
   if (err?.name === "AbortError" || err?.name === "TimeoutError") return `timeout after ${timeoutMs}ms`;
   const cause = err?.cause?.code || err?.cause?.message;
@@ -240,7 +250,7 @@ export async function request(url, opts = {}) {
       }
 
       if (hop > 0) await acquireSlot(ctx, combined);
-      const res = await globalThis.fetch(current, { ...init, signal: combined, redirect: "manual" });
+      const res = await globalThis.fetch(current, { ...forOrigin(init, current, ctx), signal: combined, redirect: "manual" });
       if (ctx) bump(ctx.contacted, new URL(current).hostname.toLowerCase());
 
       const location = res.headers.get("location");
@@ -462,6 +472,7 @@ export function egressSummary(ctx = currentEgress()) {
     rateLimit: ctx.rateLimit || null,
     userAgent: ctx.userAgent,
     target: ctx.targetHost,
+    ...(ctx.targetHeaders?.length ? { targetHeaders: ctx.targetHeaders.map(([k]) => k.toLowerCase()) } : {}),
     hosts: contacted,
     thirdPartyHosts: contacted.filter((h) => isThirdParty(ctx, h.host)),
     blocked: sortHosts(ctx.blocked),

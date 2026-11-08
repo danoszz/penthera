@@ -14,7 +14,7 @@ pull requests, a scan step in your own workflow, and the
 
 ```yaml
 - name: "Penthera: your open-source cyber security agent"
-  uses: danoszz/penthera@3b4c837aaae81966ad95645e0f84dc9f9353d0ab # v2.3.1
+  uses: danoszz/penthera@f7dee0f4adef277e781cc0bd9c3902a2e6d1f4c4 # v2.3.2
   with:
     mode: deps        # deps | agents | scan (scan also needs url:)
     fail-on: none     # none | high | critical
@@ -22,7 +22,7 @@ pull requests, a scan step in your own workflow, and the
 
 Pin the action to a release commit SHA, not a tag: a tag can be moved, a
 commit cannot. Find the SHA for a release with
-`git ls-remote https://github.com/danoszz/penthera refs/tags/v2.3.1`.
+`git ls-remote https://github.com/danoszz/penthera refs/tags/v2.3.2`.
 
 The action's name contains a colon, so a `name:` line that holds it needs
 quotes. The snippet on the GitHub Marketplace page may print the name without
@@ -38,6 +38,13 @@ code scanning. Penthera runs from the action's own checkout: no npx and no
 install from npm. Penthera has no runtime dependencies, so no mode runs `npm ci`. On fork PRs the
 token is read-only, so the diff goes to the job summary instead.
 
+In `mode: scan` with a `fail-on` gate, a run fails as incomplete (exit 2),
+whatever it found, unless its report proves the site was read: the home page
+answered 2xx, no firewall served a bot challenge or block page, no request was
+rate limited, and the app scan ran. A redirect to another address, a 401 or
+403, or no answer all count as not read. The log says
+`Site not read (<reason>)`. With `fail-on: none` it is a warning.
+
 The job fails when the scan is incomplete, even with `fail-on: none`. That
 happens when Penthera could not read a lockfile or requirements file (a FIFO,
 a device, a link out of the project, over the 64 MiB cap, or an `-r` include
@@ -45,7 +52,7 @@ like that), so the packages it lists were not checked. The CLI exits 2. The PR
 comment says `Incomplete:` and names the file, SARIF is still uploaded, and
 then the step "Fail on an incomplete scan" fails the job. Any other exit 2 (a
 crash, a bad input) fails the job at once, with no comment or SARIF. Inputs: `mode`, `path`, `base-ref`, `url`,
-`fail-on`, `comment`, `footer`, `sarif`, `penthera-version`, `github-token`. Copy the full workflow, with
+`fail-on`, `comment`, `footer`, `sarif`, `penthera-version`, `vercel-bypass-secret`, `github-token`. Copy the full workflow, with
 permissions and a lockfile paths filter, from
 [`docs/examples/pr-dependency-review.yml`](https://github.com/danoszz/penthera/blob/main/docs/examples/pr-dependency-review.yml).
 
@@ -88,6 +95,15 @@ because their token is read-only.
 To scan a preview URL and upload SARIF, see
 [scan in CI](scan.md#ci-integration) and the example
 [`docs/examples/github-actions-scan.yml`](https://github.com/danoszz/penthera/blob/main/docs/examples/github-actions-scan.yml).
+For a Vercel deployment behind Vercel Authentication, pass Vercel's Protection
+Bypass for Automation secret from a repository secret:
+`vercel-bypass-secret: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}`. The
+action masks it in the log and hands it to the scan as
+`PENTHERA_VERCEL_BYPASS`, never as an argument, in scan mode only. Pass it from
+`secrets.*` only: a value from `vars`, a step output or plain text is printed
+with the step's environment before the action can mask it
+([scan](scan.md#behind-vercel-deployment-protection)).
+
 Pin the Penthera version, so every run is checked by the same rules, and use
 `--baseline` for counts of what is new, or `--baseline ... -q` to report and
 gate on new findings only. `penthera --repo .`

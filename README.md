@@ -94,6 +94,15 @@ The skill tells your agent how to run Penthera; the MCP server gives it six
 read-only tools. More routes: [skill.md](docs/commands/skill.md),
 [mcp.md](docs/commands/mcp.md).
 
+**Where AI fits.** Rules decide every finding and every exit code. A model may
+only propose:
+
+| Role | Who | How |
+|---|---|---|
+| Decides | Penthera's rules, always | Every finding, every exit code |
+| Looks further (optional) | A model, with `--ai` | Proposes problems no rule describes; the rules check each one, and unchecked ones are listed apart and never fail CI ([AI mode](docs/ai-mode.md)) |
+| Fixes | Your own coding agent | Through the MCP server, the skill or `penthera fix --plan` |
+
 To run it in a container:
 `docker build -t penthera . && docker run --rm penthera https://your-app.example`.
 
@@ -213,26 +222,142 @@ projects is experiment E1. To reproduce every table, get the sealed split with
 
 ```mermaid
 flowchart LR
-    U["You or your AI agent"] --> P(("Penthera<br/>on your machine"))
+    U["You or<br/>your agent"] --> P(("Penthera<br/>on your machine"))
 
-    P --> APP["Your app<br/>URL scan, repo scan<br/>runtime advisories"]
-    P --> DEP["Your dependencies<br/>capabilities, install firewall<br/>typosquats, upgrade diff"]
-    P --> AI["Your AI tooling<br/>skills, MCP, hooks<br/>plugins, rule files"]
+    P --> APP["Your app<br/>live and code"]
+    P --> DEP["Dependencies<br/>npm and Python"]
+    P --> AI["AI tooling<br/>skills, MCP, hooks"]
 
-    APP --> F[["Findings<br/>severity, confidence<br/>evidence at file:line"]]
-    DEP --> F
-    AI --> F
+    APP & DEP & AI --> F[["Findings<br/>rules decide"]]
 
-    F --> FIX["Fix loop<br/>asks first, local branch<br/>cannot edit its own tests"]
-    FIX -. "re-scan proves it" .-> F
-    F --> R["Reports and dashboard<br/>terminal, Markdown, SARIF<br/>penthera ui, MCP tools"]
-    F --> E["Evidence<br/>signed bundle<br/>NIS2 and CRA drafts"]
+    F --> FIX["Fix<br/>asks first"]
+    F --> R["Reports<br/>SARIF, ui, MCP"]
+    F --> E["Evidence<br/>signed bundle"]
+    FIX -. "re-scan" .-> F
 
     classDef core fill:#0000ed,stroke:#0000ed,color:#ffffff
     classDef box fill:#ffffff,stroke:#000000,color:#000000
     class P core
     class U,APP,DEP,AI,F,FIX,R,E box
 ```
+
+<details>
+<summary><b>Advanced: black box</b>, the running app over HTTP</summary>
+
+The default scan sends no attack payloads. `--deep`, `--fuzz` and `--adaptive`
+start only after you confirm the hostname, or pass `--confirm-target <host>` in
+CI. Limits are in [METHODOLOGY.md](docs/METHODOLOGY.md#under-the-hood).
+
+```mermaid
+%%{init: {"flowchart": {"nodeSpacing": 24, "rankSpacing": 40}}}%%
+flowchart LR
+    APP["Running app<br/>penthera URL"] --> DEF
+    APP --> ACT
+
+    subgraph DEF["Default: no attack payloads"]
+        direction TB
+        B1["TLS, headers<br/>cookies, CORS"]
+        B2["Routes<br/>OpenAPI, files"]
+        B3["Auth, JWT, OAuth<br/>IDOR: review"]
+        B4["JS libraries<br/>bundle keys"]
+    end
+
+    subgraph ACT["Opt-in, gated"]
+        direction TB
+        A1["--deep<br/>SQLi, XSS, SSRF"]
+        A2["--fuzz<br/>API bodies"]
+        A3["--adaptive<br/>may send DELETE"]
+    end
+
+    DEF & ACT --> F[["Findings"]]
+
+    classDef core fill:#0000ed,stroke:#0000ed,color:#ffffff
+    classDef box fill:#ffffff,stroke:#000000,color:#000000
+    class F core
+    class APP,B1,B2,B3,B4,A1,A2,A3 box
+    style DEF fill:none,stroke:#0000ed,stroke-width:2px
+    style ACT fill:none,stroke:#0000ed,stroke-width:2px,stroke-dasharray:6 4
+```
+
+</details>
+
+<details>
+<summary><b>Advanced: white box</b>, your code and config</summary>
+
+Code sinks use taint-lite within one file, with no call graph. Dependency
+capabilities are what code can do, not proof it is malicious.
+
+```mermaid
+%%{init: {"flowchart": {"nodeSpacing": 24, "rankSpacing": 40}}}%%
+flowchart LR
+    REPO["Code and config"] --> RS
+    REPO --> OWN
+
+    subgraph RS["penthera --repo ."]
+        direction TB
+        W1["Secrets<br/>key formats"]
+        W2["Routes<br/>auth per route"]
+        W3["Code sinks<br/>eval, vm, exec"]
+        W4["CI, runtimes<br/>Actions, pins"]
+    end
+
+    subgraph OWN["Own commands"]
+        direction TB
+        W5["deps<br/>capabilities, IOCs"]
+        W6["agents<br/>MCP, skills, hooks"]
+        W7["install, hook<br/>before it lands"]
+    end
+
+    RS & OWN --> F[["Findings"]]
+
+    classDef core fill:#0000ed,stroke:#0000ed,color:#ffffff
+    classDef box fill:#ffffff,stroke:#000000,color:#000000
+    class F core
+    class REPO,W1,W2,W3,W4,W5,W6,W7 box
+    style RS fill:none,stroke:#0000ed,stroke-width:2px
+    style OWN fill:none,stroke:#0000ed,stroke-width:2px
+```
+
+</details>
+
+<details>
+<summary><b>Advanced: engine and outputs</b>, how a match becomes a result</summary>
+
+Rules decide every finding. Exit code `0` means nothing critical or high, `1`
+critical or high, `2` an incomplete or refused scan. Under `--ai` a model only
+proposes.
+
+```mermaid
+%%{init: {"flowchart": {"nodeSpacing": 30, "rankSpacing": 40}}}%%
+flowchart LR
+    subgraph IN["Inputs"]
+        direction LR
+        R["Signed rule packs"]
+        GI["--giants, opt-in"]
+        AI["--ai, opt-in"]
+    end
+
+    IN --> FD[["Finding<br/>severity, confidence"]]
+    FD --> EX{"Exit<br/>0, 1 or 2"}
+    EX --> OUT
+
+    subgraph OUT["Outputs"]
+        direction LR
+        O1["Reports, SARIF"]
+        O2["penthera ui, MCP"]
+        O3["Action, Vercel check"]
+        O4["Evidence bundle"]
+    end
+
+    classDef core fill:#0000ed,stroke:#0000ed,color:#ffffff
+    classDef box fill:#ffffff,stroke:#000000,color:#000000
+    class FD core
+    class R,GI,AI,EX,O1,O2,O3,O4 box
+    style IN fill:none,stroke:#0000ed,stroke-width:2px
+    style OUT fill:none,stroke:#0000ed,stroke-width:2px
+```
+
+</details>
 
 ### Before you deploy
 

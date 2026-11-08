@@ -90,8 +90,8 @@ async def security_headers(request, call_next):
 ```ts
 import { NextResponse } from "next/server";
 export function middleware(req) {
-  const token = req.cookies.get("session")?.value;
-  if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // verifySession: your auth library's check on the request
+  if (!verifySession(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 }
 export const config = { matcher: ["/api/:path*"] };
 ```
@@ -99,8 +99,8 @@ export const config = { matcher: ["/api/:path*"] };
 **Express:**
 ```js
 function requireAuth(req, res, next) {
-  const token = req.headers.authorization?.replace("Bearer ", "");
-  if (!token || !verify(token)) return res.status(401).json({ error: "Unauthorized" });
+  // verifySession: your auth library's check on the request
+  if (!verifySession(req)) return res.status(401).json({ error: "Unauthorized" });
   next();
 }
 app.use("/api/admin", requireAuth);
@@ -109,14 +109,14 @@ app.use("/api/admin", requireAuth);
 **FastAPI:**
 ```python
 from fastapi import Depends, HTTPException
-def require_auth(token: str = Depends(oauth2_scheme)):
-    if not valid(token): raise HTTPException(status_code=401)
+def require_auth(user = Depends(current_user)):  # your auth library's dependency
+    if user is None: raise HTTPException(status_code=401)
 
 @app.get("/api/admin", dependencies=[Depends(require_auth)])
 def admin(): ...
 ```
 
-**Verify:** re-scan; the route returns 401 without a valid token and the "Unauthenticated endpoint" finding clears.
+**Verify:** re-scan; the route returns 401 when not signed in and the "Unauthenticated endpoint" finding clears.
 
 ---
 
@@ -126,7 +126,7 @@ def admin(): ...
 **Fix:** disable interactive docs and the spec in production.
 
 **FastAPI:** `FastAPI(docs_url=None, redoc_url=None, openapi_url=None)` in production (gate by an env flag).
-**Express + swagger-ui:** only mount when `process.env.NODE_ENV !== "production"`.
+**Express + swagger-ui:** mount it only outside production (check your app's environment setting).
 
 **Verify:** `/docs` and `/openapi.json` return 404 in production.
 
@@ -177,7 +177,7 @@ app.use("/api/login", rateLimit({ windowMs: 15 * 60 * 1000, max: 10 }));
 
 **Finding:** an API key, token, password, or private key is committed in the repo.
 **Fix (do all three):**
-1. Move it to an environment variable: `const key = process.env.STRIPE_SECRET_KEY;` (was `const key = "sk_live_..."`).
+1. Take the value out of the code and load it from configuration that stays out of the repo, such as an environment variable your host sets. The code then names the setting (say, `STRIPE_KEY`), never the value.
 2. **Rotate the secret now**, once committed it is compromised, even after removal.
 3. Add the file to `.gitignore`; if it was pushed, scrub history (`git filter-repo`).
 
