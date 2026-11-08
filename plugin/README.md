@@ -7,13 +7,13 @@ each one yourself. MIT licensed.
 This folder is the plugin for Claude Code and Cowork. It holds the
 Penthera skill (`skills/penthera`), which tells Claude how to scan your own
 app, live URL, dependencies and agent setup with the Penthera CLI
-(`npx -y penthera@2.3.2`), explain the findings and fix them with your approval.
+(`npx -y penthera@2.4.0`), explain the findings and fix them with your approval.
 
 The plugin starts no MCP server. To use Penthera's read-only MCP tools as well,
 add the server yourself:
 
 ```bash
-claude mcp add penthera -- npx -y penthera@2.3.2 mcp
+claude mcp add penthera -- npx -y penthera@2.4.0 mcp
 ```
 
 The tools scan inside your project, never apply fixes and run no shell. Other

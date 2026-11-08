@@ -12,7 +12,7 @@ description: "penthera mcp runs Penthera as an MCP server."
 server. Your agent (Claude Code, Codex, GitHub Copilot, Cursor, Windsurf, Gemini CLI) starts it
 and calls its tools. It needs Node.js 22 or later.
 
-The commands below pin 2.3.2, so an update never reaches you unless you change the pin.
+The commands below pin 2.4.0, so an update never reaches you unless you change the pin.
 
 Always pin the version. An unpinned `npx penthera` runs whatever version is
 newest on npm each time your agent starts, which is the risk that
@@ -21,7 +21,7 @@ newest on npm each time your agent starts, which is the risk that
 ### Claude Code
 
 ```bash
-claude mcp add penthera -- npx -y penthera@2.3.2 mcp
+claude mcp add penthera -- npx -y penthera@2.4.0 mcp
 ```
 
 Add `--scope project` to write it to `.mcp.json` for the whole team. The
@@ -41,7 +41,7 @@ Inside a session, the same is `/plugin marketplace add danoszz/penthera` and
 ### Codex
 
 ```bash
-codex mcp add penthera -- npx -y penthera@2.3.2 mcp
+codex mcp add penthera -- npx -y penthera@2.4.0 mcp
 ```
 
 Or add it to `~/.codex/config.toml`:
@@ -49,7 +49,7 @@ Or add it to `~/.codex/config.toml`:
 ```toml
 [mcp_servers.penthera]
 command = "npx"
-args = ["-y", "penthera@2.3.2", "mcp"]
+args = ["-y", "penthera@2.4.0", "mcp"]
 ```
 
 Checked against [Codex's MCP docs](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
@@ -65,12 +65,12 @@ copilot plugin install penthera@penthera
 ```
 
 For the MCP tools in Copilot CLI, add the server in its MCP settings with the
-same `npx -y penthera@2.3.2 mcp` launch line.
+same `npx -y penthera@2.4.0 mcp` launch line.
 
 In VS Code, add the server to your user profile:
 
 ```bash
-code --add-mcp '{"name":"penthera","type":"stdio","command":"npx","args":["-y","penthera@2.3.2","mcp"]}'
+code --add-mcp '{"name":"penthera","type":"stdio","command":"npx","args":["-y","penthera@2.4.0","mcp"]}'
 ```
 
 Or put the JSON under **VS Code** below in `.vscode/mcp.json`. Checked against
@@ -86,7 +86,7 @@ Cursor reads `.cursor/mcp.json`, and Windsurf `~/.codeium/windsurf/mcp_config.js
   "mcpServers": {
     "penthera": {
       "command": "npx",
-      "args": ["-y", "penthera@2.3.2", "mcp"]
+      "args": ["-y", "penthera@2.4.0", "mcp"]
     }
   }
 }
@@ -102,7 +102,7 @@ Checked against [Cursor's MCP docs](https://cursor.com/docs/context/mcp).
     "penthera": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "penthera@2.3.2", "mcp"]
+      "args": ["-y", "penthera@2.4.0", "mcp"]
     }
   }
 }
@@ -193,7 +193,7 @@ true.
   you write, not the model:
 
 ```bash
-npx -y penthera@2.3.2 mcp --allow-host staging.example.com
+npx -y penthera@2.4.0 mcp --allow-host staging.example.com
 ```
 
   Only list hosts you are authorized to test. The same limit holds on every
@@ -216,8 +216,8 @@ npx -y penthera@2.3.2 mcp --allow-host staging.example.com
 ## Options
 
 ```bash
-npx -y penthera@2.3.2 mcp --offline
-npx -y penthera@2.3.2 mcp --help
+npx -y penthera@2.4.0 mcp --offline
+npx -y penthera@2.4.0 mcp --help
 ```
 
 | Flag | Meaning |

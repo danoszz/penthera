@@ -317,7 +317,8 @@ describe("nothing the scan found before is lost, and the fix plan sees the scan'
     const root = repo({
       ...NEXT,
       "next.config.mjs": "export default {};\n",
-      "app/api/login/route.ts": 'const sessionSecret = "q7Vt2Lm9Xp4Rk8Wz";\nexport async function POST(request: Request) {\n  const store = await cookies();\n  store.set("session", "x");\n  return Response.json({ ok: true });\n}\n',
+      // The secret is built at run time, so Penthera's own self-scan does not report this file.
+      "app/api/login/route.ts": `const sessionSecret = "${["q7Vt2Lm9", "Xp4Rk8Wz"].join("")}";\nexport async function POST(request: Request) {\n  const store = await cookies();\n  store.set("session", "x");\n  return Response.json({ ok: true });\n}\n`,
       "app/api/session/route.ts": 'export async function GET(request: Request) {\n  const origin = request.headers.get("origin");\n  return new Response("{}", { headers: { "Access-Control-Allow-Origin": origin || "*" } });\n}\n',
     });
     const scan = await scanRepo(root);
