@@ -21,6 +21,7 @@ import { hintCommand } from "../utils/invocation.js";
 import { notRead, readNothing, siteUnread, SITE_NOT_READ } from "./unread.js";
 import { unreachableText } from "./reach.js";
 import { bucketOf, pathOf, problemsText, fixesText } from "./counts.js";
+import { exploitabilityFor, matchLabel } from "../../lib/provenance.js";
 
 export { bucketOf };
 
@@ -102,6 +103,9 @@ function severityMix(group) {
   return names.length > 1 ? names.map((n) => `${n} ${counts[n]}`).join(", ") : null;
 }
 
+export const SUPPRESS_COMMAND = 'penthera memory suppress <fid> --reason "<why>"';
+const SUPPRESS_WHY = "It sets the finding aside on this machine; add the fid and reason to penthera.suppress.json to share that with your team. Both apply to scans with --memory, and the report lists what they hide. The fid is next to each finding in the JSON and Markdown reports";
+
 function item(group) {
   const f = group[0];
   const paths = [...new Set(group.map(whereOf).filter(Boolean))];
@@ -112,6 +116,7 @@ function item(group) {
     severity: f.severity,
     mix: severityMix(group),
     confidence: f.confidence || "likely",
+    exploitability: f.exploitability || exploitabilityFor(f),
     count: group.length,
     where: paths.slice(0, MAX_EXAMPLES).map((p) => text(p, 300)),
     more: Math.max(0, paths.length - MAX_EXAMPLES),
@@ -237,6 +242,11 @@ export function buildBrief(results, { reports = [], fixes = null, limits = [], m
     }
   }
   next.push(...moreNext);
+  // How to set aside a problem you checked: by its fid (in the JSON and the
+  // Markdown report), with a reason. Only where the findings carry one.
+  const setAside = (act.length || check.length) && findings.some((f) => typeof f.fid === "string")
+    ? { command: SUPPRESS_COMMAND, why: SUPPRESS_WHY }
+    : null;
   for (const r of list) if (r.challenge) notChecked.unshift(`${SITE_NOT_READ} ${siteUnread(r).text}`);
   if (!notChecked.length) notChecked.push("The scan reported nothing it skipped. No finding is still not proof of safety: Penthera reports what its rules match.");
 
@@ -285,6 +295,8 @@ export function buildBrief(results, { reports = [], fixes = null, limits = [], m
     likely_noise: noise,
     not_checked: [...new Set(notChecked)],
     next: dedupeNext(next).slice(0, MAX_NEXT),
+    // Added in 2.4.1: how to suppress a problem you checked, by fid with a reason.
+    ...(setAside ? { set_aside: setAside } : {}),
     reports: reports.map((p) => text(p, 300)),
   };
 }
@@ -331,11 +343,12 @@ export function formatBrief(b, { footer = false } = {}) {
     L.push("### Check first", "");
     for (const i of b.check_first.slice(0, MAX_ITEMS)) {
       const where = whereText(i);
-      L.push(`- **${md(i.title)}**${i.count > 1 ? ` (${i.count})` : ""} [${i.mix || i.severity}, ${i.confidence}]${where ? ` in ${where}` : ""}.${i.why ? ` ${md(i.why)}` : ""}`);
+      L.push(`- **${md(i.title)}**${i.count > 1 ? ` (${i.count})` : ""} [${i.mix || i.severity}, ${matchLabel(i.confidence)}]${where ? ` in ${where}` : ""}.${i.why ? ` ${md(i.why)}` : ""}`);
     }
     if (b.check_first.length > MAX_ITEMS) L.push(`- ${b.check_first.length - MAX_ITEMS} more in the full report.`);
     L.push("");
   }
+  if (b.set_aside) L.push(`Checked one and it is not a problem? ${code(hintCommand(b.set_aside.command))}. ${md(b.set_aside.why)}.`, "");
   if (b.likely_noise.length) {
     L.push("### Likely noise", "");
     for (const g of b.likely_noise.slice(0, MAX_ITEMS)) {

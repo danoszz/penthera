@@ -29,7 +29,8 @@ only likely noise is listed apart (`and 1 for likely noise or info`). One fix
 can cover several problems: one `next.config.mjs` change adds five missing
 headers. Over 50 problems, the scan names the command without counting.
 `--json` adds `counts`: `problems`, `covered`, `fixes`, `other` (fixes for
-likely noise or info only) and `findings`.
+likely noise or info only) and `findings`. The plan prints its headline again
+at the end, so the last lines of the output say what it holds.
 
 Ask your agent to fix what Penthera finds. It detects the issue, applies a framework-aware fix to your code (shown as a diff for you to approve), and re-scans to prove it is resolved.
 

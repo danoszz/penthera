@@ -174,9 +174,17 @@ not one per route.
 
 Every finding has an id, `fid` in `-o` JSON, beside the title in the terminal report and
 in the Id column of the Markdown report's findings tables.
-The brief doesn't print it. Use it with `penthera memory suppress <fid> --reason "..." --severity <level>`.
+The brief doesn't print it, but it says how to use it under its problems. Use it with `penthera memory suppress <fid> --reason "..." --severity <level>`, or add the fid and reason to `penthera.suppress.json` to share it with your team; both apply to scans with `--memory`.
 A suppression covers the finding up to that severity, and medium when you give
 none. If the finding escalates past it, it shows again.
+
+In `-o` JSON a repo finding also has `path`, its file (the same value `url`
+holds, which stays for older readers), and every finding has `exploitability`.
+`confidence` says how sure the rule is about what it matched, not whether it
+can be exploited in your app: `exploitability` is `not-assessed` for a rule
+match, and `needs-human-review` where a scanner cannot judge it. Text reports
+use the words `pattern matched`, `likely match`, `possible match` and
+`needs a person` for the four confidence values.
 
 ---
 

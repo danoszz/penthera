@@ -24,3 +24,10 @@ section: Changed
   file already did. Any number of `cookies()` stores is read, padding inside
   `.get( "origin" )` is read as before, and a file with many hits holds only
   the 25 worst in memory.
+- **Words an agent can act on.** In the JSON a repo finding also has `path`
+  (the file `url` already held, which stays) and every finding has
+  `exploitability`: `not-assessed` for a rule match, so `confidence: confirmed`
+  no longer reads as a verdict. Text reports say `pattern matched`,
+  `likely match`, `possible match` or `needs a person`. The brief says how to
+  suppress a problem you checked by its fid with a reason (`set_aside` in its
+  JSON), and `penthera fix --plan` prints its headline again at the end.

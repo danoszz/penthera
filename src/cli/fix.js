@@ -179,7 +179,8 @@ export async function runFix(argv) {
     }
     process.stdout.write(`\n  ${bold("penthera fix")} ${dim(repo)}\n`);
     const other = counts.other ? `, and ${counts.other} for likely noise or info` : "";
-    process.stdout.write(`  ${fixesText(counts.fixes, counts.covered, counts.problems)}${other}${gathered.fresh ? " (fresh repo scan)" : ` (from ${opts.input})`}\n`);
+    const headline = `${fixesText(counts.fixes, counts.covered, counts.problems)}${other}`;
+    process.stdout.write(`  ${headline}${gathered.fresh ? " (fresh repo scan)" : ` (from ${opts.input})`}\n`);
     for (const p of plans) printPlan(redactPlan(p));
     for (const r of refused) process.stdout.write(`\n  ${yellow("Refused")} the model's fix for ${visible(r.finding.title)}: ${visible(r.reason)}\n`);
     const manual = unmatched.filter((f) => isProblem(f));
@@ -187,7 +188,10 @@ export async function runFix(argv) {
       process.stdout.write(`\n  ${dim(`${plural(manual.length, "problem")} without a recipe; fix by hand (\`penthera --repo . -o report.json\` writes an action plan)${model ? "" : " or try --fix-model <name>"}:`)}\n`);
       for (const f of manual.slice(0, 20)) process.stdout.write(`    [${visible(f.severity)}] ${visible(f.title)}\n`);
     }
-    if (plans.length) process.stdout.write(`\n  Apply one:  penthera fix --apply <id>${opts.repo ? ` --repo ${opts.repo}` : ""}${opts.input ? ` -o ${opts.input}` : ""}\n\n`);
+    // The headline again at the end, so the last lines (`tail`) say what the plan holds.
+    process.stdout.write(`\n  ${bold(headline)}\n`);
+    if (plans.length) process.stdout.write(`  Apply one:  penthera fix --apply <id>${opts.repo ? ` --repo ${opts.repo}` : ""}${opts.input ? ` -o ${opts.input}` : ""}\n`);
+    process.stdout.write("\n");
     process.exit(0);
   }
 

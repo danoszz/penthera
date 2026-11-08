@@ -155,7 +155,10 @@ assistant to pass the brief on as it is and to put its own view under "My
 read". Every
 finding has a `rule` (such as `openapi-exposed`, `gha-pwn-request` or `agents/mcp-unpinned`, or
 its category when no narrower rule applies), a severity, a confidence label (`confirmed`, `likely`,
-`potential`, `needs-human-review`), and evidence at `file:line` or a URL. Each
+`potential`, `needs-human-review`), `exploitability`, and evidence at `file:line` or a URL.
+Confidence is about the rule's match, not a verdict: `exploitability` is
+`not-assessed` for a rule match and `needs-human-review` where a scanner cannot
+judge it. Each
 result also lists what the tool did not check. By default a tool returns the 50
 most severe findings; ask for up to 200 with `max_findings`.
 

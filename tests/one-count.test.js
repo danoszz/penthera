@@ -180,3 +180,41 @@ describe("the scan's fix line stays cheap", () => {
     }
   });
 });
+
+describe("what an agent reads (gaia feedback, 8 Nov)", () => {
+  it("JSON findings keep url and confidence, and add path and exploitability", () => {
+    const json = JSON.parse(readFileSync(join(root, "report.json"), "utf-8"));
+    const secret = json.findings.find((f) => f.category === "secrets");
+    expect(secret).toMatchObject({ path: secret.url, confidence: expect.any(String), exploitability: "not-assessed" });
+    expect(secret.url).toMatch(/\.(?:ts|js|mjs)$/);
+    // Every repo finding with a file has the alias; the value is always the same as url or file.
+    for (const f of json.findings) if (f.path) expect([f.file, f.url]).toContain(f.path);
+  });
+
+  it("text says a rule matched, never 'confirmed' as if it were a verdict", () => {
+    const out = cli(["--repo", ".", "--brief"]).out;
+    expect(out).toMatch(/\[(?:critical|high|medium|low)[^\]]*, (?:pattern matched|likely match|possible match)\]/);
+    expect(out).not.toMatch(/, confirmed\]/);
+  });
+
+  it("the MCP finding view adds exploitability next to confidence", async () => {
+    const tool = TOOLS.find((t) => t.name === "scan_repo");
+    const r = await tool.run({ path: app }, { roots: async () => [root], allowHosts: [], offline: true, version: "test" });
+    for (const f of r.structured.findings) expect(f.exploitability).toMatch(/^(?:not-assessed|needs-human-review)$/);
+  });
+
+  it("the brief says how to set aside a checked problem by fid; only where findings carry a fid", async () => {
+    const out = cli(["--repo", ".", "--brief"]).out;
+    expect(out).toMatch(/Checked one and it is not a problem\? `(?:npx )?penthera memory suppress <fid> --reason "<why>"`/);
+    expect(JSON.parse(readFileSync(join(root, "report.json"), "utf-8")).brief.set_aside.command).toBe('penthera memory suppress <fid> --reason "<why>"');
+    expect(out).toContain("penthera.suppress.json");
+    const tool = TOOLS.find((t) => t.name === "scan_repo");
+    const r = await tool.run({ path: app }, { roots: async () => [root], allowHosts: [], offline: true, version: "test" });
+    expect(r.text).not.toContain("memory suppress <fid>");
+  });
+
+  it("fix --plan ends with its headline, so tail shows it", () => {
+    const lines = cli(["fix", "--plan", "--repo", "."]).out.trimEnd().split("\n");
+    expect(lines.slice(-2).join("\n")).toMatch(/5 fixes planned for 8 problems\n\s+Apply one:/);
+  });
+});

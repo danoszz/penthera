@@ -18,7 +18,7 @@ import { problemCounts } from "./counts.js";
 const SEV_ORDER = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
 
 export const CONFIDENCE_LABELS = [
-  { label: "confirmed", meaning: "Deterministic evidence: a header is absent, a certificate has expired, a secret is in the file." },
+  { label: "confirmed", meaning: "The pattern matched exactly: a header is absent, a certificate has expired, a key in the file has a provider's format. A rule match, not a verdict that it can be exploited." },
   { label: "likely", meaning: "A strong signal with a small chance of a false positive." },
   { label: "potential", meaning: "A heuristic or timing signal. It needs a second source before anyone acts on it." },
   { label: "needs-human-review", meaning: "A scanner cannot judge exploitability here (access control, IDOR). A person has to look." },
