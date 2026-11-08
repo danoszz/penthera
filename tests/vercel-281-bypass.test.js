@@ -166,3 +166,21 @@ describe("an array statement after a typed function keeps the body", () => {
     it(name, async () => { expect(await injection(ts(code))).not.toEqual([]); });
   }
 });
+
+// Vercel review of e2036d5: a spent brace budget lost a request alias, and a file
+// with only vm or eval sinks (no shell module) returned before saying incomplete.
+describe("a spent brace budget makes a vm-only file incomplete, never a silent pass", () => {
+  const routeTs = (n) => {
+    const pad = "const f = " + "({ a = ".repeat(n) + "1" + " }: Request) => 0".repeat(n) + ";\n";
+    return { "package.json": '{"name":"a","private":true}', "routes/run.ts": `import vm from "node:vm";\nimport express from "express";\nconst app = express();\n${pad}app.post("/run", ({ body }: Request, res) => { vm.runInNewContext(body.code); res.send("ok"); });\n` };
+  };
+  it("small: the request-fed vm call is found", async () => {
+    const r = await scanRepo(repo(routeTs(10)));
+    expect(r.findings.some((f) => /eval/.test(f.title) && f.severity !== "info")).toBe(true);
+  });
+  it("overlapping typed Request defaults: found or incomplete (exit 2), never neither", async () => {
+    const r = await scanRepo(repo(routeTs(3000)));
+    const found = r.findings.some((f) => /eval/.test(f.title) && f.severity !== "info");
+    expect(found || r.incomplete?.length > 0).toBe(true);
+  });
+});
