@@ -15,11 +15,11 @@ description: >
   of their own app, staging URL, localhost, repo, dependencies, or agent setup. Do
   NOT use for targets without explicit authorization.
 license: MIT
-compatibility: Node.js 22+, the Penthera CLI (npx -y penthera@2.3.2, npm install -g, or node bin/penthera.js from a checkout), network access to the target for URL scans. macOS only for --machine.
+compatibility: Node.js 22+, the Penthera CLI (npx -y penthera@2.4.0, npm install -g, or node bin/penthera.js from a checkout), network access to the target for URL scans. macOS only for --machine.
 allowed-tools: "Read"
 metadata:
   author: danoszz
-  version: 2.3.2
+  version: 2.4.0
   category: security
 ---
 
@@ -57,17 +57,17 @@ Fix anything that fails before you scan.
 Use whichever is available:
 
 ```bash
-penthera --version          # installed (npm install -g penthera@2.3.2, or npm link)
-npx -y penthera@2.3.2 --version   # nothing installed: npx fetches it
+penthera --version          # installed (npm install -g penthera@2.4.0, or npm link)
+npx -y penthera@2.4.0 --version   # nothing installed: npx fetches it
 node bin/penthera.js --version   # from a Penthera checkout
 ```
 
-All examples below use `penthera`; substitute `npx -y penthera@2.3.2` or `node bin/penthera.js` when needed.
+All examples below use `penthera`; substitute `npx -y penthera@2.4.0` or `node bin/penthera.js` when needed.
 
 This skill needs no MCP server: it runs the CLI, and the user approves each run. If the user wants Penthera's read-only MCP tools as well, they add the server themselves (the Penthera plugin doesn't start one):
 
 ```bash
-claude mcp add penthera -- npx -y penthera@2.3.2 mcp
+claude mcp add penthera -- npx -y penthera@2.4.0 mcp
 ```
 
 For other agents, see https://github.com/danoszz/penthera/blob/main/docs/commands/mcp.md.
