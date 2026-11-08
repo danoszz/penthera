@@ -689,6 +689,35 @@ drop policy if exists gone on public.t;`)).toEqual([]);
     expect([o.severity, o.confidence]).toEqual(["high", "likely"]);
   }, 60_000);
 
+  it("policies with ~19k-token expressions keep only a summary: bounded time and output through scanRepo, CLI and MCP (Vercel, PR 312)", async () => {
+    const expr = Array.from({ length: 4700 }, () => "a = 1").join(" and ");
+    const files = {};
+    for (let f = 0; f < 3; f++) {
+      let sql = f === 0 ? "create table public.t (id int);\nalter table public.t enable row level security;\n" : "";
+      for (let i = 0; i < 150; i++) sql += `create policy p${f}_${i} on public.t for update to anon using (${i === 0 && f === 2 ? "true" : expr});\n`;
+      files[`supabase/migrations/00${f}.sql`] = sql;
+    }
+    const root = repo(files);
+    // What is kept per policy: booleans and the roles that matter, no token arrays.
+    const r = checkMigrations(Object.entries(files).map(([rel, text]) => ({ rel, text })));
+    const [pf] = r.findings.filter((f) => f.kind === "policy");
+    expect(pf.policy.using).toEqual({ open: true });
+    expect(pf.policy.roles).toEqual(["anon"]);
+    expect(JSON.stringify(pf.policy).length).toBeLessThan(400);
+    const t0 = Date.now();
+    const scan = await scanRepo(root);
+    expect(Date.now() - t0).toBeLessThan(20_000);
+    expect(scan.findings.filter((f) => f.templateId === "supabase-policy-open").map((f) => f.title)).toEqual([expect.stringMatching(/^Policy "p2_0" lets anyone/)]);
+    const home = mkdtempSync(join(tmpdir(), "penthera-supabase-home-"));
+    const out = spawnSync(process.execPath, ["bin/penthera.js", "--repo", root, "--offline", "--json"], {
+      env: { PATH: process.env.PATH, HOME: home, NO_COLOR: "1", PENTHERA_NO_ONBOARDING: "1" }, encoding: "utf-8", maxBuffer: 64 * 1024 * 1024,
+    });
+    expect(out.stdout.length).toBeLessThan(256 * 1024);
+    expect(out.status).toBe(1);
+    const res = await TOOL_BY_NAME.get("scan_repo").run({ path: realpathSync(root) }, { roots: async () => [realpathSync(root)] });
+    expect(JSON.stringify(res).length).toBeLessThan(256 * 1024);
+  }, 120_000);
+
   it("a few names in one file are one finding whose id follows the set", () => {
     const ids = (text) => scanSupabase(repo({ ".env": text })).findings.map((f) => `${f.title}|${f.severity}`);
     const two = ids(`${PUB("NEXT_PUBLIC_")}=\n${PUB("VITE_")}=\n`);
