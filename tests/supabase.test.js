@@ -377,6 +377,12 @@ describe("supabase-rls-disabled", () => {
       disable: [`create table public.users (email text);\nalter table public.users enable row level security;\nset search_path to private;\n${decoys}`, "alter table public.users disable row level security;"],
       set_schema: [`create table private.users (email text);\nset search_path to private;\n${decoys}`, "alter table private.users set schema public;"],
     };
+    Object.assign(cases, {
+      regrant: [`create table public.users (email text);\nrevoke all on table public.users from anon, authenticated;\nset search_path to private;\n${decoys}`, "grant select on public.users to anon;"],
+      open_policy: [`create table public.users (email text);\nalter table public.users enable row level security;\nset search_path to private;\n${decoys}`, "create policy p on public.users for all to anon using (true) with check (true);"],
+      opened_policy: [`create table public.users (email text);\nalter table public.users enable row level security;\ncreate policy p on public.users for select to anon using (false);\nset search_path to private;\n${decoys}`, "alter policy p on public.users using (true);"],
+      recreate: [`create table public.users (email text);\nalter table public.users enable row level security;\nset search_path to private;\n${decoys}`, "drop table public.users;\ncreate table public.users (password text);"],
+    });
     for (const [name, [a, b]] of Object.entries(cases)) {
       const r = scanSupabase(repo({ "supabase/migrations/001.sql": a, "supabase/migrations/002.sql": b }));
       const f = r.findings.filter((x) => x.templateId === "supabase-rls-disabled");
