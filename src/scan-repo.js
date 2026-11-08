@@ -168,6 +168,9 @@ export async function scanRepo(repoPath, opts = {}) {
     });
   }
 
+  // Files named as not read, once each: the route scan below may refuse the same one.
+  const named = new Set();
+
   // ── Phase 1e: Supabase: service-role key in client code, tables without RLS
   progress("Checking Supabase keys and row-level security...");
   const supabase = scanSupabase(repoPath, { ignored });
@@ -177,7 +180,9 @@ export async function scanRepo(repoPath, opts = {}) {
   // What it couldn't read whole (a refused, oversized or over-budget
   // migration) makes the scan incomplete: exit 2, never a silent pass.
   for (const inc of supabase.incomplete) {
-    result.findings.push(refusedFileFinding({ path: inc.file, reason: inc.reason }, repoPath));
+    const f = refusedFileFinding({ path: inc.file, reason: inc.reason }, repoPath);
+    named.add(f.file);
+    result.findings.push(f);
     (result.incomplete ||= []).push(inc);
   }
   result.executedProbes.push("supabase");
@@ -202,7 +207,6 @@ export async function scanRepo(repoPath, opts = {}) {
   // FIFO, too large) become info findings, one per file, and make the scan
   // incomplete (`incomplete`, exit 2): never a silent pass.
   const refused = [];
-  const named = new Set();
   const reportRefused = () => {
     for (const e of refused.splice(0)) {
       const f = refusedFileFinding(e, repoPath);

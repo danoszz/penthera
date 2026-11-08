@@ -161,6 +161,34 @@ describe("supabase-service-role-exposed", () => {
     ]);
   });
 
+  it("catches whole-env inlining in its other spellings, but not a define that picks one value (recheck)", () => {
+    const pkg = { dependencies: { vite: "5.4.0", "@supabase/supabase-js": "2.45.0" } };
+    const bad = [
+      "const env = loadEnv(mode, process.cwd(), '');\nexport default { define: { __APP_ENV__: JSON.stringify(env) } };\n",
+      "const env = loadEnv(mode, process.cwd(), '');\nexport default { define: Object.fromEntries(Object.entries(env).map(([k, v]) => [k, JSON.stringify(v)])) };\n",
+    ];
+    expect(bad.map((text) => hits(repo({ "vite.config.ts": text }, { pkg })))).toEqual([
+      ["supabase-service-role-exposed:high:vite.config.ts:2"], // the define object
+      ["supabase-service-role-exposed:high:vite.config.ts:1"], // the empty-prefix loadEnv
+    ]);
+    expect(hits(repo({ "next.config.js": "const env = process.env;\nmodule.exports = { env: { ...env } };\n" }, { pkg: NEXT }))).toEqual(["supabase-service-role-exposed:high:next.config.js:2"]);
+    expect(hits(repo({ "vite.config.ts": "const env = loadEnv(mode, process.cwd(), '');\nexport default { define: { __V__: JSON.stringify(env.npm_package_version) } };\n" }, { pkg }))).toEqual([]);
+    // No package.json, but the code loads Supabase from a CDN.
+    expect(hits(repo({ "src/db.js": "import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';\n", "next.config.js": "module.exports = { env: { ...process.env } };\n" }))).toEqual(["supabase-service-role-exposed:high:next.config.js:1"]);
+  });
+
+  it("treats Svelte and Vue components, and an Astro file past its frontmatter, as client code (recheck)", () => {
+    const root = repo({
+      "src/routes/+page.svelte": `<script>const k = "${SERVICE}";</script>\n`,
+      "src/pages/a.astro": `---\nconst server = "${SERVICE}";\n---\n<script>const k = "${SERVICE}";</script>\n`,
+    }, { pkg: { dependencies: { "@sveltejs/kit": "2.0.0", astro: "4.0.0" } } });
+    expect(hits(root).sort()).toEqual([
+      "supabase-service-role-committed:high:src/pages/a.astro:2",
+      "supabase-service-role-exposed:critical:src/pages/a.astro:4",
+      "supabase-service-role-exposed:critical:src/routes/+page.svelte:1",
+    ]);
+  });
+
   it("reports client code that git ignores at high, never drops it", () => {
     const root = repo({ "src/config.ts": `export const k = "${SERVICE}";\n` }, { pkg: VITE });
     const ignored = { dirs: new Set(), files: new Set([join(root, "src/config.ts")]) };
@@ -297,6 +325,11 @@ describe("supabase-rls-disabled", () => {
     }
   });
 
+  it("set_config(..., true) lasts until the transaction ends (recheck)", () => {
+    expect(tablesOf(mig({ "001.sql": "begin;\nselect set_config('search_path', 'private', true);\ncommit;\ncreate table t (id int);" }))).toEqual(["public.t"]);
+    expect(tablesOf(mig({ "001.sql": "select set_config('search_path', 'private', false);\ncreate table t (id int);" }))).toEqual([]);
+  });
+
   it("CREATE TABLE IF NOT EXISTS later doesn't undo RLS (review false positive)", () => {
     expect(tablesOf(mig({ "001.sql": "create table public.t (id int);\nalter table public.t enable row level security;", "002.sql": "create table if not exists public.t (id int);" }))).toEqual([]);
   });
@@ -426,6 +459,17 @@ describe("caps, refusals and chunk edges (BYPASS-CHECKLIST)", () => {
     symlinkSync(join(root, "src/inside.ts"), join(root, "src/alias.ts"));
     execFileSync("mkfifo", [join(root, ".env.production")]);
     expect(scanSupabase(root).incomplete.map((i) => i.file).sort()).toEqual([".env.production", "public/keys.js", "supabase"]);
+  });
+
+  it.skipIf(process.platform === "win32")("row 2: a link out under any folder name is incomplete; a link inside ships its target (recheck)", () => {
+    const outside = mkdtempSync(join(tmpdir(), "penthera-supabase-out-"));
+    const root = repo({ "src/main.js": "import { x } from '../lib/x.js';\n", "server/keys.js": `export const k = "${SERVICE}";\n`, "public/.keep": "" }, { pkg: VITE });
+    symlinkSync(outside, join(root, "lib"));
+    symlinkSync(outside, join(root, "components"));
+    symlinkSync(join(root, "server/keys.js"), join(root, "public/keys.js"));
+    const r = scanSupabase(root);
+    expect(r.incomplete.map((i) => i.file).sort()).toEqual(["components", "lib"]);
+    expect(r.findings.map((f) => `${f.templateId}:${f.severity}:${f.file}`)).toEqual(["supabase-service-role-exposed:critical:server/keys.js"]);
   });
 
   it.skipIf(process.platform === "win32")("row 2: a migrations folder that is a link is incomplete", () => {
