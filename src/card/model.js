@@ -11,6 +11,7 @@ import { basename, resolve } from "node:path";
 import { VERDICTS, bucketOf } from "../report/brief.js";
 import { siteUnread, readNothing } from "../report/unread.js";
 import { uncheckedDeps } from "../../lib/deps/report.js";
+import { dropLastWord } from "./kit.js";
 
 export const CARD_SCHEMA = "penthera.card/1";
 
@@ -30,12 +31,14 @@ export function publicText(s, max = 120) {
     .replace(PATHISH, (m) => (m.match(/^[\s(`'"]/) ? m[0] : ""))
     .replace(TOKEN, (m) => (/\d/.test(m) ? "[hidden]" : m))
     .replace(/[`*_]/g, "")
-    .replace(/\s+(?:in|at|from)\s*$/i, "")
     .replace(/\s+/g, " ")
     .trim();
+  // A title whose path was taken out can end on "in", "at" or "from": drop that word.
+  const tail = t.slice(t.lastIndexOf(" ") + 1).toLowerCase();
+  if (t.includes(" ") && ["in", "at", "from"].includes(tail)) t = t.slice(0, t.lastIndexOf(" ")).trimEnd();
   // The pixel font has no glyphs past this set; keep what it can draw.
   t = t.replace(/[—]/g, "-").replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/[^\x20-\x7e·×→←•…–]/g, "");
-  if ([...t].length > max) t = `${[...t].slice(0, max - 1).join("").replace(/\s+\S*$/, "")}…`;
+  if ([...t].length > max) t = `${dropLastWord([...t].slice(0, max - 1).join(""))}…`;
   return t;
 }
 

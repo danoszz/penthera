@@ -74,6 +74,13 @@ export function mosaicRows(s) {
 /** Width and height in pixels of a mosaic at block size k and gap g. */
 export const mosaicSize = (rows, k, g) => ({ w: rows[0].length * (k + g) - g, h: rows.length * (k + g) - g });
 
+/** Cut a line back to its last whole word (no regex: lines can be long). */
+export function dropLastWord(s) {
+  const t = String(s).trimEnd();
+  const i = t.lastIndexOf(" ");
+  return i > 0 ? t.slice(0, i).trimEnd() : t;
+}
+
 /** Wrap text to lines of at most n characters, breaking at spaces. */
 export function wrap(s, n, maxLines = 3) {
   const words = String(s).split(/\s+/).filter(Boolean);
@@ -87,7 +94,7 @@ export function wrap(s, n, maxLines = 3) {
   if (cur) lines.push(cur);
   if (lines.length > maxLines) {
     const kept = lines.slice(0, maxLines);
-    kept[maxLines - 1] = `${kept[maxLines - 1].slice(0, n - 1).replace(/\s+\S*$/, "")}…`;
+    kept[maxLines - 1] = `${dropLastWord(kept[maxLines - 1].slice(0, n - 1))}…`;
     return kept;
   }
   return lines.map((l) => (l.length > n ? `${l.slice(0, n - 1)}…` : l));

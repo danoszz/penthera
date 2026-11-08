@@ -67,7 +67,8 @@ function hex(c) {
   return [(v >> 16) & 255, (v >> 8) & 255, v & 255];
 }
 
-const num = (n) => (Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/\.?0+$/, ""));
+// Two decimals at most, without trailing zeros ("1.5", not "1.50").
+const num = (n) => (Number.isInteger(n) ? String(n) : String(Math.round(n * 100) / 100));
 
 function escXml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;" })[c]);
