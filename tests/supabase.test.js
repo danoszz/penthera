@@ -474,7 +474,10 @@ drop policy if exists gone on public.t;`)).toEqual([]);
     const scan = (pols) => scanSupabase(repo({ "supabase/migrations/001.sql": table + pols })).findings.filter((f) => f.templateId === "supabase-policy-open");
     const pairs = {
       // Same severity and table before and after: only what the policy grants changes.
-      "WITH CHECK opened": ["create policy p on public.t for update to anon using (true);", "create policy p on public.t for update to anon using (true) with check (true);"],
+      "WITH CHECK opened": ["create policy p on public.t for update to anon using (true) with check (auth.uid() = id);", "create policy p on public.t for update to anon using (true) with check (true);"],
+      // Without WITH CHECK, UPDATE checks new rows with USING: dropping it opens the check.
+      "WITH CHECK dropped": ["create policy p on public.t for update to anon using (true) with check (auth.uid() = id);", "create policy p on public.t for update to anon using (true);"],
+      "a quoted role can't hide an added one": ['create policy p on public.t for delete to anon, "authenticated, x" using (true);', "create policy p on public.t for delete to anon, authenticated, x using (true);"],
       "role added": ["create policy p on public.t for delete to anon using (true);", "create policy p on public.t for delete to anon, authenticated using (true);"],
       "grouped, a role added": [
         "create policy a on public.t for update to anon using (true);\ncreate policy b on public.t for delete to anon using (true);",
@@ -498,6 +501,17 @@ drop policy if exists gone on public.t;`)).toEqual([]);
       // The same policies scanned again stay unchanged.
       expect(compareWithBaseline(scan(narrow), base).newFindings, name).toEqual([]);
     }
+  });
+
+  it("policy ids ignore roles that don't matter, and titles stay short (review of PR 312)", () => {
+    const table = "create table public.t (id int);\nalter table public.t enable row level security;\n";
+    const scan = (pols) => scanSupabase(repo({ "supabase/migrations/001.sql": table + pols })).findings.filter((f) => f.templateId === "supabase-policy-open");
+    const ids = (pols) => scan(pols).map(findingId);
+    expect(ids("create policy p on public.t for delete to anon using (true);")).toEqual(ids("create policy p on public.t for delete to anon, service_role using (true);"));
+    expect(ids("create policy p on public.t for update to anon using (true);")).toEqual(ids("create policy p on public.t for update to anon using (true) with check (true);"));
+    const many = Array.from({ length: 5000 }, (_, i) => `r${i}`).join(", ");
+    const [f] = scan(`create policy "${"n".repeat(100_000)}" on public.t for delete to anon, ${many} using (true);`);
+    expect(f.title.length).toBeLessThan(300);
   });
 
   it("grades by command and role: write for anyone is high, public read is low", () => {
