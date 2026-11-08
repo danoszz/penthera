@@ -8,7 +8,7 @@
  * (chunk edges, caps, refusals, budgets, linear time) have their own block.
  */
 import { describe, it, expect } from "vitest";
-import { mkdtempSync, mkdirSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { execFileSync } from "node:child_process";
@@ -19,6 +19,7 @@ import { cpuMs } from "./fixtures/cpu-time.js";
 import { compareWithBaseline } from "../src/cli/baseline.js";
 import { findingId, isSuppressed } from "../lib/memory/views.js";
 import { spawnSync } from "node:child_process";
+import { TOOL_BY_NAME } from "../src/mcp/tools.js";
 
 const b64 = (o) => Buffer.from(JSON.stringify(o)).toString("base64url");
 const SIG = "ZmFrZS1zaWduYXR1cmUtZm9yLWEtdGVzdC1maXh0dXJl";
@@ -577,6 +578,42 @@ drop policy if exists gone on public.t;`)).toEqual([]);
     const [f] = scanSupabase(repo({ "supabase/config.toml": toml, "supabase/migrations/001.sql": 'create table public."x.y" (id int);' })).findings;
     const [g] = scanSupabase(repo({ "supabase/config.toml": toml, "supabase/migrations/001.sql": 'create table "public.x".y (id int);' })).findings;
     expect(findingId(f)).not.toBe(findingId(g));
+  });
+
+  it("200k distinct public service-role env names: bounded findings through scanRepo, CLI --json and MCP, and an incomplete scan (Vercel, PR 312)", async () => {
+    const env = Array.from({ length: 200_000 }, (_, i) => `NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY_${i}=`).join("\n");
+    const reads = Array.from({ length: 5000 }, (_, i) => `process.env.SUPABASE_SERVICE_ROLE_KEY_${i};`).join("\n");
+    const root = repo({ ".env.example": env, "app/a.tsx": `"use client";\n${reads}\n` }, { pkg: NEXT });
+    const t0 = Date.now();
+    const r = await scanRepo(root);
+    expect(Date.now() - t0).toBeLessThan(20_000);
+    const exposed = r.findings.filter((f) => f.templateId === "supabase-service-role-exposed");
+    // One finding per file and kind, each naming 20 and a digest of the set.
+    expect(exposed.map((f) => f.file).sort()).toEqual([".env.example", "app/a.tsx"]);
+    const envFinding = exposed.find((f) => f.file === ".env.example");
+    expect(envFinding.title).toMatch(/^Service-role key under 1000\+ public env names in `\.env\.example` \(list [0-9a-f]{16}\)$/);
+    expect(envFinding.lines.length).toBeLessThanOrEqual(50);
+    expect(r.incomplete.map((i) => i.file)).toContain(".env.example");
+    expect(r.findings.some((f) => f.title === "File not fully checked: .env.example")).toBe(true);
+    // The CLI's JSON stays small.
+    const home = mkdtempSync(join(tmpdir(), "penthera-supabase-home-"));
+    const out = spawnSync(process.execPath, ["bin/penthera.js", "--repo", root, "--offline", "--json"], {
+      env: { PATH: process.env.PATH, HOME: home, NO_COLOR: "1", PENTHERA_NO_ONBOARDING: "1" }, encoding: "utf-8", maxBuffer: 64 * 1024 * 1024,
+    });
+    expect(out.stdout.length).toBeLessThan(1024 * 1024);
+    expect(JSON.parse(out.stdout).findings.filter((f) => f.templateId === "supabase-service-role-exposed")).toHaveLength(2);
+    expect(out.status).toBe(2);
+    // And so does the MCP scan_repo result.
+    const res = await TOOL_BY_NAME.get("scan_repo").run({ path: realpathSync(root) }, { roots: async () => [realpathSync(root)] });
+    expect(JSON.stringify(res).length).toBeLessThan(512 * 1024);
+  }, 120_000);
+
+  it("a few names in one file are one finding whose id follows the set", () => {
+    const ids = (text) => scanSupabase(repo({ ".env": text })).findings.map((f) => `${f.title}|${f.severity}`);
+    const two = ids(`${PUB("NEXT_PUBLIC_")}=\n${PUB("VITE_")}=\n`);
+    expect(two).toHaveLength(1);
+    expect(two[0]).toMatch(/^Service-role key under 2 public env names in `\.env` \(list [0-9a-f]{16}\)\|high$/);
+    expect(ids(`${PUB("NEXT_PUBLIC_")}=\n${PUB("REACT_APP_")}=\n`)).not.toEqual(two);
   });
 
   it("policy ids ignore roles that don't matter, and titles stay short (review of PR 312)", () => {
