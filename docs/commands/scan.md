@@ -213,6 +213,36 @@ Each finding points to the file and line. `explain_finding` knows all four ids. 
 
 **Limits.** It doesn't follow reusable workflows or composite actions into their own files, and it doesn't trace a value through `env:` or a step output into a script. A clean result means none of these patterns was found in what it read. It doesn't prove the workflow is safe.
 
+### Framework versions with a published vulnerability
+
+A `--repo` scan reads the installed version of `next` and the React Server Components packages (`react-server-dom-webpack`, `-turbopack`, `-parcel`) from the lockfile and compares it with a short table that ships with Penthera. Lockfiles read: `package-lock.json`, `npm-shrinkwrap.json`, `pnpm-lock.yaml`, `yarn.lock` (classic and berry) and `bun.lock`. With no lockfile, an exact pin in `package.json` counts; a range such as `^15.5.0` says nothing about what is installed and is not guessed. Every copy in the tree is checked, nested ones too. Pre-release and canary builds are not compared.
+
+| Rule | Severity | What it means |
+|------|----------|---------------|
+| `framework-advisory` | critical, high or low | The installed version is in a published advisory's affected range. Critical for CVE-2025-55182 (React Server Components deserialisation, remote code execution, fixed in Next.js 15.0.5, 15.1.9, 15.2.6, 15.3.6, 15.4.8, 15.5.7 and 16.0.7). High for CVE-2025-29927 (the middleware bypass, fixed in 12.3.5, 13.5.9, 14.2.25 and 15.2.3) when the project has a middleware file, low when it has none. The finding names the lockfile line, the advisory and the fixed versions. |
+
+A lockfile that cannot be read or parsed is named and makes the scan incomplete (exit 2), never a silent pass.
+
+### Server secrets behind a public env prefix
+
+Next.js writes every `NEXT_PUBLIC_*` variable into the browser bundle at build time; Vite does the same for `VITE_*`, Expo for `EXPO_PUBLIC_*`, Create React App for `REACT_APP_*`, Nuxt for `NUXT_PUBLIC_*`, SvelteKit and Astro for `PUBLIC_*`, Gatsby for `GATSBY_*`. The rule reads names, not values, so a placeholder in `.env.example` or a `process.env.NEXT_PUBLIC_RESEND_API_KEY` read in a component is enough. It reads `.env*` files, `next.config.*`, `turbo.json`, `vercel.json`, `netlify.toml`, Expo's `app.json` and `app.config.*`, and `process.env.X` or `import.meta.env.X` reads in code (comments blanked).
+
+| Rule | Severity | What it means |
+|------|----------|---------------|
+| `public-env-secret` | high; critical when a committed value matches a provider key shape | The part after the prefix names a secret (`API_KEY`, `TOKEN`, `SECRET`, `PASSWORD`, `SERVICE_ROLE`, `DATABASE_URL`, ...) and nothing in the name says the value is public by design (`PUBLISHABLE`, `ANON`, `SITE_KEY`, `CLIENT_ID`, `DSN`, ...). Keys providers issue for the browser, such as `FIREBASE_API_KEY`, `GOOGLE_MAPS_API_KEY`, `MAPBOX_TOKEN`, `STRIPE_PUBLISHABLE_KEY` and `SUPABASE_ANON_KEY`, are not reported. One finding per variable name, pointing at the first place it is defined. |
+
+Rename the variable without the prefix, read it in server code only, and rotate the value if it was ever deployed. If the value is meant for the browser, say so in its name.
+
+### Server Actions without an auth check
+
+Every exported async function in a file that starts with `"use server"`, and every function whose body starts with it, is a public POST endpoint: the client bundle carries its id, and anyone can call it with any arguments. A `--repo` scan reads these files on lexed source (comments blanked, strings masked) and reports an action that writes data without checking who is calling.
+
+| Rule | Severity | What it means |
+|------|----------|---------------|
+| `server-action-no-auth` | high (medium when a root `middleware` file calls an auth function) | An action's body calls a database write (Prisma, Drizzle, Supabase, Mongoose, Kysely, Knex, Firestore, or raw `INSERT`, `UPDATE`, `DELETE`), sends mail or calls a payment API, and neither the body nor the wrapper it is passed to calls an auth function: `auth()`, `getServerSession`, `getUser`, `currentUser`, `verifySession`, `requireUser`, a name that starts with `require`, `verify`, `assert`, `ensure` or `check` and names auth, a session, a user, an admin or a permission, or anything imported from an auth module (next-auth, `@clerk/*`, `@supabase/ssr`, lucia, Kinde, WorkOS, Auth0, iron-session, better-auth, or a local file whose path names auth or a session). One finding per file, at `potential` confidence, listing the actions and what they write. |
+
+**Limits.** A check in a helper this rule does not know by name, or in middleware whose matcher covers the page, is not seen, which is why the confidence is `potential`. Actions in `test`, `fixtures` and `public` folders are not read. A read-only action is never reported.
+
 ### Coverage: what a repo scan read
 
 Every `--repo` scan adds a **Coverage** section to the terminal, Markdown and

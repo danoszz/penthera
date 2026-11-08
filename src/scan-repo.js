@@ -17,6 +17,9 @@ import { scanWorkflows } from "../lib/whitebox/workflows.js";
 import { detectLibrary } from "../lib/whitebox/library.js";
 import { discoverFrameworkRoutes } from "../lib/whitebox/frameworks.js";
 import { runtimeAdvisoriesForRepo } from "../lib/advisories/index.js";
+import { frameworkAdvisoriesForRepo } from "../lib/whitebox/framework-advisories.js";
+import { scanPublicEnv } from "../lib/whitebox/public-env.js";
+import { scanServerActions } from "../lib/whitebox/server-actions.js";
 import { buildCoverage } from "../lib/coverage.js";
 import { readRepoFile, isRefused } from "../lib/fs-safe.js";
 
@@ -143,6 +146,41 @@ export async function scanRepo(repoPath, opts = {}) {
   result.findings.push(...runtimeAdvisoriesForRepo(repoPath));
   result.executedProbes.push("runtime-advisories");
 
+  // A file one of the checks below had to read but refused (a link out, a
+  // device, a lockfile that does not parse) is named and makes the scan
+  // incomplete (exit 2), as the route scan does further down.
+  const refusedNamed = new Set();
+  const nameRefused = (list) => {
+    for (const e of list.splice(0)) {
+      const f = refusedFileFinding(e, repoPath);
+      if (refusedNamed.has(f.file)) continue;
+      refusedNamed.add(f.file);
+      result.findings.push(f);
+      (result.incomplete ||= []).push({ file: f.file, reason: e.reason || e.message });
+    }
+  };
+
+  // ── Phase 1b2: Framework versions (next, React Server Components) vs advisories
+  progress("Checking framework versions in the lockfile against advisories...");
+  const refusedLock = [];
+  result.findings.push(...frameworkAdvisoriesForRepo(repoPath, { refused: refusedLock }));
+  nameRefused(refusedLock);
+  result.executedProbes.push("framework-advisories");
+
+  // ── Phase 1b3: Server secrets behind a public env prefix (NEXT_PUBLIC_, VITE_, ...)
+  progress("Checking env names that ship to the browser...");
+  const refusedEnv = [];
+  result.findings.push(...scanPublicEnv(repoPath, { refused: refusedEnv, ignoredDirs: ignored?.dirs }));
+  nameRefused(refusedEnv);
+  result.executedProbes.push("public-env");
+
+  // ── Phase 1b4: Server Actions that write without an auth check ────────
+  progress("Checking Server Actions for an auth check...");
+  const refusedActions = [];
+  result.findings.push(...scanServerActions(repoPath, { refused: refusedActions, ignoredDirs: ignored?.dirs }));
+  nameRefused(refusedActions);
+  result.executedProbes.push("server-actions");
+
   // ── Phase 1c: Code-execution sinks (all server code, not just routes) ──
   progress("Looking for eval, vm and exec sinks...");
   // Library mode: a publishable package's exported parameters are sources too.
@@ -186,17 +224,10 @@ export async function scanRepo(repoPath, opts = {}) {
   // Files the route scan would have read but refused (a link out, a device, a
   // FIFO, too large) become info findings, one per file, and make the scan
   // incomplete (`incomplete`, exit 2): never a silent pass.
+  // A file an earlier check already named (the Server Action check reads the same
+  // server files) is named once: `nameRefused` keeps the set.
   const refused = [];
-  const named = new Set();
-  const reportRefused = () => {
-    for (const e of refused.splice(0)) {
-      const f = refusedFileFinding(e, repoPath);
-      if (named.has(f.file)) continue;
-      named.add(f.file);
-      result.findings.push(f);
-      (result.incomplete ||= []).push({ file: f.file, reason: e.reason || e.message });
-    }
-  };
+  const reportRefused = () => nameRefused(refused);
 
   if (apiRoot) {
     // ── Phase 2: Discover attack surface ───────────────────────────────────
