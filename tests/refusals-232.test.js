@@ -1046,8 +1046,13 @@ describe("bounded work per file (Vercel Security Review, 2.3.2)", () => {
       await time("taint chain 20k", () => findSinks(R(20000, (i) => \`const a\${i} = \${i ? "a" + (i - 1) : "req.body"};\`) + "\\nexec(a19999);\\n" + CP));
       await time("wide taint 20k", () => findSinks(R(20000, (i) => \`const a\${i} = req.body.f\${i};\`) + "\\n" + R(20000, (i) => \`eval(z\${i});\`)));
       await time("20k module objects", () => findSinks(R(20000, (i) => \`const cp\${i} = require("child_process");\`) + "\\n" + R(20000, (i) => \`cp\${i}.exec(y);\`)));
-      await time("library: 8k class fields", () => findSinks(CP + "export class K {\\n" + R(8000, (i) => \`  m\${i}(a) { const self\${i} = this; this.f\${i} = a; return this.f\${i}; }\`) + "\\n  run() { cp.exec(this.f1); }\\n}\\n", { library: true }));
       await time("200k unclosed eval(x lines", () => findSinks("eval(x\\n".repeat(200000)));`);
+    // Library mode is the slowest linear path: about 250 ms here, 1.6 s on a loaded
+    // CI runner. The quadratic it guards against took minutes, so 5 s still catches it.
+    timed(`
+      const { findSinks } = await import(${mod("lib/whitebox/code-sinks.js")});
+      const CP = 'const cp = require("child_process");\\n';
+      await time("library: 8k class fields", () => findSinks(CP + "export class K {\\n" + R(8000, (i) => \`  m\${i}(a) { const self\${i} = this; this.f\${i} = a; return this.f\${i}; }\`) + "\\n  run() { cp.exec(this.f1); }\\n}\\n", { library: true }));`, 5000);
   });
 
   it("the object-property binding still binds what it bound (one matcher, same result)", () => {
