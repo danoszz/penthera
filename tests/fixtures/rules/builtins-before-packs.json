@@ -184,7 +184,7 @@
     {
       "rule": "curl-pipe-shell",
       "label": "download piped to a shell",
-      "source": "\\b(?:curl|wget|fetch|iwr)\\b[^\\n|]*\\|\\s*(?:sudo\\s+)?(?:env\\s+\\S*\\s*)?(?:ba|z|da|k|fi|c|tc)?sh\\b",
+      "source": "\\b(?:curl|wget|fetch|iwr)\\b[^\\n|]*\\|\\s*(?:sudo\\s+)?(?:[\\w.~-]*\\/)*(?:env\\s+)?(?:ba|z|da|k|fi|c|tc)?sh\\b",
       "flags": "i"
     },
     {
@@ -208,7 +208,7 @@
     {
       "rule": "base64-pipe-shell",
       "label": "decoded base64 piped to a shell",
-      "source": "base64\\s+(?:-d|--decode|-D)\\b[^\\n]*\\|\\s*(?:sudo\\s+)?(?:env\\s+\\S*\\s*)?(?:ba|z|da|k|fi|c|tc)?sh\\b",
+      "source": "base64\\s+(?:-d|--decode|-D)\\b[^\\n]*\\|\\s*(?:sudo\\s+)?(?:[\\w.~-]*\\/)*(?:env\\s+)?(?:ba|z|da|k|fi|c|tc)?sh\\b",
       "flags": "i"
     },
     {

@@ -1,12 +1,13 @@
 import { isIP } from "node:net";
 import { isPublicIp } from "../../lib/net/ip.js";
+import { trimEndChars } from "../../lib/linear-text.js";
 
 const PRIVATE_HOSTS = new Set(["localhost", "127.0.0.1", "0.0.0.0", "[::1]"]);
 
 /** Strip trailing slash so path joins do not produce double slashes. */
 export function normalizeBaseUrl(url) {
   const parsed = new URL(url);
-  const path = parsed.pathname.replace(/\/+$/, "") || "";
+  const path = trimEndChars(parsed.pathname, "/") || "";
   return `${parsed.origin}${path}`;
 }
 

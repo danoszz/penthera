@@ -157,7 +157,7 @@ baseline after the upgrade.
 |------|---------|
 | `0` | No critical or high rule fired. This run does not prove login, access rules or payments are right |
 | `1` | Critical or high findings detected (other tools' too, with `--giants`) |
-| `2` | Scan failed or is incomplete (unreachable target, missing path, bad config, a tool the policy requires did not run, a dependency input `penthera deps` or a route or server file `--repo` refused to read) |
+| `2` | Scan failed or is incomplete (unreachable target, missing path, bad config, a tool the policy requires did not run, a file the scan had to read but refused: a route or server file over 5 MiB, a FIFO or a link out of the project, a dependency input, agent config) |
 
 A firewall that refuses the scan isn't a failed scan. The verdict is `Site not read`,
 with no grade, and the exit code follows the findings Penthera could still make, such
@@ -220,7 +220,13 @@ JSON (`coverage`) reports. For each check (the secret scan, route and
 code-pattern analysis, runtime versions) it says how many files were read and
 why the others were not: file type not read, over the size limit, a language
 route analysis does not support, or no server routes found (a client-only app
-has none). Route analysis reads Next.js route handlers anywhere under `app/` or
+has none). Each file is read whole, up to a size limit: 64 MiB for the secret
+scan and 4 MiB for the eval and exec check. Minified code is checked like any
+other code, and Coverage notes how many files were minified. A file over those limits, or one that
+can't be read at all (a FIFO, a device, no permission), is named and makes the
+scan incomplete: it exits 2. A route or server file linked to another file in
+the project is read through the link. One linked out of the project or to
+nothing, or a linked folder outside it, is named the same way. Route analysis reads Next.js route handlers anywhere under `app/` or
 `src/app/` and a Worker's `export default { fetch }` entry, besides Express,
 Hono and Fastify routes. How many routes it found is part of Coverage, not a
 finding. Source files no code
@@ -271,7 +277,10 @@ sealed test half was scored once ([results](https://github.com/danoszz/penthera/
 Limits. Only one helper call is followed, and only to a function the file
 calls by name. A field set from another field is not followed. Sanitizers are not recognized, so a
 correctly escaped command can still be reported; that is what `potential`
-means.
+means. Library mode reads the body of each exported function, so exported
+functions nested inside each other are read once per level. A file that would
+take more than 16 times its own length of reading (plus 4 MiB) is checked up to
+that point, named as `File not fully checked`, and the scan exits 2.
 
 ## CI integration
 

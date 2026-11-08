@@ -79,7 +79,10 @@ const BENCH_MAX_DROP = 0.02;
 // Raised for the 2.4 secret precision fixes (Secret Manager references, test-account
 // passwords: ~3 KB unpacked), 8 Nov 2026: main had ~3 KB of unpacked headroom; was
 // 3_000_000. Raised 10 KB, approved by Daan 8 Nov 2026.
-const PACK_BUDGET = { packedBytes: 1_070_000, unpackedBytes: 3_010_000, files: 360 };
+// Raised for the 2.4 hardening (code-sinks, hidden-content, library, linear-text: ~110 KB
+// unpacked, ~32 KB packed), 9 Nov 2026: was 1_070_000 / 3_010_000. Raised 120 KB unpacked
+// and 35 KB packed, approved by Daan 8 Nov 2026.
+const PACK_BUDGET = { packedBytes: 1_105_000, unpackedBytes: 3_130_000, files: 360 };
 
 /** Paths the npm package may contain. Anything else fails the packaging gate. */
 const PACK_ALLOW = [

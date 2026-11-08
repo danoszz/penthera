@@ -571,5 +571,5 @@ export function latestScan(scans, project) {
 
 /** A filesystem-safe slug for a project key. */
 export function slug(key) {
-  return String(key).replace(/^https?:\/\//, "").replace(/[^a-z0-9]+/gi, "-").replace(/^-+|-+$/g, "").toLowerCase().slice(-48) || "project";
+  return String(key).replace(/^https?:\/\//, "").replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase().slice(-48) || "project";
 }

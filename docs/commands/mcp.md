@@ -163,11 +163,13 @@ The brief's `exit_code` is the code the CLI would exit with. A
 `check_dependencies` result is incomplete when a lockfile or requirements file
 could not be read (a FIFO, a device, a link out of the project, over the 64 MiB
 cap, or an `-r` include like that), or when a venv's `METADATA` or `PKG-INFO`
-could not be read. A `scan_repo` result is incomplete when a route or server
-file was not read (over the 5 MiB cap, a FIFO, a link out of the project). Its
-brief then has `exit_code` 2, a verdict of Review, and an `exit_reason` that
-names the file, and the findings list it as `File not read: <file>`. Never read
-that as clean.
+could not be read. Its brief then has `exit_code` 2, a verdict of Review, and an
+`exit_reason` that names the file, and the findings list it as
+`File not read: <file>`. Never read that as clean. `scan_repo` and
+`audit_ai_tooling` work the same way for a source or agent config file they
+could not read, such as a route file over 5 MiB, a FIFO or a link out of the
+project. Each tool reads a file whole under a size limit and matches it in
+linear time, so a padded file or a crafted header can't stall the server.
 
 Arguments: `path` and `max_findings` on the file tools, `prod` on
 `check_dependencies`, `url` and `profile` (`quick` or `standard`) on `scan_url`,
