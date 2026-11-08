@@ -345,20 +345,45 @@ describe("supabase-rls-disabled", () => {
     const root = repo({ "supabase/migrations/001.sql": text });
     const r = await scanRepo(root);
     const rls = r.findings.filter((f) => f.templateId === "supabase-rls-disabled");
-    expect(rls).toHaveLength(1);
+    // The tracked ones as one group, and those past the cap as one more, counted, at potential.
+    expect(rls.map((f) => f.confidence).sort()).toEqual(["likely", "potential"]);
+    expect(rls.find((f) => f.confidence === "potential").title).toMatch(/^149999 tables created after Penthera's 50000-object limit/);
     // The table with a private-looking column is named first; the count stops at the cap.
-    expect(rls[0].title).toMatch(/^50001 tables in `supabase\/migrations\/001\.sql`/);
+    rls.sort((a, b) => (a.confidence === "likely" ? -1 : 1) - (b.confidence === "likely" ? -1 : 1));
+    expect(rls[0].title).toMatch(/^50001 tables in `supabase\/migrations\/001\.sql` have no row-level security \(list [0-9a-f]{8}\)$/);
     expect(rls[0].description).toMatch(/^`supabase\/migrations\/001\.sql` creates or changes 50001 tables in exposed schemas that no migration puts under row-level security: `public\.t150`/);
     expect(rls[0].lines.length).toBeLessThanOrEqual(20);
-    expect(r.incomplete).toEqual([expect.objectContaining({ file: "supabase", reason: expect.stringContaining("more than 50000 tables and policies") })]);
+    expect(r.incomplete).toEqual([expect.objectContaining({ file: "supabase/migrations/001.sql", reason: expect.stringContaining("more than 50000 tables and policies") })]);
   }, 60_000);
+
+  it("the cap can't hide a later unprotected table behind harmless ones; Coverage marks that file not read (review of PR 312)", async () => {
+    const root = repo({
+      "supabase/migrations/001.sql": Array.from({ length: 50_001 }, (_, i) => `create table private.d${i} (id int);`).join("\n"),
+      "supabase/migrations/002.sql": "create table public.users (email text, password text);",
+    });
+    const r = await scanRepo(root);
+    const f = r.findings.filter((x) => x.templateId === "supabase-rls-disabled");
+    expect(f.map((x) => [x.severity, x.confidence, x.file])).toEqual([["high", "potential", "supabase/migrations/002.sql"]]);
+    expect(f[0].description).toContain("`public.users`");
+    // The cap fires on 002.sql's first statement: 001.sql was read whole, 002.sql only noted.
+    expect(r.incomplete.map((i) => i.file)).toEqual(["supabase/migrations/002.sql"]);
+    expect(r.coverage.families.find((x) => x.id === "supabase")).toMatchObject({ examined: 1 });
+  }, 60_000);
+
+  it("a grouped finding's id changes when its set of tables changes, so a suppression doesn't carry over (review of PR 312)", () => {
+    const title = (sql) => scanSupabase(repo({ "supabase/migrations/001.sql": sql })).findings[0].title;
+    const a = title("create table public.logs (id int);\ncreate table public.events (id int);");
+    const b = title("create table public.logs (id int);\ncreate table public.users (email text);");
+    expect(a).not.toBe(b);
+    expect(a).toBe(title("create table public.events (id int);\ncreate table public.logs (id int);"));
+  });
 
   it("groups many open policies per file and severity", () => {
     const pols = Array.from({ length: 30 }, (_, i) => `create policy p${i} on public.t for update to anon using (true);`).join("\n");
     const root = repo({ "supabase/migrations/001.sql": `create table public.t (id int);\nalter table public.t enable row level security;\n${pols}` });
     const f = scanSupabase(root).findings;
     expect(f.map((x) => `${x.templateId}:${x.severity}`)).toEqual(["supabase-policy-open:high"]);
-    expect(f[0].title).toBe("30 policies in `supabase/migrations/001.sql` check nothing");
+    expect(f[0].title).toMatch(/^30 policies in `supabase\/migrations\/001\.sql` check nothing \(list [0-9a-f]{8}\)$/);
     expect(f[0].description).toContain("and 10 more");
   });
 
