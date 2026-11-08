@@ -12,6 +12,7 @@ import { mkdtempSync, mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { execFileSync } from "node:child_process";
+import { createHmac } from "node:crypto";
 import { scanSupabase, findServiceKeys, checkMigrations, sqlTokens, alwaysTrue, directiveOf, exposedSchemas, isServiceRoleName } from "../lib/whitebox/supabase.js";
 import { scanRepo } from "../src/scan-repo.js";
 import { cpuMs } from "./fixtures/cpu-time.js";
@@ -21,7 +22,14 @@ const SIG = "ZmFrZS1zaWduYXR1cmUtZm9yLWEtdGVzdC1maXh0dXJl";
 const jwt = (claims) => `${b64({ alg: "HS256", typ: "JWT" })}.${b64(claims)}.${SIG}`;
 const SERVICE = jwt({ iss: "supabase", ref: "abcdefghijklmnop", role: "service_role", iat: 1700000000, exp: 2000000000 });
 const ANON = jwt({ iss: "supabase", ref: "abcdefghijklmnop", role: "anon", iat: 1700000000, exp: 2000000000 });
-const DEMO = jwt({ iss: "supabase-demo", role: "service_role", exp: 1983812996 });
+// A key signed with the local stack's published demo secret, and one that only claims to be.
+const DEMO_SECRET = ["super", "secret", "jwt", "token", "with", "at", "least", "32", "characters", "long"].join("-");
+const signed = (claims, secret) => {
+  const input = `${b64({ alg: "HS256", typ: "JWT" })}.${b64(claims)}`;
+  return `${input}.${createHmac("sha256", secret).update(input).digest("base64url")}`;
+};
+const DEMO = signed({ iss: "supabase-demo", role: "service_role", exp: 1983812996 }, DEMO_SECRET);
+const FAKE_DEMO = signed({ iss: "supabase-demo", role: "service_role", exp: 1983812996 }, "a-self-hosted-secret-of-at-least-32-chars");
 // The new-style secret key: prefix plus a made-up body.
 const SB_SECRET = ["sb", "secret", "Qm9ndXNLZXlGb3JUZXN0c09ubHk1"].join("_");
 // Env names built from parts, so this file holds none of them whole.
@@ -49,8 +57,9 @@ describe("findServiceKeys", () => {
     expect(found[0].demo).toBe(false);
   });
 
-  it("marks the well-known local key (iss supabase-demo)", () => {
+  it("marks the local demo key only when the demo secret signed it (row 6)", () => {
     expect(findServiceKeys(`k=${DEMO}`)[0].demo).toBe(true);
+    expect(findServiceKeys(`k=${FAKE_DEMO}`)[0].demo).toBe(false);
   });
 
   it("finds an sb_secret_ key and skips placeholders", () => {
@@ -106,12 +115,56 @@ describe("supabase-service-role-exposed", () => {
     expect(f[0].description).not.toContain(SERVICE.slice(-20));
   });
 
-  it("flags a public env name for the service-role key", () => {
-    const root = repo({ ".env.example": `${PUB("VITE_")}=\n`, "src/a.ts": `const k = process.env.${PUB("NEXT_PUBLIC_")};\n` });
+  it("flags a public env name for the service-role key: high where it ships, medium in server code", () => {
+    const root = repo({
+      ".env.example": `${PUB("VITE_")}=\n`,
+      "app/a.tsx": `"use client";\nconst k = process.env.${PUB("NEXT_PUBLIC_")};\n`,
+      "scripts/check-env.mjs": `if (process.env.${PUB("NEXT_PUBLIC_")}) throw new Error("never public");\n`,
+    }, { pkg: NEXT });
     expect(hits(root).sort()).toEqual([
       "supabase-service-role-exposed:high:.env.example:1",
-      "supabase-service-role-exposed:high:src/a.ts:1",
+      "supabase-service-role-exposed:high:app/a.tsx:2",
+      "supabase-service-role-exposed:medium:scripts/check-env.mjs:1",
     ]);
+  });
+
+  it("catches SUPABASE_SERVICE_KEY, and a build config that inlines the whole env", () => {
+    const name = ["SUPABASE", "SERVICE", "KEY"].join("_");
+    const root = repo({
+      ".env": `NEXT_PUBLIC_${name}=\n`,
+      "next.config.js": "module.exports = { env: { ...process.env } };\n",
+      "vite.config.mts": "export default defineConfig(({ mode }) => ({ define: { 'process.env': loadEnv(mode, process.cwd(), '') } }));\n",
+    }, { pkg: NEXT });
+    expect(hits(root).sort()).toEqual([
+      "supabase-service-role-exposed:high:.env:1",
+      "supabase-service-role-exposed:high:next.config.js:1",
+      "supabase-service-role-exposed:high:vite.config.mts:1",
+    ]);
+  });
+
+  it("reads Vue, Svelte, Astro, HTML and .mts files, and follows <script src>", () => {
+    const root = repo({
+      "src/App.vue": `<script setup>const k = "${SERVICE}";</script>\n`,
+      "src/routes/+page.svelte": `<script>const k = "${SERVICE}";</script>\n`,
+      "src/pages/index.astro": `---\n---\n<script>const k = "${SERVICE}";</script>\n`,
+      "src/client.mts": `export const k = "${SERVICE}";\n`,
+      "index.html": `<script>window.k = "${SERVICE}";</script><script type="module" src="/assets/app.js"></script>\n`,
+      "assets/app.js": `const k = "${SERVICE}";\n`,
+    }, { pkg: VITE });
+    expect(hits(root).sort()).toEqual([
+      "supabase-service-role-exposed:critical:assets/app.js:1",
+      "supabase-service-role-exposed:critical:index.html:1",
+      "supabase-service-role-exposed:critical:src/App.vue:1",
+      "supabase-service-role-exposed:critical:src/client.mts:1",
+      "supabase-service-role-exposed:critical:src/pages/index.astro:3",
+      "supabase-service-role-exposed:critical:src/routes/+page.svelte:1",
+    ]);
+  });
+
+  it("reports client code that git ignores at high, never drops it", () => {
+    const root = repo({ "src/config.ts": `export const k = "${SERVICE}";\n` }, { pkg: VITE });
+    const ignored = { dirs: new Set(), files: new Set([join(root, "src/config.ts")]) };
+    expect(hits(root, { ignored })).toEqual(["supabase-service-role-exposed:high:src/config.ts:1"]);
   });
 
   it("reports one finding, not two, for a public name holding the key on one line", () => {
@@ -136,10 +189,13 @@ describe("supabase-service-role-exposed", () => {
     expect([f.templateId, f.severity, f.confidence, f.line]).toEqual(["supabase-service-role-exposed", "medium", "potential", 2]);
   });
 
-  it("reports the local demo key low, at potential confidence", () => {
-    const root = repo({ "src/client.ts": `const k = "${DEMO}";\n` }, { pkg: VITE });
-    const [f] = scanSupabase(root).findings;
-    expect([f.templateId, f.severity, f.confidence]).toEqual(["supabase-service-role-committed", "low", "potential"]);
+  it("reports the local demo key low, at potential confidence; a look-alike gets full severity", () => {
+    const root = repo({ "src/client.ts": `const k = "${DEMO}";\n`, "src/other.ts": `const k = "${FAKE_DEMO}";\n` }, { pkg: VITE });
+    const f = scanSupabase(root).findings.map((x) => `${x.templateId}:${x.severity}:${x.confidence}:${x.file}`).sort();
+    expect(f).toEqual([
+      "supabase-service-role-committed:low:potential:src/client.ts",
+      "supabase-service-role-exposed:critical:likely:src/other.ts",
+    ]);
   });
 
   it("marks hits in tests as potential, never drops them", () => {
@@ -211,6 +267,10 @@ describe("supabase-rls-disabled", () => {
     expect(tablesOf(mig({ "001.sql": "select pg_catalog.set_config('search_path', '', false);\ncreate table public.y (id int);" }))).toEqual(["public.y"]);
   });
 
+  it("reads config.toml in one pass, even all blank lines (review 4)", () => {
+    expect(cpuMs(() => exposedSchemas("\n".repeat(1_000_000)), { runs: 2 })).toBeLessThan(1500);
+  });
+
   it("reads the exposed schemas from config.toml", () => {
     expect(exposedSchemas('[db]\nport = 1\n[api]\nenabled = true\nschemas = ["public", "api"]\n[auth]\n')).toEqual(["public", "api"]);
     expect(tablesOf(mig({ "001.sql": "create table api.items (id int);" }, { schemas: ["public", "api"] }))).toEqual(["api.items"]);
@@ -220,6 +280,31 @@ describe("supabase-rls-disabled", () => {
     const r = mig({ "001.sql": "create table public.a (id int);\nalter table public.a enable row level security;\ncreate table public.gone (id int);", "002.sql": "alter table public.a disable row level security;\ndrop table if exists public.gone;" });
     expect(tablesOf(r)).toEqual(["public.a"]);
     expect(r.findings[0].table.file).toBe("002.sql");
+  });
+
+  it("ignores default-privilege revokes on functions, sequences or another role's tables (review 1)", () => {
+    for (const pre of [
+      "alter default privileges in schema public revoke all on functions from anon, authenticated;",
+      "alter default privileges in schema public revoke all on sequences from anon, authenticated;",
+      "alter default privileges for role supabase_admin in schema public revoke all on tables from anon, authenticated;",
+    ]) expect(tablesOf(mig({ "001.sql": `${pre}\ncreate table public.t (id int, email text);` }))).toEqual(["public.t"]);
+    expect(tablesOf(mig({ "001.sql": "alter default privileges for role postgres in schema public revoke all on tables from anon, authenticated;\ncreate table public.t (id int);" }))).toEqual([]);
+  });
+
+  it("resets search_path on DEFAULT, RESET and the end of a transaction (review 5)", () => {
+    for (const reset of ["set search_path to default;", "reset search_path;", "begin; set local search_path = private; commit;"]) {
+      expect(tablesOf(mig({ "001.sql": `set search_path = private;\n${reset}\ncreate table t (id int);`.replace("set search_path = private;\nbegin;", "begin;") }))).toEqual(["public.t"]);
+    }
+  });
+
+  it("CREATE TABLE IF NOT EXISTS later doesn't undo RLS (review false positive)", () => {
+    expect(tablesOf(mig({ "001.sql": "create table public.t (id int);\nalter table public.t enable row level security;", "002.sql": "create table if not exists public.t (id int);" }))).toEqual([]);
+  });
+
+  it("moves policies with SET SCHEMA and marks DO '...' strings and EXECUTE ... CREATE (review 10)", () => {
+    const r = mig({ "001.sql": "create table private.t (id int);\nalter table private.t enable row level security;\ncreate policy p on private.t for all to anon using (true);\nalter table private.t set schema public;\ndo 'begin execute ''create table public.x(id int)''; end';\ncreate function f() returns void language plpgsql as $$ begin execute 'create ' || 'table public.y(id int)'; end $$;" });
+    expect(r.findings.filter((f) => f.kind === "policy").map((f) => f.policy.table)).toEqual(["public.t"]);
+    expect(r.unchecked).toHaveLength(2);
   });
 
   it("treats a table anon and authenticated can't reach as not exposed", () => {
@@ -241,10 +326,12 @@ describe("supabase-rls-disabled", () => {
     expect([f.severity, f.confidence]).toEqual(["high", "potential"]);
   });
 
-  it("a statement past the token cap keeps its start and is marked (row 4)", () => {
+  it("a statement past the token cap keeps its start, and the scan is incomplete (rows 1, 4)", () => {
     const r = mig({ "001.sql": `create table public.wide (${Array.from({ length: 30_000 }, (_, i) => `c${i} int`).join(", ")});` });
     expect(tablesOf(r)).toEqual(["public.wide"]);
-    expect(r.unchecked[0].why).toContain("over 20000 tokens");
+    expect(r.unchecked[0]).toMatchObject({ why: expect.stringContaining("over 20000 tokens"), incomplete: true });
+    const root = repo({ "supabase/migrations/001.sql": `create table public.a (id int);\nalter table public.a enable row level security${", alter column id set default 1".repeat(5000)}, disable row level security;` });
+    expect(scanSupabase(root).incomplete.map((i) => i.file)).toEqual(["supabase/migrations/001.sql"]);
   });
 
   it("over the work budget it says so and keeps the findings it has (row 17)", () => {
@@ -327,6 +414,18 @@ describe("caps, refusals and chunk edges (BYPASS-CHECKLIST)", () => {
     execFileSync("mkfifo", [join(root, "supabase/migrations/002.sql")]);
     const r = scanSupabase(root);
     expect(r.incomplete.map((i) => i.file).sort()).toEqual(["supabase/migrations/001.sql", "supabase/migrations/002.sql"]);
+  });
+
+  it.skipIf(process.platform === "win32")("row 2: links out of the project and FIFOs among the files read are incomplete (review 9)", () => {
+    const outside = mkdtempSync(join(tmpdir(), "penthera-supabase-out-"));
+    writeFileSync(join(outside, "keys.js"), `const k = "${SERVICE}";`);
+    mkdirSync(join(outside, "sb"));
+    const root = repo({ "public/.keep": "", "src/inside.ts": "export {};" });
+    symlinkSync(join(outside, "keys.js"), join(root, "public/keys.js"));
+    symlinkSync(join(outside, "sb"), join(root, "supabase"));
+    symlinkSync(join(root, "src/inside.ts"), join(root, "src/alias.ts"));
+    execFileSync("mkfifo", [join(root, ".env.production")]);
+    expect(scanSupabase(root).incomplete.map((i) => i.file).sort()).toEqual([".env.production", "public/keys.js", "supabase"]);
   });
 
   it.skipIf(process.platform === "win32")("row 2: a migrations folder that is a link is incomplete", () => {
