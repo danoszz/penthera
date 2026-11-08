@@ -218,7 +218,7 @@ export async function scanRepo(repoPath, opts = {}) {
   // What it couldn't read whole (a refused, oversized or over-budget
   // migration) makes the scan incomplete: exit 2, never a silent pass.
   // noteRefused names each file once: the secret or route scan may refuse the same one.
-  for (const inc of supabase.incomplete) noteRefused({ path: inc.file, reason: inc.reason });
+  for (const inc of supabase.incomplete) noteRefused({ path: inc.file, reason: inc.reason, partial: inc.partial });
   result.executedProbes.push("supabase");
 
   // ── Phase 2: Locate API root ───────────────────────────────────────────

@@ -84,7 +84,7 @@ const BENCH_MAX_DROP = 0.02;
 // and 35 KB packed, approved by Daan 8 Nov 2026.
 // Raised for the Supabase rules (lib/whitebox/supabase.js and its docs: ~88 KB unpacked,
 // ~27 KB packed, 1 file, no dependencies; ~22 KB is the SQL reader and ~23 KB the
-// reachability walk and finding text), PR 312, rebased on 2.4 hardening 9 Nov 2026; was
+// reachability walk and finding text), PR 312, merged with 2.4 hardening 8 Nov 2026; was
 // 1_105_000 / 3_130_000. Raised under Daan's standing rule of 8 Nov (engineers may raise it
 // with a written reason while the package stays under 5 MB unpacked).
 const PACK_BUDGET = { packedBytes: 1_140_000, unpackedBytes: 3_230_000, files: 360 };

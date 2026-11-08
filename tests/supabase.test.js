@@ -357,6 +357,8 @@ describe("supabase-rls-disabled", () => {
     expect(rls[0].description).toMatch(/^`supabase\/migrations\/001\.sql` creates or changes 50001 tables in exposed schemas that no migration puts under row-level security: `public\.t150`/);
     expect(rls[0].lines.length).toBeLessThanOrEqual(20);
     expect(r.incomplete).toEqual([expect.objectContaining({ file: "supabase/migrations/001.sql", reason: expect.stringContaining("more than 50000 tables and policies") })]);
+    // Read, but not to the end: named as not fully checked, not as not read.
+    expect(r.findings.some((f) => f.title === "File not fully checked: supabase/migrations/001.sql")).toBe(true);
   }, 60_000);
 
   it("the cap can't hide a later unprotected table behind harmless ones; Coverage marks that file not read (review of PR 312)", async () => {
