@@ -4,7 +4,7 @@
  * Argument parsing, dispatch to scanners, report output.
  */
 import { parseArgs } from "node:util";
-import { resolve, dirname } from "node:path";
+import { resolve, dirname, relative } from "node:path";
 import { readFileSync, writeFileSync, mkdirSync, existsSync, realpathSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { scanUrl } from "./scan-url.js";
@@ -52,7 +52,7 @@ function loadJurisdiction() {
 function shouldRunOnboarding(positionals, opts) {
   if (process.env.PENTHERA_NO_ONBOARDING) return false;
   if (positionals.length > 0) return false;
-  if (opts.repo || opts.machine) return false;
+  if (opts.repo || opts.machine || opts.card || opts["card-out"]) return false;
   return process.stdin.isTTY && process.stdout.isTTY;
 }
 
@@ -175,6 +175,11 @@ const HELP = `
         --audience <who>    developer | owner | auditor | agent report (for --markdown or stdout)
         --brief             Print the agent brief to stdout (the default when stdout is
                             not a terminal and not CI; PENTHERA_BRIEF=0 turns that off)
+        --card              Write a share card of this run: penthera-card.png (1080 x 1350)
+                            and penthera-card-og.png (1200 x 630), each with an .svg. Made
+                            offline from the brief's verdict; no paths, no file contents.
+                            On its own, cards the folder you are in (--repo .)
+        --card-out <path>   Where to write the card (default: penthera-card)
         --report-template <file.md>  Your own Markdown template ({{summary.critical}}, {{#each findings}})
         --evidence <dir>    Evidence bundle: all reports + manifest.json with SHA-256s
         --no-footer         Leave the one-line "Checked by Penthera" footer off Markdown output
@@ -316,7 +321,7 @@ export async function run() {
 
   if (process.argv[2] === "brief") {
     const { runBrief } = await import("./cli/brief.js");
-    process.exit(runBrief(process.argv.slice(3)));
+    process.exit(runBrief(process.argv.slice(3), { version: pkg.version }));
   }
 
   if (process.argv[2] === "giants") {
@@ -345,6 +350,8 @@ export async function run() {
         "audit-seeds": { type: "string" },
         audience:    { type: "string" },
         brief:       { type: "boolean", default: false },
+        card:        { type: "boolean", default: false },
+        "card-out":  { type: "string" },
         "no-footer": { type: "boolean", default: false },
         "report-template": { type: "string" },
         evidence:    { type: "string" },
@@ -568,7 +575,8 @@ export async function run() {
     }
     url = target.url;
   }
-  const repo = opts.repo || null;
+  // `penthera --card` on its own cards the folder you are in.
+  const repo = opts.repo || ((opts.card || opts["card-out"]) && !url && !agentsMode ? "." : null);
   const aiFlags = ["ai-model", "ai-budget", "ai-consent", "ai-scope"].filter((k) => opts[k] != null);
   if (aiFlags.length && !opts.ai) {
     printError(`--${aiFlags[0]} only applies with --ai.`);
@@ -900,6 +908,15 @@ export async function run() {
     writeSarifReport(merged, opts.sarif);
     if (!opts.quiet && !opts.json) {
       process.stderr.write(`  SARIF report   ${opts.sarif}\n`);
+    }
+  }
+
+  if (opts.card || opts["card-out"]) {
+    // Loaded here: only a run that asks for the card pays for the renderer.
+    const { writeCards, DEFAULT_CARD_OUT } = await import("./card/index.js");
+    const { paths } = writeCards(merged.brief, [merged], { version: pkg.version, out: opts["card-out"] || DEFAULT_CARD_OUT });
+    if (!opts.quiet && !opts.json) {
+      process.stderr.write(`  Share card     ${paths.filter((p) => p.endsWith(".png")).map((p) => relative(process.cwd(), p) || p).join(", ")} (and .svg; made offline, nothing uploaded)\n`);
     }
   }
 
