@@ -359,7 +359,8 @@ export function formatBrief(b, { footer = false } = {}) {
     if (b.check_first.length > MAX_ITEMS) L.push(`- ${b.check_first.length - MAX_ITEMS} more in the full report.`);
     L.push("");
   }
-  if (b.set_aside) L.push(`Checked one and it is not a problem? ${code(hintCommand(b.set_aside.command))}. ${md(b.set_aside.why)}.`, "");
+  // Plain, like the brief's other in-text commands: the same words however Penthera was started.
+  if (b.set_aside) L.push(`Checked one and it is not a problem? ${code(b.set_aside.command)}. ${md(b.set_aside.why)}.`, "");
   if (b.likely_noise.length) {
     L.push("### Likely noise", "");
     for (const g of b.likely_noise.slice(0, MAX_ITEMS)) {

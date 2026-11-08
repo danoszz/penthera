@@ -11,7 +11,7 @@
 - **Possible IDOR on /api/orders/:id** [high, needs a person] in `https://shop.example/api/orders/1001`.
 - **DMARC policy is p=none** [low, pattern matched] in `https://shop.example`.
 
-Checked one and it is not a problem? `npx penthera memory suppress <fid> --reason "<why>"`. It sets the finding aside on this machine; add the fid and reason to penthera.suppress.json to share that with your team. Both apply to scans with --memory, and the report lists what they hide. The fid is next to each finding in the JSON and Markdown reports.
+Checked one and it is not a problem? `penthera memory suppress <fid> --reason "<why>"`. It sets the finding aside on this machine; add the fid and reason to penthera.suppress.json to share that with your team. Both apply to scans with --memory, and the report lists what they hide. The fid is next to each finding in the JSON and Markdown reports.
 
 ### Not checked
 
