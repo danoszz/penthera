@@ -16,6 +16,8 @@ import { createHmac } from "node:crypto";
 import { scanSupabase, findServiceKeys, checkMigrations, sqlTokens, alwaysTrue, directiveOf, exposedSchemas, isServiceRoleName } from "../lib/whitebox/supabase.js";
 import { scanRepo } from "../src/scan-repo.js";
 import { cpuMs } from "./fixtures/cpu-time.js";
+import { compareWithBaseline } from "../src/cli/baseline.js";
+import { findingId } from "../lib/memory/views.js";
 
 const b64 = (o) => Buffer.from(JSON.stringify(o)).toString("base64url");
 const SIG = "ZmFrZS1zaWduYXR1cmUtZm9yLWEtdGVzdC1maXh0dXJl";
@@ -465,6 +467,37 @@ create policy r on public.t as restrictive for all to anon using (true);
 create policy svc on public.t for all to service_role using (true);
 create policy gone on public.t for all to anon using (true);
 drop policy if exists gone on public.t;`)).toEqual([]);
+  });
+
+  it("a broadened policy shows again past a baseline and a suppression, single or grouped (Vercel, PR 312)", () => {
+    const table = "create table public.t (id int);\nalter table public.t enable row level security;\n";
+    const scan = (pols) => scanSupabase(repo({ "supabase/migrations/001.sql": table + pols })).findings.filter((f) => f.templateId === "supabase-policy-open");
+    const pairs = {
+      // Same severity and table before and after: only what the policy grants changes.
+      "WITH CHECK opened": ["create policy p on public.t for update to anon using (true);", "create policy p on public.t for update to anon using (true) with check (true);"],
+      "role added": ["create policy p on public.t for delete to anon using (true);", "create policy p on public.t for delete to anon, authenticated using (true);"],
+      "grouped, a role added": [
+        "create policy a on public.t for update to anon using (true);\ncreate policy b on public.t for delete to anon using (true);",
+        "create policy a on public.t for update to anon using (true);\ncreate policy b on public.t for delete to anon, public using (true);",
+      ],
+      "grouped, UPDATE to ALL": [
+        "create policy a on public.t for update to anon using (true);\ncreate policy b on public.t for delete to anon using (true);",
+        "create policy a on public.t for all to anon using (true);\ncreate policy b on public.t for delete to anon using (true);",
+      ],
+    };
+    for (const [name, [narrow, broad]] of Object.entries(pairs)) {
+      const before = scan(narrow);
+      const after = scan(broad);
+      expect(before.map((f) => f.severity), name).toEqual(after.map((f) => f.severity));
+      // A suppression is keyed by the finding's id: the broadened finding has a new one.
+      expect(after.map(findingId).some((id) => !before.map(findingId).includes(id)), name).toBe(true);
+      // And a baseline of the narrow scan reports it as new.
+      const base = join(mkdtempSync(join(tmpdir(), "penthera-supabase-base-")), "base.json");
+      writeFileSync(base, JSON.stringify({ findings: before }));
+      expect(compareWithBaseline(after, base).newFindings.length, name).toBeGreaterThan(0);
+      // The same policies scanned again stay unchanged.
+      expect(compareWithBaseline(scan(narrow), base).newFindings, name).toEqual([]);
+    }
   });
 
   it("grades by command and role: write for anyone is high, public read is low", () => {
