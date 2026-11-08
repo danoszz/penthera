@@ -79,7 +79,13 @@ const BENCH_MAX_DROP = 0.02;
 // Raised for the 2.4 secret precision fixes (Secret Manager references, test-account
 // passwords: ~3 KB unpacked), 8 Nov 2026: main had ~3 KB of unpacked headroom; was
 // 3_000_000. Raised 10 KB, approved by Daan 8 Nov 2026.
-const PACK_BUDGET = { packedBytes: 1_070_000, unpackedBytes: 3_010_000, files: 360 };
+// Raised for the Supabase rules (lib/whitebox/supabase.js: ~67 KB unpacked, of which
+// ~22 KB is the SQL reader and ~23 KB the reachability walk and finding text; ~71 KB
+// unpacked, ~23 KB packed with its docs, 1 file, no dependencies), 8 Nov 2026: the
+// package went to ~1,087 KB packed / ~3,078 KB unpacked; was 1_070_000 / 3_010_000.
+// Raised under Daan's standing rule of 8 Nov (engineers may raise it with a written
+// reason while the package stays under 5 MB unpacked).
+const PACK_BUDGET = { packedBytes: 1_095_000, unpackedBytes: 3_090_000, files: 360 };
 
 /** Paths the npm package may contain. Anything else fails the packaging gate. */
 const PACK_ALLOW = [
