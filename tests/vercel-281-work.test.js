@@ -187,6 +187,25 @@ describe("Mythos: escaped slashes, huge files, CRLF", () => {
     // The same reading as before the memo (regex and string contents are blanked in `code`).
     expect(lexJs('a / b; /x/.test(y); "/\\\\"; /[/]/').code).toBe('a / b; / /.test(y); "   "; /   /');
   });
+  // Final review: a line of `[/]` put every "/" inside a class in the walk
+  // before it, so the stretch memo never fired and each "/" rescanned the line
+  // (81 s at 512 KiB). Failed scans now mark the (position, in-class) pairs
+  // they passed, and a later scan stops at a marked pair.
+  it("one long line of `[/]` lexes in linear time, read as before", async () => {
+    const t = (n) => { const s = performance.now(); lexJs("[/]".repeat(n)); return performance.now() - s; };
+    t(1000);
+    const a = best3(t, 64 * 1024), b = best3(t, 256 * 1024);
+    expect(b / Math.max(a, 20)).toBeLessThan(9);
+    expect(b).toBeLessThan(2000);
+    expect(lexJs("[/]".repeat(1000)).plain).toBe("[/]".repeat(1000));
+    expect(lexJs('x = [/a/, /[/]/g]; y = a / [1][0] / 2; "[/]"').code).toBe('x = [/ /, /   /g]; y = a / [1][0] / 2; "   "');
+    // The deps scan reaches the lexer through jsLineBreaks on a lone CR.
+    const { scanSource } = await import("../lib/deps/capabilities.js");
+    const d = (n) => { const s = performance.now(); scanSource("[/]".repeat(n) + "\r" + "x", "p/index.js"); return performance.now() - s; };
+    const c = best3(d, 32 * 1024), e = best3(d, 128 * 1024);
+    expect(e / Math.max(c, 20)).toBeLessThan(9);
+    expect(e).toBeLessThan(3000);
+  });
   it("the test-account check does not lex a file past 4 MiB and keeps the finding", async () => {
     const { findSecretsInText } = await import("../lib/whitebox/secrets.js");
     const P = ["Kx9!", "mQ2#vL7pR"].join("");

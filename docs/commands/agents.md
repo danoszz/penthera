@@ -26,6 +26,7 @@ penthera agents                 # this repo: .mcp.json, .claude/, .cursor/, AGEN
 penthera agents --home          # + ~/.claude (hooks, permissions, plugins, skills), ~/.cursor/mcp.json, Claude Desktop, Cline and Roo Code
 penthera agents ./some-skill    # vet a downloaded skill before you install it
 penthera agents --pin           # write penthera.lock; later runs flag anything that changed
+penthera agents . --card        # a share card: the grade and score, what was not read, the fix first
 ```
 
 A folder you name with `SKILL.md` at its root, in any casing, is read as one

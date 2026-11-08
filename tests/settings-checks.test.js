@@ -295,7 +295,7 @@ describe("refused and linked files (row 2)", () => {
 
 describe("headers set where a host or framework sets them", () => {
   it("reads vercel.json, so a Next.js app that sets its headers there gets no missing-header finding", () => {
-    const vercel = { headers: [{ source: "/(.*)", headers: ["Content-Security-Policy", "X-Frame-Options", "X-Content-Type-Options", "Strict-Transport-Security", "Referrer-Policy"].map((key) => ({ key, value: "x" })) }] };
+    const vercel = { headers: [{ source: "/(.*)", headers: ["Content-Security-Policy", "X-Frame-Options", "X-Content-Type-Options", "Strict-Transport-Security", "Referrer-Policy"].map((key) => ({ key, value: key === "Strict-Transport-Security" ? "max-age=63072000" : "x" })) }] };
     const root = repo({ ...NEXT, "vercel.json": JSON.stringify(vercel, null, 2), "next.config.mjs": "export default {};\n" });
     expect(probeRepoDetailed(root).findings.filter((f) => f.category === "headers")).toEqual([]);
   });

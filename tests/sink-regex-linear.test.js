@@ -56,6 +56,8 @@ describe("code-sink regexes are linear (2.3.2)", () => {
     }
   });
 
+  // Several 4 MiB inputs in one test, each under its own limit below: the whole test gets
+  // room for all of them (vitest's 20 s default bound it first on CI's slower Node 22 runner).
   it("at the 4 MiB read cap: each crafted input takes under 5 s", () => {
     const out = run(`${CASES}
       const out = [];
@@ -65,7 +67,7 @@ describe("code-sink regexes are linear (2.3.2)", () => {
       expect(c.hits, c.k).toBe(1);
       expect(c.ms, c.k).toBeLessThan(5000);
     }
-  });
+  }, 120_000);
 
   it("minified: one 4 MiB line, a long string and the exec on the same line, is scanned and the sink found", () => {
     const out = run(`
@@ -127,6 +129,8 @@ describe("brace lists are read whole: a padded binding is still bound (Vercel U,
     for (const n of [0, 400, 20000]) for (const [k, src] of Object.entries(forms(n))) expect(findSinks(src).length, `${k}, ${n} padding entries`).toBe(1);
   });
 
+  // Several 4 MiB inputs in one test, each under its own limit below: the whole test gets
+  // room for all of them (vitest's 20 s default bound it first on CI's slower Node 22 runner).
   it("at the 4 MiB cap: one huge list, and a file of many small lists and lone braces, take under 5 s", () => {
     const out = run(`
       const pad = (n, f) => Array.from({ length: n }, (_, i) => f(i)).join(", ");
@@ -138,7 +142,7 @@ describe("brace lists are read whole: a padded binding is still bound (Vercel U,
     expect(out.kib).toBeGreaterThan(3000);
     for (const k of ["big", "many", "close"]) { expect(out[k].hits, k).toBe(1); expect(out[k].ms, k).toBeLessThan(5000); }
     expect(out.open.ms).toBeLessThan(5000);
-  });
+  }, 120_000);
 
   it.skipIf(spawnSync("git", ["cat-file", "-e", "origin/main:lib/whitebox/code-sinks.js"]).status !== 0)(
     "differential against main: every sink main finds in a corpus of binding forms is found now", async () => {

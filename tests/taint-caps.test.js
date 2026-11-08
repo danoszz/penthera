@@ -52,6 +52,8 @@ describe("app mode: request data is followed with no length or round cap", () =>
     expect(app(chain(50, '"ls"') + H("v0"))).toEqual([]);
   });
 
+  // Several 4 MiB inputs in one test, each under its own limit below: the whole test gets
+  // room for all of them (vitest's 20 s default bound it first on CI's slower Node 22 runner).
   it("at the 4 MiB cap: chains, statements and lists of every kind stay fast", () => {
     const lib = resolve("lib/whitebox/code-sinks.js");
     const r = spawnSync(process.execPath, ["--input-type=module", "-e", `
@@ -72,7 +74,7 @@ describe("app mode: request data is followed with no length or round cap", () =>
     const out = JSON.parse(r.stdout);
     for (const [k, c] of Object.entries(out)) expect(c.ms, k).toBeLessThan(6000);
     expect(out["reverse chain"].n).toBe(300001);
-  });
+  }, 120_000);
 
   it.skipIf(!hasMain("lib/whitebox/code-sinks.js"))("differential against main: every name main's taintedNames finds is found (3,000 seeded programs)", async () => {
     const main = await fromMain("lib/whitebox/code-sinks.js");
@@ -119,6 +121,8 @@ describe("library mode: no silent caps; past the budget the file is incomplete",
     expect(t.incomplete).toBe(true);
   });
 
+  // Several 4 MiB inputs in one test, each under its own limit below: the whole test gets
+  // room for all of them (vitest's 20 s default bound it first on CI's slower Node 22 runner).
   it("at the 4 MiB cap: library mode stays within the run's time", () => {
     const sinks = resolve("lib/whitebox/code-sinks.js");
     const r = spawnSync(process.execPath, ["--input-type=module", "-e", `
@@ -137,7 +141,7 @@ describe("library mode: no silent caps; past the budget the file is incomplete",
       console.log(JSON.stringify(out));`], { encoding: "utf-8", timeout: 180_000, maxBuffer: 1 << 24 });
     expect(r.status, r.stderr || "timed out").toBe(0);
     for (const [k, ms] of Object.entries(JSON.parse(r.stdout))) expect(ms, k).toBeLessThan(10_000);
-  });
+  }, 120_000);
 
   it.skipIf(!hasMain("lib/whitebox/library.js"))("differential against main: every name main's parameterTaint finds is found (3,000 seeded bodies)", async () => {
     const main = await fromMain("lib/whitebox/library.js");
@@ -180,6 +184,8 @@ describe("library mode: functions are found whatever the length of their types a
     expect(r.incomplete).toBe(true);
   });
 
+  // Several 4 MiB inputs in one test, each under its own limit below: the whole test gets
+  // room for all of them (vitest's 20 s default bound it first on CI's slower Node 22 runner).
   it("at the 4 MiB cap: typed arrows, nested arrows, ternaries and `():` runs stay fast", () => {
     const sinks = resolve("lib/whitebox/code-sinks.js");
     const r = spawnSync(process.execPath, ["--input-type=module", "-e", `
@@ -193,7 +199,7 @@ describe("library mode: functions are found whatever the length of their types a
       console.log(JSON.stringify(out));`], { encoding: "utf-8", timeout: 180_000, maxBuffer: 1 << 24 });
     expect(r.status, r.stderr || "timed out").toBe(0);
     for (const [k, ms] of Object.entries(JSON.parse(r.stdout))) expect(ms, k).toBeLessThan(10_000);
-  });
+  }, 120_000);
 
   it.skipIf(!hasMain("lib/whitebox/library.js"))("differential against main: every function main's functionRanges finds is found (3,000 seeded texts)", async () => {
     const main = await fromMain("lib/whitebox/library.js");

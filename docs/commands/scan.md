@@ -205,6 +205,75 @@ routes, for example `--deep reached 3 of 13 routes in your code.`
 | Audience report | `--audience developer\|owner\|auditor\|agent` | The same scan written for a developer, an owner, an auditor or an AI assistant ([docs/evidence.md](../evidence.md#audience-reports), [brief.md](brief.md)) |
 | Your template | `--report-template file.md` | Your own Markdown with `{{summary.critical}}`, `{{#each findings}}`, `{{#if x}}`; no code runs |
 | **Evidence bundle** | `--evidence <dir> [--sign-key <ssh-key>]` | All reports plus `manifest.json` with SHA-256s, optionally SSH-signed. Auditors check it with `penthera evidence verify <dir> --allowed-signers <file>` ([docs/evidence.md](../evidence.md)) |
+| **Share card** | `--card [--card-out <path>]` | One image of the run to post: the verdict, what was read, what wasn't, the number to fix first and the top fix. PNG and SVG, made offline ([below](#share-card)) |
+
+### Share card
+
+`--card` writes the result as an image you can post, a security receipt:
+
+```bash
+penthera --card                 # the folder you are in, like penthera --repo . --card
+penthera agents . --card        # your AI-agent configs: skills, MCP servers, hooks
+penthera https://my-app.example --repo . --card
+```
+
+| File | Size | For |
+|---|---|---|
+| `penthera-card.png`, `penthera-card.svg` | 1080 × 1350 | X and other feeds (4:5) |
+| `penthera-card-og.png`, `penthera-card-og.svg` | 1200 × 630 | Link previews |
+
+`--card-out <path>` picks another place and name: `--card-out reports/card`
+writes `reports/card.png`, `reports/card-og.png` and their SVGs.
+
+The card never writes through a symbolic link. If a folder on the way is a
+link, or a card name is a folder, nothing is written and the run exits 2; a
+link planted at a card's name is replaced, and the file it pointed to is left
+as it was. `--card` does not work with `penthera deps` (write `-o deps.json`
+and use `penthera brief deps.json --card`) or with `--baseline` and `-q`
+together, which counts only new findings; both exit 2.
+
+The card is built on your machine from the brief, so it shows the same
+verdict as the brief, and no model is involved. Penthera draws it with its own
+renderer and pixel font: nothing is fetched or uploaded, and it adds no
+dependency.
+
+What a card always shows:
+
+- The verdict: Fix now, Review, Nothing to fix, Nothing to assess, Site not
+  read, or how many findings are suppressed.
+- On an agent-config card, the audit's grade as the big letter, with its score
+  out of 100 next to it and the number to fix first as a line. Repo and URL
+  scans have no score, so their card leads with the number to fix first; none
+  is made up.
+- What was read: code, dependencies, AI-agent configs and the live site, each
+  read, partly read or not run. On a card that merges several scans, AI-agent
+  configs show the audit's grade and score on their line.
+- What was not checked, including what the checks themselves could not read
+  (an agent audit starts no MCP server, so tool descriptions are not read). A
+  repo or live-site card always adds that login, access rules and payments are
+  not proven.
+- The number to fix first and, when there is one, the top fix: the most severe
+  finding that needs a change.
+- The command that made it, at the bottom.
+
+What it never shows: file paths, file contents, hidden characters or anything
+shaped like a key.
+A finding's title loses its path, and long key-like strings are replaced with
+`[hidden]`. The target is the folder name or the host, not the full path.
+
+A run that read nothing never looks clean. Site not read and Nothing to
+assess show a `?` instead of a number, and suppressed findings are the number
+when they are all that is left.
+
+A repo scan alone lists dependencies and AI-agent configs as not run. To put
+all of them on one card, write each report and merge them:
+
+```bash
+penthera --repo . -o reports/repo.json
+penthera deps . -o reports/deps.json
+penthera agents . -o reports/agents.json
+penthera brief reports/repo.json reports/deps.json reports/agents.json --card
+```
 
 ### GitHub Actions workflows
 
