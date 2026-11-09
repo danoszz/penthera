@@ -893,3 +893,32 @@ describe("caps, refusals and chunk edges (BYPASS-CHECKLIST)", () => {
     expect(r.incomplete).toBeUndefined();
   });
 });
+
+// Vercel 01M6ZKR6TN5K2H7AFAZ0SJR388: nested supabase/ folders made every ancestor
+// project reparse the same migrations with a fresh budget. Each SQL file now
+// belongs to its nearest project and is read once.
+describe("nested Supabase projects", () => {
+  const nested = (levels, sql) => {
+    let p = "supabase";
+    const files = {};
+    for (let i = 0; i < levels; i++) p = `${p}/migrations/n${i}/supabase`;
+    files[`${p}/migrations/001.sql`] = sql;
+    return repo(files);
+  };
+  it("reads a migration once, however deep the nesting", () => {
+    const sql = "create table public.t (id int);\n" + "select 1;\n".repeat(20000);
+    const shallow = nested(1, sql), deep = nested(20, sql);
+    scanSupabase(shallow); scanSupabase(deep);
+    const ms = (r) => { const s = process.hrtime.bigint(); for (let k = 0; k < 3; k++) scanSupabase(r); return Number(process.hrtime.bigint() - s) / 1e6; };
+    const ratio = ms(deep) / Math.max(ms(shallow), 0.5);
+    expect(ratio, `20 levels took ${ratio.toFixed(1)}x 1 level`).toBeLessThan(5); // the old code reparsed it 21 times
+    const r = scanSupabase(deep);
+    expect(r.findings.filter((f) => f.templateId === "supabase-rls-disabled").length).toBe(1); // found once, not once per ancestor
+    expect(r.read).toHaveLength(1);
+  });
+  it("a nested supabase/ folder without migrations/ is still read by its ancestor", () => {
+    const root = repo({ "supabase/migrations/old/supabase/legacy.sql": "create table public.legacy (id int);" });
+    const files = scanSupabase(root).findings.filter((f) => f.templateId === "supabase-rls-disabled").map((f) => f.file);
+    expect(files).toEqual(["supabase/migrations/old/supabase/legacy.sql"]);
+  });
+});
