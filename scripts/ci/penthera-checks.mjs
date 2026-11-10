@@ -73,7 +73,9 @@ async function main() {
     const title = s.status !== "completed" ? "Running" : s.conclusion === "success" ? `All ${jobs.length} passed` : `${s.failed.length} of ${jobs.length} failed`;
     const body = { name: NAMES[key], status: s.status, output: { title, summary: summary.slice(0, 60000) } };
     if (s.conclusion) body.conclusion = s.conclusion;
-    const prev = existing.find((c) => c.name === NAMES[key] && c.app?.slug !== "github-actions");
+    // Update our own earlier check: the app's, or the workflow token's (CHECK_APP_SLUG=github-actions) when it falls back.
+    const own = process.env.CHECK_APP_SLUG;
+    const prev = existing.find((c) => c.name === NAMES[key] && (own ? c.app?.slug === own : c.app?.slug !== "github-actions"));
     const input = JSON.stringify(prev ? body : { ...body, head_sha: sha });
     execFileSync("gh", ["api", "-X", prev ? "PATCH" : "POST", prev ? `repos/${repo}/check-runs/${prev.id}` : `repos/${repo}/check-runs`, "--input", "-"], { input, stdio: ["pipe", "ignore", "inherit"] });
     console.log(`${NAMES[key]}: ${title}`);
