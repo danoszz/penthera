@@ -84,7 +84,8 @@ function extractTree(top, sha, dir) {
   mkdirSync(tree);
   // git archive leaves out paths the tree's .gitattributes marks export-ignore.
   git(top, ["archive", "--format=tar", "-o", tar, sha]);
-  const r = spawnSync("tar", ["-xf", tar, "-C", tree], { stdio: ["ignore", "ignore", "pipe"] });
+  // Relative names, run from `dir`: GNU tar (Git for Windows) reads "C:\..." as host:path.
+  const r = spawnSync("tar", ["-xf", "base.tar", "-C", "tree"], { cwd: dir, stdio: ["ignore", "ignore", "pipe"] });
   if (r.error || r.status !== 0) throw new Error(`could not unpack the merge-base (${r.error?.message || String(r.stderr || "").trim() || `tar exited ${r.status}`})`);
   return tree;
 }

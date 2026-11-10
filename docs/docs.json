@@ -97,6 +97,7 @@
       {
         "group": "Compared",
         "pages": [
+          "compare/claude-security-review",
           "compare/github",
           "compare/semgrep",
           "compare/snyk",
