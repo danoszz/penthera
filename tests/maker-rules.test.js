@@ -321,3 +321,28 @@ describe("maker checks stay linear on crafted input", () => {
     for (const c of no) expect(unchecked(`'use server';\nexport async function a(id){ ${c}; await db.delete(id); }\n`), c).toEqual(["a:a database write"]);
   });
 });
+
+// Vercel 01M72FBGGB1TKX5S6D0N4E8BQE: the CommonJS auth-import regex rescanned the rest of
+// the file at each unfinished destructuring. Vercel 01M72FB3CQ25K7XSXGRQ3ET4HD: a lockfile
+// with very many watched entries overflowed a spread into push() and aborted the scan.
+describe("maker checks: CommonJS imports and huge lockfiles", () => {
+  it("unfinished destructurings after an action stay linear", () => {
+    const gen = (n) => `'use server';\nexport async function act(id){ await db.delete(id); }\n${"const { a, b\n".repeat(n)}const auth = require("next-auth");\n`;
+    const ms = (n) => { const src = gen(n); uncheckedActions(src); const s = process.hrtime.bigint(); for (let k = 0; k < 3; k++) uncheckedActions(src); return Number(process.hrtime.bigint() - s) / 1e6; };
+    const ratio = ms(32000) / Math.max(ms(4000), 0.5);
+    expect(ratio, `grew ${ratio.toFixed(1)}x over 8x the input`).toBeLessThan(24);
+  });
+  it("still reads CommonJS auth imports, destructured or not", () => {
+    for (const imp of ['const { auth } = require("@/lib/auth");', 'const auth = require("next-auth");', 'let { auth: check } = require("./auth");']) {
+      const name = /\{\s*auth:\s*(\w+)/.exec(imp)?.[1] || "auth";
+      expect(unchecked(`'use server';\n${imp}\nexport async function a(id){ await ${name}(); await db.delete(id); }\n`), imp).toEqual([]);
+    }
+    expect(unchecked("'use server';\nconst { auth } = require(\"lodash\");\nexport async function a(id){ await db.delete(id); }\n")).toEqual(["a:a database write"]);
+  });
+  it("a lockfile with 150k nested Next.js copies doesn't abort the scan", () => {
+    const packages = { "": {} };
+    for (let i = 0; i < 150000; i++) packages[`node_modules/p${i}/node_modules/next`] = { version: "15.5.9" };
+    const dir = repo({ "package-lock.json": JSON.stringify({ lockfileVersion: 3, packages }) });
+    expect(() => frameworkAdvisoriesForRepo(dir)).not.toThrow();
+  });
+});

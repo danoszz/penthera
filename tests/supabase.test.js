@@ -924,3 +924,21 @@ describe("nested Supabase projects", () => {
     expect(files).toEqual(["supabase/migrations/old/supabase/legacy.sql"]);
   });
 });
+
+// Vercel 01M72EX57HP1N9DR8ZWGTR9Z2K: Supabase key findings had no value tags, so a key added to
+// or swapped in a file the baseline already lists stayed "unchanged" under --baseline -q.
+describe("Supabase keys and the baseline", () => {
+  it("a swapped or added key in a baselined client file is new; the same key is unchanged", async () => {
+    const { tagSalt } = await import("../lib/secret-tags.js");
+    const OTHER = jwt({ iss: "supabase", ref: "zyxwvutsrqponmlk", role: "service_role", iat: 1700000000, exp: 2000000000 });
+    const file = (keys) => `"use client";\nimport { createClient } from "@supabase/supabase-js";\n${keys.map((k, i) => `const s${i} = createClient("https://x.supabase.co", "${k}");`).join("\n")}\n`;
+    const scan = (keys) => scanSupabase(repo({ "app/a.tsx": file(keys) }, { pkg: NEXT })).findings.filter((f) => f.templateId === "supabase-service-role-exposed");
+    const before = scan([SERVICE]);
+    expect(before[0].valueTags).toHaveLength(1);
+    const base = join(mkdtempSync(join(tmpdir(), "penthera-supabase-base-")), "base.json");
+    writeFileSync(base, JSON.stringify({ findings: before, secretTagSalt: tagSalt() }));
+    expect(compareWithBaseline(scan([SERVICE]), base).newFindings).toEqual([]);
+    expect(compareWithBaseline(scan([OTHER]), base).newFindings.length).toBe(1); // swapped, same line and title
+    expect(compareWithBaseline(scan([SERVICE, OTHER]), base).newFindings.length).toBe(1); // added
+  });
+});
