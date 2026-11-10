@@ -64,6 +64,7 @@
         "group": "I run it in CI",
         "pages": [
           "commands/action",
+          "commands/diff",
           "commands/hook",
           "commands/fix",
           "local-loop",

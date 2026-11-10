@@ -133,7 +133,7 @@ before bucketing.
 
 A short reply contract, in SKILL.md and in the MCP server instructions:
 
-1. Pass the brief on in its order. Keep the verdict line, the reason line under it when there is one, and the section names.
+1. Pass the brief on in its order. Keep the verdict line, the reason line under it when there is one, the Do this first line (2.5.0), and the section names.
 2. Do not move a finding between sections, change a severity or drop a group.
 3. If you checked something yourself (you opened the file and saw `pass:` is a
    CSS class map), say so under a last section, **My read**, and name what you

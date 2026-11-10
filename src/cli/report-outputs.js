@@ -10,7 +10,8 @@ import { formatAudienceReport, AUDIENCES } from "../report/audience.js";
 import { buildReportModel } from "../report/model.js";
 import { parseTemplate, renderTemplate } from "../report/template.js";
 import { formatMarkdownReport } from "../report/markdown.js";
-import { formatSarif } from "../reporter.js";
+import { formatSarif, formatJson } from "../reporter.js";
+import { scrubDeep } from "../../lib/scrub.js";
 import { formatReadinessMarkdown } from "../../lib/compliance/readiness.js";
 import { writeEvidenceBundle, assertEmptyDir } from "../report/evidence.js";
 import { footerLines } from "../report/footer.js";
@@ -33,7 +34,8 @@ export function prepareReportOptions(opts) {
 }
 
 /** The --audience or --report-template report as Markdown, or null when neither is set. */
-export function customReport(result, opts, { version, template }) {
+export function customReport(raw, opts, { version, template }) {
+  const result = scrubDeep(raw); // secrets masked before a template or audience cuts anything
   if (template) return renderTemplate(template, buildReportModel(result, { version }));
   if (opts.audience) return formatAudienceReport(result, opts.audience, { version, footer: !opts["no-footer"] });
   return null;
@@ -44,11 +46,12 @@ export function customReport(result, opts, { version, template }) {
  * the custom template report, readiness and SBOM when they were produced, and
  * with --giants each other tool's raw output (secrets masked) under giants/.
  */
-export function writeEvidence(result, opts, { version, template, mdOpts, sbom, argv, giantsRaw = [], now = new Date().toISOString() }) {
+export function writeEvidence(raw, opts, { version, template, mdOpts, sbom, argv, giantsRaw = [], now = new Date().toISOString() }) {
+  const result = scrubDeep(raw);
   const footer = !opts["no-footer"];
   const artifacts = [
     { path: "README.md", kind: "readme", content: evidenceReadme(result, { version, footer }) },
-    { path: "report.json", kind: "json", content: JSON.stringify(result, null, 2) + "\n" },
+    { path: "report.json", kind: "json", content: formatJson(result) },
     { path: "report.md", kind: "markdown", content: formatMarkdownReport(result, mdOpts) },
     { path: "report.sarif", kind: "sarif", content: JSON.stringify(formatSarif(result), null, 2) + "\n" },
     ...AUDIENCES.map((a) => ({ path: `report-${a}.md`, kind: `audience:${a}`, content: formatAudienceReport(result, a, { version, footer }) })),
