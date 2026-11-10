@@ -13,6 +13,7 @@ together.
 | [Penthera and Snyk](snyk.md) | Snyk brings curated vulnerability data across many languages; Penthera looks at behavior, the running app and agent config |
 | [Penthera and GitHub (Dependabot, code scanning)](github.md) | GitHub alerts on known CVEs and runs CodeQL; Penthera's SARIF lands in the same tab |
 | [Penthera and OWASP ZAP](zap.md) | ZAP is the deeper dynamic scanner; Penthera is a quicker first pass with source context |
+| [Penthera and Claude Code Security Review](claude-security-review.md) | A model reviews the diff for logic bugs on trusted PRs; Penthera's rules cover secrets, dependencies, agent config and fork PRs |
 | [Penthera and Semgrep](semgrep.md) | Semgrep is the deeper static analyzer for your code; Penthera adds dependencies, the live app and AI tooling |
 | [Penthera and Cloudflare's security-audit skill](cloudflare-security-audit.md) | The skill has a model audit your code in depth; Penthera runs fast, repeatable checks, looks outside the source and verifies fixes |
 

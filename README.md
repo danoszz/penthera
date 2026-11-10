@@ -32,6 +32,7 @@ Daily notes from Penthera: **[x.com/penthera_org](https://x.com/penthera_org)**
 [![CI](https://github.com/danoszz/penthera/actions/workflows/ci.yml/badge.svg)](https://github.com/danoszz/penthera/actions/workflows/ci.yml)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/danoszz/penthera/badge)](https://scorecard.dev/viewer/?uri=github.com/danoszz/penthera)
 [![Socket](https://socket.dev/api/badge/npm/package/penthera)](https://socket.dev/npm/package/penthera)
+[![Glama MCP server score](https://glama.ai/mcp/servers/danoszz/penthera/badges/score.svg)](https://glama.ai/mcp/servers/danoszz/penthera)
 
 <br/>
 
