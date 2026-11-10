@@ -322,6 +322,26 @@ Every exported async function in a file that starts with `"use server"`, and eve
 
 **Limits.** A check in a helper this rule does not know by name, or in middleware whose matcher covers the page, is not seen, which is why the confidence is `potential`. Actions in `test`, `fixtures` and `public` folders are not read. A read-only action is never reported.
 
+`jwtVerify` and `jwt.verify` count as auth calls, and a re-export from an auth module (`export { auth as middleware } from "@/auth"`) counts as an auth import, so an Auth.js middleware lowers these findings to medium.
+
+### Middleware, sessions, passwords and OAuth callbacks
+
+Five checks on lexed source (comments blanked, strings masked), in every code file outside `test`, `fixtures` and `public` folders. Each is one finding per file, with file:line evidence and a CWE.
+
+| Rule | Severity | What it means |
+|------|----------|---------------|
+| `next-middleware-no-auth` | medium, potential | A Next.js `middleware` or `proxy` file (it imports `next/server`, has a `matcher`, or sits next to a `next.config` file) names a protected area in a string, such as `/admin`, `/dashboard`, `/account`, `/settings`, `/billing`, `/workspace` or `/internal`. It also checks nothing: no auth call by name (the Server Actions check's list), nothing imported or re-exported from an auth module, no read of a cookie or of the `Authorization` header, and no redirect to a path such as `/login`. CWE-306. |
+| `credential-in-url` | medium, likely (a password); low, potential (a secret) | Code reads a password, API key, access or refresh token, client secret or `secret` from the query string: `req.query.password`, `req.query["api_key"]`, `searchParams.get("password")`, `c.req.query("api_key")`, a Next.js page's `searchParams.password`, `getQuery(event).password`, or `const { password } = req.query`. A URL ends up in history, logs and the Referer header. CWE-598. |
+| `password-encrypted-not-hashed` | high, likely (decrypted to compare); high, potential (encrypted) | A password is decrypted and compared at login (`decrypt(user.password) !== password`, `createDecipheriv(...).update(row.password)`), or a user's password goes to `encrypt()`, crypto-js `AES.encrypt()` or a `createCipheriv` cipher's `update()` in a file that never hashes one. CWE-257. |
+| `session-cookie-insecure` | medium, likely (turned off); medium, potential (left at the default) | A file that imports a session library (express-session, cookie-session, koa-session, `@fastify/session`, iron-session, next-auth, `@auth/*`, better-auth, Lucia, or Remix and React Router's cookie sessions) sets `secure: false` or `httpOnly: false` in its cookie options (`cookie`, `cookieOptions`, `cookies.sessionToken.options`, `sessionCookie.attributes`, ...), or `useSecureCookies: false`. Or express-session gets options, inline or from a `const` in the same file, with no `cookie.secure`. It then sends the cookie without Secure. CWE-614. |
+| `oauth-callback-no-state` | medium, potential | A file reads `code` from the URL and exchanges it: an `authorization_code` grant, arctic's `validateAuthorizationCode`, or an OAuth client's `getToken(code)`. Nothing in the file mentions `state`, a PKCE `code_verifier` or a `nonce`, and nothing in it comes from a library that checks state for you (Auth.js, Passport, openid-client, oauth4webapi, `@fastify/oauth2`, Supabase, better-auth, Clerk, Auth0, WorkOS, Kinde). CWE-352. |
+
+The cookie calls themselves (`res.cookie`, `cookies().set`) are the cookie-flag check's, under `fix`; this rule reads only a session library's options.
+
+**Limits.** These rules are built for precision. Anything that may hide a check makes them stay quiet: a spread (`...base`) in the options, options imported from another file, a `sess.cookie.secure = true` assignment anywhere in the file, a check in a helper with an unknown name, or a callback that reads `state` but never compares it. A one-time `token` or `code` in a link, Stripe's `session_id` and `key` are not credentials here. A password for another system (`smtp.password`, `config.db.password`) may be encrypted, and is not reported. Middleware for public paths (`/app`, `/team`, `/user/:name`) is not reported. On the four known-vulnerable apps Penthera benchmarks (Juice Shop, DVNA, NodeGoat, WebGoat: 910 files) and on 11,390 files of the maintainer's own apps, the checks reported 3 findings, all real. One was NodeGoat's documented "session cookie lacks the Secure flag". The same sets were used to tune the rules (`session_id` was taken out after two false alarms there), so the count is not independent. The middleware, password and OAuth rules had no hit in either set, so their precision is not measured yet.
+
+Work per file is bounded: the reads that depend on the code's shape are charged to a budget of 16 times the file's length. Past it, what was found is kept, the file is named as not fully checked, and the scan is incomplete (exit 2). So is a file it could not read. `explain_finding` knows all five ids.
+
 ### Supabase: the service-role key and row-level security
 
 A `--repo` scan checks the two leaks most common in a Supabase app. It reads your code (including `.vue`, `.svelte`, `.astro` and HTML), your `.env` files and the SQL in `supabase/migrations/` and `supabase/schemas/`. It runs nothing and connects to nothing.
