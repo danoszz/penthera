@@ -244,6 +244,20 @@ describe("client-trusted-value", () => {
 
 // ── metamorphic variants (checklist row 21) ───────────────────────────────
 
+describe("client-trusted-value: what counts as an admin check", () => {
+  const write = `const body = await req.json();\nawait prisma.user.update({ where: { id }, data: { role: body.role } });\n`;
+  it("a check called by name, or a role comparison, marks an admin route", () => {
+    for (const check of ["await requireAdmin();", "if (!hasRole(session, 'admin')) return;", "assertIsOwner (team);", "if (session.user.role !== 'admin') return;", "if (!isAdmin) return;", "await $checkIsStaff(user);"]) {
+      expect(rules(`${check}\n${write}`), check).toEqual([]);
+    }
+  });
+  it("a name that is not called, a marker before the prefix, or a lower-case marker is not a check", () => {
+    for (const notCheck of ["const isAdminPage = true;", "adminIs(x);", "isadmin(x);", "// requireAdmin()", "const s = \"requireAdmin()\";", "requireAdmin$x(y);"]) {
+      expect(rules(`${notCheck}\n${write}`), notCheck).toEqual([CLIENT_VALUE_RULE]);
+    }
+  });
+});
+
 describe("the rules survive behaviour-preserving rewrites", () => {
   it("comments between tokens, chains across lines, no semicolons, TypeScript annotations, renamed names", () => {
     const variants = [
@@ -412,6 +426,8 @@ describe("the rules stay linear on crafted input", () => {
     "many decode calls": (n) => `${"jwt.decode(req.headers.authorization);\n".repeat(n / 10)}`,
     "many spreads in one call": (n) => `const body = await req.json();\nprisma.user.update({ data: { ${"...a, ".repeat(n / 2)} } });\n`,
     "a long spaced member chain with no write at its end": (n) => `const e = await req.json(); e.type;\n${"prisma" + " .\n a".repeat(n / 2)} ;\n`,
+    "a long uncalled name with repeated admin markers": (n) => `const body = await req.json();\nprisma.user.update({ data: { role: body.role } });\nconst x = is${"Admin".repeat(n / 5)};\nconst y = require${"RoleOwner".repeat(n / 9)} ;\n`,
+    "many short calls that are not admin checks": (n) => `const body = await req.json();\nprisma.user.update({ data: { role: body.role } });\n${"isReady(a); hasItems(b);\n".repeat(n / 25)}`,
     "an unclosed destructuring and call at the end": (n) => `const body = await req.json();\n${"const { a, b\n".repeat(n / 4)}prisma.user.create({ data: body `,
   };
   for (const [name, gen] of Object.entries(cases)) {
@@ -420,6 +436,7 @@ describe("the rules stay linear on crafted input", () => {
     });
   }
   it("the crafted cases above are still read: findings, or an incomplete mark", () => {
+    expect(missingCheckHits(cases["a long uncalled name with repeated admin markers"](4000), "server/c.js").hits[CLIENT_VALUE_RULE]).toBeDefined();
     expect(missingCheckHits(cases["nested comparisons"](200), "server/a.js").hits[TIMING_RULE]).toBeDefined();
     expect(missingCheckHits(cases["many writes with many keys"](200), "server/b.js").hits[CLIENT_VALUE_RULE]).toBeDefined();
   });
