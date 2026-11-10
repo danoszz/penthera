@@ -346,3 +346,20 @@ describe("maker checks: CommonJS imports and huge lockfiles", () => {
     expect(() => frameworkAdvisoriesForRepo(dir)).not.toThrow();
   });
 });
+
+// Vercel 01M72JPF8NQZQZ80YXQ03R98WR: the export-list regex rescanned the rest of the file at
+// every unterminated `export {`. Lists are now read once by a bounded walk.
+describe("Server Actions: export lists", () => {
+  it("many unterminated export lists stay linear, and the file is marked incomplete", () => {
+    const gen = (n) => `'use server';\nasync function act(id){ await db.delete(id); }\n${"export { act, b\n".repeat(n)}`;
+    const ms = (n) => { const src = gen(n); uncheckedActions(src); const s = process.hrtime.bigint(); for (let k = 0; k < 3; k++) uncheckedActions(src); return Number(process.hrtime.bigint() - s) / 1e6; };
+    const ratio = ms(32000) / Math.max(ms(4000), 0.5);
+    expect(ratio, `grew ${ratio.toFixed(1)}x over 8x the input`).toBeLessThan(24);
+  });
+  it("still reads a normal export list, and an unclosed one is incomplete, not silent", () => {
+    expect(unchecked("'use server';\nasync function wipe(id){ await db.delete(id); }\nexport { wipe };\n")).toEqual(["wipe:a database write"]);
+    const r = uncheckedActions(`'use server';\nasync function wipe(id){ await db.delete(id); }\nexport { wipe${" ".repeat(20000)}`);
+    expect(r.incomplete).toBe(true);
+    expect(r.reason).toMatch(/export list/);
+  });
+});
