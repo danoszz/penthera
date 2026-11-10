@@ -390,8 +390,9 @@ export async function scanRepo(repoPath, opts = {}) {
   // Flag public routes that call external services without rate limiting
   for (const route of result.boundaries.public || []) {
     if (route.externalCalls.length > 0 && !route.auth.includes("rate-limited")) {
+      // A hardening hint, not a proven vulnerability: low, so it never fails CI on its own.
       result.findings.push({
-        severity: "medium",
+        severity: "low",
         title: `Public endpoint without rate limiting: ${route.url}`,
         description: `This route's file calls ${route.externalCalls.join(", ")}, so abuse can cost you money.`,
         url: route.url,
@@ -449,7 +450,12 @@ export async function scanRepo(repoPath, opts = {}) {
         perFile.get(key).routes.add(route.url);
         continue;
       }
-      const severity = sevMap[name] || "medium";
+      // Every shell call in the file runs fixed text (a string literal, lib/whitebox/code-sinks.js
+      // constantCommands) and the sink scan found nothing there: no request data can reach it, so
+      // the finding stays as a check (potential, medium) rather than a critical. Anything the check
+      // can't read, and any sink finding for the file, keeps the critical.
+      const constant = name === "command-injection" && route.commandsConstant === true && !sinks.has(key);
+      const severity = constant ? "medium" : sevMap[name] || "medium";
       // A sink finding stands in for the route's only if it says as much, or a real bug would lose its severity.
       if (sinks.has(key) && SEVERITIES.indexOf(sinks.get(key).severity) <= SEVERITIES.indexOf(severity)) {
         perFile.set(key, { sink: sinks.get(key), routes: new Set([route.url]) });
@@ -463,15 +469,17 @@ export async function scanRepo(repoPath, opts = {}) {
         pattern: name,
         category: "code-pattern",
         source: "static-analysis",
+        ...(constant ? { confidence: "potential" } : {}),
       };
-      perFile.set(key, { finding, routes: new Set([route.url]), filePath: route.filePath });
+      perFile.set(key, { finding, routes: new Set([route.url]), filePath: route.filePath, constant });
       result.findings.push(finding);
     }
   }
-  for (const { finding, sink, routes, filePath } of perFile.values()) {
+  for (const { finding, sink, routes, filePath, constant } of perFile.values()) {
     const list = `${routes.size} route${routes.size === 1 ? "" : "s"}: ${[...routes].slice(0, 10).join(", ")}`;
     if (sink) sink.description = `${sink.description} This file serves ${list}.`;
     else finding.description = routes.size > 1 ? `Detected in ${filePath}, which serves ${list}. The pattern matches the file, not one route.` : `Detected in ${filePath}`;
+    if (constant) finding.description += `${routes.size > 1 ? "" : "."} Every shell call in it runs fixed text, so no request data reaches a command today. If one ever takes request data, pass it as a list argument (execFile, no shell).`;
   }
 
   // Check: more public than admin routes is a smell

@@ -135,13 +135,17 @@ describe("jwt-decode-unverified", () => {
 // ── 3. timing-safe compares ───────────────────────────────────────────────
 
 describe("secret-compare-not-constant-time", () => {
-  it("reports an HMAC compared with !== (medium) and a cron bearer secret (low)", async () => {
+  it("reports an HMAC compared with !== and a cron bearer secret, both low: hardening hints, not proven bugs", async () => {
     const dir = repo({
       "lib/sig.ts": `export function check(body, signature) {\n  const expected = crypto.createHmac("sha256", key).update(body).digest("hex");\n  return signature === expected;\n}\n`,
       "app/api/cron/route.ts": "export async function GET(request) {\n  const authHeader = request.headers.get(\"authorization\");\n  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) return new Response(null, { status: 401 });\n}\n",
     });
-    const f = scanMissingChecks(dir).map((x) => [x.file, x.severity, x.line]).sort();
-    expect(f).toEqual([["app/api/cron/route.ts", "low", 3], ["lib/sig.ts", "medium", 3]]);
+    const found = scanMissingChecks(dir);
+    const f = found.map((x) => [x.file, x.severity, x.confidence, x.line]).sort();
+    expect(f).toEqual([["app/api/cron/route.ts", "low", "likely", 3], ["lib/sig.ts", "low", "likely", 3]]);
+    // The HMAC case still says what it is.
+    expect(found.find((x) => x.file === "lib/sig.ts").description).toMatch(/One side is an HMAC or a signature/);
+    expect(found.find((x) => x.file === "app/api/cron/route.ts").description).not.toMatch(/HMAC/);
   });
   it("reports a header API key, a query token and a CSRF token against a secret", () => {
     expect(rules(`if (req.headers["x-api-key"] !== process.env.API_KEY) return res.status(401).end();\n`, "server/mw.js")).toEqual([TIMING_RULE]);
@@ -164,11 +168,12 @@ describe("secret-compare-not-constant-time", () => {
     ];
     for (const q of quiet) expect(rules(q + "\n", "server/q.js"), q).toEqual([]);
   });
-  it("keeps the worst hit: an HMAC compare after many low ones sets the severity and line", async () => {
+  it("keeps the worst hit: an HMAC compare after many plain ones sets the line", async () => {
     const lows = Array.from({ length: 30 }, () => "if (req.headers.authorization !== process.env.API_TOKEN) deny();").join("\n");
     const dir = repo({ "server/many.js": `${lows}\nconst mac = createHmac("sha256", k).update(b).digest("hex");\nif (mac !== given) deny();\n` });
     const [f] = scanMissingChecks(dir);
-    expect(f).toMatchObject({ severity: "medium", line: 32 });
+    expect(f).toMatchObject({ severity: "low", line: 32 });
+    expect(f.description).toMatch(/One side is an HMAC or a signature/);
     expect(f.description).toMatch(/and \d+ more/);
   });
 });

@@ -24,11 +24,11 @@ import { runLoop } from "../src/agent/loop.js";
 
 const FIXTURE = resolve("tests/fixtures/fix/next");
 const BIN = resolve("bin/penthera.js");
-// What the fixture holds, counted by hand: 4 to act on (the secret, the CORS
-// wildcard, the cookie, the login route), 4 to check first (CSP, X-Frame-Options,
+// What the fixture holds, counted by hand: 3 to act on (the secret, the CORS
+// wildcard, the cookie), 5 to check first (the login route with no rate limit, a low hint; CSP, X-Frame-Options,
 // X-Content-Type-Options and HSTS: read from code, so a host may still add them),
 // 1 info (Referrer-Policy). One config change fixes all five headers.
-const EXPECTED = { problems: 8, act: 4, check: 4, info: 1, fixes: 5 };
+const EXPECTED = { problems: 8, act: 3, check: 5, info: 1, fixes: 5 };
 
 let root;
 let app;
@@ -71,18 +71,18 @@ describe("one count everywhere (the next fixture)", () => {
     const sarif = join(root, "out.sarif");
     const report = join(root, "report.json");
     const brief = cli(["--repo", ".", "--brief", "-o", report, "--sarif", sarif]);
-    expect(brief.out).toContain("8 problems (4 to act on, 4 to check first)");
+    expect(brief.out).toContain("8 problems (3 to act on, 5 to check first)");
     expect(brief.out).toContain("A fix recipe matches 8 of the 8 problems. It shows each diff");
     expect(brief.out).not.toMatch(/may be fixable|also checks cookie flags/);
     const json = JSON.parse(readFileSync(report, "utf-8"));
-    expect(json.brief.counts).toMatchObject({ problems: 8, act: 4, check: 4, info: 1 });
+    expect(json.brief.counts).toMatchObject({ problems: 8, act: 3, check: 5, info: 1 });
     expect(buildReportModel(json).summary.problems).toBe(8);
-    expect(JSON.parse(readFileSync(sarif, "utf-8")).runs[0].properties.counts).toMatchObject({ problems: 8, act: 4, check: 4 });
+    expect(JSON.parse(readFileSync(sarif, "utf-8")).runs[0].properties.counts).toMatchObject({ problems: 8, act: 3, check: 5 });
   });
 
   it("the terminal report says the same", () => {
     const text = cli(["--repo", "."]).out;
-    expect(text).toContain("8 problems (4 to act on, 4 to check first)");
+    expect(text).toContain("8 problems (3 to act on, 5 to check first)");
     expect(text).toContain("A fix recipe matches 8 of the 8 problems: penthera fix --plan --repo");
   });
 
@@ -90,7 +90,7 @@ describe("one count everywhere (the next fixture)", () => {
     const tool = TOOLS.find((t) => t.name === "scan_repo");
     const r = await tool.run({ path: app }, { roots: async () => [root], allowHosts: [], offline: true, version: "test" });
     expect(r.structured.brief.counts.problems).toBe(8);
-    expect(r.text).toContain("8 problems (4 to act on, 4 to check first)");
+    expect(r.text).toContain("8 problems (3 to act on, 5 to check first)");
   });
 
   it("fix --plan plans 5 fixes for the same 8 problems", () => {
