@@ -4,7 +4,7 @@
  * temp folder; nothing leaves this machine.
  */
 import { describe, it, expect, afterAll } from "vitest";
-import { mkdtempSync, writeFileSync, rmSync, mkdirSync } from "node:fs";
+import { mkdtempSync, writeFileSync, rmSync, mkdirSync, chmodSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
@@ -86,6 +86,32 @@ describe("penthera diff: what counts as new", () => {
     const before = [git(dir, "status", "--porcelain"), git(dir, "rev-parse", "HEAD"), git(dir, "stash", "list"), git(dir, "worktree", "list")];
     await diffScan(dir);
     expect([git(dir, "status", "--porcelain"), git(dir, "rev-parse", "HEAD"), git(dir, "stash", "list"), git(dir, "worktree", "list")]).toEqual(before);
+  });
+});
+
+describe("penthera diff: unpacking the base", () => {
+  // Git for Windows ships GNU tar, which reads "C:\\..." as host:path and fails
+  // (seen in the install matrix on windows-latest). This stand-in tar refuses
+  // absolute paths and drive-style names the same way, then runs the real tar.
+  it.skipIf(process.platform === "win32")("passes tar only relative names, so a drive letter can't read as a host", async () => {
+    const bin = tempDir();
+    const fake = join(bin, "tar");
+    writeFileSync(fake, `#!/bin/sh
+for a in "$@"; do
+  case "$a" in /*|*:*) echo "tar: Cannot connect to $a: resolve failed" >&2; exit 2;; esac
+done
+exec /usr/bin/tar "$@"
+`);
+    chmodSync(fake, 0o755);
+    const dir = branchRepo();
+    const path = process.env.PATH;
+    process.env.PATH = `${bin}:${path}`;
+    try {
+      const { diff } = await diffScan(dir);
+      expect(diff).toMatchObject({ new: 1, unchanged: 1 });
+    } finally {
+      process.env.PATH = path;
+    }
   });
 });
 
