@@ -55,6 +55,7 @@ A mapped WSTG ID means a probe touches that test area. It does not mean the prob
 | Framework advisories (Next.js, React Server Components) from the lockfile | WSTG-CONF-04, WSTG-INFO-08 | quick, standard, deep | Repo |
 | Server secrets behind a public env prefix (`NEXT_PUBLIC_`, `VITE_`, ...) | WSTG-CONF-02, WSTG-INFO-05 | quick, standard, deep | Repo |
 | Server Actions that write without an auth check | WSTG-ATHZ-02, WSTG-ATHN-01 | quick, standard, deep | Repo |
+| Missing checks: webhooks without a signature check, `jwt.decode` where `jwt.verify` belongs, reset tokens without an expiry, amounts and roles from the client, secrets compared with `===` | WSTG-BUSL-02, WSTG-SESS-10, WSTG-ATHN-09, WSTG-BUSL-01, WSTG-INPV-20 | quick, standard, deep | Repo |
 
 ## WSTG categories not covered
 

@@ -21,6 +21,7 @@ import { runtimeAdvisoriesForRepo } from "../lib/advisories/index.js";
 import { frameworkAdvisoriesForRepo } from "../lib/whitebox/framework-advisories.js";
 import { scanPublicEnv } from "../lib/whitebox/public-env.js";
 import { scanServerActions } from "../lib/whitebox/server-actions.js";
+import { scanMissingChecks } from "../lib/whitebox/missing-checks.js";
 import { buildCoverage } from "../lib/coverage.js";
 import { readRepoFile, isRefused } from "../lib/fs-safe.js";
 import { probeRepoDetailed, findingKey } from "../lib/fix/index.js";
@@ -236,6 +237,14 @@ export async function scanRepo(repoPath, opts = {}) {
   for (const f of scanServerActions(repoPath, { refused: refusedActions, ignoredDirs: ignored?.dirs })) result.findings.push(f);
   nameRefused(refusedActions);
   result.executedProbes.push("server-actions");
+
+  // ── Phase 1b5: missing checks (webhook signatures, jwt.decode, timing-safe
+  // compares, reset-token expiry, client-chosen amounts and roles)
+  progress("Checking webhooks, tokens and client-chosen values...");
+  const refusedChecks = [];
+  for (const f of scanMissingChecks(repoPath, { refused: refusedChecks, ignoredDirs: ignored?.dirs })) result.findings.push(f);
+  nameRefused(refusedChecks);
+  result.executedProbes.push("missing-checks");
 
   // ── Phase 1c: Code-execution sinks (all server code, not just routes) ──
   progress("Looking for eval, vm and exec sinks...");
