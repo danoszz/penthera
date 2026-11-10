@@ -14,6 +14,7 @@ import { scanSecrets } from "../lib/whitebox/secrets.js";
 import { gitIgnored } from "../lib/git.js";
 import { scanCodeSinks } from "../lib/whitebox/code-sinks.js";
 import { scanWorkflows } from "../lib/whitebox/workflows.js";
+import { scanSupabase } from "../lib/whitebox/supabase.js";
 import { detectLibrary } from "../lib/whitebox/library.js";
 import { discoverFrameworkRoutes } from "../lib/whitebox/frameworks.js";
 import { runtimeAdvisoriesForRepo } from "../lib/advisories/index.js";
@@ -23,6 +24,15 @@ import { probeRepoDetailed, findingKey } from "../lib/fix/index.js";
 
 /** Source and config files the route scan reads are capped at 5 MiB. */
 const SOURCE_MAX_BYTES = 5 * 1024 * 1024;
+
+/**
+ * Append findings one by one. A spread (push(...list)) passes every item as an argument, and
+ * a list an attacker can grow (200k findings from one crafted file) passes V8's argument limit
+ * and aborts the scan with no report (Vercel, PR 312).
+ */
+function append(target, items) {
+  for (const item of items) target.push(item);
+}
 
 /** A file the route scan would have read but refused: a link out, a device, a FIFO, too large. */
 function refusedFileFinding(e, repoPath) {
@@ -188,13 +198,13 @@ export async function scanRepo(repoPath, opts = {}) {
   progress("Scanning for hardcoded secrets...");
   // So is a file the secret scan could not read (a FIFO, a device, over 512 MiB).
   const secretRefused = [];
-  result.findings.push(...scanSecrets(repoPath, { ignored, refused: secretRefused }));
+  append(result.findings, scanSecrets(repoPath, { ignored, refused: secretRefused }));
   for (const e of secretRefused) noteRefused(e);
   result.executedProbes.push("secret-scanning");
 
   // ── Phase 1b: Runtime pins (Dockerfile, .tool-versions, ...) vs advisories
   progress("Checking pinned runtime versions against advisories...");
-  result.findings.push(...runtimeAdvisoriesForRepo(repoPath));
+  append(result.findings, runtimeAdvisoriesForRepo(repoPath));
   result.executedProbes.push("runtime-advisories");
 
   // ── Phase 1c: Code-execution sinks (all server code, not just routes) ──
@@ -207,13 +217,13 @@ export async function scanRepo(repoPath, opts = {}) {
   const sinkRefused = [];
   // Minified files are checked too; the coverage ledger notes how many.
   result.sinkMinified = [];
-  result.findings.push(...scanCodeSinks(repoPath, { library, ignored, refused: sinkRefused, minified: result.sinkMinified }));
+  append(result.findings, scanCodeSinks(repoPath, { library, ignored, refused: sinkRefused, minified: result.sinkMinified }));
   for (const e of sinkRefused) noteRefused(e);
   result.executedProbes.push("code-sinks");
 
   // ── Phase 1d: GitHub Actions workflows (.github/workflows) ────────────
   progress("Checking GitHub Actions workflows...");
-  result.findings.push(...scanWorkflows(repoPath));
+  append(result.findings, scanWorkflows(repoPath));
   result.executedProbes.push("ci-workflows");
 
   // Files a check would have read but refused: one info finding per file, and
@@ -258,6 +268,18 @@ export async function scanRepo(repoPath, opts = {}) {
       source: "repo-scan",
     });
   }
+
+  // ── Phase 1e: Supabase: service-role key in client code, tables without RLS
+  progress("Checking Supabase keys and row-level security...");
+  const supabase = scanSupabase(repoPath, { ignored });
+  append(result.findings, supabase.findings);
+  // The SQL files it read, so Coverage reports what was read, not what exists (row 23).
+  result.supabase = { migrations: supabase.migrations, read: supabase.read };
+  // What it couldn't read whole (a refused, oversized or over-budget
+  // migration) makes the scan incomplete: exit 2, never a silent pass.
+  // noteRefused names each file once: the secret or route scan may refuse the same one.
+  for (const inc of supabase.incomplete) noteRefused({ path: inc.file, reason: inc.reason, partial: inc.partial });
+  result.executedProbes.push("supabase");
 
   // ── Phase 2: Locate API root ───────────────────────────────────────────
   progress("Locating API routes directory...");
