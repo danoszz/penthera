@@ -153,8 +153,8 @@ Each scan tool's result has the findings as structured JSON, and as text the
 is likely noise, what was not checked, and what to run next. The text asks the
 assistant to pass the brief on as it is and to put its own view under "My
 read". Every
-finding has a `rule` (such as `openapi-exposed`, `gha-pwn-request` or `agents/mcp-unpinned`, or
-its category when no narrower rule applies), a severity, a confidence label (`confirmed`, `likely`,
+finding has a `rule` (such as `openapi-exposed`, `gha-pwn-request`, `supabase-rls-disabled` or `agents/mcp-unpinned`, or
+its category when no narrower rule applies; `explain_finding` takes any of them), a severity, a confidence label (`confirmed`, `likely`,
 `potential`, `needs-human-review`), `exploitability`, and evidence at `file:line` or a URL.
 Confidence is about the rule's match, not a verdict: `exploitability` is
 `not-assessed` for a rule match and `needs-human-review` where a scanner cannot

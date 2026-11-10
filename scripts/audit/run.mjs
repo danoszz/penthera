@@ -85,6 +85,17 @@ const BENCH_MAX_DROP = 0.02;
 // Raised for the share card (src/card: renderer, pixel font, PNG encoder, ~51 KB unpacked,
 // ~19 KB packed), 8 Nov 2026: was 1_105_000 / 3_130_000. Raised 25 KB packed and 65 KB
 // unpacked; under the 5 MB line, so no separate approval needed (package-size rule).
+// Raised for the Supabase rules (lib/whitebox/supabase.js and its docs: ~88 KB unpacked,
+// ~27 KB packed, 1 file, no dependencies; ~22 KB is the SQL reader and ~23 KB the
+// reachability walk and finding text), PR 312, merged with the share card 8 Nov 2026; was
+// 1_130_000 / 3_195_000; the merged package is ~1,151 KB packed / ~3,274 KB unpacked. Raised under Daan's standing rule of 8 Nov (engineers may raise it
+// with a written reason while the package stays under 5 MB unpacked).
+// Raised again for the fixes to Vercel's two DoS findings on PR 312 (env-name groups and caps,
+// identifiers cut at 63 bytes: ~12 KB unpacked, ~3 KB packed), which put the package at ~1,154 KB /
+// ~3,286 KB; was 1_160_000 / 3_285_000. Same standing rule.
+// Raised when main's 2.4 one-count batch (PR 314: app-settings coverage, exploitability) was merged
+// in: the merged package is ~1,170 KB packed / ~3,332 KB unpacked, 355 files; was 1_170_000 /
+// 3_300_000. Same standing rule (under 5 MB unpacked).
 // Raised for the 2.4.0 release (8 Nov 2026): the Supabase rules (PR 312: +30 KB
 // packed, +98 KB unpacked), one count and agent-ready findings (PR 314: +14 KB,
 // +39 KB) and the card URL-leak fix (PR 315: +2 KB, +5 KB), measured with npm pack
