@@ -22,6 +22,7 @@ import { frameworkAdvisoriesForRepo } from "../lib/whitebox/framework-advisories
 import { scanPublicEnv } from "../lib/whitebox/public-env.js";
 import { scanServerActions } from "../lib/whitebox/server-actions.js";
 import { scanMissingChecks } from "../lib/whitebox/missing-checks.js";
+import { scanSessionAuth } from "../lib/whitebox/session-auth.js";
 import { buildCoverage } from "../lib/coverage.js";
 import { readRepoFile, isRefused } from "../lib/fs-safe.js";
 import { probeRepoDetailed, findingKey } from "../lib/fix/index.js";
@@ -245,6 +246,13 @@ export async function scanRepo(repoPath, opts = {}) {
   for (const f of scanMissingChecks(repoPath, { refused: refusedChecks, ignoredDirs: ignored?.dirs })) result.findings.push(f);
   nameRefused(refusedChecks);
   result.executedProbes.push("missing-checks");
+  // ── Phase 1b6: Middleware without a session check, credentials in URLs,
+  // encrypted passwords, session cookie options, OAuth callbacks without state
+  progress("Checking middleware, sessions, passwords and OAuth callbacks...");
+  const refusedSession = [];
+  for (const f of scanSessionAuth(repoPath, { refused: refusedSession, ignoredDirs: ignored?.dirs })) result.findings.push(f);
+  nameRefused(refusedSession);
+  result.executedProbes.push("session-auth");
 
   // ── Phase 1c: Code-execution sinks (all server code, not just routes) ──
   progress("Looking for eval, vm and exec sinks...");
