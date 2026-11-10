@@ -12,7 +12,8 @@ assistant to pass on as it is. Penthera's rules fill it; no model is involved.
 | Section | What is in it |
 |---|---|
 | Verdict | `Fix now` when Act on holds a critical or high finding. `Review` when anything is in Act on, or the run exits 1 or 2. `Nothing to fix now` when only Check first holds something (headers read from code, say, which your host may still add) and the run exits 0: the count to check is beside it. `Nothing to fix` otherwise. `Site not read` when a firewall answered instead of the site, unless a critical or high finding says `Fix now`; the exit code doesn't change. With the counts. `Nothing to assess` when `penthera agents` found no agent config. Never `Nothing to fix` when a finding or a required tool makes the scan exit 1 or 2: it says `Review` and gives the reason on the next line. A failure after the brief prints, such as an output file it can't write, exits 2 with an error of its own |
-| Act on | Findings that need a change: where, why, the fix, the rule id |
+| Do this first | One line under the verdict: the first step for the top finding in Act on (or Check first), where it is, and why it matters. Only when there is something to act on or check |
+| Act on | Findings that need a change: where, why it matters, the fix, the rule id |
 | Check first | Heuristic and low findings, and what a dependency *can* do |
 | Likely noise | Hits in files git ignores, generated build output, test fixtures or test files, one line per group |
 | Not checked | What the scan did not read. Always shown, so a short brief is not read as "safe" |
@@ -29,7 +30,7 @@ full list stays in the JSON and Markdown reports.
 | A scan, in a terminal | `penthera --repo . --brief` |
 | A scan, from an agent | Nothing to add: with no terminal on stdout, a scan prints the brief instead of the terminal report. `PENTHERA_BRIEF=0` or `--verbose` turns that off, `PENTHERA_BRIEF=1` turns it on anywhere, and CI keeps the terminal report. `--json`, `--audience` and `--report-template` print their own output instead |
 | A report file | `penthera --repo . --audience agent --markdown reports/brief.md` |
-| JSON | The `brief` field of `-o report.json` (schema `penthera.brief/1`). `exit_code` is the code the findings give, `exit_reason` the line under the verdict or null, and `likely_noise[].severe` the critical or high findings in that group. Top-level fields: `schema`, `verdict`, `verdict_id` (a stable name: `fix`, `review`, `check`, `clean`, `none`, `unread` or `suppressed`), `exit_code`, `exit_reason`, `target`, `scanned`, `counts` (`problems`, `act`, `check`, `noise`, `info`, `suppressed`, `total`), `act_on`, `check_first`, `likely_noise`, `not_checked`, `next`, `set_aside` (how to suppress a problem you checked, by fid with a reason; only when findings carry a fid), `reports`. Each item in `act_on` and `check_first` has `confidence` and `exploitability` |
+| JSON | The `brief` field of `-o report.json` (schema `penthera.brief/1`). `exit_code` is the code the findings give, `exit_reason` the line under the verdict or null, and `likely_noise[].severe` the critical or high findings in that group. Top-level fields: `schema`, `verdict`, `verdict_id` (a stable name: `fix`, `review`, `check`, `clean`, `none`, `unread` or `suppressed`), `exit_code`, `exit_reason`, `target`, `scanned`, `counts` (`problems`, `act`, `check`, `noise`, `info`, `suppressed`, `total`), `act_on`, `check_first`, `likely_noise`, `not_checked`, `next`, `set_aside` (how to suppress a problem you checked, by fid with a reason; only when findings carry a fid), `reports`, and since 2.5.0 `first` (`title`, `where`, `action`, `why_it_matters`, `from`, or null). Each item in `act_on` and `check_first` has `confidence` and `exploitability`, and since 2.5.0 `why_it_matters` and `first_step` (null when the table has no line for the rule) |
 | Several scans in one | `penthera brief reports/repo.json reports/deps.json reports/agents.json` |
 | MCP | The text of every scan tool's result is the brief; `structuredContent.brief` holds the object. `explain_finding` has no brief |
 
@@ -45,11 +46,27 @@ reads only the files you name and runs no scan. `penthera brief --card` also
 writes the merged result as a share card, and `--card-out <path>` picks where
 ([scan.md](scan.md#share-card)).
 
+## Why it matters, in plain words
+
+Each finding in Act on and Check first gets a "Why it matters" line written
+for someone who is not in security, and a first step. They come from a fixed
+table in `src/report/plain.js`, keyed on the rule id and, for a secret, the
+key's name. The table covers what makers ship most: Stripe and Clerk keys,
+AI provider keys, Supabase service_role keys and row-level security, Next.js
+`NEXT_PUBLIC_` variables, Server Actions and source maps, framework
+advisories, and GitHub Actions workflows.
+
+No model writes these lines, and they never move a finding, change its
+severity or change the verdict. A rule the table does not know keeps the
+finding's own description, and the fix stays the finding's own when it has
+one.
+
 ## How an assistant should reply
 
 The MCP server and the Agent Skill ask the assistant to:
 
-1. Pass the brief on in its order, with the verdict line and section names.
+1. Pass the brief on in its order, with the verdict line, the **Do this
+   first** line and the section names, and lead with that first step.
 2. Not move a finding between sections, change a severity or drop a group.
 3. Put anything it checked itself under a last section, **My read**, and say
    what it looked at. That section is the assistant's view, not Penthera's.

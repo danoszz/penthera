@@ -10,6 +10,7 @@ import { readFileSync } from "node:fs";
 import { buildBrief, formatBrief } from "../report/brief.js";
 import { markdownPathFromJson } from "../report/markdown.js";
 import { writeCards, DEFAULT_CARD_OUT } from "../card/index.js";
+import { formatJson } from "../reporter.js";
 
 const HELP = `
   penthera brief <report.json...> [--json] [--card] [--card-out <path>]
@@ -72,7 +73,7 @@ export function runBrief(argv, { out = process.stdout, err = process.stderr, ver
     results.push(r);
   }
   const brief = buildBrief(results, { reports: files.map(markdownPathFromJson) });
-  out.write(opts.json ? JSON.stringify(brief, null, 2) + "\n" : formatBrief(brief));
+  out.write(opts.json ? formatJson(brief) : formatBrief(brief));
   if (opts.card || opts["card-out"]) {
     try {
       const { paths } = writeCards(brief, results, { version, out: opts["card-out"] || DEFAULT_CARD_OUT, date });

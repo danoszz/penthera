@@ -2,7 +2,8 @@
  * The agent brief (docs/research/spec-agent-brief.md): one short, fixed-shape
  * summary an AI assistant can pass on as it is. Rules fill every section:
  *
- *   Verdict       Fix now | Review | Nothing to fix now | Nothing to fix | Nothing to assess | Site not read | N suppressed, with the counts behind it; `verdict_id` names it without string matching
+ *   Verdict       Fix now | Review | Nothing to fix now | Nothing to fix | Nothing to assess | Site not read | N suppressed, with the counts behind it; `verdict_id` names it without string matching;
+ *                 then the one thing to do first (`first`), when there is anything to act on or check
  *   Act on        findings that need a change, grouped by place and fix
  *   Check first   heuristic, low or dependency-capability findings
  *   Likely noise  findings demoted by a deterministic reason, one line per group
@@ -11,9 +12,12 @@
  *
  * No model is involved: a finding's bucket comes from fields the engines set
  * (severity, confidence, localOnly, path, source). Every finding lands in
- * exactly one bucket or group count.
+ * exactly one bucket or group count. The "why it matters" line and the first
+ * step come from a fixed table in plain words (src/report/plain.js), keyed on
+ * the rule; they explain a finding and never move it.
  */
 import { cleanText } from "../mcp/results.js";
+import { scrubDeep } from "../../lib/scrub.js";
 import { mdInline } from "./md-escape.js";
 import { footerLines } from "./footer.js";
 import { exitCodeOf, exitReason, isSevere } from "./exit.js";
@@ -22,6 +26,7 @@ import { notRead, readNothing, siteUnread, SITE_NOT_READ } from "./unread.js";
 import { unreachableText } from "./reach.js";
 import { bucketOf, pathOf, plural, problemsText } from "./counts.js";
 import { exploitabilityFor, matchLabel } from "../../lib/provenance.js";
+import { plainWords } from "./plain.js";
 
 export { bucketOf };
 
@@ -115,6 +120,7 @@ const SUPPRESS_WHY = "It sets the finding aside on this machine; add the fid and
 
 function item(group) {
   const f = group[0];
+  const plain = plainWords(f);
   const paths = [...new Set(group.map(whereOf).filter(Boolean))];
   const titles = [...new Set(group.map((g) => text(g.title, 200)))];
   const sameWhere = paths.length === 1;
@@ -129,8 +135,23 @@ function item(group) {
     more: Math.max(0, paths.length - MAX_EXAMPLES),
     why: sameWhere && titles.length > 1 ? titles.join("; ") : firstSentence(f.description),
     fix: fixOf(group),
+    // Added in 2.5.0: what could happen, in words a non-security reader follows, and the first step.
+    why_it_matters: plain ? plain.why : null,
+    first_step: plain ? plain.act : null,
     rules: [...new Set(group.map(ruleOf))].map((r) => text(r, 120)),
   };
+}
+
+/**
+ * The one thing to do first: the top Act on item (the most severe, then the
+ * largest group), else the top Check first item. Null when there is neither.
+ */
+function firstOf(act, check) {
+  const i = act[0] || check[0];
+  if (!i) return null;
+  const where = i.where[0] || null;
+  const action = i.first_step || i.fix || (act[0] ? `Fix ${i.title}${where ? ` in ${where}` : ""}.` : `Check ${i.title}${where ? ` in ${where}` : ""}.`);
+  return { title: i.title, where, action: text(action, 300), why_it_matters: i.why_it_matters, from: act[0] ? "act_on" : "check_first" };
 }
 
 /** Merge rule groups that all sit in one file and share a category. */
@@ -304,6 +325,8 @@ export function buildBrief(results, { reports = [], fixes = null, limits = [], m
       info: by.info.length,
       total: findings.length,
     },
+    // Added in 2.5.0: the single most important step, from the top Act on (or Check first) item.
+    first: firstOf(act, check),
     act_on: act,
     check_first: check,
     likely_noise: noise,
@@ -333,7 +356,8 @@ function whereText(i) {
  * The brief as Markdown, about 40 lines at most. The product footer only goes
  * on a report file (--audience agent); stdout and MCP results leave it off.
  */
-export function formatBrief(b, { footer = false } = {}) {
+export function formatBrief(raw, { footer = false } = {}) {
+  const b = scrubDeep(raw); // the brief's own fields are scrubbed; this covers a brief read back from a file
   const L = [];
   const c = b.counts;
   const parts = [problemsText({ problems: c.problems ?? c.act + c.check, act: c.act, check: c.check }), `${c.noise} likely noise`];
@@ -341,13 +365,15 @@ export function formatBrief(b, { footer = false } = {}) {
   const scanned = b.scanned.length ? ` Scanned: ${b.scanned.map((m) => MODE_NAMES[m] || m).join(", ")}.` : "";
   L.push(`**Penthera: ${b.verdict}.** ${parts.join(", ")}.${scanned}`, "");
   if (b.exit_reason) L.push(md(b.exit_reason), "");
+  if (b.first) L.push(`**Do this first**${b.first.where ? ` (${code(b.first.where)})` : ""}: ${md(b.first.action)}${b.first.why_it_matters ? ` Why it matters: ${md(b.first.why_it_matters)}` : ""}`, "");
 
   if (b.act_on.length) {
     L.push("### Act on", "");
     b.act_on.slice(0, MAX_ITEMS).forEach((i, n) => {
       const where = whereText(i);
       const count = i.count > 1 && i.where.length > 1 ? ` (${i.count} findings)` : "";
-      const tail = [i.why && md(i.why), i.fix && `Fix: ${md(i.fix)}`, i.rules.map(code).join(", ")].filter(Boolean).join(" ");
+      const fix = i.fix || i.first_step;
+      const tail = [i.why_it_matters ? `Why it matters: ${md(i.why_it_matters)}` : i.why && md(i.why), fix && `Fix: ${md(fix)}`, i.rules.map(code).join(", ")].filter(Boolean).join(" ");
       L.push(`${n + 1}. **${md(i.title)}**${count} [${i.mix || i.severity}]${where ? ` in ${where}` : ""}. ${tail}`);
     });
     if (b.act_on.length > MAX_ITEMS) L.push(`${b.act_on.length - MAX_ITEMS} more in the full report.`);
@@ -357,7 +383,8 @@ export function formatBrief(b, { footer = false } = {}) {
     L.push("### Check first", "");
     for (const i of b.check_first.slice(0, MAX_ITEMS)) {
       const where = whereText(i);
-      L.push(`- **${md(i.title)}**${i.count > 1 ? ` (${i.count})` : ""} [${i.mix || i.severity}, ${matchLabel(i.confidence)}]${where ? ` in ${where}` : ""}.${i.why ? ` ${md(i.why)}` : ""}`);
+      const why = i.why_it_matters ? `Why it matters: ${i.why_it_matters}` : i.why;
+      L.push(`- **${md(i.title)}**${i.count > 1 ? ` (${i.count})` : ""} [${i.mix || i.severity}, ${matchLabel(i.confidence)}]${where ? ` in ${where}` : ""}.${why ? ` ${md(why)}` : ""}`);
     }
     if (b.check_first.length > MAX_ITEMS) L.push(`- ${b.check_first.length - MAX_ITEMS} more in the full report.`);
     L.push("");

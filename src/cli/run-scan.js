@@ -19,6 +19,7 @@ import {
   writeJsonReport,
   writeSarifReport,
   createProgress,
+  formatJson,
 } from "../reporter.js";
 import { writeMarkdownReport, markdownPathFromJson } from "../report/markdown.js";
 import { buildActionPlan } from "../../lib/remediation/index.js";
@@ -142,7 +143,7 @@ export function writeScanReports(result, paths, mdOpts, opts = {}) {
   const { quiet = false, json = false, writeSarif = true } = opts;
 
   if (json) {
-    console.log(JSON.stringify(result.merged, null, 2));
+    process.stdout.write(formatJson(result.merged));
   } else if (!quiet) {
     printReport(result.merged, { verbose: opts.verbose });
   } else {

@@ -103,7 +103,13 @@ const BENCH_MAX_DROP = 0.02;
 // was 1_130_000 / 3_195_000. Under the 5 MB unpacked line where engineers raise it
 // with a reason (Daan's standing rule, 8 Nov 2026). PR 312 moved to 2.4.1 (8 Nov): 2.4.0 itself
 // is about 1,113 KB packed and 3,156 KB unpacked, and the room is kept for 2.4.1.
-const PACK_BUDGET = { packedBytes: 1_190_000, unpackedBytes: 3_375_000, files: 360 };
+// Raised for 2.5 (10 Nov 2026): main after 2.4.1 already packs 1,191,772 B and
+// 3,392,257 B unpacked in 359 files, over the old line. The five missing-check
+// rules (lib/whitebox/missing-checks.js) add 16,909 B packed, 55,201 B unpacked and
+// one file (1,208,781 / 3,447,458 / 360, npm pack on the branch). Room is kept for
+// the other 2.5 rules in the batch. Was 1_190_000 / 3_375_000 / 360. Same standing
+// rule (under 5 MB unpacked).
+const PACK_BUDGET = { packedBytes: 1_250_000, unpackedBytes: 3_550_000, files: 370 };
 
 /** Paths the npm package may contain. Anything else fails the packaging gate. */
 const PACK_ALLOW = [

@@ -6,7 +6,8 @@ import { existsSync, writeFileSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { mergeResults } from "./merge-results.js";
 import { buildActionPlan } from "../../lib/remediation/index.js";
-import { printReport, printFindings, writeJsonReport, writeSarifReport, createProgress, printError } from "../reporter.js";
+import { printReport, printFindings, writeJsonReport, writeSarifReport, createProgress, printError, formatJson } from "../reporter.js";
+import { scrubSecrets } from "../../lib/scrub.js";
 import { writeMarkdownReport, markdownPathFromJson } from "../report/markdown.js";
 import { wantBrief, briefReports } from "./brief.js";
 import { buildBrief, formatBrief } from "../report/brief.js";
@@ -129,7 +130,7 @@ export async function runDeps(args, opts, { version }) {
   });
   const custom = customReport(merged, opts, { version, template: reportCtx.template });
 
-  if (opts.json) console.log(JSON.stringify(merged, null, 2));
+  if (opts.json) process.stdout.write(formatJson(merged));
   else if (custom && !opts.markdown) process.stdout.write(custom);
   else if (wantBrief(opts)) process.stdout.write(formatBrief(merged.brief));
   else if (opts.quiet) printFindings(merged.findings);
@@ -157,7 +158,7 @@ export async function runDeps(args, opts, { version }) {
     const { formatPrComment } = await import("../../lib/deps/report.js");
     const path = resolve(opts["pr-comment"]);
     mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(path, formatPrComment(merged, { version, footer }));
+    writeFileSync(path, scrubSecrets(formatPrComment(merged, { version, footer })));
     note(`  PR comment     ${opts["pr-comment"]}\n`);
   }
   if (opts.evidence) {

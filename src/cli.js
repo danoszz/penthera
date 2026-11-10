@@ -16,7 +16,7 @@ import { resolveScanOptions } from "./cli/profiles.js";
 import { compareWithBaseline, useBaselineSalt } from "./cli/baseline.js";
 import { tagSalt } from "../lib/secret-tags.js";
 import { targetFromArg } from "./utils/url.js";
-import { printReport, printFindings, writeJsonReport, writeSarifReport, createProgress, printError } from "./reporter.js";
+import { printReport, printFindings, writeJsonReport, writeSarifReport, createProgress, printError, formatJson } from "./reporter.js";
 import { writeMarkdownReport, markdownPathFromJson } from "./report/markdown.js";
 import { prepareReportOptions, customReport, writeEvidence } from "./cli/report-outputs.js";
 import { parseTemplatePaths } from "../lib/plugins.js";
@@ -100,6 +100,7 @@ const HELP = `
     $ penthera mcp                   MCP server on stdio for your agent (penthera mcp --help)
     $ penthera giants                Which free scanners --giants can run here (penthera giants --help)
     $ penthera brief <report.json...>  One short brief from JSON reports, for your AI assistant
+    $ penthera diff [ref]            Only the findings this branch added, against the merge-base with main
 
   ${dim("Scan modes")}
         --profile <name>        quick | standard | deep (default: standard)
@@ -223,6 +224,7 @@ const HELP = `
     $ penthera https://myapp.com --profile quick -o report.json
     $ penthera https://myapp.com --profile deep -o report.json --markdown report.md
     $ penthera https://myapp.com --baseline reports/previous.json
+    $ penthera diff main
     $ penthera --repo ./my-nextjs-app
     $ penthera https://staging.myapp.com --repo . --fuzz
     $ penthera https://myapp.com --adaptive -o report.json
@@ -332,6 +334,12 @@ export async function run() {
   if (process.argv[2] === "brief") {
     const { runBrief } = await import("./cli/brief.js");
     process.exit(runBrief(process.argv.slice(3), { version: pkg.version }));
+  }
+
+  if (process.argv[2] === "diff") {
+    const { runDiff } = await import("./cli/diff.js");
+    process.exitCode = await runDiff(process.argv.slice(3), { version: pkg.version });
+    return;
   }
 
   if (process.argv[2] === "giants") {
@@ -897,7 +905,7 @@ export async function run() {
 
   // Output
   if (opts.json) {
-    console.log(JSON.stringify(merged, null, 2));
+    process.stdout.write(formatJson(merged));
   } else if (custom && !opts.markdown) {
     process.stdout.write(custom);
   } else if (wantBrief(opts)) {

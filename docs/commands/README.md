@@ -11,6 +11,7 @@ has the full flag list.
 | `penthera`, `penthera init` | [init.md](init.md) | Set up in one command: detect, check, then hook, workflow and dashboard |
 | `penthera <url>`, `--repo .` | [scan.md](scan.md) | Scan a running app and its source: modes, profiles, outputs, exit codes, CI |
 | `penthera agents` | [agents.md](agents.md) | Audit skills, MCP servers, hooks, plugins and rule files |
+| `penthera diff` | [diff.md](diff.md) | Only the findings your branch added, against the merge-base with main |
 | `penthera deps` | [deps.md](deps.md) | What each package can do, the upgrade diff, typosquats, license policy |
 | `penthera install` | [install.md](install.md) | Check a new package before any install script runs |
 | `penthera fix`, `penthera agent --loop` | [fix.md](fix.md) | Deterministic fix recipes and the local scan, fix, verify loop |

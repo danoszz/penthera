@@ -1,10 +1,12 @@
 **Penthera: Fix now.** 5 problems (3 to act on, 2 to check first), 0 likely noise. Scanned: live URL, repo.
 
+**Do this first** (`src/lib/payments.js:14`): Roll the key in the Stripe Dashboard (Developers, API keys), then read it from a server-only environment variable. Why it matters: Anyone with this key can charge cards, refund payments and read your customers' payment details in your Stripe account.
+
 ### Act on
 
-1. **Hardcoded Stripe secret key** [critical] in `src/lib/payments.js:14`. A live-format Stripe key is committed to source. `secrets`
-2. **Missing Content-Security-Policy header** [medium] in `https://shop.example/`. `headers`
-3. **Session cookie without Secure \| HttpOnly &lt;flags&gt;** [medium] in `https://shop.example/login`. `cookie`
+1. **Hardcoded Stripe secret key** [critical] in `src/lib/payments.js:14`. Why it matters: Anyone with this key can charge cards, refund payments and read your customers' payment details in your Stripe account. Fix: Roll the key in the Stripe Dashboard (Developers, API keys), then read it from a server-only environment variable. `secrets`
+2. **Missing Content-Security-Policy header** [medium] in `https://shop.example/`. Why it matters: Without these headers, the browser has fewer guards against injected scripts and against your pages being framed by another site. Fix: Set the headers in next.config (headers()) or vercel.json, then check them on the live site. `headers`
+3. **Session cookie without Secure \| HttpOnly &lt;flags&gt;** [medium] in `https://shop.example/login`. Why it matters: A session cookie without these flags can be read by an injected script or sent over plain HTTP, and then someone can take over the session. Fix: Set Secure, HttpOnly and SameSite on the session cookie. `cookie`
 
 ### Check first
 
