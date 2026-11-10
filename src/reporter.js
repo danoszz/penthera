@@ -18,6 +18,7 @@ import { toolById } from "../lib/giants/tools.js";
 import { colorOff } from "./cli/ansi.js";
 import { trimEndChars, trimStartChars } from "../lib/linear-text.js";
 import { problemCounts, problemsText, plural } from "./report/counts.js";
+import { scrubDeep, scrubSecrets } from "../lib/scrub.js";
 
 const PKG_VERSION = JSON.parse(
   readFileSync(new URL("../package.json", import.meta.url), "utf-8"),
@@ -61,7 +62,10 @@ function line(char = "\u2500", len = 58) { return char.repeat(len); }
 
 // ── Terminal report ──────────────────────────────────────────────────────
 
-export function printReport(result, opts = {}) {
+export function printReport(raw, opts = {}) {
+  // Every output masks secrets through one function (lib/scrub.js), before anything is cut to fit.
+  const result = scrubDeep(raw);
+  opts = scrubDeep(opts);
   const out = process.stdout;
   const w = (s) => out.write(s + "\n");
 
@@ -591,7 +595,8 @@ function printSummaryLine(result, w, opts = {}) {
 
 // ── Findings-only output (--quiet) ───────────────────────────────────────
 
-export function printFindings(findings) {
+export function printFindings(raw) {
+  const findings = scrubDeep(raw);
   if (!findings || findings.length === 0) return;
   const sorted = [...findings].sort((a, b) => {
     const order = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
@@ -607,7 +612,12 @@ export function printFindings(findings) {
 
 export function writeJsonReport(result, filePath) {
   mkdirSync(dirname(filePath), { recursive: true });
-  writeFileSync(filePath, JSON.stringify(result, null, 2) + "\n");
+  writeFileSync(filePath, formatJson(result));
+}
+
+/** A result as the JSON report holds it, secrets masked (lib/scrub.js). Also what --json prints. */
+export function formatJson(result) {
+  return JSON.stringify(scrubDeep(result), null, 2) + "\n";
 }
 
 // ── SARIF export (GitHub Security tab integration) ───────────────────────
@@ -648,7 +658,8 @@ export function writeSarifReport(result, filePath) {
 }
 
 /** The SARIF 2.1.0 object for a scan result. */
-export function formatSarif(result) {
+export function formatSarif(raw) {
+  const result = scrubDeep(raw);
   const rules = new Map();
   const results = [];
 
@@ -801,9 +812,9 @@ function sevToScore(severity) {
 
 export function createProgress(quiet) {
   if (quiet) return () => {};
-  return (msg) => process.stderr.write(`  ${c.dim("\u25b8")} ${msg}\n`);
+  return (msg) => process.stderr.write(`  ${c.dim("\u25b8")} ${scrubSecrets(String(msg))}\n`);
 }
 
 export function printError(msg) {
-  process.stderr.write(`\n  ${c.red("error")} ${msg}\n\n`);
+  process.stderr.write(`\n  ${c.red("error")} ${scrubSecrets(String(msg))}\n\n`);
 }

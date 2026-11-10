@@ -15,6 +15,7 @@ import { mdInline } from "./md-escape.js";
 import { footerLines } from "./footer.js";
 import { buildBrief, formatBrief } from "./brief.js";
 import { exitCodeOf, exitNote } from "./exit.js";
+import { scrubDeep } from "../../lib/scrub.js";
 
 export const AUDIENCES = ["developer", "owner", "auditor", "agent"];
 
@@ -278,7 +279,8 @@ export function formatAuditorReport(m) {
 const FORMATTERS = { developer: formatDeveloperReport, owner: formatOwnerReport, auditor: formatAuditorReport };
 
 /** Render the report for one audience. Throws on an unknown audience. */
-export function formatAudienceReport(result, audience, { version, footer = true } = {}) {
+export function formatAudienceReport(raw, audience, { version, footer = true } = {}) {
+  const result = scrubDeep(raw); // secrets masked (lib/scrub.js) before anything is cut to fit
   if (audience === "agent") return formatBrief(result.brief || buildBrief(result), { footer });
   const fmt = FORMATTERS[audience];
   if (!fmt) throw new Error(`Unknown --audience "${audience}". Use one of: ${AUDIENCES.join(", ")}.`);

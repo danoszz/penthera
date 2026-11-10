@@ -11,6 +11,7 @@ import { fingerprintFinding } from "../../lib/audit-loop.js";
 import { exploitabilityFor } from "../../lib/provenance.js";
 import { referenceKeysFor } from "../../lib/references.js";
 import { buildBrief, formatBrief } from "../report/brief.js";
+import { scrubDeep, scrubSecrets, SCRUB_MARGIN } from "../../lib/scrub.js";
 
 export const MAX_STRING = 2000;
 export const MAX_RESULT_BYTES = 256 * 1024;
@@ -37,11 +38,17 @@ const ALWAYS_LIMITS = [
 // variation selectors, and Unicode tag characters: the ways to hide text from a reader.
 const HIDDEN = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F؜ᅟᅠ឴឵᠎​-‏‪-‮⁠-⁤⁦-⁯ㅤ︀-️﻿ﾠ\u{E0000}-\u{E007F}\u{E0100}-\u{E01EF}]+/gu;
 
-/** Untrusted text made safe to hand to a model: hidden characters out, length capped. */
+/**
+ * Untrusted text made safe to hand to a model: hidden characters out, secrets
+ * masked (lib/scrub.js), length capped. Secrets are masked before the cut, so
+ * a key cut in half never shows its first half.
+ */
 export function cleanText(s, max = MAX_STRING) {
   if (s === undefined || s === null) return s;
-  let t = String(s).replace(HIDDEN, "�");
-  if (t.length > max) t = `${t.slice(0, max)}… [cut at ${max} characters]`;
+  const raw = String(s);
+  const long = raw.length > max + SCRUB_MARGIN;
+  let t = scrubSecrets((long ? raw.slice(0, max + SCRUB_MARGIN) : raw).replace(HIDDEN, "�"));
+  if (long || t.length > max) t = `${t.slice(0, max)}… [cut at ${max} characters]`;
   return t;
 }
 
@@ -147,7 +154,7 @@ function summaryText(r) {
 
 export const REPLY_CONTRACT =
   "`Site not read`: a firewall answered, so this says nothing about the site. `Nothing to assess`: nothing was read. `N suppressed`: findings exist and were set aside. Never call these clean or safe. " +
-  "Reply with this brief in its order and keep the verdict line, the reason line under it when there is one, and the section names. Do not move a finding between sections, change a severity or drop a group. If you checked something yourself, add it under a last section \"My read\" and say what you looked at. Ask before changing files.";
+  "Reply with this brief in its order and keep the verdict line, the reason line under it when there is one, the Do this first line, and the section names. Keep the Why it matters lines in their plain words. Do not move a finding between sections, change a severity or drop a group. If you checked something yourself, add it under a last section \"My read\" and say what you looked at. Ask before changing files.";
 
 /** A tool error the model can read and act on. */
 export function errorResult(message) {
@@ -156,11 +163,12 @@ export function errorResult(message) {
 
 /** The CallToolResult for a built result: summary text, the JSON for older clients, and structuredContent. */
 export function callResult({ structured, text }) {
+  const safe = scrubDeep(structured);
   return {
     content: [
-      { type: "text", text },
-      { type: "text", text: JSON.stringify(structured) },
+      { type: "text", text: scrubSecrets(text) },
+      { type: "text", text: JSON.stringify(safe) },
     ],
-    structuredContent: structured,
+    structuredContent: safe,
   };
 }

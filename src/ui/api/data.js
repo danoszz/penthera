@@ -16,6 +16,7 @@ import { planFixes, redactPlan } from "../../../lib/fix/index.js";
 import { keyParts } from "../static/js/format.js";
 import { verifyEvidence, MANIFEST, SIGNATURE, SCHEMA as EVIDENCE_SCHEMA } from "../../report/evidence.js";
 import { writeEvidence } from "../../cli/report-outputs.js";
+import { formatJson } from "../../reporter.js";
 import { createGit } from "../../agent/git.js";
 import { formatAudienceReport, AUDIENCES } from "../../report/audience.js";
 import {
@@ -400,7 +401,7 @@ export function createDataSource({ projects, reportsDir, home, memoryRoot, setti
 
     /** A scan, deps or agents report from a run started here: a new file, never through a symlink. */
     writeReport(name, result) {
-      writeNewFile(reportsReal, reportsReal, name, JSON.stringify(result, null, 2) + "\n");
+      writeNewFile(reportsReal, reportsReal, name, formatJson(result));
       cache = null;
       return name;
     },

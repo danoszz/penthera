@@ -139,10 +139,11 @@ The verdict decides how you open. Only `Nothing to fix` is a clean result, and e
 
 Then:
 
-1. Hand the brief on in its order. Keep the verdict line, the reason line under it when there is one, and the section names.
+1. Hand the brief on in its order. Keep the verdict line, the reason line under it when there is one, the **Do this first** line, and the section names.
 2. Do not move a finding between sections, change a severity or drop a group. The full list is in the `.md` reports.
 3. If you checked something yourself (opened the file, saw the match is a CSS class map), add it under a last section **My read** and say what you looked at. That section is your judgment, not Penthera's.
-4. End with the one change you would make first, and ask before changing files.
+4. Keep the **Why it matters** lines as they are: they are written for someone who is not in security, and they come from a fixed table, not a model.
+5. Lead your own words with the **Do this first** step, and ask before changing files.
 
 To suppress a finding, take its id from the terminal report or the `fid` field of `-o` JSON: the brief doesn't print it. `penthera memory suppress <fid> --reason "<why>"` needs the user's reason. MCP tools don't read suppressions, so they always count everything.
 

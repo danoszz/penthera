@@ -9,6 +9,7 @@ import { closeSync, constants as FS, lstatSync, mkdirSync, openSync, renameSync,
 import { randomBytes } from "node:crypto";
 import { basename, dirname, isAbsolute, join, parse, relative, resolve, sep } from "node:path";
 import { buildCardModel } from "./model.js";
+import { scrubDeep } from "../../lib/scrub.js";
 import { postLayout, ogLayout } from "./layout.js";
 import { toSvg, toPng } from "./draw.js";
 
@@ -121,7 +122,7 @@ function replaceFiles(files) {
 export function writeCards(brief, results, { version, out = DEFAULT_CARD_OUT, date, cwd = resolve(".") } = {}) {
   const base = resolve(cwd, String(out).replace(/\.(?:png|svg)$/i, ""));
   safeDir(dirname(base), cwd);
-  const model = buildCardModel(brief, results, { version, date });
+  const model = buildCardModel(scrubDeep(brief), scrubDeep(results), { version, date });
   const cards = renderCards(model);
   const files = Object.entries(cards).flatMap(([name, c]) => {
     const stem = name === "post" ? base : `${base}-og`;

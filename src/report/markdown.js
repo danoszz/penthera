@@ -3,6 +3,7 @@
  */
 import { matchLabel } from "../../lib/provenance.js";
 import { writeFileSync, mkdirSync, readFileSync } from "node:fs";
+import { scrubDeep } from "../../lib/scrub.js";
 import { dirname } from "node:path";
 import { buildWstgCoverage, formatWstgMarkdown } from "../../lib/owasp-wstg.js";
 import { formatComplianceMarkdown } from "../../lib/compliance/index.js";
@@ -49,7 +50,9 @@ const PKG_VERSION = JSON.parse(
 /**
  * Generate Markdown report content from scan result.
  */
-export function formatMarkdownReport(result, opts = {}) {
+export function formatMarkdownReport(raw, opts = {}) {
+  // Secrets masked (lib/scrub.js) before any cell or line is cut to fit.
+  const result = scrubDeep(raw);
   const findings = sortFindings(result.findings);
   const counts = countBySeverity(findings);
   const version = opts.version || PKG_VERSION;

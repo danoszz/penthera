@@ -4,6 +4,7 @@
 import { readFileSync } from "node:fs";
 import { fingerprintFinding } from "../../lib/audit-loop.js";
 import { tagSalt, useTagSalt } from "../../lib/secret-tags.js";
+import { scrubDeep } from "../../lib/scrub.js";
 
 // Shared with dedupe and the audit loop so one finding has one identity
 // everywhere. It excludes severity: a finding whose severity is re-rated is
@@ -61,8 +62,15 @@ export function compareWithBaseline(currentFindings, baselinePath) {
   } catch (e) {
     throw new Error(`Cannot read baseline report: ${baselinePath} (${e.message})`);
   }
+  return compareFindings(currentFindings, baseline, baselinePath);
+}
 
-  const prev = baseline.findings || [];
+/**
+ * The same comparison against a report held in memory (`penthera diff` scans
+ * the merge-base itself). `label` is what stats.path names.
+ */
+export function compareFindings(currentFindings, baseline, label = null) {
+  const prev = baseline?.findings || [];
   // Tags compare only when both runs used one salt; else the masked value and count decide, as before.
   const tagged = typeof baseline.secretTagSalt === "string" && baseline.secretTagSalt === tagSalt();
   // Per key: the most severe baseline severity, and what the findings held.
@@ -82,16 +90,20 @@ export function compareWithBaseline(currentFindings, baselinePath) {
     }
     before.set(k, b);
   }
-  const currKeys = new Set((currentFindings || []).map(findingKey));
+  // Keyed as the JSON report holds them: a baseline file went through the
+  // secret scrubber (lib/scrub.js), so this run's findings are keyed through it too.
+  const viewOf = new Map((currentFindings || []).map((f) => [f, scrubDeep(f)]));
+  const keyOf = (f) => findingKey(viewOf.get(f) || f);
+  const currKeys = new Set((currentFindings || []).map(keyOf));
 
   // New: a key the baseline lacks, a severity above the baseline's for that
   // key (a low that became critical is not "unchanged"), or a secret or sink
   // finding that now holds more than it did.
   const isNew = (f) => {
-    const b = before.get(findingKey(f));
+    const b = before.get(keyOf(f));
     if (!b) return true;
     if (rank(f.severity) < b.rank) return true;
-    const s = sitesOf(f);
+    const s = sitesOf(viewOf.get(f) || f);
     if (!s) return false;
     if (s.count > b.count) return true;
     // A secret with tags on both sides: new when it holds a value the baseline did not.
@@ -109,7 +121,7 @@ export function compareWithBaseline(currentFindings, baselinePath) {
     resolvedFindings,
     unchangedFindings,
     stats: {
-      path: baselinePath,
+      path: label,
       newCount: newFindings.length,
       resolvedCount: resolvedFindings.length,
       unchangedCount: unchangedFindings.length,

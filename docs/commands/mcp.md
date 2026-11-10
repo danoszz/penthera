@@ -208,6 +208,10 @@ npx -y penthera@2.4.0 mcp --allow-host staging.example.com
   finding text, with invisible characters removed and a note that it is data.
   A file that says "ignore previous instructions" becomes a finding, not a
   command.
+- **Hand your keys to the agent.** Every tool result, error and log line goes
+  through the same secret scrubber as the CLI's reports, before any text is cut
+  to length: a key of a known shape (a provider prefix, a JWT, a private key, a
+  password in a URL) shows as its first and last 4 characters at most.
 - **Phone home.** It talks to your agent over stdin and stdout and never opens
   a port. `scan_url` uses the vendored Retire.js snapshot, never a download.
   Without `--offline` it makes the SPF and DMARC DNS lookups. With `--offline`

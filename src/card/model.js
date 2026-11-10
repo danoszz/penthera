@@ -12,6 +12,7 @@ import { VERDICTS, bucketOf } from "../report/brief.js";
 import { siteUnread, readNothing } from "../report/unread.js";
 import { uncheckedDeps } from "../../lib/deps/report.js";
 import { dropLastWord } from "./kit.js";
+import { scrubSecrets, SCRUB_MARGIN } from "../../lib/scrub.js";
 
 export const CARD_SCHEMA = "penthera.card/1";
 
@@ -111,7 +112,9 @@ export function publicText(s, max = 120) {
   // is dropped anyway (backticks, emphasis, anything the pixel font can't draw,
   // zero-width characters) BEFORE the checks: removing them later could join
   // pieces into a URL or a key the checks never saw.
-  const raw = String(s ?? "");
+  // Secrets of a known shape are masked first (lib/scrub.js), over a bounded
+  // window past the cut, so a key the cut would split is still masked whole.
+  const raw = scrubSecrets(String(s ?? "").slice(0, max * 4 + SCRUB_MARGIN), () => "[hidden]");
   let t = raw.slice(0, max * 4);
   // A cut in the middle of a word could leave the visible start of a key: drop that piece.
   if (raw.length > t.length && !/\s/.test(raw[t.length])) {

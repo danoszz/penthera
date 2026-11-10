@@ -125,6 +125,9 @@ still gets 401 or 403 on the home page records it as `httpStatus`; treat that
 as a scan that read nothing. The [Vercel integration](https://docs.penthera.org/vercel#deployment-protection)
 and the [Action](action.md) pass it for you.
 
+To compare with the merge-base of your branch instead of a saved report, use
+[`penthera diff`](diff.md).
+
 ### What `--baseline` counts as new
 
 A finding is new when the baseline report has no finding with the same

@@ -17,7 +17,7 @@ import { dirname, resolve } from "node:path";
 import { parseCloudflareFindings, PRODUCER, SCHEMA_PIN, MAX_INPUT_BYTES } from "../../lib/llm-audit/cloudflare.js";
 import { verifyCandidates, sha256 } from "../../lib/llm-audit/verify.js";
 import { stampProvenance } from "../../lib/provenance.js";
-import { formatSarif } from "../reporter.js";
+import { formatSarif, formatJson } from "../reporter.js";
 import { mdInline } from "../report/md-escape.js";
 import { bold, dim, green, yellow } from "./ansi.js";
 
@@ -117,10 +117,10 @@ export async function runVerify(argv, { out = process.stdout, err = process.stde
   });
   result.findings = stampProvenance(result.findings, result.timestamp);
 
-  if (values.output) writeFile(values.output, JSON.stringify(result, null, 2) + "\n");
+  if (values.output) writeFile(values.output, formatJson(result));
   if (values.sarif) writeFile(values.sarif, JSON.stringify(verifySarif(result), null, 2) + "\n");
   if (values.markdown) writeFile(values.markdown, formatVerifyMarkdown(result));
-  if (values.json) out.write(JSON.stringify(result, null, 2) + "\n");
+  if (values.json) out.write(formatJson(result));
   else printVerify(result, out);
   return 0;
 }

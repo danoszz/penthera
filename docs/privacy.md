@@ -29,6 +29,20 @@ Other commands stay local unless you opt in. `penthera deps` makes no network re
 
 `penthera mcp` talks to your agent over stdin and stdout and opens no port. Of its tools, only `scan_url` uses the network, and it stays on the target and the hosts you listed with `--allow-host`. A redirect may also move between the apex and `www.`, or to a subdomain of the target, never to a sibling or a parent host. It never contacts the hosts above, and it uses the vendored Retire.js snapshot. Without `--offline` it makes the same DNS lookups as a URL scan. See [docs/commands/mcp.md](commands/mcp.md).
 
+### Secrets in what Penthera writes
+
+Every output goes through one secret scrubber (`lib/scrub.js`): the terminal
+report, `--json`, the JSON, Markdown and SARIF reports, the evidence bundle,
+the brief, the share card, MCP results, error messages and progress lines. It
+masks every value with a known shape, the way findings show secrets: the
+secret scan's fixed-shape rules (provider prefixes such as `sk_live_`, `ghp_`,
+`AKIA`, `sk-ant-`, and private key blocks), JWTs, `sb_secret_`, Stripe test
+and webhook secrets, Slack, npm, GitLab, SendGrid and Vercel Blob tokens, the
+password in a URL, and the token after `Bearer`. It masks before any text is
+cut to length, so half a key never shows. A secret with no fixed shape (a
+password in a `name = value` line) is masked by the rule that found it, not by
+the scrubber.
+
 ### AI mode: `--ai`
 
 AI mode is off unless you turn it on, and asks every run. Penthera itself talks
