@@ -102,3 +102,18 @@ describe("the MCP server and the reply contract ask to keep it", () => {
     expect(r.structured.brief.first.action).toMatch(/Stripe Dashboard/);
   });
 });
+
+describe("plain words for the 2.5 missing-check rules", () => {
+  it("has a why and a first step for each of the ten new rule ids", async () => {
+    const { MISSING_CHECK_RULES } = await import("../lib/whitebox/missing-checks.js");
+    const { SESSION_AUTH_RULES } = await import("../lib/whitebox/session-auth.js");
+    const ids = [...Object.keys(MISSING_CHECK_RULES), ...Object.keys(SESSION_AUTH_RULES)];
+    expect(ids).toHaveLength(10);
+    for (const id of ids) {
+      const words = plainWords({ templateId: id, source: "repo-scan" });
+      expect(words, id).toBeTruthy();
+      expect(words.why.length, id).toBeGreaterThan(20);
+      expect(words.act.length, id).toBeGreaterThan(20);
+    }
+  });
+});

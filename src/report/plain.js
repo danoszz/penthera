@@ -101,6 +101,46 @@ const RULES = {
     why: "If this action's owner or account is taken over, the next run of your CI runs their code.",
     act: "Pin the action to a full commit SHA.",
   },
+  "webhook-signature-missing": {
+    why: "Anyone who finds this webhook URL can post a fake event, like a paid checkout, and your app treats it as real.",
+    act: "Verify the provider's signature on the raw body first (for Stripe, stripe.webhooks.constructEvent) and reject the request when it fails.",
+  },
+  "jwt-decode-unverified": {
+    why: "Decoding a token doesn't check who signed it, so anyone can write one that says they're any user or an admin.",
+    act: "Use jwt.verify or jose's jwtVerify and read the claims from its result.",
+  },
+  "secret-compare-not-constant-time": {
+    why: "Comparing a secret with === takes a little longer the more of it is right, so it can be guessed one character at a time.",
+    act: "Compare with crypto.timingSafeEqual on two buffers of the same length.",
+  },
+  "reset-token-no-expiry": {
+    why: "A reset link that never expires works for whoever finds the old email, years later.",
+    act: "Store an expiry next to the token, check it in the lookup, and delete the token once it's used.",
+  },
+  "client-trusted-value": {
+    why: "The browser decides what's in the request, so a visitor can set their own price, role or plan.",
+    act: "Look prices and roles up on the server, and write only the fields you pick from the request.",
+  },
+  "next-middleware-no-auth": {
+    why: "This middleware runs on pages like /admin or /dashboard but checks no session, so it keeps nobody out.",
+    act: "Check the session in the middleware and redirect to login, and check it again in each page and route.",
+  },
+  "credential-in-url": {
+    why: "A password or key in the URL ends up in browser history, server logs and the Referer header sent to other sites.",
+    act: "Send passwords in a POST body and keys in a header, then rotate any key that was ever in a URL.",
+  },
+  "password-encrypted-not-hashed": {
+    why: "An encrypted password turns back into the password with a key that lives next to it, so one leak exposes every user.",
+    act: "Store a slow hash (argon2id, scrypt or bcrypt) and rehash each password at the user's next login.",
+  },
+  "session-cookie-insecure": {
+    why: "Without Secure or HttpOnly the session cookie can be read on open Wi-Fi or by any script on the page, which hands over the login.",
+    act: "Set secure: true and httpOnly: true in the session library's cookie options.",
+  },
+  "oauth-callback-no-state": {
+    why: "Without a state check, someone can send a link that logs a visitor into the attacker's account.",
+    act: "Store a random state in a cookie before the redirect and compare it in the callback, or let your auth library run the flow.",
+  },
 };
 
 // By category, when the rule id says nothing more.
