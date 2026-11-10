@@ -104,5 +104,10 @@ jobs:
           if [ -n "$number" ]; then
             gh pr edit "$number" --body-file "$RUNNER_TEMP/body.md"
           else
-            gh pr create --base "$BASE" --head "$BRANCH" --title "chore(site): news ticker candidates" --body-file "$RUNNER_TEMP/body.md"
+            # When the repository doesn't let Actions open PRs, leave the link instead of failing.
+            if ! gh pr create --base "$BASE" --head "$BRANCH" --title "chore(site): news ticker candidates" --body-file "$RUNNER_TEMP/body.md"; then
+              url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/compare/$BASE...$BRANCH"
+              echo "::notice::Actions may not open pull requests here. Open it by hand: $url"
+              echo "Actions may not open pull requests here. Open it by hand: $url" >> "$GITHUB_STEP_SUMMARY"
+            fi
           fi

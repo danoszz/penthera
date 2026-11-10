@@ -52,6 +52,9 @@ A mapped WSTG ID means a probe touches that test area. It does not mean the prob
 | Code-execution sinks (eval, vm, exec) with request data | WSTG-INPV-11, WSTG-INPV-12 | quick, standard, deep | Repo |
 | Supabase service-role key in client code, tables without row-level security | WSTG-INFO-05, WSTG-ATHZ-02 | quick, standard, deep | Repo |
 | Runtime & server advisories (PHP, nginx, Apache, Node.js, Python, OpenSSL, MongoDB) | WSTG-INFO-02, WSTG-INFO-08, WSTG-CONF-01 | quick, standard, deep | URL, Repo |
+| Framework advisories (Next.js, React Server Components) from the lockfile | WSTG-CONF-04, WSTG-INFO-08 | quick, standard, deep | Repo |
+| Server secrets behind a public env prefix (`NEXT_PUBLIC_`, `VITE_`, ...) | WSTG-CONF-02, WSTG-INFO-05 | quick, standard, deep | Repo |
+| Server Actions that write without an auth check | WSTG-ATHZ-02, WSTG-ATHN-01 | quick, standard, deep | Repo |
 
 ## WSTG categories not covered
 

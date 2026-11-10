@@ -33,13 +33,13 @@ const PATH = {
   maxLength: 4096,
   // No NUL or other control characters; the path never reaches a shell either way.
   pattern: "^[^\\u0000-\\u001f\\u007f]+$",
-  description: "Project folder to scan, relative to the workspace root or absolute inside it. Default: the workspace root.",
+  description: "Project folder to scan, relative to the workspace root or absolute inside it; nothing outside the workspace is read. Default: the workspace root.",
 };
 const MAX = {
   type: "integer",
   minimum: 1,
   maximum: MAX_FINDINGS,
-  description: `How many findings to return, most severe first (default ${DEFAULT_FINDINGS}).`,
+  description: `How many findings to return, most severe first (default ${DEFAULT_FINDINGS}). The brief always counts all of them.`,
 };
 
 const READ_ONLY = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
@@ -84,7 +84,7 @@ export const TOOLS = [
   {
     name: "scan_repo",
     title: "Scan a repository",
-    description: "White-box scan of a local project folder: hardcoded secrets, code-execution sinks, API routes and trust boundaries, runtime versions with known advisories, and security headers, cookie flags, CORS and login rate limits as the code sets them. Offline and read-only. Returns findings with evidence at file:line and confidence labels.",
+    description: "White-box scan of a local project folder: hardcoded secrets, code-execution sinks, API routes and trust boundaries, runtime versions with known advisories, and security headers, cookie flags, CORS and login rate limits as the code sets them. Offline and read-only. Use it first on a project. For third-party packages use check_dependencies, for AI agent config audit_ai_tooling, for a running app scan_url; pass any finding's rule to explain_finding. Returns the brief first (verdict, act on, check first, likely noise, not checked), then findings most severe first with rule, severity, confidence and file:line evidence; truncated says if more were left out.",
     inputSchema: { type: "object", properties: { path: PATH, max_findings: MAX }, additionalProperties: false },
     annotations: { title: "Scan a repository", ...READ_ONLY },
     async run(args, ctx) {
@@ -102,7 +102,7 @@ export const TOOLS = [
   {
     name: "scan_url",
     title: "Scan a running app (passive)",
-    description: "Passive black-box scan of a running web app the user is authorized to test: TLS, security headers, cookies, CORS, exposed files and docs, OpenAPI and auth checks. Sends no attack payloads: profile quick sends no login request, standard sends one POST /api/login with invalid credentials. Only loopback targets, or hosts the user listed with --allow-host when configuring this server, can be scanned, and a redirect off them is refused.",
+    description: "Passive black-box scan of a running web app the user is authorized to test: TLS, security headers, cookies, CORS, exposed files and docs, OpenAPI and auth checks. Sends no attack payloads: profile quick sends no login request, standard sends one POST /api/login with invalid credentials. Only loopback targets, or hosts the user listed with --allow-host when configuring this server, can be scanned, and a redirect off them is refused. Use it for an app that is running; scan_repo reads the source instead. Returns the brief first (verdict, act on, check first, likely noise, not checked), then findings most severe first with rule, severity, confidence and file:line evidence; truncated says if more were left out.",
     inputSchema: {
       type: "object",
       properties: {
@@ -139,7 +139,7 @@ export const TOOLS = [
   {
     name: "check_dependencies",
     title: "Check dependencies",
-    description: "What each npm or Python dependency can do (install scripts, shell, network, eval, credential access), known-malicious packages and typosquats, read offline from the lockfile and installed tree. Read-only.",
+    description: "What each npm or Python dependency can do (install scripts, shell, network, eval, credential access), known-malicious packages and typosquats, read offline from the lockfile and installed tree. Read-only. Use it for third-party packages; scan_repo covers your own code and runtime_advisories the runtime or server. Returns the brief first (verdict, act on, check first, likely noise, not checked), then findings most severe first with rule, severity, confidence and file:line evidence; truncated says if more were left out.",
     inputSchema: {
       type: "object",
       properties: { path: PATH, prod: { type: "boolean", description: "Skip dev dependencies (npm)." }, max_findings: MAX },
@@ -167,7 +167,7 @@ export const TOOLS = [
   {
     name: "audit_ai_tooling",
     title: "Audit AI agent config",
-    description: "Audit the project's AI agent setup: skills, MCP servers, hooks, permissions, plugins and rule files, for hidden instructions, curl-pipe-shell, unpinned MCP packages, inline secrets and wildcard permissions. Grades A to F, or gives no grade when it finds no agent config. Offline, deterministic, read-only.",
+    description: "Audit the project's AI agent setup: skills, MCP servers, hooks, permissions, plugins and rule files, for hidden instructions, curl-pipe-shell, unpinned MCP packages, inline secrets and wildcard permissions. Grades A to F, or gives no grade when it finds no agent config. Offline, deterministic, read-only. Use it for the agent setup (.claude, .cursor, .mcp.json, skills, hooks); scan_repo covers the app's code. Returns the brief first (verdict, act on, check first, likely noise, not checked), then findings most severe first with rule, severity, confidence and file:line evidence; truncated says if more were left out. The brief carries the grade.",
     inputSchema: { type: "object", properties: { path: PATH, max_findings: MAX }, additionalProperties: false },
     annotations: { title: "Audit AI agent config", ...READ_ONLY },
     async run(args, ctx) {
@@ -186,7 +186,7 @@ export const TOOLS = [
   {
     name: "explain_finding",
     title: "Explain a finding",
-    description: "Explain a finding's rule: what it checks, why it matters, how to fix it, effort, whether it is an owner action (rotate a key, change DNS), research references and OWASP MCP/Agentic ids. Pass the `rule` field of a finding as `id` (e.g. agents/mcp-unpinned, secrets, headers).",
+    description: "Explain a finding's rule: what it checks, why it matters, how to fix it, effort, whether it is an owner action (rotate a key, change DNS), research references and OWASP MCP/Agentic ids. Pass the `rule` field of a finding as `id` (e.g. agents/mcp-unpinned, secrets, headers). Use it after any scan tool returns a finding; it scans nothing itself. Returns action, why, fix, effort, owner_action, references, OWASP ids and limits. An id it doesn't know returns general advice marked as an unknown rule, never an error.",
     inputSchema: {
       type: "object",
       properties: { id: { type: "string", minLength: 1, maxLength: 128, pattern: "^[A-Za-z0-9][A-Za-z0-9/_.:-]*$", description: "The finding's `rule`, e.g. agents/mcp-unpinned." } },
@@ -201,7 +201,7 @@ export const TOOLS = [
   {
     name: "runtime_advisories",
     title: "Runtime advisories",
-    description: "Is the PHP, nginx, Apache, Node.js, Python or OpenSSL an app runs affected by a published advisory, or past end of life? Give a project path (reads Dockerfiles, compose files and version pins) or the response headers you already have (Server, X-Powered-By). Offline.",
+    description: "Is the PHP, nginx, Apache, Node.js, Python or OpenSSL an app runs affected by a published advisory, or past end of life? Give a project path (reads Dockerfiles, compose files and version pins) or the response headers you already have (Server, X-Powered-By). Offline. Use it for the runtime and server versions; for npm or Python packages use check_dependencies. Returns the brief first (verdict, act on, check first, likely noise, not checked), then findings most severe first with rule, severity, confidence and file:line evidence; truncated says if more were left out.",
     inputSchema: {
       type: "object",
       properties: {

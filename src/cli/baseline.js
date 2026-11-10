@@ -15,7 +15,8 @@ const RANK = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
 // An unknown severity counts as the most severe: never unchanged by accident.
 const rank = (s) => RANK[s] ?? -1;
 
-const isSecret = (f) => f.source === "secret-scan";
+// Supabase key findings carry value tags too (Vercel 01M72EX57HP1N9DR8ZWGTR9Z2K): compared like secrets.
+const isSecret = (f) => f.source === "secret-scan" || (f.source === "supabase-scan" && /^supabase-service-role-(exposed|committed)$/.test(f.templateId || ""));
 const isSink = (f) => f.source === "static-analysis" && f.category === "code-pattern" && !!f.pattern;
 
 /**

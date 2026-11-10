@@ -18,6 +18,9 @@ import { scanSupabase } from "../lib/whitebox/supabase.js";
 import { detectLibrary } from "../lib/whitebox/library.js";
 import { discoverFrameworkRoutes } from "../lib/whitebox/frameworks.js";
 import { runtimeAdvisoriesForRepo } from "../lib/advisories/index.js";
+import { frameworkAdvisoriesForRepo } from "../lib/whitebox/framework-advisories.js";
+import { scanPublicEnv } from "../lib/whitebox/public-env.js";
+import { scanServerActions } from "../lib/whitebox/server-actions.js";
 import { buildCoverage } from "../lib/coverage.js";
 import { readRepoFile, isRefused } from "../lib/fs-safe.js";
 import { probeRepoDetailed, findingKey } from "../lib/fix/index.js";
@@ -206,6 +209,33 @@ export async function scanRepo(repoPath, opts = {}) {
   progress("Checking pinned runtime versions against advisories...");
   append(result.findings, runtimeAdvisoriesForRepo(repoPath));
   result.executedProbes.push("runtime-advisories");
+
+  // A file one of the checks below had to read but refused (a link out, a
+  // device, a lockfile that does not parse) is named once (noteRefused keeps
+  // the set, so a server file the route scan also refuses is not named twice)
+  // and makes the scan incomplete (exit 2).
+  const nameRefused = (list) => { for (const e of list.splice(0)) noteRefused(e); };
+
+  // ── Phase 1b2: Framework versions (next, React Server Components) vs advisories
+  progress("Checking framework versions in the lockfile against advisories...");
+  const refusedLock = [];
+  for (const f of frameworkAdvisoriesForRepo(repoPath, { refused: refusedLock })) result.findings.push(f);
+  nameRefused(refusedLock);
+  result.executedProbes.push("framework-advisories");
+
+  // ── Phase 1b3: Server secrets behind a public env prefix (NEXT_PUBLIC_, VITE_, ...)
+  progress("Checking env names that ship to the browser...");
+  const refusedEnv = [];
+  for (const f of scanPublicEnv(repoPath, { refused: refusedEnv, ignoredDirs: ignored?.dirs })) result.findings.push(f);
+  nameRefused(refusedEnv);
+  result.executedProbes.push("public-env");
+
+  // ── Phase 1b4: Server Actions that write without an auth check ────────
+  progress("Checking Server Actions for an auth check...");
+  const refusedActions = [];
+  for (const f of scanServerActions(repoPath, { refused: refusedActions, ignoredDirs: ignored?.dirs })) result.findings.push(f);
+  nameRefused(refusedActions);
+  result.executedProbes.push("server-actions");
 
   // ── Phase 1c: Code-execution sinks (all server code, not just routes) ──
   progress("Looking for eval, vm and exec sinks...");

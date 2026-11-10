@@ -284,8 +284,8 @@ describe("the MCP contract", () => {
     try {
       const res = await client.modern("tools/list", {});
       const tool = res.result.tools.find((t) => t.name === "audit_ai_tooling");
-      expect(tool.description).toBe("Audit the project's AI agent setup: skills, MCP servers, hooks, permissions, plugins and rule files, for hidden instructions, curl-pipe-shell, unpinned MCP packages, inline secrets and wildcard permissions. Grades A to F, or gives no grade when it finds no agent config. Offline, deterministic, read-only.");
-      expect(tool.inputSchema.properties.path.description).toBe("Project folder to scan, relative to the workspace root or absolute inside it. Default: the workspace root.");
+      expect(tool.description).toBe("Audit the project's AI agent setup: skills, MCP servers, hooks, permissions, plugins and rule files, for hidden instructions, curl-pipe-shell, unpinned MCP packages, inline secrets and wildcard permissions. Grades A to F, or gives no grade when it finds no agent config. Offline, deterministic, read-only. Use it for the agent setup (.claude, .cursor, .mcp.json, skills, hooks); scan_repo covers the app's code. Returns the brief first (verdict, act on, check first, likely noise, not checked), then findings most severe first with rule, severity, confidence and file:line evidence; truncated says if more were left out. The brief carries the grade.");
+      expect(tool.inputSchema.properties.path.description).toBe("Project folder to scan, relative to the workspace root or absolute inside it; nothing outside the workspace is read. Default: the workspace root.");
     } finally {
       await client.close();
     }
