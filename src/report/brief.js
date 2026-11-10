@@ -52,6 +52,8 @@ const NOISE_REASONS = {
   generated: "in generated build output",
   fixture: "in test fixtures",
   "test-file": "in test files",
+  vendored: "in vendored or minified third-party files",
+  example: "in examples, demos or samples",
 };
 
 const SKIP_LABELS = {

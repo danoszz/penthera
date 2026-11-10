@@ -16,10 +16,28 @@
  */
 
 // Generated or build output: nobody edits these files, so a hit in them is noise.
-const GENERATED = /(?:^|\/)(?:\.next[^/]*|dist|build|out|\.turbo|\.svelte-kit|\.nuxt|\.output|__pycache__|coverage)\//;
+// Names only a tool writes are always generated. dist, build and out are generated
+// only when no source folder comes before them: app/api/build/route.ts is a real
+// route, packages/x/dist/index.js is build output.
+const GENERATED = /(?:^|\/)(?:\.next[^/]*|\.turbo|\.svelte-kit|\.nuxt|\.output|__pycache__|coverage)\//;
+const BUILD_DIR = /(?:^|\/)(?:dist|build|out)\//;
+const SOURCE_DIR = /(?:^|\/)(?:app|pages|src|api|routes|lib|server|functions|controllers|handlers)\//;
+const isGenerated = (p) => {
+  if (GENERATED.test(p)) return true;
+  const m = BUILD_DIR.exec(p);
+  return !!m && !SOURCE_DIR.test(p.slice(0, m.index + 1));
+};
+// Third-party code shipped inside the repo: minified files and vendored library folders.
+const VENDORED = /(?:^|\/)(?:vendor|vendors|third_party|third-party|bower_components)\/|(?:^|\/)(?:public|static|assets|wwwroot)\/(?:js\/|scripts\/)?(?:lib|libs|vendor)\/|[.-](?:min|compressed|packed)\.(?:js|mjs|cjs|css)$/;
+// A sign of planted or malicious code is never demoted for where it sits: a minified
+// file or a vendor folder is exactly where such code hides.
+const HOSTILE = /^(?:rootkit|persistence|suspicious-files|suspicious-process|malware|ioc|supply-chain|dependency-risk|agent-config)$/;
+const isHostile = (f) => HOSTILE.test(String(f.category || "")) || /^ioc[.:-]/i.test(String(f.templateId || f.rule || ""));
+// Examples, demos and documentation samples: sample keys and passwords live here.
+const EXAMPLE = /(?:^|\/)(?:examples?|samples?|demos?)\//;
 const FIXTURE = /(?:^|\/)(?:fixtures?|__fixtures__|testdata|__mocks__)\//;
 // Test code: a key here is a test's own sample. A fixtures folder keeps its own reason, so FIXTURE is checked first.
-const TEST_FILE = /(?:^|\/)(?:tests|__tests__)\/|(?:^|\/)[^/]*\.(?:test|spec)\.[^/]+$/;
+const TEST_FILE = /(?:^|\/)(?:tests?(?:[_-][^/]*)?|__tests__|e2e|cypress|playwright)\/|(?:^|\/)[^/]*\.(?:test|spec|cy)\.[^/]+$/;
 const URL_RE = /^[a-z][a-z0-9+.-]*:\/\//i;
 
 /** The file a finding points at, or null for a URL. */
@@ -33,9 +51,11 @@ export function bucketOf(f, { skillTarget = false } = {}) {
   const p = pathOf(f) || "";
   if (f.localOnly) return { bucket: "noise", reason: "local-only" };
   // A skill ships its dist/ and build/, so in a named skill those are real code.
-  if (!skillTarget && GENERATED.test(p)) return { bucket: "noise", reason: "generated" };
+  if (!skillTarget && isGenerated(p)) return { bucket: "noise", reason: "generated" };
   if (FIXTURE.test(p)) return { bucket: "noise", reason: "fixture" };
   if (TEST_FILE.test(p)) return { bucket: "noise", reason: "test-file" };
+  if (!skillTarget && !isHostile(f) && VENDORED.test(p)) return { bucket: "noise", reason: "vendored" };
+  if (!isHostile(f) && EXAMPLE.test(p)) return { bucket: "noise", reason: "example" };
   if (f.severity === "info") return { bucket: "info" };
   if (["potential", "needs-human-review"].includes(f.confidence)) return { bucket: "check" };
   if (f.severity === "low") return { bucket: "check" };
