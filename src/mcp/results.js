@@ -10,7 +10,7 @@ import { createHash } from "node:crypto";
 import { fingerprintFinding } from "../../lib/audit-loop.js";
 import { exploitabilityFor } from "../../lib/provenance.js";
 import { referenceKeysFor } from "../../lib/references.js";
-import { buildBrief, formatBrief } from "../report/brief.js";
+import { buildBrief, formatBrief, worseFinding } from "../report/brief.js";
 import { scrubDeep, scrubSecrets, SCRUB_MARGIN } from "../../lib/scrub.js";
 
 export const MAX_STRING = 2000;
@@ -54,7 +54,6 @@ export function cleanText(s, max = MAX_STRING) {
 
 const SEVERITIES = ["critical", "high", "medium", "low", "info"];
 const NOT_RUN_TOOL = { deps: "check_dependencies tool", agents: "audit_ai_tooling tool" };
-const SEV_RANK = Object.fromEntries(SEVERITIES.map((s, i) => [s, i]));
 
 export function countBySeverity(findings) {
   const summary = Object.fromEntries(SEVERITIES.map((s) => [s, 0]));
@@ -115,7 +114,8 @@ export function toMcpFinding(f) {
  * @param {object} [p.scan]      { mode, coverage, agents, notChecked } for the brief
  */
 export function buildResult({ tool, target, findings, limits, maxFindings = DEFAULT_FINDINGS, extra = {}, scan = {} }) {
-  const sorted = [...findings].sort((a, b) => (SEV_RANK[a.severity] ?? 9) - (SEV_RANK[b.severity] ?? 9));
+  // Worst first, as the brief orders its groups (severity, then confidence): a cut list keeps the worst.
+  const sorted = [...findings].sort(worseFinding);
   const all = sorted.map(toMcpFinding);
   let shown = all.slice(0, maxFindings);
   const brief = buildBrief({ ...scan, target, findings }, { notRunCommand: (n) => NOT_RUN_TOOL[n.id] || n.command });
@@ -142,6 +142,9 @@ export function buildResult({ tool, target, findings, limits, maxFindings = DEFA
   return { structured, text: summaryText(structured) };
 }
 
+// Where the brief text points for what its budget left out: the same result, no second call.
+export const BRIEF_FULL = "All of it is in this result: `structuredContent.brief` lists every group (`act_on`, `check_first`, `likely_noise`, `not_checked`), and `findings` each finding.";
+
 /**
  * The text part of a tool result: the agent brief, then how to read it. The
  * brief comes from rules only; the reply contract keeps the assistant's own
@@ -149,12 +152,12 @@ export function buildResult({ tool, target, findings, limits, maxFindings = DEFA
  */
 function summaryText(r) {
   const more = r.truncated ? [`The JSON lists ${r.shown} of ${r.summary.total} findings; raise max_findings (up to ${MAX_FINDINGS}) for more.`] : [];
-  return [formatBrief(r.brief), ...more, REPLY_CONTRACT, UNTRUSTED_NOTE].join("\n");
+  return [formatBrief(r.brief, { full: BRIEF_FULL }), ...more, REPLY_CONTRACT, UNTRUSTED_NOTE].join("\n");
 }
 
 export const REPLY_CONTRACT =
   "`Site not read`: a firewall answered, so this says nothing about the site. `Nothing to assess`: nothing was read. `N suppressed`: findings exist and were set aside. Never call these clean or safe. " +
-  "Reply with this brief in its order and keep the verdict line, the reason line under it when there is one, the Do this first line, and the section names. Keep the Why it matters lines in their plain words. Do not move a finding between sections, change a severity or drop a group. If you checked something yourself, add it under a last section \"My read\" and say what you looked at. Ask before changing files.";
+  "Reply with this brief in its order and keep the verdict line, the reason line under it when there is one, the Do this first line, the section names, and the Not shown here line when there is one. Keep the Why it matters lines in their plain words. Do not move a finding between sections, change a severity or drop a group. If you checked something yourself, add it under a last section \"My read\" and say what you looked at. Ask before changing files.";
 
 /** A tool error the model can read and act on. */
 export function errorResult(message) {

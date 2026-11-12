@@ -162,6 +162,13 @@ judge it. Each
 result also lists what the tool did not check. By default a tool returns the 50
 most severe findings; ask for up to 200 with `max_findings`.
 
+The brief text keeps to the [brief's budget](brief.md#the-budget): 5 groups to
+act on, 3 to check first, at most 2,000 characters. Its last line counts what
+it left out and points to `structuredContent.brief`, which lists every group,
+in the same result. Both cuts keep the worst: `findings` is sorted by severity,
+then confidence, and the brief's groups by severity, confidence and size. So
+`max_findings` and the brief's budget drop from the same end.
+
 The brief's `exit_code` is the code the CLI would exit with. A
 `check_dependencies` result is incomplete when a lockfile or requirements file
 could not be read (a FIFO, a device, a link out of the project, over the 64 MiB
