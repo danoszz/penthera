@@ -214,6 +214,34 @@ describe("command-injection in a route: fixed text is a check, the rest stays cr
     const r = await scanRepo(repo({ "app/api/run/route.ts": "import { exec, execSync } from 'child_process';\nconst run = exec;\nexport async function POST(req) {\n  execSync('git status');\n  run((await req.json()).cmd);\n}\n" }));
     expect(routeFinding(r)).toMatchObject({ severity: "critical" });
   });
+  // Vercel 01M77J8S704B4DF7BQ5H3Q3EA7: a request-derived call inside template interpolation, then a literal call.
+  it("an imported bare exec with request data in a template, then a literal call: critical, fails the run", async () => {
+    const src = "import { exec } from 'child_process';\nexport async function GET(request) {\n  const q = new URL(request.url).searchParams.get('q');\n  const out = `${exec(q)}`;\n  exec('git status');\n  return Response.json({ out });\n}\n";
+    const r = await scanRepo(repo({ "app/api/run/route.ts": src, "package.json": "{\"dependencies\":{\"next\":\"15.5.9\"}}" }));
+    expect(routeFinding(r)).toMatchObject({ severity: "critical" });
+    expect(isSevere(routeFinding(r))).toBe(true);
+    expect(commandsConstant(src)).toBe(false);
+  });
+  it("the same, with no request-reading names, still fails: the shared regex cursor no longer skips the first call", () => {
+    const src = "import { exec } from 'child_process';\nexport async function GET() {\n  const out = `${exec(process.argv[2])}`;\n  exec('git status');\n}\n";
+    const shared = new RegExp(SHELL_EXEC_RE.source, "g");
+    shared.test(src); // leave the cursor past the first call, as codeMatcher did
+    expect(constantCommands(src, shared)).toBe(false);
+  });
+  // Vercel 01M77J94SK530Y7RAV4E3MZ06Q: a fixed interpreter fed request data on stdin.
+  it("a fixed interpreter with request data through options.input: critical, fails the run", async () => {
+    const src = "import { execSync } from 'child_process';\nexport async function POST(req) {\n  const { code } = await req.json();\n  return Response.json({ out: execSync('python3', { input: code }).toString() });\n}\n";
+    const r = await scanRepo(repo({ "app/api/run/route.ts": src }));
+    expect(routeFinding(r)).toMatchObject({ severity: "critical" });
+    expect(isSevere(routeFinding(r))).toBe(true);
+  });
+  it("options are constant only with literal values", () => {
+    const run = (opts) => shellFixed(`import { execSync } from 'child_process';\nexport function GET() { execSync('python3', ${opts}); }\n`);
+    expect(run("{ encoding: 'utf8', timeout: 5000, windowsHide: true }")).toBe(true);
+    expect(run("{ env: { ...process.env, NODE_ENV: 'production' } }")).toBe(true);
+    expect(run("{ ...process.env }")).toBe(true);
+    for (const opts of ["{ input: code }", "{ input }", "{ shell: sh }", "{ cwd: dir }", "{ input: `${x}` }", "{ input: get() }", "{ env: { X: y } }"]) expect(run(opts), opts).toBe(false);
+  });
   it("an Express route with fixed text: medium, potential", async () => {
     const r = await scanRepo(repo({ "routes/v.js": "const express = require('express');\nconst { execSync } = require('child_process');\nconst router = express.Router();\nrouter.get('/version', (req, res) => res.json({ sha: execSync('git rev-parse HEAD').toString() }));\nmodule.exports = router;\n" }));
     expect(routeFinding(r)).toMatchObject({ severity: "medium", confidence: "potential" });
