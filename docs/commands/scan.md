@@ -179,9 +179,9 @@ The low-severity route hints (`err.message`, an unguarded `JSON.parse`) read
 the code with comments blanked and strings kept, so a word in a comment is not
 a hint. The serious sinks (`eval`, `innerHTML`, `exec` and `spawn`) and the CORS
 wildcard match if either the raw text or the comment-blanked code has them, and
-on the raw text a comment between a sink's name and its bracket
-(`exec/**/(`) still matches: no trick that fakes or hides a comment can hide a
-call, and `el["innerHTML"] = x` matches.
+on the raw text a sink's name followed by `(` or by a `/` that may open a
+comment (`exec/**/(`) counts, without parsing the comment: no trick that fakes
+or hides a comment can hide a call, and `el["innerHTML"] = x` matches.
 A word in a real comment can still raise one; that costs noise, never a missed
 sink. A route that runs a command is reported at the pattern's severity, fixed
 text included: an earlier "fixed text is only medium" rule was bypassed three
