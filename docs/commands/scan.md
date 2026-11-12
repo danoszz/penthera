@@ -175,21 +175,15 @@ not control scripts" ([how to fix it](https://penthera.org/csp-that-controls-scr
 A pattern that matches a whole file, such as `exec`, is one finding that lists the routes,
 not one per route.
 
-The route patterns (`eval`, `innerHTML`, `exec` and `spawn`, `err.message`,
-`origin || "*"`, an unguarded `JSON.parse`) read the code with comments
-blanked and strings kept. A word in a comment is not a finding, and
-`el["innerHTML"] = x` still is. A comment counts only when no `/` comes
-before it on its line, so a comment the lexer may have misread never hides a
-match.
-
-A route file whose every `exec`, `execSync` or `spawn` call runs fixed text (a
-string literal, any argument list of literals, an options object or a
-callback) gets `command-injection` at medium, potential: Check first, and it
-does not fail CI on its own. Anything else keeps it critical: a command built
-from a variable or a template, an exec function passed around as a value or
-renamed on import, `cp["exec"]`, or a sink finding for the same file. A
-`RegExp.exec` call in the same file counts as an unknown call, so that file
-stays critical too.
+The low-severity route hints (`err.message`, `origin || "*"`, an unguarded
+`JSON.parse`) read the code with comments blanked and strings kept, so a word
+in a comment is not a hint. The serious sinks (`eval`, `innerHTML`, `exec` and
+`spawn`) match if either the raw text or the comment-blanked code has them: no
+trick that fakes a comment can hide a call, and `el["innerHTML"] = x` matches.
+A word in a real comment can still raise one; that costs noise, never a missed
+sink. A route that runs a command is reported at the pattern's severity, fixed
+text included: an earlier "fixed text is only medium" rule was bypassed three
+ways in review, so it was removed.
 
 Two rate-limit findings are low, since they are hardening hints rather than
 proven bugs: a public route that calls a paid API with no rate limit, and a
