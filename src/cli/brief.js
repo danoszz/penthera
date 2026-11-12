@@ -73,7 +73,7 @@ export function runBrief(argv, { out = process.stdout, err = process.stderr, ver
     results.push(r);
   }
   const brief = buildBrief(results, { reports: files.map(markdownPathFromJson) });
-  out.write(opts.json ? formatJson(brief) : formatBrief(brief));
+  out.write(opts.json ? formatJson(brief) : formatBrief(brief, { full: "All of it: the same `penthera brief` command with `--json`, or the full reports under Next." }));
   if (opts.card || opts["card-out"]) {
     try {
       const { paths } = writeCards(brief, results, { version, out: opts["card-out"] || DEFAULT_CARD_OUT, date });

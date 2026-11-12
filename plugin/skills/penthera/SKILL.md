@@ -140,7 +140,7 @@ The verdict decides how you open. Only `Nothing to fix` is a clean result, and e
 Then:
 
 1. Hand the brief on in its order. Keep the verdict line, the reason line under it when there is one, the **Do this first** line, and the section names.
-2. Do not move a finding between sections, change a severity or drop a group. The full list is in the `.md` reports.
+2. Do not move a finding between sections, change a severity or drop a group. The brief shows the 5 worst groups to act on and the 3 worst to check first; when it leaves something out, its last line, **Not shown here**, counts it and says where it is. Keep that line. The full list is in the `.md` reports and in the `brief` field of `--json`.
 3. If you checked something yourself (opened the file, saw the match is a CSS class map), add it under a last section **My read** and say what you looked at. That section is your judgment, not Penthera's.
 4. Keep the **Why it matters** lines as they are: they are written for someone who is not in security, and they come from a fixed table, not a model.
 5. Lead your own words with the **Do this first** step, and ask before changing files.

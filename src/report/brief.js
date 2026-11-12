@@ -40,9 +40,48 @@ export const NOT_PROVEN_NOTE = "This run does not prove login, access rules or p
 export const VERDICTS = { fix: "Fix now", review: "Review", check: "Nothing to fix now", clean: "Nothing to fix", none: "Nothing to assess", unread: "Site not read" };
 
 const SEV_ORDER = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
-const MAX_ITEMS = 8;
+// A confidence the table does not know reads as "likely", the default every item shows.
+const CONF_ORDER = { confirmed: 0, likely: 1, potential: 2, "needs-human-review": 3 };
 const MAX_EXAMPLES = 3;
 const MAX_NEXT = 3;
+
+/**
+ * What the agent brief (formatBrief) shows at most. The counts on the verdict
+ * line always cover every finding; what the budget leaves out, the brief's
+ * last line names and says where to read it. `chars` is a hard cap on the
+ * brief's text, the product footer of a report file aside.
+ */
+export const BRIEF_BUDGET = Object.freeze({ act: 5, check: 3, notChecked: 3, next: 3, chars: 2000 });
+
+const sevRank = (f) => SEV_ORDER[f.severity] ?? 9;
+const confRank = (f) => CONF_ORDER[f.confidence] ?? 1;
+
+/**
+ * Worst first, for single findings: severity, then confidence. The MCP
+ * findings list sorts with it too, so a cut list and a cut brief keep the same kind.
+ */
+export function worseFinding(a, b) {
+  return sevRank(a) - sevRank(b) || confRank(a) - confRank(b);
+}
+
+/** A group's sort key: its worst severity, the best confidence at that severity, its size. */
+function groupKey(g) {
+  // reduce, not Math.min(...g): a group can hold more findings than a call takes arguments.
+  const sev = g.reduce((m, f) => Math.min(m, sevRank(f)), 9);
+  const conf = g.reduce((m, f) => (sevRank(f) === sev ? Math.min(m, confRank(f)) : m), 9);
+  return { sev, conf, size: g.length, title: String(g[0].title || "") };
+}
+
+/**
+ * Worst first, for groups: severity, then confidence, then group size, then
+ * title, so equal groups never depend on the order files were read. Every cut
+ * (the brief's budget, the terminal's first screen) keeps the top of this
+ * order, never the first groups by file order.
+ */
+function worstFirst(groups) {
+  const order = (x, y) => x.sev - y.sev || x.conf - y.conf || y.size - x.size || (x.title < y.title ? -1 : x.title > y.title ? 1 : 0);
+  return groups.map((g) => [groupKey(g), g]).sort((a, b) => order(a[0], b[0])).map(([, g]) => g);
+}
 
 // An info finding that says something was not found or not run belongs under Not checked.
 const GAP = /^no\b|not (?:found|run|read|checked|supported)|did not|skipped|unreachable/i;
@@ -103,8 +142,7 @@ function groupFindings(list, keyOf) {
     if (!groups.has(k)) groups.set(k, []);
     groups.get(k).push(f);
   }
-  return [...groups.values()].sort((a, b) =>
-    (SEV_ORDER[a[0].severity] ?? 9) - (SEV_ORDER[b[0].severity] ?? 9) || b.length - a.length);
+  return worstFirst([...groups.values()]);
 }
 
 const ruleOf = (f) => String(f.rule || f.templateId || f.category || "unknown");
@@ -145,8 +183,8 @@ function item(group) {
 }
 
 /**
- * The one thing to do first: the top Act on item (the most severe, then the
- * largest group), else the top Check first item. Null when there is neither.
+ * The one thing to do first: the top Act on item (worst first: severity,
+ * confidence, group size), else the top Check first item. Null when there is neither.
  */
 function firstOf(act, check) {
   const i = act[0] || check[0];
@@ -164,8 +202,7 @@ function regroupByFile(groups) {
     const k = paths.size === 1 && pathOf(g[0]) ? `file|${pathOf(g[0])}|${g[0].category}` : `rule|${ruleOf(g[0])}|${genericTitle(g[0])}`;
     merged.set(k, [...(merged.get(k) || []), ...g]);
   }
-  return [...merged.values()].sort((a, b) =>
-    (SEV_ORDER[a[0].severity] ?? 9) - (SEV_ORDER[b[0].severity] ?? 9) || b.length - a.length);
+  return worstFirst([...merged.values()]);
 }
 
 function fixOf(group) {
@@ -349,68 +386,212 @@ const MODE_NAMES = { url: "live URL", repo: "repo", deps: "dependencies", agents
 const md = mdInline;
 const code = (s) => `\`${String(s ?? "").replace(/[`\r\n]/g, " ")}\``;
 
-function whereText(i) {
+/**
+ * Text cut to `max` characters with an ellipsis, at a word where one is near.
+ * It never cuts a surrogate pair in half. Callers scrub first (formatBrief
+ * scrubs the whole brief), so a cut never shows half of a key in clear.
+ */
+export function clip(s, max) {
+  const t = String(s ?? "").replace(/\s+/g, " ").trim();
+  if (t.length <= max) return t;
+  let cut = t.slice(0, Math.max(1, max - 1));
+  if (/[\uD800-\uDBFF]$/.test(cut)) cut = cut.slice(0, -1);
+  const space = cut.lastIndexOf(" ");
+  if (space > max * 0.6) cut = cut.slice(0, space);
+  let end = cut.length;
+  while (end > 1 && " .,;:".includes(cut[end - 1])) end--;
+  cut = cut.slice(0, end);
+  // A cut inside `code` closes the span, so the rest of the line does not read as code.
+  const ticks = cut.split("`").length - 1;
+  return `${cut}…${ticks % 2 ? "`" : ""}`;
+}
+
+// The longest each piece of a brief line may be, after Markdown escaping. The
+// plain-words lines (src/report/plain.js, 144 characters at most) fit whole.
+const LEN = { title: 90, path: 100, report: 300, rule: 50, why: 150, fix: 150, reason: 240, action: 200, firstWhy: 160, line: 180, next: 130 };
+
+/** Untrusted text, escaped for Markdown and held to `max` characters after the escape. */
+function fit(s, max) {
+  let n = max;
+  let out = md(clip(s, n));
+  while (out.length > max && n > 1) {
+    n = Math.max(1, Math.floor(n * 0.8));
+    out = md(clip(s, n));
+  }
+  return out;
+}
+
+const fitCode = (s, max) => code(clip(s, max));
+
+function whereText(i, examples = 2) {
   if (!i.where.length) return "";
-  return `${i.where.map(code).join(", ")}${i.more ? ` and ${i.more} more` : ""}`;
+  const shown = i.where.slice(0, examples);
+  const more = i.more + i.where.length - shown.length;
+  return `${shown.map((p) => fitCode(p, LEN.path)).join(", ")}${more ? ` and ${more} more` : ""}`;
+}
+
+function rulesText(rules) {
+  const shown = rules.slice(0, 2).map((r) => fitCode(r, LEN.rule));
+  return `${shown.join(", ")}${rules.length > 2 ? ` and ${rules.length - 2} more` : ""}`;
 }
 
 /**
- * The brief as Markdown, about 40 lines at most. The product footer only goes
- * on a report file (--audience agent); stdout and MCP results leave it off.
+ * An item's why and fix, without what the Do this first line above it already
+ * says: on the top item those two are often the same words.
  */
-export function formatBrief(raw, { footer = false } = {}) {
+function whyAndFix(i, first, said) {
+  const top = first && first.title === i.title && first.where === (i.where[0] || null);
+  // A plain line already said above (in Do this first, or an earlier item of the
+  // same section, which the cap never drops before this one) is not said again.
+  const repeat = i.why_it_matters && said.has(i.why_it_matters);
+  if (i.why_it_matters) said.add(i.why_it_matters);
+  const why = repeat ? null
+    : i.why_it_matters ? `Why it matters: ${fit(i.why_it_matters, LEN.why)}` : i.why ? fit(i.why, LEN.why) : null;
+  const step = i.fix || i.first_step;
+  const fix = step && !(top && step === first.action) ? `Fix: ${fit(step, LEN.fix)}` : null;
+  return { why, fix };
+}
+
+function actLine(i, n, first, said) {
+  const where = whereText(i);
+  const count = i.count > 1 && i.where.length > 1 ? ` (${i.count} findings)` : "";
+  const { why, fix } = whyAndFix(i, first, said);
+  const tail = [why, fix, rulesText(i.rules)].filter(Boolean).join(" ");
+  return `${n}. **${fit(i.title, LEN.title)}**${count} [${i.mix || i.severity}]${where ? ` in ${where}` : ""}. ${tail}`;
+}
+
+function checkLine(i, first, said) {
+  const where = whereText(i);
+  const { why } = whyAndFix(i, first, said);
+  return `- **${fit(i.title, LEN.title)}**${i.count > 1 ? ` (${i.count})` : ""} [${i.mix || i.severity}, ${matchLabel(i.confidence)}]${where ? ` in ${where}` : ""}.${why ? ` ${why}` : ""}`;
+}
+
+/** Likely noise in one line: one group as it is, several summed by reason. */
+function noiseLine(groups) {
+  if (groups.length === 1) {
+    const g = groups[0];
+    const where = whereText(g);
+    const severe = g.severe ? ` (${g.severe} critical or high)` : "";
+    return `- ${g.count} × ${fit(g.label, LEN.title)}${severe}, ${g.text}${where ? `: ${where}` : ""}.`;
+  }
+  const by = new Map();
+  for (const g of groups) by.set(g.text, (by.get(g.text) || 0) + g.count);
+  const total = groups.reduce((n, g) => n + g.count, 0);
+  const severe = groups.reduce((n, g) => n + g.severe, 0);
+  const parts = [...by].map(([t, n]) => `${n} ${t}`).join(", ");
+  return `- ${plural(total, "finding")}${severe ? ` (${severe} critical or high)` : ""}: ${parts}.`;
+}
+
+// The JSON keeps set_aside.why in full; the brief says only what the agent needs to run it.
+const SET_ASIDE_SHORT = "sets it aside on this machine; penthera.suppress.json shares it. The fid is in the JSON report";
+
+function defaultFull(b) {
+  return b.reports.length
+    ? `All of it: the full report under Next, or the \`brief\` field of the same scan with \`--json\`.`
+    : "All of it: the `brief` field of the same scan with `--json`.";
+}
+
+/** The last line: what the budget left out, counted exactly, and where to read it. */
+function pointerLine(left, full) {
+  const parts = [];
+  if (left.act) parts.push(`${left.act} more ${left.act === 1 ? "group" : "groups"} to act on`);
+  if (left.check) parts.push(`${left.check} more ${left.check === 1 ? "group" : "groups"} to check first`);
+  if (left.noise) parts.push(`the paths of ${left.noise} likely-noise groups`);
+  if (left.notChecked) parts.push(`${left.notChecked} more Not checked ${left.notChecked === 1 ? "line" : "lines"}`);
+  if (left.next) parts.push(`${left.next} Next ${left.next === 1 ? "command" : "commands"}`);
+  if (left.setAside) parts.push("how to set a finding aside");
+  if (!parts.length) return null;
+  const list = parts.length > 1 ? `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}` : parts[0];
+  return `**Not shown here:** ${list}. ${full}`;
+}
+
+/**
+ * The agent brief as Markdown, under a fixed budget (BRIEF_BUDGET): the
+ * verdict and every count, Do this first, the 5 worst groups to act on and the
+ * 3 worst to check first, one line of likely noise, 3 Not checked lines and 3
+ * Next commands, and at most `budget.chars` characters. What the budget leaves
+ * out, the last line counts and says where to read it; that line, the verdict,
+ * the reason under it, Do this first and the first Not checked line are never
+ * dropped. Past the character cap the least important lines go first, and a
+ * line goes whole: long text is cut with an ellipsis inside its line.
+ *
+ * The product footer only goes on a report file (--audience agent); stdout
+ * and MCP results leave it off. `full` says where the whole brief is (the MCP
+ * server names its structured result; the CLI default names `--json`).
+ */
+export function formatBrief(raw, { footer = false, full = null, budget = BRIEF_BUDGET } = {}) {
   const b = scrubDeep(raw); // the brief's own fields are scrubbed; this covers a brief read back from a file
-  const L = [];
   const c = b.counts;
   const parts = [problemsText({ problems: c.problems ?? c.act + c.check, act: c.act, check: c.check }), `${c.noise} likely noise`];
   if (c.info) parts.push(`${c.info} info in the full report`);
   const scanned = b.scanned.length ? ` Scanned: ${b.scanned.map((m) => MODE_NAMES[m] || m).join(", ")}.` : "";
-  L.push(`**Penthera: ${b.verdict}.** ${parts.join(", ")}.${scanned}`, "");
-  if (b.exit_reason) L.push(md(b.exit_reason), "");
-  if (b.first) L.push(`**Do this first**${b.first.where ? ` (${code(b.first.where)})` : ""}: ${md(b.first.action)}${b.first.why_it_matters ? ` Why it matters: ${md(b.first.why_it_matters)}` : ""}`, "");
 
-  if (b.act_on.length) {
-    L.push("### Act on", "");
-    b.act_on.slice(0, MAX_ITEMS).forEach((i, n) => {
-      const where = whereText(i);
-      const count = i.count > 1 && i.where.length > 1 ? ` (${i.count} findings)` : "";
-      const fix = i.fix || i.first_step;
-      const tail = [i.why_it_matters ? `Why it matters: ${md(i.why_it_matters)}` : i.why && md(i.why), fix && `Fix: ${md(fix)}`, i.rules.map(code).join(", ")].filter(Boolean).join(" ");
-      L.push(`${n + 1}. **${md(i.title)}**${count} [${i.mix || i.severity}]${where ? ` in ${where}` : ""}. ${tail}`);
-    });
-    if (b.act_on.length > MAX_ITEMS) L.push(`${b.act_on.length - MAX_ITEMS} more in the full report.`);
-    L.push("");
+  // Each row: its section, its rank (0 is never dropped) and its text, in display order.
+  const rows = [];
+  const add = (sec, rank, line) => rows.push({ sec, rank, line });
+  add("head", 0, `**Penthera: ${fit(b.verdict, 120)}.** ${parts.join(", ")}.${scanned}`);
+  if (b.exit_reason) add("head", 0, fit(b.exit_reason, LEN.reason));
+  if (b.first) {
+    const where = b.first.where ? ` (${fitCode(b.first.where, LEN.path)})` : "";
+    add("head", 0, `**Do this first**${where}: ${fit(b.first.action, LEN.action)}${b.first.why_it_matters ? ` Why it matters: ${fit(b.first.why_it_matters, LEN.firstWhy)}` : ""}`);
   }
-  if (b.check_first.length) {
-    L.push("### Check first", "");
-    for (const i of b.check_first.slice(0, MAX_ITEMS)) {
-      const where = whereText(i);
-      const why = i.why_it_matters ? `Why it matters: ${i.why_it_matters}` : i.why;
-      L.push(`- **${md(i.title)}**${i.count > 1 ? ` (${i.count})` : ""} [${i.mix || i.severity}, ${matchLabel(i.confidence)}]${where ? ` in ${where}` : ""}.${why ? ` ${md(why)}` : ""}`);
-    }
-    if (b.check_first.length > MAX_ITEMS) L.push(`- ${b.check_first.length - MAX_ITEMS} more in the full report.`);
-    L.push("");
-  }
+  const said = () => new Set(b.first?.why_it_matters ? [b.first.why_it_matters] : []);
+  const saidAct = said();
+  const saidCheck = said();
+  b.act_on.slice(0, budget.act).forEach((i, n) => add("act", n < 3 ? 1 : 3, actLine(i, n + 1, b.first, saidAct)));
+  b.check_first.slice(0, budget.check).forEach((i, n) => add("check", n < 1 ? 2 : 3, checkLine(i, b.first, saidCheck)));
   // Plain, like the brief's other in-text commands: the same words however Penthera was started.
-  if (b.set_aside) L.push(`Checked one and it is not a problem? ${code(b.set_aside.command)}. ${md(b.set_aside.why)}.`, "");
-  if (b.likely_noise.length) {
-    L.push("### Likely noise", "");
-    for (const g of b.likely_noise.slice(0, MAX_ITEMS)) {
-      const where = whereText(g);
-      const severe = g.severe ? ` (${g.severe} critical or high)` : "";
-      L.push(`- ${g.count} × ${md(g.label)}${severe}, ${g.text}${where ? `: ${where}` : ""}.`);
+  if (b.set_aside) add("aside", 2, `Checked one and it is not a problem? ${code(b.set_aside.command)} ${SET_ASIDE_SHORT}.`);
+  if (b.likely_noise.length) add("noise", 2, noiseLine(b.likely_noise));
+  b.not_checked.slice(0, budget.notChecked).forEach((s, n) => add("not", n < 1 ? 0 : 3, `- ${fit(s, LEN.line)}`));
+  b.next.slice(0, budget.next).forEach((n, i) => add("next", i ? 4 : 1, `- ${code(hintCommand(n.command))}: ${fit(hintCommand(n.why), LEN.next)}`));
+
+  const heads = { act: "### Act on", check: "### Check first", noise: "### Likely noise", not: "### Not checked", next: "### Next" };
+  const fullText = full || defaultFull(b);
+  const render = (kept, reportsShown) => {
+    const has = (sec) => kept.filter((r) => r.sec === sec);
+    const left = {
+      act: b.act_on.length - has("act").length,
+      check: b.check_first.length - has("check").length,
+      noise: b.likely_noise.length > 1 ? b.likely_noise.length : has("noise").length ? 0 : b.likely_noise.length,
+      notChecked: b.not_checked.length - has("not").length,
+      next: Math.min(b.next.length, budget.next) - has("next").length,
+      setAside: b.set_aside && !has("aside").length,
+    };
+    const pointer = pointerLine(left, fullText);
+    const L = [];
+    for (const r of has("head")) L.push(r.line, "");
+    for (const sec of ["act", "check", "aside", "noise", "not", "next"]) {
+      const lines = has(sec);
+      if (!lines.length) continue;
+      if (heads[sec]) L.push(heads[sec], "");
+      L.push(...lines.map((r) => r.line), "");
     }
-    L.push("");
+    // Next ends with the report path, as it always did; it is never dropped.
+    if (b.reports.length) {
+      if (!has("next").length) L.push(heads.next, "");
+      else L.pop();
+      const paths = b.reports.slice(0, reportsShown).map((p) => fitCode(p, LEN.report)).join(", ");
+      const more = b.reports.length - Math.min(reportsShown, b.reports.length);
+      L.push(`- Full report${b.reports.length > 1 ? "s" : ""}: ${paths}${more ? ` and ${more} more` : ""}`, "");
+    }
+    if (pointer) L.push(pointer, "");
+    return L.join("\n");
+  };
+
+  // Past the cap, drop the least important line, the last one first, until it
+  // fits; with only the lines that always stay left, name one report path.
+  let kept = rows;
+  let reportsShown = 3;
+  let out = render(kept, reportsShown);
+  while (out.length > budget.chars) {
+    let drop = -1;
+    for (let n = 0; n < kept.length; n++) if (kept[n].rank > 0 && (drop < 0 || kept[n].rank >= kept[drop].rank)) drop = n;
+    if (drop >= 0) kept = kept.filter((_, n) => n !== drop);
+    else if (reportsShown > 1) reportsShown = 1;
+    else break;
+    out = render(kept, reportsShown);
   }
-  L.push("### Not checked", "");
-  for (const s of b.not_checked.slice(0, MAX_ITEMS)) L.push(`- ${md(s)}`);
-  L.push("");
-  if (b.next.length || b.reports.length) {
-    L.push("### Next", "");
-    for (const n of b.next) L.push(`- ${code(hintCommand(n.command))}: ${md(hintCommand(n.why))}`);
-    if (b.reports.length) L.push(`- Full report${b.reports.length > 1 ? "s" : ""}: ${b.reports.map(code).join(", ")}`);
-    L.push("");
-  }
-  if (footer) L.push("---", "", ...footerLines({ footer }));
-  return L.join("\n");
+  if (footer) out += ["", "---", "", ...footerLines({ footer })].join("\n");
+  return out;
 }

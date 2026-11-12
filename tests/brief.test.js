@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildBrief, formatBrief, bucketOf, VERDICTS, BRIEF_SCHEMA } from "../src/report/brief.js";
+import { buildBrief, formatBrief, bucketOf, VERDICTS, BRIEF_SCHEMA, BRIEF_BUDGET } from "../src/report/brief.js";
 import { runBrief, wantBrief } from "../src/cli/brief.js";
 import { buildResult, REPLY_CONTRACT } from "../src/mcp/results.js";
 import { formatAudienceReport, AUDIENCES } from "../src/report/audience.js";
@@ -210,7 +210,8 @@ describe("agent brief: Markdown", () => {
     const heads = out.split("\n").filter((l) => l.startsWith("### "));
     expect(heads).toEqual(["### Act on", "### Check first", "### Not checked"]);
     expect(out.split("\n").length).toBeLessThanOrEqual(45);
-    expect(out).toMatch(/more in the full report/);
+    expect(out.length).toBeLessThanOrEqual(BRIEF_BUDGET.chars);
+    expect(out).toMatch(/^\*\*Not shown here:\*\* \d+ more groups to act on/m);
   });
 
   it("treats finding text as data: hidden characters out, Markdown escaped", () => {

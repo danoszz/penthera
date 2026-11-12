@@ -18,10 +18,50 @@ assistant to pass on as it is. Penthera's rules fill it; no model is involved.
 | Likely noise | Hits in files git ignores, generated build output, test fixtures, test files, vendored or minified third-party code, or examples and samples, one line per group |
 | Not checked | What the scan did not read. Always shown, so a short brief is not read as "safe" |
 | Next | Up to three commands, and the path of the full report |
+| Not shown here | Only when the budget below left something out: how many groups and lines, counted exactly, and where all of it is |
 
 Findings that repeat collapse into one line: two advisories for one Node.js
 pin, or the same rule in 16 build files. Every finding is counted once. The
 full list stays in the JSON and Markdown reports.
+
+## The budget
+
+An agent reads the brief as context, so it stays short: about 500 tokens. In
+our E9 experiment, long, noisy briefs misled the coding agents that read them;
+one opened with 23 items to act on. The brief text shows at most:
+
+| Part | At most |
+|---|---|
+| Verdict line | Always, with every count exact: nothing the budget leaves out is left out of the counts |
+| Do this first | Always, when there is something to act on or check |
+| Act on | 5 groups |
+| Check first | 3 groups |
+| Likely noise | 1 line: one group as it is, several summed by reason (`21 findings (4 critical or high): 4 in test files, 17 in test fixtures`) |
+| Not checked | 3 lines, the most important first: a suppressed finding, a site that was not read |
+| Next | 3 commands, and the full report path |
+| The whole brief | 2,000 characters |
+
+Groups are ordered worst first: severity, then confidence, then group size,
+then title. So a cut keeps the worst groups, never the first ones by file
+order. The order comes from the findings' own fields; no model sets it.
+
+Past 2,000 characters, the least important lines go first: Next commands,
+the rest of Check first and Not checked, then groups 4 and 5 to act on. The
+verdict, the reason line, Do this first, the first Not checked line, the full
+report path and the last line always stay. A line goes whole or not at all.
+Long text inside a line (a title over 90 characters, a path over 100) is cut
+with an ellipsis. The secret scrubber runs before any cut, so a cut never
+shows half a key.
+
+When anything was left out, the last line says what and where to find it:
+
+```text
+**Not shown here:** 25 more groups to act on and 3 more Not checked lines. All of it: the `brief` field of the same scan with `--json`.
+```
+
+The JSON `brief` object (`--json`, `-o report.json`, `penthera brief --json`
+and MCP `structuredContent.brief`) has no budget: it lists every group. The
+footer of a report file (`--audience agent`) comes after the 2,000 characters.
 
 ## Get it
 
@@ -32,7 +72,7 @@ full list stays in the JSON and Markdown reports.
 | A report file | `penthera --repo . --audience agent --markdown reports/brief.md` |
 | JSON | The `brief` field of `-o report.json` (schema `penthera.brief/1`). `exit_code` is the code the findings give, `exit_reason` the line under the verdict or null, and `likely_noise[].severe` the critical or high findings in that group. Top-level fields: `schema`, `verdict`, `verdict_id` (a stable name: `fix`, `review`, `check`, `clean`, `none`, `unread` or `suppressed`), `exit_code`, `exit_reason`, `target`, `scanned`, `counts` (`problems`, `act`, `check`, `noise`, `info`, `suppressed`, `total`), `act_on`, `check_first`, `likely_noise`, `not_checked`, `next`, `set_aside` (how to suppress a problem you checked, by fid with a reason; only when findings carry a fid), `reports`, and since 2.5.0 `first` (`title`, `where`, `action`, `why_it_matters`, `from`, or null). Each item in `act_on` and `check_first` has `confidence` and `exploitability`, and since 2.5.0 `why_it_matters` and `first_step` (null when the table has no line for the rule) |
 | Several scans in one | `penthera brief reports/repo.json reports/deps.json reports/agents.json` |
-| MCP | The text of every scan tool's result is the brief; `structuredContent.brief` holds the object. `explain_finding` has no brief |
+| MCP | The text of every scan tool's result is the brief; `structuredContent.brief` holds the object with every group. `explain_finding` has no brief |
 
 ```bash
 penthera --repo . -o reports/repo.json

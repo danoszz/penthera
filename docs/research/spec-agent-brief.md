@@ -86,6 +86,11 @@ advisories for one runtime pin) collapse into one step.
 
 At most about 40 lines. The brief ends with the path of the full report.
 
+Since the E9 run (10 Nov), a fixed budget replaces the line count: 5 groups to
+act on, 3 to check first, one line of likely noise, 3 Not checked lines, 3 Next
+commands and 2,000 characters, with a last line that counts what was left out
+([brief.md](../commands/brief.md#the-budget)).
+
 ## Example
 
 The test run above, as a brief, assuming the engine fixes below (E1 removes the
