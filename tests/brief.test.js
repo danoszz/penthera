@@ -63,6 +63,37 @@ describe("agent brief: buckets", () => {
     expect(bucketOf(f({ url: "https://example.test/tests/x" })).bucket).toBe("act");
   });
 
+  it("build/ and out/ inside source folders are real code; vendored, examples and test folders are noise (E9, 10 Nov)", () => {
+    // A real route named build or out is not build output (it was hidden as "generated").
+    expect(bucketOf(f({ url: "app/api/build/route.ts" })).bucket).toBe("act");
+    expect(bucketOf(f({ url: "src/out/handler.js" })).bucket).toBe("act");
+    expect(bucketOf(f({ url: "packages/web/dist/index.js" }))).toEqual({ bucket: "noise", reason: "generated" });
+    expect(bucketOf(f({ url: "out/server.js" }))).toEqual({ bucket: "noise", reason: "generated" });
+    // Third-party code shipped in the repo.
+    expect(bucketOf(f({ url: "public/js/lib/jquery/jquery-1.10.2.js" }))).toEqual({ bucket: "noise", reason: "vendored" });
+    expect(bucketOf(f({ url: "public/js/lib/codemirror/codemirror-compressed.js" }))).toEqual({ bucket: "noise", reason: "vendored" });
+    expect(bucketOf(f({ url: "static/app.min.js" }))).toEqual({ bucket: "noise", reason: "vendored" });
+    expect(bucketOf(f({ url: "vendor/acme/sdk.js" }))).toEqual({ bucket: "noise", reason: "vendored" });
+    // Sample keys in examples and documentation samples.
+    expect(bucketOf(f({ url: "examples/pki/private/cakey.pem" }))).toEqual({ bucket: "noise", reason: "example" });
+    expect(bucketOf(f({ url: "api-ref/source/v3/samples/admin/credential.json" }))).toEqual({ bucket: "noise", reason: "example" });
+    // Test folders other runners use.
+    for (const url of ["test/a.js", "e2e/login.ts", "cypress/e2e/a.cy.ts", "playwright/x.ts", "test_apps/app/main.py", "test-utils/a.js"]) {
+      expect(bucketOf(f({ url })), url).toEqual({ bucket: "noise", reason: "test-file" });
+    }
+    expect(bucketOf(f({ url: "testing/app.py" })).bucket).toBe("act");
+    // Signs of planted code keep their bucket wherever they sit, and a skill's own files are real code.
+    expect(bucketOf(f({ url: "public/js/lib/x.min.js", category: "suspicious-files" })).bucket).toBe("act");
+    expect(bucketOf(f({ url: "examples/.claude/settings.json", category: "agent-config" })).bucket).toBe("act");
+    expect(bucketOf(f({ url: "vendor/a.js" }), { skillTarget: true }).bucket).toBe("act");
+  });
+
+  it("the exit code ignores the new buckets: a critical key in examples still fails the run", async () => {
+    const { exitCodeOf } = await import("../src/report/exit.js");
+    expect(exitCodeOf({ findings: [f({ url: "examples/pki/private/cakey.pem", severity: "critical" })] })).toBe(1);
+    expect(exitCodeOf({ findings: [f({ url: "public/js/lib/x.min.js", severity: "high" })] })).toBe(1);
+  });
+
   it("moves a key in a test file to Likely noise, and still counts it", () => {
     const key = (url) => f({ url, line: 12, title: "API key in source" });
     const report = { target: "/repo", mode: "repo", findings: [key("tests/a.test.js"), key("src/app.spec.ts")] };

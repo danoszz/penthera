@@ -15,7 +15,7 @@ assistant to pass on as it is. Penthera's rules fill it; no model is involved.
 | Do this first | One line under the verdict: the first step for the top finding in Act on (or Check first), where it is, and why it matters. Only when there is something to act on or check |
 | Act on | Findings that need a change: where, why it matters, the fix, the rule id |
 | Check first | Heuristic and low findings, and what a dependency *can* do |
-| Likely noise | Hits in files git ignores, generated build output, test fixtures or test files, one line per group |
+| Likely noise | Hits in files git ignores, generated build output, test fixtures, test files, vendored or minified third-party code, or examples and samples, one line per group |
 | Not checked | What the scan did not read. Always shown, so a short brief is not read as "safe" |
 | Next | Up to three commands, and the path of the full report |
 
@@ -92,11 +92,18 @@ noise`. SARIF carries the same counts in `runs[0].properties.counts`.
 The first matching rule wins:
 
 1. **Likely noise:** the file is local only (git ignores it), in generated
-   output (`.next*`, `dist`, `build`, `out`, `.turbo`, `.svelte-kit`, `.nuxt`,
-   `.output`, `__pycache__`, `coverage`), a test fixture (`fixtures`,
-   `__fixtures__`, `testdata`, `__mocks__`), or a test file (anything under
-   `tests` or `__tests__`, or named `*.test.*` or `*.spec.*`), with the reason
-   "in test files". The finding is still listed, still counted, and the exit
+   output (`.next*`, `.turbo`, `.svelte-kit`, `.nuxt`, `.output`,
+   `__pycache__`, `coverage`, and `dist`, `build` or `out` unless a source
+   folder such as `app`, `src`, `api`, `pages`, `routes` or `lib` comes
+   first, so `app/api/build/route.ts` stays real code), a test fixture
+   (`fixtures`, `__fixtures__`, `testdata`, `__mocks__`), a test file
+   (anything under `test`, `tests`, `test_*`, `test-*`, `__tests__`, `e2e`,
+   `cypress` or `playwright`, or named `*.test.*`, `*.spec.*` or `*.cy.*`),
+   with the reason "in test files", vendored or minified third-party code
+   (`vendor`, `third_party`, `bower_components`, `public/js/lib` and the like,
+   `*.min.js`), or an example or sample (`examples`, `samples`, `demos`). A
+   rootkit, persistence, suspicious-file, malicious-package or agent-config
+   finding is never moved to noise for being in a vendored or example folder. The finding is still listed, still counted, and the exit
    code doesn't change. A fixtures folder inside `tests` keeps the fixture
    reason. In a skill folder you name, `dist` and `build` are the skill's
    own code, so they are not noise there.

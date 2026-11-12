@@ -85,7 +85,7 @@ claude mcp add penthera -- npx -y penthera@2.4.0 mcp
 
 For other agents, see https://github.com/danoszz/penthera/blob/main/docs/commands/mcp.md.
 
-To try a release candidate in someone's project, run it with `npx penthera@next ...` rather than `npm install penthera@next`. An install pins the exact rc in the lockfile, so it never moves to the final release, and it adds a dependency the project did not ask for. If the user does want it installed, use `-D` and point out the pin.
+To try a release candidate, use only an exact version the user names, written as `npx -y penthera@<the exact rc version> ...`, never a moving tag like `@next` or `@latest`, and run it rather than `npm install` it: an install pins the rc in the lockfile, so it never moves to the final release, and adds a dependency the project did not ask for. If the user does want it installed, use `-D` and point out the pin.
 
 ## Decision tree
 
@@ -147,7 +147,7 @@ Then:
 
 To suppress a finding, take its id from the terminal report or the `fid` field of `-o` JSON: the brief doesn't print it. `penthera memory suppress <fid> --reason "<why>"` needs the user's reason. MCP tools don't read suppressions, so they always count everything.
 
-If you run Penthera through `npx`, its hints print `npx penthera`. Run them as printed.
+If you run Penthera through `npx`, re-run every hint it prints with the same pinned command you started with (`npx -y penthera@2.4.0 ...`), never a bare `npx penthera`, which npm resolves to whatever version is newest. From 2.5 the hints print the running version themselves.
 
 **Exit codes changed in 2.2.** Exit 1 now also means: `agent --loop` left a critical or high finding, suppressed ones included; `agent --loop --url` couldn't read the site; `agents` found login details in a connection string or instructions in an HTML comment; `deps` couldn't read a package. Exit 0 can now mean a firewall's 503, which used to exit 2. A plain exit 0 still doesn't prove login, access rules or payments are right. [Upgrading from 2.1](https://github.com/danoszz/penthera/blob/main/CHANGELOG.md#upgrading-from-21) has the full table.
 
