@@ -4,7 +4,7 @@
 
 ### Act on
 
-1. **Hardcoded Stripe secret key** [critical] in `src/lib/payments.js:14`. Why it matters: Anyone with this key can charge cards, refund payments and read your customers' payment details in your Stripe account. Fix: Roll the key in the Stripe Dashboard (Developers, API keys), then read it from a server-only environment variable. `secrets`
+1. **Hardcoded Stripe secret key** [critical] in `src/lib/payments.js:14`. `secrets`
 2. **Missing Content-Security-Policy header** [medium] in `https://shop.example/`. Why it matters: Without these headers, the browser has fewer guards against injected scripts and against your pages being framed by another site. Fix: Set the headers in next.config (headers()) or vercel.json, then check them on the live site. `headers`
 3. **Session cookie without Secure \| HttpOnly &lt;flags&gt;** [medium] in `https://shop.example/login`. Why it matters: A session cookie without these flags can be read by an injected script or sent over plain HTTP, and then someone can take over the session. Fix: Set Secure, HttpOnly and SameSite on the session cookie. `cookie`
 
@@ -13,7 +13,7 @@
 - **Possible IDOR on /api/orders/:id** [high, needs a person] in `https://shop.example/api/orders/1001`.
 - **DMARC policy is p=none** [low, pattern matched] in `https://shop.example`.
 
-Checked one and it is not a problem? `penthera memory suppress <fid> --reason "<why>"`. It sets the finding aside on this machine; add the fid and reason to penthera.suppress.json to share that with your team. Both apply to scans with --memory, and the report lists what they hide. The fid is next to each finding in the JSON and Markdown reports.
+Checked one and it is not a problem? `penthera memory suppress <fid> --reason "<why>"` sets it aside on this machine; penthera.suppress.json shares it. The fid is in the JSON report.
 
 ### Not checked
 
