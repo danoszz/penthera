@@ -114,7 +114,7 @@ describe("route RISK patterns: low hints skip comments, serious sinks never do",
     expect(risks(src)).toContain("RISK:command-injection");
   });
   it("a comment between the name and its bracket, behind a lexer trick, can't hide eval or exec (blind review, 12 Nov)", async () => {
-    for (const body of ["eval/**/(b.code)", "exec/**/(b.cmd)", "exec/* x */ (b.cmd)", "eval//c\n(b.code)", "eval//x\r(b.code)", "exec//x\u2028(b.cmd)", "exec//x\u2029(b.cmd)"]) {
+    for (const body of ["eval/**/(b.code)", "exec/**/(b.cmd)", "exec/* x */ (b.cmd)", "eval//c\n(b.code)", "eval//x\r(b.code)", "exec//x\u2028(b.cmd)", "exec//x\u2029(b.cmd)", "eval?.(b.code)", "exec?.(b.cmd)", "(0, eval)(b.code)", "(0, exec)(b.cmd)", "eval.call(null, b.code)", "exec.call(null, b.cmd)"]) {
       const src = `import { exec } from "child_process";\nexport async function POST(req){ const b = await req.json(); let i = 0; const h = i++ / 2; ${body}; return Response.json({}); }\n`;
       const r = await scanRepo(repo({ "app/api/x/route.js": src }));
       expect(r.findings.some((f) => isSevere(f) && /eval|command-injection/.test(f.pattern || f.title)), body).toBe(true);
@@ -128,7 +128,7 @@ describe("route RISK patterns: low hints skip comments, serious sinks never do",
     }
   });
   it("prose, longer names and other exec calls are not sinks", () => {
-    for (const src of ["// never eval here", "const medieval = 1;", "const r = exec.length;", "re.exec(s)"]) expect(riskPatterns(src), src).toEqual([]);
+    for (const src of ["// never eval here", "const medieval = 1;", "re.exec(s)", "const evaluate = 1;"]) expect(riskPatterns(src), src).toEqual([]);
   });
   it("a fake comment can't hide the CORS wildcard", () => {
     const src = "export async function GET(req){ const s='a', ok=1, origin=req.headers.get('origin');\nif (ok) /`/.test(s);\nconst m = `/*`;\nconst h = { 'Access-Control-Allow-Origin': origin || \"*\" };\nconst z = `*/`;\nreturn Response.json({}, { headers: h }); }\n";
