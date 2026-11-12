@@ -128,7 +128,8 @@ describe("route RISK patterns: low hints skip comments, serious sinks never do",
     }
   });
   it("prose, longer names and other exec calls are not sinks", () => {
-    for (const src of ["// never eval here", "const medieval = 1;", "re.exec(s)", "const evaluate = 1;"]) expect(riskPatterns(src), src).toEqual([]);
+    for (const src of ["// never eval here", "const medieval = 1;", "re.exec(s)", "const evaluate = 1;", "await retrieval(q)", "retrieval.search(q)", "respawn(w)", "execSyncLike()"]) expect(riskPatterns(src), src).toEqual([]);
+    for (const src of ["window.eval(x)", "cp.spawn('ls')", "eval(x)", "spawn('ls')"]) expect(riskPatterns(src).length, src).toBe(1);
   });
   it("a fake comment can't hide the CORS wildcard", () => {
     const src = "export async function GET(req){ const s='a', ok=1, origin=req.headers.get('origin');\nif (ok) /`/.test(s);\nconst m = `/*`;\nconst h = { 'Access-Control-Allow-Origin': origin || \"*\" };\nconst z = `*/`;\nreturn Response.json({}, { headers: h }); }\n";
