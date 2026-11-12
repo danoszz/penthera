@@ -175,6 +175,22 @@ not control scripts" ([how to fix it](https://penthera.org/csp-that-controls-scr
 A pattern that matches a whole file, such as `exec`, is one finding that lists the routes,
 not one per route.
 
+The low-severity route hints (`err.message`, an unguarded `JSON.parse`) read
+the code with comments blanked and strings kept, so a word in a comment is not
+a hint. The serious sinks (`eval`, `innerHTML`, `exec` and `spawn`) and the CORS
+wildcard match if either the raw text or the comment-blanked code has them, and
+on the raw text a sink's name followed by `(` or by a `/` that may open a
+comment (`exec/**/(`) counts, without parsing the comment: no trick that fakes
+or hides a comment can hide a call, and `el["innerHTML"] = x` matches.
+A word in a real comment can still raise one; that costs noise, never a missed
+sink. A route that runs a command is reported at the pattern's severity, fixed
+text included: an earlier "fixed text is only medium" rule was bypassed three
+ways in review, so it was removed.
+
+Two rate-limit findings are low, since they are hardening hints rather than
+proven bugs: a public route that calls a paid API with no rate limit, and a
+login route with none.
+
 Every finding has an id, `fid` in `-o` JSON, beside the title in the terminal report and
 in the Id column of the Markdown report's findings tables.
 The brief doesn't print it, but it says how to use it under its problems. Use it with `penthera memory suppress <fid> --reason "..." --severity <level>`, or add the fid and reason to `penthera.suppress.json` to share it with your team; both apply to scans with `--memory`.
@@ -321,7 +337,7 @@ Every exported async function in a file that starts with `"use server"`, and eve
 
 | Rule | Severity | What it means |
 |------|----------|---------------|
-| `server-action-no-auth` | high (medium when a root `middleware` file calls an auth function) | An action's body calls a database write (Prisma, Drizzle, Supabase, Mongoose, Kysely, Knex, Firestore, or raw `INSERT`, `UPDATE`, `DELETE`), sends mail or calls a payment API, and neither the body nor the wrapper it is passed to calls an auth function: `auth()`, `getServerSession`, `getUser`, `currentUser`, `verifySession`, `requireUser`, a name that starts with `require`, `verify`, `assert`, `ensure` or `check` and names auth, a session, a user, an admin or a permission, or anything imported from an auth module (next-auth, `@clerk/*`, `@supabase/ssr`, lucia, Kinde, WorkOS, Auth0, iron-session, better-auth, or a local file whose path names auth or a session). One finding per file, at `potential` confidence, listing the actions and what they write. |
+| `server-action-no-auth` | high (medium when a root `middleware` file calls an auth function) | An action's body calls a database write (Prisma, Drizzle, Supabase, Mongoose, Kysely, Knex, Firestore, or raw `INSERT`, `UPDATE`, `DELETE`), sends mail or calls a payment API, and neither the body nor the wrapper it is passed to calls an auth function: `auth()`, `getServerSession`, `getUser` (Supabase's `auth.getUser()` and `auth.getClaims()` too, but not `auth.getSession()`, which reads the cookie without verifying it), `currentUser`, `verifySession`, `requireUser`, a name that starts with `require`, `verify`, `assert`, `ensure` or `check` and names auth, a session, a user, an admin or a permission, or anything imported from an auth module (next-auth, `@clerk/*`, `@supabase/ssr`, lucia, Kinde, WorkOS, Auth0, iron-session, better-auth, or a local file whose path names auth or a session). One finding per file, at `potential` confidence, listing the actions and what they write. |
 
 **Limits.** A check in a helper this rule does not know by name, or in middleware whose matcher covers the page, is not seen, which is why the confidence is `potential`. Actions in `test`, `fixtures` and `public` folders are not read. A read-only action is never reported.
 
@@ -335,7 +351,7 @@ Five places where server code skips the one standard check that makes it safe. A
 |------|----------|---------------|
 | `webhook-signature-missing` | high; `likely`, or `potential` when the file reads a signature header | A webhook handler takes the request body and writes data, sends mail or calls a payment API, and nothing in the file verifies the provider's signature. A handler is a file whose path names a webhook, a route registered on a path with `webhook` or `/hooks`, or a file that handles Stripe events (`checkout.session.completed`, `invoice.paid`, ...). It also needs a provider import (stripe, svix, Clerk, Octokit, Lemon Squeezy, Paddle, Polar, Shopify, ...) or an event read (`event.type`). The check can be `constructEvent`, `createHmac`, `timingSafeEqual`, any verify or validate call, `stripe.events.retrieve`, or a webhook or signing secret by name. A file that reads a user session (`auth()`, `getServerSession`) is a settings route, not a provider's webhook. |
 | `jwt-decode-unverified` | high, `likely` | A file reads a token from the request (an `Authorization` header, a cookie, a `token` query) and decodes it with `jwt.decode`, `decodeJwt` or `jwtDecode`, and nothing in the file verifies a token (`jwt.verify`, `jwtVerify`, any verify call, `getToken`, `getServerSession`). A decode with a secret (jwt-simple, next-auth's `decode`) verifies, so it is not reported. |
-| `secret-compare-not-constant-time` | medium for an HMAC or a signature, low otherwise; `likely` | `===`, `!==`, `==` or `!=` with an HMAC on one side (`createHmac`, or a name assigned from it), or a value from the request (a header, the query, the body, a cookie) on one side and a secret on the other: an env secret (`process.env.CRON_SECRET`, also inside a template), a constant such as `API_KEY`, or a name such as `apiKey`, `signature`, `csrfToken`, `resetToken`. Lengths, types, literals, `typeof` and flags (`isSecret`) are not compared secrets. One finding per file, at the worst hit, listing the lines. |
+| `secret-compare-not-constant-time` | low; `likely`. A hardening hint: the finding says when one side is an HMAC or a signature | `===`, `!==`, `==` or `!=` with an HMAC on one side (`createHmac`, or a name assigned from it), or a value from the request (a header, the query, the body, a cookie) on one side and a secret on the other: an env secret (`process.env.CRON_SECRET`, also inside a template), a constant such as `API_KEY`, or a name such as `apiKey`, `signature`, `csrfToken`, `resetToken`. Lengths, types, literals, `typeof` and flags (`isSecret`) are not compared secrets. One finding per file, at the worst hit, listing the lines. |
 | `reset-token-no-expiry` | medium, `potential` | A file looks up a password-reset token (`resetToken`, `reset_password_token`, `password_reset_tokens`, ...) and writes a password, and has no expiry check anywhere: no expiry field or word, no date filter (`gt:`, `$gt`), no time comparison, no `now()`, no verify call. A token kept in Redis or another key-value store expires by its TTL there, so those files are not reported. |
 | `client-trusted-value` | high for an amount sent to a payment API (`likely`) or a role, plan or credit field from the request (`potential`); medium for the whole body written to a user record (`potential`) | A value from the request body, the query or a form goes, as the client sent it, into `amount` or `unit_amount` of a Stripe, PayPal, Razorpay, Mollie, Paddle or Lemon Squeezy create call, or into `role`, `plan`, `tier`, `credits`, `isAdmin`, `permissions` or `emailVerified` of a write to a user, account, profile, member, team or tenant record. Or the whole body is the data (`data: body`, `{ ...body }`, `User.findByIdAndUpdate(id, req.body)`, `new User(req.body)`). A body passed through a schema parse (`Schema.parse`) is not whole, since the parse keeps only the keys it names. Admin routes (an admin check by name, a role comparison, an `admin` path), refunds, `metadata`, and donations, tips and top-ups, where the payer picks the amount, are not reported. |
 

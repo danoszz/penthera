@@ -390,8 +390,9 @@ export async function scanRepo(repoPath, opts = {}) {
   // Flag public routes that call external services without rate limiting
   for (const route of result.boundaries.public || []) {
     if (route.externalCalls.length > 0 && !route.auth.includes("rate-limited")) {
+      // A hardening hint, not a proven vulnerability: low, so it never fails CI on its own.
       result.findings.push({
-        severity: "medium",
+        severity: "low",
         title: `Public endpoint without rate limiting: ${route.url}`,
         description: `This route's file calls ${route.externalCalls.join(", ")}, so abuse can cost you money.`,
         url: route.url,
@@ -449,6 +450,9 @@ export async function scanRepo(repoPath, opts = {}) {
         perFile.get(key).routes.add(route.url);
         continue;
       }
+      // No "fixed text" downgrade: three Vercel findings (12 Nov) showed request data
+      // reaching a command that a constant-command check certified, in route files
+      // the sink scan skips. A command in a route stays at its pattern's severity.
       const severity = sevMap[name] || "medium";
       // A sink finding stands in for the route's only if it says as much, or a real bug would lose its severity.
       if (sinks.has(key) && SEVERITIES.indexOf(sinks.get(key).severity) <= SEVERITIES.indexOf(severity)) {
