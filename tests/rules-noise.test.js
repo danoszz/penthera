@@ -1,12 +1,12 @@
 /**
- * Noise at the top of the agent brief (E9): four rules that put a hint or a
- * comment in "Act on", each fixed without dropping a real finding.
+ * Noise at the top of the agent brief (E9), fixed without dropping a real finding.
  *
  *   1. Supabase `auth.getSession()` reads the cookie unverified, so it is not an
  *      auth check (Server Actions, route records); `getUser()` and `getClaims()` are.
- *   2. The route RISK patterns read code with comments blanked and strings kept.
- *   3. A route-level command-injection whose every shell call runs fixed text is
- *      medium, potential; anything unresolved stays critical.
+ *   2. Low route hints skip comments; the serious sinks (and the CORS wildcard)
+ *      match the raw text, comment-tolerant, or the comment-blanked code.
+ *   3. A route-level command-injection stays critical: the fixed-text downgrade
+ *      was bypassed three times in review (Vercel, 12 Nov) and is gone.
  *   4. Rate-limit and timing-compare hints are low.
  */
 import { describe, it, expect, afterAll } from "vitest";
@@ -41,6 +41,15 @@ const ACTION = (check) => `"use server";\nimport { createClient } from "@/utils/
 const unchecked = (src) => uncheckedActions(src).hits.map((h) => h.name);
 
 describe("Supabase auth.getSession() is not an auth check", () => {
+  it("other spellings of Supabase's auth member are not auth either (blind review, 12 Nov)", () => {
+    // Known limit: supabase['auth'].getSession() and an alias (const a = supabase.auth) need data flow;
+    // the action check reads code with strings masked. Missed in honest code, not a bypass.
+    for (const call of ["supabase.auth!.getSession()", "(supabase.auth).getSession()", "supabase.auth?.getSession()"]) {
+      expect(unchecked(ACTION(`const { data } = await ${call};`)), call).toEqual(["addTodo"]);
+      expect(SESSION_CHECK_RE.test(call), call).toBe(false);
+    }
+    expect(SESSION_CHECK_RE.test("const session = await getSession();")).toBe(true);
+  });
   it("reports a Server Action that only calls supabase.auth.getSession()", () => {
     expect(unchecked(ACTION("const { data: { session } } = await supabase.auth.getSession();"))).toEqual(["addTodo"]);
   });
@@ -85,8 +94,9 @@ describe("Supabase auth.getSession() is not an auth check", () => {
 // ── 2. RISK patterns and comments ───────────────────────────────────────
 
 describe("route RISK patterns: low hints skip comments, serious sinks never do", () => {
-  it("a low hint in a comment is no finding", () => {
-    expect(risks("// never send err.message, origin || \"*\" here\nexport async function GET(){ return Response.json({ ok: 1 }) }\n")).toEqual([]);
+  it("a low hint in a comment is no finding; the CORS wildcard (medium) counts anyway", () => {
+    expect(risks("// never send err.message here\nexport async function GET(){ return Response.json({ ok: 1 }) }\n")).toEqual([]);
+    expect(risks("// origin || \"*\" is fine here\nexport async function GET(){}\n")).toEqual(["RISK:cors-wildcard"]);
     expect(risks("export async function POST(req){ const b = JSON.parse(await req.text()); } // add .catch later\n")).toEqual(["RISK:json-parse-unguarded"]);
   });
   it("eval, innerHTML and exec match the raw text, comments included (Vercel 01M77P03MJR568HXT0BKQZ1ZTE)", () => {
@@ -102,6 +112,17 @@ describe("route RISK patterns: low hints skip comments, serious sinks never do",
   it("a lexer trick that fakes a comment can't hide an exec: a quote-bearing regex after a block, then a continued string", () => {
     const src = "import { exec } from 'child_process';\nif (a) {}\n/[\"']/.test(s);\nconst t = 'x\\\n/* ';\nexport async function POST(req) { exec((await req.json()).cmd); }\n";
     expect(risks(src)).toContain("RISK:command-injection");
+  });
+  it("a comment between the name and its bracket, behind a lexer trick, can't hide eval or exec (blind review, 12 Nov)", async () => {
+    for (const body of ["eval/**/(b.code)", "exec/**/(b.cmd)", "exec/* x */ (b.cmd)", "eval//c\n(b.code)"]) {
+      const src = `import { exec } from "child_process";\nexport async function POST(req){ const b = await req.json(); let i = 0; const h = i++ / 2; ${body}; return Response.json({}); }\n`;
+      const r = await scanRepo(repo({ "app/api/x/route.js": src }));
+      expect(r.findings.some((f) => isSevere(f) && /eval|command-injection/.test(f.pattern || f.title)), body).toBe(true);
+    }
+  });
+  it("a fake comment can't hide the CORS wildcard", () => {
+    const src = "export async function GET(req){ const s='a', ok=1, origin=req.headers.get('origin');\nif (ok) /`/.test(s);\nconst m = `/*`;\nconst h = { 'Access-Control-Allow-Origin': origin || \"*\" };\nconst z = `*/`;\nreturn Response.json({}, { headers: h }); }\n";
+    expect(risks(src)).toContain("RISK:cors-wildcard");
   });
   it("end of input, and linear on a file full of comments", () => {
     expect(risks("")).toEqual([]);

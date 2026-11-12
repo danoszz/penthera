@@ -175,11 +175,13 @@ not control scripts" ([how to fix it](https://penthera.org/csp-that-controls-scr
 A pattern that matches a whole file, such as `exec`, is one finding that lists the routes,
 not one per route.
 
-The low-severity route hints (`err.message`, `origin || "*"`, an unguarded
-`JSON.parse`) read the code with comments blanked and strings kept, so a word
-in a comment is not a hint. The serious sinks (`eval`, `innerHTML`, `exec` and
-`spawn`) match if either the raw text or the comment-blanked code has them: no
-trick that fakes a comment can hide a call, and `el["innerHTML"] = x` matches.
+The low-severity route hints (`err.message`, an unguarded `JSON.parse`) read
+the code with comments blanked and strings kept, so a word in a comment is not
+a hint. The serious sinks (`eval`, `innerHTML`, `exec` and `spawn`) and the CORS
+wildcard match if either the raw text or the comment-blanked code has them, and
+on the raw text a comment between a sink's name and its bracket
+(`exec/**/(`) still matches: no trick that fakes or hides a comment can hide a
+call, and `el["innerHTML"] = x` matches.
 A word in a real comment can still raise one; that costs noise, never a missed
 sink. A route that runs a command is reported at the pattern's severity, fixed
 text included: an earlier "fixed text is only medium" rule was bypassed three
