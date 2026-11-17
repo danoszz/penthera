@@ -15,7 +15,7 @@
 | Scan failed (exception) | Network timeout, parse error | Retry with `--verbose`; increase `--timeout` |
 
 ```bash
-penthera https://myapp.com --verbose --timeout 30000
+penthera https://example.com --verbose --timeout 30000
 ```
 
 ## Node.js not found or wrong version
@@ -75,7 +75,7 @@ behind a login.
 ```bash
 ls reports/previous.json
 # Or run initial scan first:
-penthera https://myapp.com -o reports/previous.json
+penthera https://example.com -o reports/previous.json
 ```
 
 ## SARIF upload fails in CI

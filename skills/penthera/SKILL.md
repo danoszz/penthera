@@ -429,10 +429,10 @@ Actions:
 
 **Example 2: Staging before deploy**
 
-User: "Audit staging.myapp.com before we ship"
+User: "Audit staging.example.com before we ship"
 
 Actions:
-1. Ask: "Do you own or have written authorization for staging.myapp.com?"
+1. Ask: "Do you own or have written authorization for staging.example.com?"
 2. On confirmation, run standard profile scan with JSON + markdown output.
 3. List critical/high items first with remediation steps.
 

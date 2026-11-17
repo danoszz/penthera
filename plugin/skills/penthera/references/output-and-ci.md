@@ -11,7 +11,7 @@
 | SARIF | `--sarif file.sarif` | GitHub Security / Code Scanning |
 
 ```bash
-penthera https://myapp.com -o reports/scan.json
+penthera https://example.com -o reports/scan.json
 # → reports/scan.json  (machine-readable)
 # → reports/scan.md    (human-readable)
 ```
@@ -40,7 +40,7 @@ Use exit codes in CI to fail builds on severe findings:
 Compare current scan against a previous JSON report:
 
 ```bash
-penthera https://myapp.com -o reports/scan.json --baseline reports/previous.json
+penthera https://example.com -o reports/scan.json --baseline reports/previous.json
 ```
 
 Output includes: new findings count, resolved count, unchanged count. Use for weekly regression checks.

@@ -3,9 +3,10 @@
 # Penthera installer — clones the repo, links the CLI, and installs the
 # Agent Skill into Cursor and Claude Code if it finds them.
 #
-#   curl -fsSL https://raw.githubusercontent.com/danoszz/penthera/main/install.sh | bash
+#   git clone https://github.com/danoszz/penthera.git ~/.penthera && bash ~/.penthera/install.sh
 #
-# This script is intentionally short and readable — review it before running.
+# This script is intentionally short and readable. Read it before you run it;
+# do not pipe it from the network into a shell.
 # It uses no sudo, makes no network calls beyond `git clone` + `npm install`,
 # and only writes to ~/.penthera and your agent skill folders.
 #
