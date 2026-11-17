@@ -25,6 +25,7 @@ import { parse as parseYaml } from "../../lib/vendor/yaml/index.js";
 import { startMockServer } from "../../tests/fixtures/mock-server.js";
 import { mdCell } from "../../src/report/md-escape.js";
 import { ACTION_PIN } from "../../src/cli/onboarding.js";
+import { maliciousAgentsFixture } from "../../tests/fixtures/agents/malicious.js";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const AUDIT_DIR = join(ROOT, "audit");
@@ -459,7 +460,7 @@ async function gateSmoke() {
     }
 
     // agents: a malicious and a clean fixture
-    await check("penthera agents <malicious fixture>", "penthera", ["agents", "tests/fixtures/agents/malicious", "--json"],
+    await check("penthera agents <malicious fixture>", "penthera", ["agents", maliciousAgentsFixture(), "--json"],
       { codes: [1], test: (r) => json(r).agents.grade === "F" || `grade ${json(r).agents.grade}, expected F` });
     await check("penthera agents <clean fixture>", "penthera", ["agents", "tests/fixtures/agents/clean", "--json"],
       { codes: [0], test: (r) => json(r).agents.grade === "A" || `grade ${json(r).agents.grade}, expected A` });

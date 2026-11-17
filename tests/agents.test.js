@@ -25,8 +25,10 @@ import { canonicalJson, diffLock, computeLockEntries } from "../lib/agents/lock.
 import { scanAgents, gradeFindings, toFinding } from "../lib/agents/index.js";
 import { RULE_OWASP, OWASP_NAMES } from "../lib/agents/owasp.js";
 import { cpuMs } from "./fixtures/cpu-time.js";
+import { maliciousAgentsFixture } from "./fixtures/agents/malicious.js";
 
 const FIXTURES = resolve("tests/fixtures/agents");
+const MALICIOUS_DIR = maliciousAgentsFixture();
 const BIN = resolve("bin/penthera.js");
 const tmpRoots = [];
 function tmp() {
@@ -556,7 +558,7 @@ const EXPECTED_MALICIOUS = [
 
 describe("fixtures", () => {
   it("malicious fixture reports every expected rule and grades F", async () => {
-    const r = await scanAgents(join(FIXTURES, "malicious"));
+    const r = await scanAgents(MALICIOUS_DIR);
     const found = ids(r.findings);
     for (const id of EXPECTED_MALICIOUS) expect(found, id).toContain(id);
     expect(r.agents.grade).toBe("F");
@@ -608,7 +610,7 @@ describe("CLI: penthera agents", () => {
   };
 
   it("reports the malicious fixture and exits 1", () => {
-    const { code, stdout } = cli(["agents", join(FIXTURES, "malicious"), "--json"]);
+    const { code, stdout } = cli(["agents", MALICIOUS_DIR, "--json"]);
     expect(code).toBe(1);
     const report = JSON.parse(stdout);
     expect(report.mode).toBe("agents");
@@ -624,7 +626,7 @@ describe("CLI: penthera agents", () => {
 
   it("writes SARIF, Markdown and JSON with the existing reporters", () => {
     const out = tmp();
-    cli(["agents", join(FIXTURES, "malicious"), "--sarif", join(out, "a.sarif"), "-o", join(out, "a.json")]);
+    cli(["agents", MALICIOUS_DIR, "--sarif", join(out, "a.sarif"), "-o", join(out, "a.json")]);
     const sarif = JSON.parse(readFileSync(join(out, "a.sarif"), "utf-8"));
     const ruleIds = sarif.runs[0].tool.driver.rules.map((r) => r.id);
     expect(ruleIds).toContain("agents/hook-exec");

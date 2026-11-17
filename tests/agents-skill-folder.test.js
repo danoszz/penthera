@@ -13,8 +13,9 @@ import { discoverAgentConfig } from "../lib/agents/discover.js";
 import { buildBrief, VERDICTS } from "../src/report/brief.js";
 import { confinePath, ToolInputError } from "../src/mcp/workspace.js";
 import { startServer, structured } from "./helpers/mcp-client.js";
+import { maliciousAgentsFixture } from "./fixtures/agents/malicious.js";
 
-const MALICIOUS = resolve("tests/fixtures/agents/malicious/skills/helper");
+const MALICIOUS = join(maliciousAgentsFixture(), "skills/helper");
 const CLEAN = resolve("tests/fixtures/agents/clean/skills/release-notes");
 const BIN = resolve("bin/penthera.js");
 const j = (...p) => p.join("");

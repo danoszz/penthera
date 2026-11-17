@@ -17,6 +17,7 @@ import { findSecretsInText, isSecretScanTarget } from "../lib/whitebox/secrets.j
 import { scanPackage } from "../lib/deps/capabilities.js";
 import { MapSource } from "../lib/deps/source.js";
 import { packageFiles } from "./fixtures/deps/build.js";
+import { maliciousAgentsFixture } from "./fixtures/agents/malicious.js";
 import { BUILT_IN_TEMPLATES, executeTemplate } from "../lib/templates.js";
 import { startMockServer } from "./fixtures/mock-server.js";
 import { evidenceFromRepo, evidenceFromResponse } from "../lib/advisories/evidence.js";
@@ -58,7 +59,10 @@ beforeAll(async () => {
   inventory = await ruleInventory();
 
   // Agent config: the fixture folders and the corpus cases.
-  const agentDirs = readdirSync(join(ROOT, "tests/fixtures/agents")).map((d) => join(ROOT, "tests/fixtures/agents", d));
+  const agentDirs = readdirSync(join(ROOT, "tests/fixtures/agents"), { withFileTypes: true })
+    .filter((d) => d.isDirectory())
+    .map((d) => join(ROOT, "tests/fixtures/agents", d.name));
+  agentDirs.push(maliciousAgentsFixture());
   for (const c of AGENT_CASES) agentDirs.push(materialize(c.files));
   for (const dir of agentDirs) {
     for (const f of (await scanAgents(dir, { home: false })).findings) fired.add(f.templateId);
