@@ -9,10 +9,12 @@
  *
  * These checks fail when a tracked file brings that back.
  */
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, afterAll } from "vitest";
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { writeMaliciousAgents } from "./fixtures/agents/malicious.js";
 
 const ROOT = join(import.meta.dirname, "..");
 const ls = spawnSync("git", ["ls-files", "-z"], { cwd: ROOT, encoding: "utf-8", maxBuffer: 64 * 1024 * 1024 });
@@ -68,5 +70,47 @@ describe.skipIf(tracked.length === 0)("the tree holds nothing a registry scanner
 
   it("links the docs-site skill copy to a release tag, not a moving branch", () => {
     expect(read("docs/skill.md")).not.toMatch(/github\.com\/danoszz\/penthera\/blob\/main\/skills\/penthera\//);
+  });
+});
+
+// Vercel finding 01M7MYJAJ94J5ND1Y6925DANQW: the fixture writer followed links
+// someone planted in a shared, predictable directory and overwrote their targets.
+describe("the malicious fixture writer never writes through a planted link", () => {
+  const dirs = [];
+  const tmp = () => { const d = realpathSync(mkdtempSync(join(tmpdir(), "penthera-bait-"))); dirs.push(d); return d; };
+  afterAll(() => { for (const d of dirs) rmSync(d, { recursive: true, force: true }); });
+
+  it("refuses a directory that already holds a link where a fixture file goes, and leaves the target alone", () => {
+    const work = tmp();
+    const victim = join(work, "victim.txt");
+    writeFileSync(victim, "keep me");
+    const demo = join(work, "demo");
+    mkdirSync(demo);
+    symlinkSync(victim, join(demo, "AGENTS.md"));
+    expect(() => writeMaliciousAgents(demo)).toThrow(/not empty/);
+    expect(readFileSync(victim, "utf-8")).toBe("keep me");
+  });
+
+  it("refuses a target that is itself a link to another directory", () => {
+    const work = tmp();
+    const elsewhere = join(work, "elsewhere");
+    mkdirSync(elsewhere);
+    symlinkSync(elsewhere, join(work, "demo"));
+    expect(() => writeMaliciousAgents(join(work, "demo"))).toThrow(/symlink/);
+    expect(readdirSync(elsewhere)).toEqual([]);
+  });
+
+  it("writes into a new directory, and will not write over its own output", () => {
+    const demo = join(tmp(), "demo");
+    const root = writeMaliciousAgents(demo);
+    expect(readdirSync(root).sort()).toEqual([".claude", ".claude-plugin", ".mcp.json", "AGENTS.md", "skills"]);
+    expect(() => writeMaliciousAgents(demo)).toThrow(/not empty/);
+  });
+
+  it("keeps the demo tapes in a private mktemp folder, not a fixed shared path", () => {
+    for (const tape of ["assets/tapes/agents.tape", "assets/tapes/deps-diff.tape"]) {
+      expect(read(tape), tape).toContain("mktemp -d");
+      expect(read(tape), tape).not.toMatch(/\/tmp\/penthera-demo|TMPDIR:-/);
+    }
   });
 });

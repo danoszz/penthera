@@ -17,3 +17,7 @@ section: Security
 - **The skill doc no longer shows an installer piped into a shell.** Install
   with `npx skills add danoszz/penthera`. `install.sh` stays for a cloned
   repo: read it, then run it.
+- **The demo recordings use a private temp folder.** The tapes wrote their
+  fixtures to a fixed path under `/tmp`, where another user on a shared machine
+  could plant links first. They now use `mktemp -d`, and the fixture writer
+  refuses a directory that is a link or is not empty.

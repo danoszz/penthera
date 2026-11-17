@@ -10,15 +10,15 @@
  * only when a test, the audit or the benchmark needs them. Every URL in it
  * uses the reserved `.invalid` top-level domain. Nothing in it is ever run.
  *
- *   node tests/fixtures/agents/malicious.js /tmp/agents-demo
- *   node bin/penthera.js agents /tmp/agents-demo
+ *   dir=$(node tests/fixtures/agents/malicious.js)   # a new private temp folder
+ *   node bin/penthera.js agents "$dir"
  *
  * To change the fixture: write it out, edit the files, then repack with
  * `node tests/fixtures/agents/malicious.js --pack <dir>` and paste the output
  * over PACK below.
  */
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, statSync, writeFileSync } from "node:fs";
-import { dirname, join, relative, resolve } from "node:path";
+import { lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, statSync, writeFileSync } from "node:fs";
+import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { tmpdir } from "node:os";
 import { gunzipSync, gzipSync } from "node:zlib";
 import { fileURLToPath } from "node:url";
@@ -56,14 +56,27 @@ export function maliciousAgentsFiles() {
   return JSON.parse(gunzipSync(Buffer.from(PACK, "base64")).toString("utf-8"));
 }
 
-/** Write the fixture into `dir` (created if missing) and return `dir`. */
+/**
+ * Write the fixture into `dir` and return its real path.
+ *
+ * `dir` must be new or empty, and must not be a symlink. Every file is created
+ * exclusively, so a link or file someone planted there is never followed or
+ * overwritten: the write fails instead. Prefer maliciousAgentsFixture(), which
+ * makes its own private directory.
+ */
 export function writeMaliciousAgents(dir) {
+  mkdirSync(dir, { recursive: true });
+  if (lstatSync(dir).isSymbolicLink()) throw new Error(`${dir} is a symlink; refusing to write the fixture through it`);
+  if (readdirSync(dir).length) throw new Error(`${dir} is not empty; give the fixture a new directory`);
+  const root = realpathSync(dir);
   for (const [rel, text] of Object.entries(maliciousAgentsFiles())) {
-    const file = join(dir, rel);
+    const file = join(root, rel);
     mkdirSync(dirname(file), { recursive: true });
-    writeFileSync(file, text);
+    const parent = realpathSync(dirname(file));
+    if (parent !== root && !parent.startsWith(root + sep)) throw new Error(`${rel} would be written outside ${root}`);
+    writeFileSync(join(parent, basename(file)), text, { flag: "wx" });
   }
-  return dir;
+  return root;
 }
 
 /** Write the fixture into a fresh temp directory and return its real path. */
