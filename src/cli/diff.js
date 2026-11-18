@@ -14,8 +14,8 @@
  * so <ref> is what your clone has.
  */
 import { parseArgs } from "node:util";
-import { existsSync, mkdirSync, realpathSync, statSync } from "node:fs";
-import { join, relative, resolve } from "node:path";
+import { existsSync, lstatSync, mkdirSync, realpathSync } from "node:fs";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { spawnSync } from "node:child_process";
 import { git, gitToplevel } from "../../lib/git.js";
 import { withTempDir } from "../../lib/tmp.js";
@@ -91,6 +91,31 @@ function extractTree(top, sha, dir) {
 }
 
 /**
+ * The folder `rel` inside the unpacked `tree`, or null when it is not a real
+ * folder there. The tree comes from history, which the reviewer does not
+ * control: a commit can hold a symlink where today's folder stands, pointing
+ * anywhere on this machine. So no part of the path may be a link, and the
+ * resolved folder must still be inside the tree. Without this the scan read
+ * the link's target and put what it found there in the report.
+ */
+export function folderInTree(tree, rel) {
+  if (isAbsolute(rel)) return null;
+  // The platform's own separator: on macOS and Linux a backslash is part of a folder's name.
+  const parts = rel.split(sep).filter(Boolean);
+  if (parts.includes("..")) return null;
+  let at = tree;
+  for (const part of parts) {
+    at = join(at, part);
+    const st = lstatSync(at, { throwIfNoEntry: false });
+    if (!st || st.isSymbolicLink() || !st.isDirectory()) return null;
+  }
+  let real, root;
+  try { real = realpathSync(at); root = realpathSync(tree); } catch { return null; }
+  if (real !== root && !real.startsWith(root + sep)) return null;
+  return at;
+}
+
+/**
  * Compare a scan of `root` with a scan of the merge-base. Returns the result
  * (the current scan with only the new findings) and the counts.
  */
@@ -101,8 +126,9 @@ export async function diffScan(root, { ref = null, onPhase = () => {}, scan = sc
   if (base.error) return base;
   const current = await scan(root, { onPhase });
   const before = await withTempDir("penthera-diff-", async (dir) => {
-    const at = join(extractTree(top, base.sha, dir), relative(top, realpathSync(root)));
-    if (!existsSync(at) || !statSync(at).isDirectory()) return { findings: [] };
+    const at = folderInTree(extractTree(top, base.sha, dir), relative(top, realpathSync(root)));
+    // No such folder at the merge-base (or a link stood there): nothing to compare, so every finding counts as new.
+    if (!at) return { findings: [] };
     return scan(at, { onPhase: () => {} });
   });
   // A file git ignores is on no branch: a local .env is not something this branch added.
