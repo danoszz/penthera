@@ -57,17 +57,17 @@ API route discovery (Next.js, Express, Hono, Fastify), trust-boundary mapping, c
 
 ```bash
 # Safe default
-penthera https://myapp.com --profile standard
+penthera https://example.com --profile standard
 
 # Fast smoke test
 penthera http://localhost:3000 --profile quick -o reports/scan.json
 
 # Maximum coverage (confirm authorization first)
-penthera https://staging.myapp.com --profile deep -o reports/scan.json
+penthera https://staging.example.com --profile deep -o reports/scan.json
 
 # Repo secrets only
 penthera --repo . -o reports/repo-scan.json
 
 # Combined with Nuclei templates
-penthera https://myapp.com --nuclei ~/nuclei-templates/http -o reports/scan.json
+penthera https://example.com --nuclei ~/nuclei-templates/http -o reports/scan.json
 ```

@@ -38,6 +38,7 @@ import { siteFooter, siteRail, smart, stickers, footGroups } from "./frame.mjs";
 import { benchmarkHtml, benchmarkMarkdown, benchmarkViews, cardFor, fieldTools, hubHtml, hubMarkdown } from "./benchmarks.mjs";
 import { cardRows, rowTag } from "./check/card.js";
 import { featured, researchEntries, researchHtml, researchMarkdown } from "./research.mjs";
+import { maliciousAgentsFiles } from "../tests/fixtures/agents/malicious.js";
 
 const SITE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(SITE, "..");
@@ -76,8 +77,8 @@ function signatures() {
 
 /** The "Load an example" files: the malicious agents fixture the test suite uses. */
 function examples() {
-  const dir = join(ROOT, "tests", "fixtures", "agents", "malicious");
-  return [".mcp.json", ".claude/settings.json", "AGENTS.md"].map((p) => ({ path: p, text: readFileSync(join(dir, p), "utf8") }));
+  const files = maliciousAgentsFiles();
+  return [".mcp.json", ".claude/settings.json", "AGENTS.md"].map((p) => ({ path: p, text: files[p] }));
 }
 
 // ── Bundle ──────────────────────────────────────────────────────────────────

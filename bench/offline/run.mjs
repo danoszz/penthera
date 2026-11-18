@@ -18,6 +18,7 @@ import { fileURLToPath } from "node:url";
 // § 6, as amended on 29 Oct 2026 (§ 9): an exact list of volatile key paths.
 // The registered regex is still applied and reported next to it.
 import { normalize, replaceTokens, diffPaths } from "./normalize.mjs";
+import { maliciousAgentsFixture } from "../../tests/fixtures/agents/malicious.js";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const BIN = join(ROOT, "bin", "penthera.js");
@@ -29,7 +30,7 @@ const PILOT = args.includes("--pilot");
 
 const TARGETS = {
   T1: join(ROOT, "tests", "fixtures", "repo-scan", "express-routes"),
-  T2: join(ROOT, "tests", "fixtures", "agents", "malicious"),
+  T2: maliciousAgentsFixture(),
   T3: ROOT,
 };
 

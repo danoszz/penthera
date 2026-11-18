@@ -5,6 +5,7 @@ import { dirname, join, relative } from "node:path";
 import { VERDICTS } from "../src/report/brief.js";
 import { INSTRUCTIONS } from "../src/mcp/server.js";
 import { REPLY_CONTRACT } from "../src/mcp/results.js";
+import { skillDocsCopy, skillLinkBase } from "../scripts/skill-docs-copy.mjs";
 
 const ROOT = join(import.meta.dirname, "..");
 
@@ -68,9 +69,9 @@ describe("agents know every verdict", () => {
 // the docs. It must be our real skill, with only its relative links made
 // absolute, so it carries the authorization gate and the current pin.
 describe("the docs site's copy of the skill", () => {
-  it("is skills/penthera/SKILL.md with absolute links to references and scripts", () => {
-    const base = "https://github.com/danoszz/penthera/blob/main/skills/penthera/";
-    const docs = readFileSync(join(ROOT, "docs/skill.md"), "utf-8").replaceAll(`](${base}`, "](");
-    expect(docs).toBe(readFileSync(join(ROOT, "skills/penthera/SKILL.md"), "utf-8"));
+  it("is skills/penthera/SKILL.md with absolute links, pinned to the release tag the skill names", () => {
+    const skill = readFileSync(join(ROOT, "skills/penthera/SKILL.md"), "utf-8");
+    expect(skillLinkBase(skill)).toMatch(/\/blob\/v\d+\.\d+\.\d+\/skills\/penthera\/$/);
+    expect(readFileSync(join(ROOT, "docs/skill.md"), "utf-8"), "run: node scripts/skill-docs-copy.mjs").toBe(skillDocsCopy(skill));
   });
 });

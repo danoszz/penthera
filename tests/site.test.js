@@ -17,6 +17,7 @@ import { COUNTS, totalRules } from "../scripts/docs-numbers.mjs";
 import { activePacks } from "../lib/rules/index.js";
 import { serve, headersFor } from "../site/serve.mjs";
 import { buildFixtures } from "./fixtures/deps/build.js";
+import { maliciousAgentsFixture } from "./fixtures/agents/malicious.js";
 import { scanAgents } from "../lib/agents/index.js";
 import { scanSecrets } from "../lib/whitebox/secrets.js";
 import { scanDeps } from "../lib/deps/index.js";
@@ -911,7 +912,7 @@ describe("site headers", () => {
 describe("browser check, against the CLI", () => {
   for (const name of ["malicious", "clean"]) {
     it(`agents fixture (${name}): the same findings as penthera agents and the secret scan`, async () => {
-      const files = pageFiles(join(ROOT, "tests", "fixtures", "agents", name));
+      const files = pageFiles(name === "malicious" ? maliciousAgentsFixture() : join(ROOT, "tests", "fixtures", "agents", name));
       expect(files.length).toBeGreaterThan(0);
       const page = await engine.check(files);
       const d = cliFolder(files);

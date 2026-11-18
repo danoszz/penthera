@@ -5,7 +5,7 @@
   "installCommand": "npm ci --ignore-scripts --no-audit --no-fund",
   "buildCommand": "node site/build.mjs",
   "outputDirectory": "site/dist",
-  "ignoreCommand": "[ \"$VERCEL_ENV\" != production ] || git diff --quiet HEAD^ HEAD -- site api lib src/ui/static assets README.md docs CHANGELOG.md AGENTS.md bench blog tests/fixtures/agents/malicious package.json package-lock.json vercel.json server.json",
+  "ignoreCommand": "[ \"$VERCEL_ENV\" != production ] || git diff --quiet HEAD^ HEAD -- site api lib src/ui/static assets README.md docs CHANGELOG.md AGENTS.md bench blog tests/fixtures/agents/malicious.js package.json package-lock.json vercel.json server.json",
   "cleanUrls": true,
   "trailingSlash": false,
   "redirects": [

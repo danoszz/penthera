@@ -19,9 +19,6 @@ summarize findings, so you can describe what you want in plain words.
 # Cross-agent, frictionless
 npx skills add danoszz/penthera
 
-# Or the one-line installer (also links the CLI)
-curl -fsSL https://raw.githubusercontent.com/danoszz/penthera/main/install.sh | bash
-
 # Or copy into a single project for team sharing
 cp -r skills/penthera .cursor/skills/penthera     # Cursor
 cp -r skills/penthera .claude/skills/penthera     # Claude Code
