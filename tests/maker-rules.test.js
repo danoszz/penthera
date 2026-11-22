@@ -224,9 +224,9 @@ describe("server-action-no-auth: findings", () => {
     const found = scanServerActions(repo({ "app/actions.ts": ACTION_FILES.plainDelete + ACTION_FILES.exportList.replace('"use server";\n', ""), "app/ok.ts": ACTION_FILES.authed }));
     expect(found.map((f) => [f.templateId, f.severity, f.confidence, f.file, f.actions])).toEqual([["server-action-no-auth", "high", "potential", "app/actions.ts", ["deleteUser", "wipe"]]]);
   });
-  it("is medium when a root middleware calls an auth function", () => {
+  it("stays high when a root middleware calls an auth function, and says so (Mythos A3)", () => {
     const found = scanServerActions(repo({ "app/actions.ts": ACTION_FILES.plainDelete, "middleware.ts": "import { auth } from \"@/auth\";\nexport default auth((req) => {});\n" }));
-    expect(found.map((f) => f.severity)).toEqual(["medium"]);
+    expect(found.map((f) => f.severity)).toEqual(["high"]);
     expect(found[0].description).toContain("middleware.ts");
   });
   it("names a linked-out action file and does not pass it", () => {
