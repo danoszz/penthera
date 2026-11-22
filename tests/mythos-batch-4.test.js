@@ -74,6 +74,11 @@ describe("only real Server Actions: helpers, stray directives and strings are no
 });
 
 describe("crafted input stays linear", () => {
+  it("a file of `/*` and many `*//*` before the directive (CodeQL on PR 338)", () => {
+    const src = "/*" + "*//*".repeat(1000) + '\n"use server";\n' + CP + "export async function run(cmd) { exec(cmd) }";
+    expect(ms(() => findSinks(src))).toBeLessThan(1000);
+    expect(tainted('/* header */\n// note\n"use server";\n' + CP + "export async function run(cmd) { exec(cmd) }")).toBe(true);
+  });
   it("many bindings, aliases and action heads", () => {
     for (const filler of ['import { runInNewContext as r } from "vm";\n', "const e = eval;\n", '"use server";\nexport async function a(x, { y }, ...z) {}\n', "Function(".repeat(1) + "x);\n"]) {
       const src = filler.repeat(Math.ceil(2e6 / filler.length));
