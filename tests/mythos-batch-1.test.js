@@ -104,11 +104,13 @@ describe("A5: a download that reaches a shell later on the line", () => {
     // The doubling method (checklist row 15): 4x the input may cost about 4x the time, never 16x.
     // An absolute limit alone failed on a loaded CI runner (3.7 s) while the growth stayed linear.
     for (const f of ["curl -o f ", "curl -o a && sh b; ", "curl x | ", "curl -o a x\n", "$(curl ", "a || "]) {
-      // Best of three: one sample flaked on a loaded Node 22 runner (9.5x once, ~4.5x locally and on main).
-      const best = (n) => { const t = f.repeat(Math.ceil(n / f.length)); return Math.min(ms(() => findExecPatterns(t)), ms(() => findExecPatterns(t)), ms(() => findExecPatterns(t))); };
-      const small = best(1.25e6);
-      const big = best(5e6);
-      expect(big).toBeLessThan(8 * small + 100);
+      // The small size takes the best of three (cheap); the big one runs once to stay inside CI's
+      // 20 s timeout. 4x the input may cost up to 12x: linear is ~4.5x, quadratic 16x. One sample
+      // of each flaked at 9.5x on a loaded Node 22 runner.
+      const t = (n) => { const s = f.repeat(Math.ceil(n / f.length)); return ms(() => findExecPatterns(s)); };
+      const small = Math.min(t(1.25e6), t(1.25e6), t(1.25e6));
+      const big = t(5e6);
+      expect(big).toBeLessThan(12 * small + 100);
       expect(big).toBeLessThan(12000);
     }
   });
