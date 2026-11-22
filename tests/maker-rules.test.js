@@ -205,7 +205,8 @@ describe("server-action-no-auth: one file", () => {
   // `from` once per alias. Each statement is now consumed once.
   it("reads one import once, however many of its names are spelled import", () => {
     const gen = (aliases) => `'use server';\nimport { auth, ${Array.from({ length: aliases }, (_, k) => `import as i${k}`).join(", ")} } from /*${"x".repeat(400000)}*/ "@/auth";\nexport async function act(id){ await auth(); await db.delete(id); }\nexport async function bad(id){ await db.delete(id); }\n`;
-    const ms = (n) => { const src = gen(n); uncheckedActions(src); const s = process.hrtime.bigint(); for (let k = 0; k < 3; k++) uncheckedActions(src); return Number(process.hrtime.bigint() - s) / 1e6; };
+    // Best of five: one sample made the ratio flaky on CI (24.5 once, ~8 locally and on main).
+    const ms = (n) => { const src = gen(n); uncheckedActions(src); let best = Infinity; for (let r = 0; r < 5; r++) { const s = process.hrtime.bigint(); for (let k = 0; k < 3; k++) uncheckedActions(src); best = Math.min(best, Number(process.hrtime.bigint() - s) / 1e6); } return best; };
     const one = Math.max(ms(1), 0.5);
     const many = ms(200); // the old walk reread the comment once per alias: ~10x here, now ~1x
     expect(many / one, `200 aliases took ${(many / one).toFixed(1)}x one alias`).toBeLessThan(3);
@@ -329,7 +330,8 @@ describe("maker checks stay linear on crafted input", () => {
 describe("maker checks: CommonJS imports and huge lockfiles", () => {
   it("unfinished destructurings after an action stay linear", () => {
     const gen = (n) => `'use server';\nexport async function act(id){ await db.delete(id); }\n${"const { a, b\n".repeat(n)}const auth = require("next-auth");\n`;
-    const ms = (n) => { const src = gen(n); uncheckedActions(src); const s = process.hrtime.bigint(); for (let k = 0; k < 3; k++) uncheckedActions(src); return Number(process.hrtime.bigint() - s) / 1e6; };
+    // Best of five: one sample made the ratio flaky on CI (24.5 once, ~8 locally and on main).
+    const ms = (n) => { const src = gen(n); uncheckedActions(src); let best = Infinity; for (let r = 0; r < 5; r++) { const s = process.hrtime.bigint(); for (let k = 0; k < 3; k++) uncheckedActions(src); best = Math.min(best, Number(process.hrtime.bigint() - s) / 1e6); } return best; };
     const ratio = ms(32000) / Math.max(ms(4000), 0.5);
     expect(ratio, `grew ${ratio.toFixed(1)}x over 8x the input`).toBeLessThan(24);
   });
@@ -353,7 +355,8 @@ describe("maker checks: CommonJS imports and huge lockfiles", () => {
 describe("Server Actions: export lists", () => {
   it("many unterminated export lists stay linear, and the file is marked incomplete", () => {
     const gen = (n) => `'use server';\nasync function act(id){ await db.delete(id); }\n${"export { act, b\n".repeat(n)}`;
-    const ms = (n) => { const src = gen(n); uncheckedActions(src); const s = process.hrtime.bigint(); for (let k = 0; k < 3; k++) uncheckedActions(src); return Number(process.hrtime.bigint() - s) / 1e6; };
+    // Best of five: one sample made the ratio flaky on CI (24.5 once, ~8 locally and on main).
+    const ms = (n) => { const src = gen(n); uncheckedActions(src); let best = Infinity; for (let r = 0; r < 5; r++) { const s = process.hrtime.bigint(); for (let k = 0; k < 3; k++) uncheckedActions(src); best = Math.min(best, Number(process.hrtime.bigint() - s) / 1e6); } return best; };
     const ratio = ms(32000) / Math.max(ms(4000), 0.5);
     expect(ratio, `grew ${ratio.toFixed(1)}x over 8x the input`).toBeLessThan(24);
   });
