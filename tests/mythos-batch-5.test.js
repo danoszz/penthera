@@ -46,6 +46,13 @@ describe("C1: cron-route-no-secret", () => {
     expect(cron("export async function GET() { return Response.json({ ok: true }); }")[0].severity).toBe("medium");
     expect(scanCronRoutes(repo({ "app/api/cron/x/route.ts": "export function GET() {}" }))).toEqual([]);
   });
+  it("malformed vercel.json never quotes the file in the report (Vercel 01M81PYAGR2ECHQW3YKG0KCNKG)", () => {
+    const refused = [];
+    scanCronRoutes(repo({ "vercel.json": '{ "env": { "API_KEY": s3cr3tValue9x }, "crons": [] }' }), { refused });
+    expect(refused).toHaveLength(1);
+    expect(JSON.stringify(refused)).not.toContain("s3cr3tValue9x");
+    expect(refused[0].reason).toMatch(/^it is not valid JSON/);
+  });
   it("a cron path cannot climb out of the repository", () => {
     expect(scanCronRoutes(repo({ "vercel.json": JSON.stringify({ crons: [{ path: "/../../etc/passwd" }] }) }))).toEqual([]);
   });
