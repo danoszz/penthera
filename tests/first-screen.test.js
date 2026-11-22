@@ -42,7 +42,8 @@ describe("the first screen", () => {
   it("puts the verdict and the top three to act on first, each with a place and a fix", () => {
     const s = plain(firstScreen(busy));
     expect(s).toContain("Fix now: 4 problems to act on.");
-    expect(s.indexOf("1. Stripe secret key in source")).toBeLessThan(s.indexOf("2. command-injection"));
+    // Two criticals at the same reach: the single command injection before the two-file key (smaller group first, Mythos F).
+    expect(s.indexOf("1. command-injection")).toBeLessThan(s.indexOf("2. Stripe secret key in source"));
     expect(s).toContain("src/config.js:1, src/pay.js:4");
     expect(s).toContain("Move the key to an environment variable");
     expect(s).toContain("3. ");

@@ -407,7 +407,18 @@ rate limits) it says how many files were read and
 why the others were not: file type not read, over the size limit, a language
 route analysis does not support, or no server routes found (a client-only app
 has none). Each file is read whole, up to a size limit: 64 MiB for the secret
-scan and 4 MiB for the eval and exec check. Minified code is checked like any
+scan and 4 MiB for the eval and exec check. The eval and exec check reads route
+files too, so where it traces request data its finding stands in for the
+route's, at the same severity. Request data includes the Web Request API
+(`await request.json()`, `request.formData()`, `request.url`,
+`searchParams.get(`, `formData.get(`) and a Server Action's arguments. The
+sinks include `eval?.(`, `eval.call(`, `Function(` without `new`, and the vm
+module by any name (`import { runInNewContext } from "node:vm"`,
+`const vm2 = require("vm")`, `require("vm").runInNewContext(`), and `const e = eval` or
+`(0, eval)` aliases. Not followed: a handler argument named other than `req` or
+`request` (`(r) => r.json()`), `request["json"]()`, `await params` from a
+route's context, `headers()` from `next/headers`, a dynamic `import("node:vm")`,
+`globalThis["eval"](x)` and `Reflect.apply(eval, …)`. Minified code is checked like any
 other code, and Coverage notes how many files were minified. A file over those limits, or one that
 can't be read at all (a FIFO, a device, no permission), is named and makes the
 scan incomplete: it exits 2. A route or server file linked to another file in

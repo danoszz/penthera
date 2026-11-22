@@ -34,8 +34,9 @@ describe("the brief budget", () => {
     expect(b.counts).toMatchObject({ problems: 32, act: 32, check: 0, total: 32 });
     const out = formatBrief(b);
     expect(out).toMatch(/^\*\*Penthera: Fix now\.\*\* 32 problems \(32 to act on, 0 to check first\), 0 likely noise\./);
-    // Severity, then confidence, then group size: never the first five by file order.
-    expect(items(out).map((l) => /\*\*(.+?)\*\*/.exec(l)[1])).toEqual(["Critical one", "High confirmed", "High likely", "Medium confirmed", "Medium in three files"]);
+    // Severity, then confidence, then the smaller group first (Mythos F: a big group of
+    // one rule no longer outranks a single finding), then path: never the first five by file order.
+    expect(items(out).map((l) => /\*\*(.+?)\*\*/.exec(l)[1])).toEqual(["Critical one", "High confirmed", "High likely", "Medium confirmed", "T0"]);
     expect(lastLine(out)).toMatch(/^\*\*Not shown here:\*\* 25 more groups to act on/);
     expect(lastLine(out)).toContain("`--json`");
     expect(out.length).toBeLessThanOrEqual(BRIEF_BUDGET.chars);
@@ -74,7 +75,7 @@ describe("the brief budget", () => {
     const b = buildBrief(run, { limits: ["Limit one.", "Limit two.", "Limit three.", "Limit four.", "Limit five."] });
     const out = formatBrief(b);
     expect(out.split("\n").filter((l) => l.startsWith("- **Check"))).toHaveLength(3);
-    expect(out).toContain("- 2 findings: 1 in test fixtures, 1 in test files.");
+    expect(out).toContain("- 2 findings: 1 in test files, 1 in test fixtures.");
     const left = b.not_checked.length - 3;
     expect(lastLine(out)).toBe(`**Not shown here:** 1 more group to check first, the paths of 2 likely-noise groups and ${left} more Not checked lines. All of it: the \`brief\` field of the same scan with \`--json\`.`);
   });

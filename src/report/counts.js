@@ -32,9 +32,83 @@ const VENDORED = /(?:^|\/)(?:vendor|vendors|third_party|third-party|bower_compon
 // A sign of planted or malicious code is never demoted for where it sits: a minified
 // file or a vendor folder is exactly where such code hides.
 const HOSTILE = /^(?:rootkit|persistence|suspicious-files|suspicious-process|malware|ioc|supply-chain|dependency-risk|agent-config)$/;
-const isHostile = (f) => HOSTILE.test(String(f.category || "")) || /^ioc[.:-]/i.test(String(f.templateId || f.rule || ""));
+export const isHostile = (f) => HOSTILE.test(String(f.category || "")) || /^ioc[.:-]/i.test(String(f.templateId || f.rule || ""));
 // Examples, demos and documentation samples: sample keys and passwords live here.
+// Also docs and other prose (a provider's documented test key in a README),
+// example env files, snapshots, seed data and stories (Mythos B3). A code file in
+// a docs folder (app/docs/route.ts) is real code, so the docs folder counts only
+// for non-code files.
+// The wider forms are for secrets only (a documented test key, a sample .env):
+// a file name never moves a code finding, so `route.stories.ts` or `seeds/run.ts`
+// cannot hide a command injection (blind review of batch 3).
 const EXAMPLE = /(?:^|\/)(?:examples?|samples?|demos?)\//;
+const EXAMPLE_SECRET = /(?:^|\/)(?:seeds?|__snapshots__)\/|\.(?:md|mdx|markdown|rst|adoc|snap)$|(?:^|\/)\.env\.(?:example|sample|template|dist)$|\.stories\.[cm]?[jt]sx?$/i;
+const DOCS_DIR = /(?:^|\/)docs?\//;
+const PROSE_EXT = /\.(?:md|mdx|markdown|rst|adoc|txt)$/i;
+const isSecret = (f) => /^secrets?$/.test(String(f.category || ""));
+// Below high only: a critical or high secret the engine reports is not a placeholder
+// (it drops those), and a live key in a README or .env.example is a real leak.
+const severe = (f) => f.severity === "critical" || f.severity === "high";
+const isExample = (p, f) => EXAMPLE.test(p) || (isSecret(f) && !severe(f) && (EXAMPLE_SECRET.test(p) || (DOCS_DIR.test(p) && PROSE_EXT.test(p))));
+
+// A library copied in by hand under its own versioned name (public/js/jquery-3.4.1.js),
+// by the file-name signatures of the bundled retire.js database (Mythos B4). Code-pattern
+// findings only: a hostile finding or a tainted hit is never demoted for this.
+// The file-name signatures of the bundled retire.js database (lib/retirejs/), copied
+// here because this module also runs in the browser (the site's live check), where the
+// database is not loaded. tests/mythos-batch-3.test.js checks the copy still matches.
+export const VENDORED_FILE_NAMES = [
+  "jquery-(\u00a7\u00a7version\u00a7\u00a7)(\\.min)?\\.js",
+  "jquery-migrate-(\u00a7\u00a7version\u00a7\u00a7)(.min)?\\.js",
+  "jquery.validat(?:ion|e)-(\u00a7\u00a7version\u00a7\u00a7)(.min)?\\.js",
+  "jquery.mobile-(\u00a7\u00a7version\u00a7\u00a7)(.min)?\\.js",
+  "knockout-(\u00a7\u00a7version\u00a7\u00a7)(.min)?\\.js",
+  "sessvars-(\u00a7\u00a7version\u00a7\u00a7)(.min)?\\.js",
+  "swfobject_(\u00a7\u00a7version\u00a7\u00a7)(.min)?\\.js",
+  "yui-(\u00a7\u00a7version\u00a7\u00a7)(.min)?\\.js",
+  "prototype-(\u00a7\u00a7version\u00a7\u00a7)(.min)?\\.js",
+  "ember-(\u00a7\u00a7version\u00a7\u00a7)(\\.min)?\\.js",
+  "dojo-(\u00a7\u00a7version\u00a7\u00a7)(\\.min)?\\.js",
+  "angular(?:js)?-(\u00a7\u00a7version\u00a7\u00a7)(.min)?\\.js",
+  "backbone(?:js)?-(\u00a7\u00a7version\u00a7\u00a7)(.min)?\\.js",
+  "mustache(?:js)?-(\u00a7\u00a7version\u00a7\u00a7)(.min)?\\.js",
+  "handlebars(?:js)?-(\u00a7\u00a7version\u00a7\u00a7)(.min)?\\.js",
+  "easyXDM-(\u00a7\u00a7version\u00a7\u00a7)(.min)?\\.js",
+  "plupload-(\u00a7\u00a7version\u00a7\u00a7)(.min)?\\.js",
+  "flowplayer-(\u00a7\u00a7version\u00a7\u00a7)(\\.min)?\\.js",
+  "moment(?:-|\\.)(\u00a7\u00a7version\u00a7\u00a7)(?:-min)?\\.js",
+  "bootstrap-(\u00a7\u00a7version\u00a7\u00a7)(\\.min)?\\.js",
+  "ckeditor-(\u00a7\u00a7version\u00a7\u00a7)(\\.min)?\\.js",
+  "ckeditor5-(\u00a7\u00a7version\u00a7\u00a7)(\\.min)?\\.js",
+  "vue-(\u00a7\u00a7version\u00a7\u00a7)(\\.min)?\\.js",
+  "/ext-all-(\u00a7\u00a7version\u00a7\u00a7)(\\.min)?\\.js",
+  "/ext-all-debug-(\u00a7\u00a7version\u00a7\u00a7)(\\.min)?\\.js",
+  "/ext-base-(\u00a7\u00a7version\u00a7\u00a7)(\\.min)?\\.js",
+  "svelte[@\\-](\u00a7\u00a7version\u00a7\u00a7)(.min)?\\.m?js",
+  "axios-(\u00a7\u00a7version\u00a7\u00a7)(\\.min)?\\.js",
+  "markdown-it-(\u00a7\u00a7version\u00a7\u00a7)(\\.min)?\\.js",
+  "jszip-(\u00a7\u00a7version\u00a7\u00a7)(\\.min)?\\.js",
+  "alasql-(\u00a7\u00a7version\u00a7\u00a7)(\\.min)?\\.js",
+  "jquery.dataTables-(\u00a7\u00a7version\u00a7\u00a7)(\\.min)?\\.js",
+  "highlight[-.](\u00a7\u00a7version\u00a7\u00a7)(.min)?.js",
+  "marked[-.](\u00a7\u00a7version\u00a7\u00a7)(.min)?.js",
+  "alpine(?:js)?[-.](\u00a7\u00a7version\u00a7\u00a7)(.min)?.js",
+  "echarts[-.](\u00a7\u00a7version\u00a7\u00a7)(.min)?.js",
+  "zrender[-.](\u00a7\u00a7version\u00a7\u00a7)(.min)?.js",
+  "d3[-.](\u00a7\u00a7version\u00a7\u00a7)(.min)?.js",
+  "video\\.js[-.](\u00a7\u00a7version\u00a7\u00a7)(\\.min)?\\.js",
+  "quill-(\u00a7\u00a7version\u00a7\u00a7)(?:\\.min)?\\.js",
+  "swiper[-.](\u00a7\u00a7version\u00a7\u00a7)(.min)?.js",
+  "mootools-(\u00a7\u00a7version\u00a7\u00a7)(?:\\.min)?\\.js",
+  "protobuf-(\u00a7\u00a7version\u00a7\u00a7)(?:\\.min)?\\.js"
+];
+let vendoredNames = null;
+function vendoredName(p) {
+  // A real version: digits and dots (`3.4.1`), so `vue-2fa.js` or `d3-3d.js` is app code.
+  vendoredNames ||= VENDORED_FILE_NAMES.map((f) => new RegExp(`^${f.replaceAll("§§version§§", "\\d+(?:\\.\\d+)+[0-9a-z.-]{0,20}")}$`, "i"));
+  const base = p.slice(p.lastIndexOf("/") + 1);
+  return base.length <= 200 && vendoredNames.some((re) => re.test(base));
+}
 const FIXTURE = /(?:^|\/)(?:fixtures?|__fixtures__|testdata|__mocks__)\//;
 // Test code: a key here is a test's own sample. A fixtures folder keeps its own reason, so FIXTURE is checked first.
 const TEST_FILE = /(?:^|\/)(?:tests?(?:[_-][^/]*)?|__tests__|e2e|cypress|playwright)\/|(?:^|\/)[^/]*\.(?:test|spec|cy)\.[^/]+$/;
@@ -55,7 +129,10 @@ export function bucketOf(f, { skillTarget = false } = {}) {
   if (FIXTURE.test(p)) return { bucket: "noise", reason: "fixture" };
   if (TEST_FILE.test(p)) return { bucket: "noise", reason: "test-file" };
   if (!skillTarget && !isHostile(f) && VENDORED.test(p)) return { bucket: "noise", reason: "vendored" };
-  if (!isHostile(f) && EXAMPLE.test(p)) return { bucket: "noise", reason: "example" };
+  // A versioned library name moves only findings below high: a planted file named like
+  // jquery-3.4.1.js must not hide a critical (blind review of batch 3).
+  if (!skillTarget && !isHostile(f) && f.tainted !== true && !severe(f) && vendoredName(p)) return { bucket: "noise", reason: "vendored" };
+  if (!isHostile(f) && f.tainted !== true && isExample(p, f)) return { bucket: "noise", reason: "example" };
   if (f.severity === "info") return { bucket: "info" };
   if (["potential", "needs-human-review"].includes(f.confidence)) return { bucket: "check" };
   if (f.severity === "low") return { bucket: "check" };
