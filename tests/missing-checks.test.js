@@ -84,8 +84,8 @@ app.post("/api/webhook", express.json(), async (req, res) => {
       `const evt = new Webhook(key).verify(payload, headers);`,
       `const evt = await verifyWebhook(req);`,
       `if (!isValidSignature(raw, sig)) return new Response(null, { status: 401 }); verifyStripeSignature(raw);`,
-      `const s = process.env.STRIPE_WEBHOOK_SECRET;`,
-      `const endpointSecret = cfg.endpoint;`,
+      `const s = process.env.STRIPE_WEBHOOK_SECRET;\n  if (sig !== s) return new Response(null, { status: 401 });`,
+      `const endpointSecret = cfg.endpoint;\n  if (!safeCompare(req.headers.get("x-signature"), endpointSecret)) return new Response(null, { status: 401 });`,
       `const event = await stripe.events.retrieve(body.id);`,
     ];
     for (const c of checks) {
