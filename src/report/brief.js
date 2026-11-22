@@ -24,7 +24,7 @@ import { exitCodeOf, exitReason, isSevere } from "./exit.js";
 import { hintCommand } from "../utils/invocation.js";
 import { notRead, readNothing, siteUnread, SITE_NOT_READ } from "./unread.js";
 import { unreachableText } from "./reach.js";
-import { bucketOf, pathOf, plural, problemsText } from "./counts.js";
+import { bucketOf, pathOf, plural, problemsText, isHostile } from "./counts.js";
 import { exploitabilityFor, matchLabel } from "../../lib/provenance.js";
 import { plainWords } from "./plain.js";
 
@@ -64,23 +64,95 @@ export function worseFinding(a, b) {
   return sevRank(a) - sevRank(b) || confRank(a) - confRank(b);
 }
 
-/** A group's sort key: its worst severity, the best confidence at that severity, its size. */
+// ── Ranking (Mythos F, 12 Nov 2026) ──────────────────────────────────────────
+// Lexicographic, no weights to tune: hostile code first; then critical, then high,
+// then the rest, so no number of highs or mediums in route files can push a critical
+// below the visible top (blind review of batch 3); then reach (an entry
+// point, other server code, config and CI, prose); then input (taken from the
+// request, unknown, constant); then severity, confidence, the smaller group
+// first, and path and line. "Larger group first" put twenty sample keys in docs/
+// above one request-tainted command injection (the E9 brief).
+const ENTRY_FILE = /(?:^|\/)(?:src\/)?(?:app|pages)\/(?:.*\/)?(?:route|page|layout)\.[cm]?[jt]sx?$|(?:^|\/)(?:pages\/)?api\/|(?:^|\/)(?:src\/)?(?:middleware|proxy)\.[cm]?[jt]s$|webhook|(?:^|\/)(?:routes|controllers|handlers|functions|server\/api|actions)\/|(?:^|\/)actions?\.[cm]?[jt]sx?$/i;
+const ENTRY_RULES = /^(?:server-action-no-auth|webhook-signature-missing|next-middleware-no-auth|jwt-decode-unverified|client-trusted-value|cron-route-no-secret)$/;
+const CONFIG_FILE = /(?:^|\/)\.github\/|(?:^|\/)(?:Dockerfile|docker-compose[^/]*|vercel\.json|netlify\.toml|\.gitlab-ci\.yml)$|\.(?:ya?ml|toml|ini|conf|cfg)$|(?:^|\/)\.(?:claude|cursor|vscode|mcp)[^/]*\/|\.mcp\.json$/i;
+const PROSE_FILE = /\.(?:md|mdx|markdown|rst|adoc|txt)$/i;
+const REQUEST_RULES = /^(?:client-trusted-value|credential-in-url)$/;
+const REACH_NAMES = ["entry", "code", "config", "prose"];
+const INPUT_NAMES = ["request", "unknown", "constant"];
+
+// Exposed wherever they sit: a committed key, an open database rule, an exposed file,
+// a vulnerable dependency, the live site's TLS, headers and cookies. Reach ranks only
+// code findings and config (a CI workflow), by where the file sits.
+// A live site's headers, TLS and cookies rank like other server code, so a web scan's
+// mediums do not sit above the repo's code findings.
+const EXPOSED_ANYWHERE = /^(?:secrets?|auth-bypass|exposure|dependency-vuln|dependency-risk|cve|js-vulnerability)$/;
+
+/** 0 entry point, 1 other server code, 2 config and CI, 3 prose. A finding with no file (a live URL) is an entry point. */
+function reachOf(f) {
+  if (ENTRY_RULES.test(ruleOf(f))) return 0;
+  if (EXPOSED_ANYWHERE.test(String(f.category || ""))) return PROSE_FILE.test(pathOf(f) || "") ? 3 : 0;
+  const p = pathOf(f);
+  if (!p) return f.url ? 0 : 1;
+  if (PROSE_FILE.test(p)) return 3;
+  if (ENTRY_FILE.test(p)) return 0;
+  if (CONFIG_FILE.test(p)) return 2;
+  return 1;
+}
+/** 0 the value comes from the request, 1 unknown, 2 a constant. */
+function inputOf(f) {
+  if (f.tainted === true || REQUEST_RULES.test(ruleOf(f))) return 0;
+  if (f.tainted === false && f.constant === true) return 2;
+  return 1;
+}
+const firstLine = (g) => g.reduce((m, f) => { const w = whereOf(f) || ""; return m === null || w < m ? w : m; }, null) || "";
+
+/** A group's sort key. */
 function groupKey(g) {
   // reduce, not Math.min(...g): a group can hold more findings than a call takes arguments.
+  const hostile = g.some(isHostile) ? 0 : 1;
+  const reach = g.reduce((m, f) => Math.min(m, reachOf(f)), 9);
+  const input = g.reduce((m, f) => Math.min(m, inputOf(f)), 9);
   const sev = g.reduce((m, f) => Math.min(m, sevRank(f)), 9);
   const conf = g.reduce((m, f) => (sevRank(f) === sev ? Math.min(m, confRank(f)) : m), 9);
-  return { sev, conf, size: g.length, title: String(g[0].title || "") };
+  return { hostile, tier: sev <= 1 ? sev : 2, reach, input, sev, conf, size: g.length, where: firstLine(g), title: String(g[0].title || "") };
 }
 
+const cmp = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+const orderKeys = (x, y) => x.hostile - y.hostile || x.tier - y.tier || x.reach - y.reach || x.input - y.input || x.sev - y.sev || x.conf - y.conf || x.size - y.size || cmp(x.where, y.where) || cmp(x.title, y.title);
+
 /**
- * Worst first, for groups: severity, then confidence, then group size, then
- * title, so equal groups never depend on the order files were read. Every cut
- * (the brief's budget, the terminal's first screen) keeps the top of this
- * order, never the first groups by file order.
+ * Worst first, for groups, by the ranking above. Every cut (the brief's budget,
+ * the terminal's first screen) keeps the top of this order, never the first
+ * groups by file order.
  */
 function worstFirst(groups) {
-  const order = (x, y) => x.sev - y.sev || x.conf - y.conf || y.size - x.size || (x.title < y.title ? -1 : x.title > y.title ? 1 : 0);
-  return groups.map((g) => [groupKey(g), g]).sort((a, b) => order(a[0], b[0])).map(([, g]) => g);
+  return groups.map((g) => [groupKey(g), g]).sort((a, b) => orderKeys(a[0], b[0])).map(([, g]) => g);
+}
+
+/** Why an item sits where it does, for the JSON: the ranking's fields, in its order. */
+function rankReasons(group) {
+  const k = groupKey(group);
+  return { hostile: k.hostile === 0, reach: REACH_NAMES[k.reach] || "code", input: INPUT_NAMES[k.input] || "unknown", severity: group[0].severity, confidence: group[0].confidence || "likely", group_size: k.size };
+}
+
+/** The top three hold at most one line per rule; the rest keep their order. */
+// The rule for the spread: the sink pattern or template first, since many engines
+// share one category ("code-pattern", "secrets").
+const spreadKey = (f) => String(f.pattern || f.templateId || f.rule || f.title || f.category || "");
+function spreadTop(pairs, n = 3) {
+  // Within one severity tier only: a second critical of the same rule never drops below a medium.
+  const tierOf = (p) => groupKey(p[1]).tier;
+  const out = [], deferred = [], seen = new Set();
+  for (let k = 0; k < pairs.length; k++) {
+    const p = pairs[k];
+    // Deferred items come back before anything of a worse tier.
+    while (deferred.length && tierOf(deferred[0]) < tierOf(p)) out.push(deferred.shift());
+    const r = spreadKey(p[1][0]);
+    if (out.length < n && seen.has(r)) { deferred.push(p); continue; }
+    seen.add(r);
+    out.push(p);
+  }
+  return [...out, ...deferred];
 }
 
 // An info finding that says something was not found or not run belongs under Not checked.
@@ -179,19 +251,26 @@ function item(group) {
     why_it_matters: plain ? plain.why : null,
     first_step: plain ? plain.act : null,
     rules: [...new Set(group.map(ruleOf))].map((r) => text(r, 120)),
+    // Added in 2.5.0: why the item sits where it does (reach, input, severity, confidence, group size).
+    rank_reasons: rankReasons(group),
   };
 }
 
 /**
- * The one thing to do first: the top Act on item (worst first: severity,
- * confidence, group size), else the top Check first item. Null when there is neither.
+ * The one thing to do first: the top of Act on and Check first merged, at high
+ * or above (a high in Check first beats a medium in Act on); else the top Act on
+ * item, else the top Check first item. Null when there is neither.
  */
-function firstOf(act, check) {
-  const i = act[0] || check[0];
-  if (!i) return null;
+function firstOf(act, check, actGroups = [], checkGroups = []) {
+  const pairs = [...act.map((i, k) => [i, actGroups[k], "act_on"]), ...check.map((i, k) => [i, checkGroups[k], "check_first"])];
+  const severe = pairs.filter(([i, g]) => g && (i.severity === "critical" || i.severity === "high"));
+  severe.sort((a, b) => orderKeys(groupKey(a[1]), groupKey(b[1])));
+  const pick = severe[0] || (act[0] ? [act[0], null, "act_on"] : check[0] ? [check[0], null, "check_first"] : null);
+  if (!pick) return null;
+  const [i, , from] = pick;
   const where = i.where[0] || null;
-  const action = i.first_step || i.fix || (act[0] ? `Fix ${i.title}${where ? ` in ${where}` : ""}.` : `Check ${i.title}${where ? ` in ${where}` : ""}.`);
-  return { title: i.title, where, action: text(action, 300), why_it_matters: i.why_it_matters, from: act[0] ? "act_on" : "check_first" };
+  const action = i.first_step || i.fix || (from === "act_on" ? `Fix ${i.title}${where ? ` in ${where}` : ""}.` : `Check ${i.title}${where ? ` in ${where}` : ""}.`);
+  return { title: i.title, where, action: text(action, 300), why_it_matters: i.why_it_matters, from };
 }
 
 /** Merge rule groups that all sit in one file and share a category. */
@@ -283,8 +362,13 @@ export function buildBrief(results, { reports = [], fixes = null, limits = [], m
 
   // One line per file and kind of problem (two advisories for one pin, three
   // sinks in one route file); without a file, one line per rule.
-  const act = regroupByFile(groupFindings(by.act, (f) => `${ruleOf(f)}|${genericTitle(f)}`)).map(item);
-  const check = groupFindings(by.check, (f) => `${f.category}|${ruleOf(f)}|${genericTitle(f)}`).map(item);
+  const actGroups = regroupByFile(groupFindings(by.act, (f) => `${ruleOf(f)}|${genericTitle(f)}`));
+  const checkGroups = groupFindings(by.check, (f) => `${f.category}|${ruleOf(f)}|${genericTitle(f)}`);
+  // Items and their groups stay paired through the top-three spread, for `first`.
+  const actPairs = spreadTop(actGroups.map((g) => [item(g), g]));
+  const act = actPairs.map(([i]) => i);
+  const actOrderedGroups = actPairs.map(([, g]) => g);
+  const check = checkGroups.map(item);
   const noise = groupFindings(by.noise, (f) => `${noiseReason.get(f)}|${f.category}`)
     .map((g) => noiseGroup(g, noiseReason.get(g[0])));
 
@@ -365,7 +449,7 @@ export function buildBrief(results, { reports = [], fixes = null, limits = [], m
       total: findings.length,
     },
     // Added in 2.5.0: the single most important step, from the top Act on (or Check first) item.
-    first: firstOf(act, check),
+    first: firstOf(act, check, actOrderedGroups, checkGroups),
     act_on: act,
     check_first: check,
     likely_noise: noise,

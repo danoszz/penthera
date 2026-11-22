@@ -27,7 +27,7 @@
       "cells": {
         "penthera": { "t": "Routes, trust boundaries and secrets for Next.js, Express, Hono and Fastify.", "s": ["docs/compare/semgrep.md#side-by-side"] },
         "cloudflare": { "t": "Any source, including native code, protocols, cloud config, mobile and desktop.", "s": ["https://github.com/cloudflare/security-audit-skill/tree/c1c8a8c/skills/security-audit"] },
-        "semgrep": { "t": "Many languages. CE works within one file; cross-file on the paid platform.", "s": ["https://docs.semgrep.dev/semgrep-pro-vs-oss"] },
+        "semgrep": { "t": "Many languages. CE works within one file; cross-file on the paid platform.", "s": ["https://semgrep.dev/docs/semgrep-pro-vs-oss"] },
         "snyk": { "t": "Snyk Code, 16 languages.", "s": ["https://docs.snyk.io/supported-languages/supported-languages-package-managers-and-frameworks"] },
         "socket": { "t": "Not its focus. SAST and secrets on the Enterprise plan.", "s": ["https://socket.dev/pricing"] },
         "zap": { "t": "No.", "s": ["docs/compare/zap.md#side-by-side"] },
@@ -87,7 +87,7 @@
       "cells": {
         "penthera": { "t": "Yes. --offline limits traffic to the target you named.", "s": ["docs/compare/socket.md#side-by-side"] },
         "cloudflare": { "t": "Needs a coding agent and model usage on every run; network depends on your model provider.", "s": ["docs/compare/cloudflare-security-audit.md#side-by-side"] },
-        "semgrep": { "t": "CE with local rules sends no metrics by default.", "s": ["https://docs.semgrep.dev/metrics"] },
+        "semgrep": { "t": "CE with local rules sends no metrics by default.", "s": ["https://semgrep.dev/docs/metrics"] },
         "snyk": { "t": "An account is required for the CLI.", "s": ["https://docs.snyk.io/developer-tools/snyk-cli/authenticate-to-use-the-cli"] },
         "socket": { "t": "The CLI needs an API token; the firewall's free mode needs no key.", "s": ["https://docs.socket.dev/docs/socket-firewall-overview"] },
         "zap": { "t": "Runs locally on Java 17+ or Docker.", "s": ["https://www.zaproxy.org/download/"] },
