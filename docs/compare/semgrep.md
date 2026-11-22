@@ -13,7 +13,7 @@ description: "Where Semgrep and Penthera overlap, where they differ, and how to 
 [Semgrep](https://semgrep.dev) is a static analyzer for your own code. The
 Community Edition engine is open source (LGPL-2.1) and runs locally. The
 commercial AppSec Platform adds cross-file analysis, supply-chain reachability,
-secrets and AI triage ([CE vs platform](https://docs.semgrep.dev/semgrep-pro-vs-oss)).
+secrets and AI triage ([CE vs platform](https://semgrep.dev/docs/semgrep-pro-vs-oss)).
 Penthera's repo scan is narrower than Semgrep's. What Penthera adds is the rest
 of the picture: the running app, what your dependencies can do, and your AI
 tooling.
@@ -26,12 +26,12 @@ agent config.
 
 | | Penthera | Semgrep |
 |---|---|---|
-| Your code | Route discovery, trust-boundary mapping and secrets for Next.js, Express, Hono, Fastify | Pattern-based analysis in many languages; CE works within a single file, the platform adds cross-file taint analysis ([CE vs platform](https://docs.semgrep.dev/semgrep-pro-vs-oss)) |
+| Your code | Route discovery, trust-boundary mapping and secrets for Next.js, Express, Hono, Fastify | Pattern-based analysis in many languages; CE works within a single file, the platform adds cross-file taint analysis ([CE vs platform](https://semgrep.dev/docs/semgrep-pro-vs-oss)) |
 | Rules | Built in and readable; add patterns and IOCs with signed rule packs or Nuclei templates; no rule language for code | A rule language plus 2,000+ community rules in the Registry ([repo](https://github.com/semgrep/semgrep)) |
 | Dependencies | Capabilities, upgrade diff, typosquats, licenses (npm and Python) | Semgrep Supply Chain with reachability, on the platform |
 | Running app | URL scan | No |
 | AI tooling | `penthera agents` | No dedicated check |
-| Network | None needed | CE with local rules sends no metrics by default; `--metrics=off` turns them off ([metrics](https://docs.semgrep.dev/metrics)) |
+| Network | None needed | CE with local rules sends no metrics by default; `--metrics=off` turns them off ([metrics](https://semgrep.dev/docs/metrics)) |
 | Cost | Free, MIT | CE is free. Platform free for up to 10 contributors; Teams from $30 per contributor a month per product ([pricing](https://semgrep.dev/pricing)) |
 
 ## Where Semgrep goes further
