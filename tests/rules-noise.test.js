@@ -122,7 +122,8 @@ describe("route RISK patterns: low hints skip comments, serious sinks never do",
   });
   it("the sink patterns stay linear on unterminated comments (blind review re-pass, 12 Nov)", () => {
     for (const unit of ["eval/*", "spawn/*", "eval//", "exec//"]) {
-      const ms = (n) => { const src = unit.repeat(n); riskPatterns(src); const t = process.hrtime.bigint(); riskPatterns(src); return Number(process.hrtime.bigint() - t) / 1e6; };
+      // Best of five: a single sub-millisecond sample made the ratio flaky on CI (30.8 once, ~8 locally).
+      const ms = (n) => { const src = unit.repeat(n); riskPatterns(src); let best = Infinity; for (let k = 0; k < 5; k++) { const t = process.hrtime.bigint(); riskPatterns(src); best = Math.min(best, Number(process.hrtime.bigint() - t) / 1e6); } return best; };
       const small = Math.max(ms(8000), 0.5);
       expect(ms(64000) / small, unit).toBeLessThan(24);
     }
