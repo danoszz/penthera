@@ -900,7 +900,10 @@ describe("pipe to a shell: every form main caught, and more, in linear time (pre
     expect(findExecPatterns("base64 --decode p | env /bin/bash").map((m) => m.rule)).toEqual(["base64-pipe-shell"]);
   });
   it("not a shell: shasum, and env running another program", () => {
-    for (const f of [`${D} | shasum`, `${D} | /usr/bin/shasum`, `${D} | env /bin/shell-thing`, `${D} | ./install.sh`, `${D} | env -C /tmp publish`, `${D} | env -S 'node x'`, `${D} | tee log | sh`, `${D} | sudo -h`, `${D} | env`, "echo hi | sh"]) expect(findExecPatterns(f), f).toEqual([]);
+    for (const f of [`${D} | shasum`, `${D} | /usr/bin/shasum`, `${D} | env /bin/shell-thing`, `${D} | ./install.sh`, `${D} | env -C /tmp publish`, `${D} | env -S 'node x'`, `${D} | sudo -h`, `${D} | env`, "echo hi | sh"]) expect(findExecPatterns(f), f).toEqual([]);
+  });
+  it("a shell later on the line still runs the download (Mythos A5, 12 Nov)", () => {
+    expect(findExecPatterns(`${D} | tee log | sh`).map((m) => m.rule)).toEqual(["curl-pipe-shell"]);
   });
   it("main's regex runs beside the parser (R12), so what main reported is still reported, its noise too", () => {
     // `env publish` ends in "sh" and `env -u sh publish` has a word "sh": main's regex matched both.

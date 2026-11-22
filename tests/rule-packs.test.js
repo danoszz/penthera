@@ -416,7 +416,19 @@ describe("bundled packs", () => {
 
   it("agent instruction and exec patterns are the same, in the same order", () => {
     expect(INSTRUCTION_PATTERNS.map((r) => ({ source: r.source, flags: r.flags }))).toEqual(BEFORE.instructions);
-    expect(EXEC_PATTERNS.map((p) => ({ rule: p.rule, label: p.label, source: p.re.source, flags: p.re.flags }))).toEqual(BEFORE.exec);
+    // New exec rules may be added (Mythos A5: download-then-run, `. <(curl`, an
+    // interpreter's -c); the old ones keep their order and label. Only the two pipe
+    // rules widened on purpose (a stage between the download and the shell) may
+    // change their definition.
+    const WIDENED = new Set(["curl-pipe-shell", "curl-pipe-interpreter"]);
+    const now = EXEC_PATTERNS.map((p) => ({ rule: p.rule, label: p.label, source: p.re.source, flags: p.re.flags }));
+    let k = 0;
+    for (const b of BEFORE.exec) {
+      while (k < now.length && !(now[k].rule === b.rule && now[k].label === b.label)) k++;
+      expect(k, `${b.rule} kept, in order`).toBeLessThan(now.length);
+      if (!WIDENED.has(b.rule)) expect(now[k]).toEqual(b);
+      k++;
+    }
   });
 
   it("built-in templates from before packs are unchanged, in the same order", () => {
