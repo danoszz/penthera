@@ -142,6 +142,10 @@ describe("wrapped shells in later stages (Vercel 01M81EJ2X60G4EFCGC78143380)", (
   it("a wrapper running something else is not a shell", () => {
     for (const t of [`${D} | cat | env -i node x.js`, `${D} | cat | nohup python3 x.py`, `${D} | cat | ./install.sh`]) expect(findExecPatterns(t).map((h) => h.rule), t).not.toContain("curl-pipe-shell");
   });
+  it("a long blank run after a pipe stays linear (Vercel 01M81FGBDQS6VT83KT78283WCK)", () => {
+    for (const blank of [" ", "\t", " \t"]) expect(ms(() => findExecPatterns(D + " | cat |" + blank.repeat(Math.ceil(2e6 / blank.length)) + "x"))).toBeLessThan(1500);
+    expect(findExecPatterns(D + " | cat |   \t  sh").map((h) => h.rule)).toContain("curl-pipe-shell");
+  });
   it("wrapper-heavy stages stay linear", () => {
     for (const f of ["| env -i ", "| env A=1 ", "| sudo -E "]) expect(ms(() => findExecPatterns(D + " " + f.repeat(Math.ceil(4e6 / f.length))))).toBeLessThan(2000);
   });
