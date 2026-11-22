@@ -911,7 +911,8 @@ describe("nested Supabase projects", () => {
     const sql = "create table public.t (id int);\n" + "select 1;\n".repeat(20000);
     const shallow = nested(1, sql), deep = nested(20, sql);
     scanSupabase(shallow); scanSupabase(deep);
-    const ms = (r) => { const s = process.hrtime.bigint(); for (let k = 0; k < 3; k++) scanSupabase(r); return Number(process.hrtime.bigint() - s) / 1e6; };
+    // CPU time, the fastest of three: wall-clock time around file reads failed under load (22 Nov).
+    const ms = (r) => cpuMs(() => scanSupabase(r), { runs: 3 });
     const ratio = ms(deep) / Math.max(ms(shallow), 0.5);
     expect(ratio, `20 levels took ${ratio.toFixed(1)}x 1 level`).toBeLessThan(9); // the old code reparsed it 21 times (14x measured)
     const r = scanSupabase(deep);

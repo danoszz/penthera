@@ -35,12 +35,8 @@ const fullFor = (file) => FULL_ENV === "1" || FULL_ENV.split(",").map((x) => x.t
 
 // Slow paths on main today, each with the pull request that fixes it. Delete an entry
 // once its fix is on main; anything slow that is not listed here fails the test.
-const KNOWN_SLOW = [
-  // A PowerShell download word on a line, with no pipe later in the file: thenOnLine()
-  // looks for the next "|" to the end of the file, once per line. Fixed by PR 335
-  // (pipe positions are read once).
-  { scanner: "agents: hidden content", match: /shape w, (?:one per line|line continued), word (?:iwr|irm|Invoke-WebRequest|Invoke-RestMethod|DownloadString):/ },
-];
+// Empty since PR 335 merged (22 Nov): it fixed the PowerShell download words, one per line.
+const KNOWN_SLOW = [];
 
 // A head opens a rule's gate (an import, a directive, a download), so the filler reaches the rule.
 const WEBHOOK = `export async function POST(req) {\n  const event = await req.json();\n  if (event.type === "x") {\n`;

@@ -113,21 +113,10 @@ function walk(dir, out = []) {
 
 // ── decoys against this tree's own rules ──────────────────────────────────
 
-// Look-alikes that silence a rule on main today. Both sets are in the Mythos
-// assessment of 12 Nov (A2, A7: silencers matched by name alone) and are fixed
-// by PR 336 (tied silencers, one auth reader). Delete an entry once its fix is
-// on main; a decoy that silences a rule and is not listed here fails the test.
-const KNOWN_SILENCED = new Set([
-  "unsigned webhook, Next route + a verification email: webhook-signature-missing",
-  "unsigned webhook, Next route + an unwrap helper: webhook-signature-missing",
-  "unsigned webhook, Express route + a verification email: webhook-signature-missing",
-  "unsigned webhook, Express route + an unwrap helper: webhook-signature-missing",
-  "unsigned Stripe events + a verification email: webhook-signature-missing",
-  "unsigned Stripe events + an unwrap helper: webhook-signature-missing",
-  "Server Action writes with no auth + an action client factory: server-action-no-auth",
-  "Server Action writes with no auth + a login URL getter: server-action-no-auth",
-  "Server Action writes with no auth + a lookup by id: server-action-no-auth",
-]);
+// Look-alikes that silence a rule on main today, each with the pull request that fixes it.
+// Empty since PR 336 merged (22 Nov). A decoy that silences a rule and is not listed here
+// fails the test.
+const KNOWN_SILENCED = new Set([]);
 // The rate-limit note reads a line count, so a comment line can move it: not a rule being silenced.
 const NOT_A_RULE = /^rate-limiting:/;
 
