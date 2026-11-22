@@ -20,7 +20,7 @@ Daily notes from Penthera: **[x.com/penthera_org](https://x.com/penthera_org)**
 
 **From your coding agent:** add Penthera ([one line per agent](#start-in-30-seconds)), then say "Hey Claude, run Penthera on this repo."
 
-**132** readable rules · **6** read-only MCP tools · **0** runtime dependencies · **0** requests past loopback in the benchmark · **MIT**, no telemetry
+**135** readable rules · **6** read-only MCP tools · **0** runtime dependencies · **0** requests past loopback in the benchmark · **MIT**, no telemetry
 
 <br/>
 
@@ -439,7 +439,7 @@ Each feature goes through the same path: **method → evidence → tool.**
 | Requests past loopback during the benchmark | 0 | Enforced by a network guard |
 | Public benchmarks (E11b), sealed test half | 1st on npm and PyPI malware (tied 1st to 3rd), 1st on JS library injection bugs (tied 1st to 4th), 2nd on leaked secrets | 4 public datasets, up to 10 free tools each ([results](bench/public/RESULTS.md#e11b-final-the-sealed-test-half-scored-once-2026-10-25), [summary](#public-benchmarks)) |
 | E10 pilot, known-vulnerable apps | Precision 0.88, 95% CI 0.78 to 0.93. Recall 0.07 before fixes, 0.71 (CI 0.45 to 0.88) after | 14 root causes in Juice Shop and DVNA ([results](bench/known-vuln/RESULTS-after-fixes.md)). No run logs in, so it doesn't cover login or access rules |
-| Detection rules, all readable | 132 in this release: 16 URL scan templates, 24 secret and AI-key patterns, 15 dependency capabilities, 47 AI-tooling rules, 5 fix recipes, and 25 rules in the signed rule packs | [Rule packs](docs/rule-packs.md) |
+| Detection rules, all readable | 135 in this release: 16 URL scan templates, 27 secret and AI-key patterns, 15 dependency capabilities, 47 AI-tooling rules, 5 fix recipes, and 25 rules in the signed rule packs | [Rule packs](docs/rule-packs.md) |
 
 The bundled benchmark is 24 findings in small labs we wrote ourselves. It
 catches regressions; it does not measure real-world accuracy. The E10 pilot
