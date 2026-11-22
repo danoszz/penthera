@@ -11,6 +11,7 @@ import { join, dirname } from "node:path";
 import { scanCronRoutes } from "../lib/whitebox/cron-routes.js";
 import { findSecretsInText, scanSecrets } from "../lib/whitebox/secrets.js";
 import { frameworkAdvisoriesForRepo } from "../lib/whitebox/framework-advisories.js";
+import { maskSecrets } from "../lib/ai/units.js";
 
 const repo = (files) => {
   const dir = mkdtempSync(join(tmpdir(), "penthera-mythos5-"));
@@ -87,6 +88,13 @@ describe("reports never show the new rules' secrets (Vercel 01M81FJ4Z1BKB702S4D8
     expect(out).not.toContain(key.slice(4, 30));
     expect(out).not.toContain(short);
   });
+});
+
+describe("AI mode masks the new rules' secrets on every line (Vercel 01M81HVP4086BNAWR7C5ADFHQY)", () => {
+  const key = "Zm9vYmFyYmF6cXV4c2VjcmV0a2V5MTIzNDU2Nzg5MA==";
+  for (const t of [`const t = jwt.sign(\n  { id },\n  "${key}"\n);`, `const s =\n  process.env.JWT_SECRET ||\n  "${key}";`]) {
+    it(JSON.stringify(t.slice(0, 30)), () => expect(JSON.stringify(maskSecrets(t))).not.toContain(key.slice(4, 30)));
+  }
 });
 
 describe("E: the December 2025 React Server Components advisory", () => {
