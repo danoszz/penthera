@@ -104,6 +104,7 @@ describe("Vercel: action names with function in a parameter, and CRLF", () => {
     "a type parameter named functionT": '"use server";\n' + CP + "const run = async <functionT,>(cmd: functionT) => { exec(cmd as any) };\nexport { run };",
     "01M81RZQ16Z9XGZVZ2PQESBMAJ: CRLF after function": '"use server";\r\n' + CP + "async function\r\nrun(cmd) { exec(cmd) }\r\nexport { run };",
     "CRLF in a const assignment": '"use server";\r\n' + CP + "export const run =\r\n  async (cmd) => { exec(cmd) };",
+    "01M81SNXHRNE138QYR6NS8ZYG1: an anonymous async function assigned to a const, export-listed": '"use server";\n' + CP + "const run = async function (cmd) { exec(cmd) };\nexport { run };",
     "a no-break space after function": '"use server";\n' + CP + "async function\u00a0run(cmd) { exec(cmd) }\nexport { run };",
   };
   for (const [name, src] of Object.entries(cases)) it(name, () => expect(tainted(src)).toBe(true));
