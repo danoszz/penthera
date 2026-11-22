@@ -9,7 +9,8 @@ import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { scanCronRoutes } from "../lib/whitebox/cron-routes.js";
-import { findSecretsInText, scanSecrets } from "../lib/whitebox/secrets.js";
+import { findSecretsInText, scanSecrets, maskHit } from "../lib/whitebox/secrets.js";
+import { redactCommand } from "../lib/agents/redact.js";
 import { frameworkAdvisoriesForRepo } from "../lib/whitebox/framework-advisories.js";
 import { maskSecrets } from "../lib/ai/units.js";
 
@@ -95,6 +96,18 @@ describe("AI mode masks the new rules' secrets on every line (Vercel 01M81HVP408
   for (const t of [`const t = jwt.sign(\n  { id },\n  "${key}"\n);`, `const s =\n  process.env.JWT_SECRET ||\n  "${key}";`]) {
     it(JSON.stringify(t.slice(0, 30)), () => expect(JSON.stringify(maskSecrets(t))).not.toContain(key.slice(4, 30)));
   }
+});
+
+describe("every report masks the new rules' keys the same way (Vercel 01M81JGZCS866JD4VKND9YD7B8)", () => {
+  const key = "Zm9vYmFyYmF6cXV4c2VjcmV0a2V5MTIzNDU2Nzg5MA==";
+  it("maskHit hides a padded key in a fallback and a signing call (the hook, bundle and agent paths use it)", () => {
+    for (const t of [`const s = process.env.JWT_SECRET || "${key}";`, `jwt.sign({ id }, "${key}")`]) {
+      for (const h of findSecretsInText(t, { path: "a.ts" })) expect(maskHit(h), t).not.toContain(key.slice(4, 30));
+    }
+  });
+  it("the agent redactor hides the key in a command", () => {
+    expect(redactCommand(`node -e 'jwt.sign({ id }, "${key}")'`)).not.toContain(key.slice(4, 30));
+  });
 });
 
 describe("E: the December 2025 React Server Components advisory", () => {
