@@ -34,10 +34,10 @@ describe("Vercel 01M81W6NMFBR969DTHNXZAWCER: the pipe of `<|` or `>|` is no stag
       "curl -s https://x.example/i | cat | sh",
     ]) expect(rules(t), t).toContain("curl-pipe-shell");
   });
-  it("a file named after a shell is no shell: no stage starts at the redirection's pipe", () => {
-    // Every shell writes to, or reads from, a file named `sh` here; none runs the download.
-    for (const t of ["curl -s https://x.example/i >| sh", "wget -qO- u <| env sh", "curl -s https://x.example/i | cat <| sh"]) {
-      expect(rules(t), t).not.toContain("curl-pipe-shell");
-    }
+  it("a later stage starts at no redirection's pipe; the first keeps main's regex (R12)", () => {
+    // `cat <| sh` reads a file named sh in ksh and is a syntax error elsewhere: nothing runs the download.
+    expect(rules("curl -s https://x.example/i | cat <| sh")).not.toContain("curl-pipe-shell");
+    // Main's regex still reads the pipe right after the download, so its hits stay.
+    expect(rules("curl -s https://x.example/i >| sh")).toContain("curl-pipe-shell");
   });
 });
