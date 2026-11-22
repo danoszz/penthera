@@ -9,7 +9,7 @@ import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { scanCronRoutes } from "../lib/whitebox/cron-routes.js";
-import { findSecretsInText } from "../lib/whitebox/secrets.js";
+import { findSecretsInText, scanSecrets } from "../lib/whitebox/secrets.js";
 import { frameworkAdvisoriesForRepo } from "../lib/whitebox/framework-advisories.js";
 
 const repo = (files) => {
@@ -68,6 +68,24 @@ describe("C3 and A9: secrets in fallbacks, signing calls and connection strings"
       ['const s = process.env.JWT_SECRET || throwMissing("JWT_SECRET");', "auth.ts"],
       ["const t = jwt.sign({ id }, process.env.JWT_SECRET);", "login.ts"],
     ]) expect(names(t, p), t).toEqual([]);
+  });
+});
+
+describe("reports never show the new rules' secrets (Vercel 01M81FJ4Z1BKB702S4D86ZCH7Y)", () => {
+  it("padded base64 keys and short values are masked in every finding", () => {
+    const key = "Zm9vYmFyYmF6cXV4c2VjcmV0a2V5MTIzNDU2Nzg5MA==";
+    const short = "q7Zp=9xK";
+    const dir = repo({
+      "a.ts": `const s = process.env.JWT_SECRET || "${key}";\n`,
+      "b.ts": `const t = jwt.sign({ id }, "${key}");\n`,
+      "c.ts": `const s = process.env.NEXTAUTH_SECRET ?? "${short}";\n`,
+      ".env.production": `DATABASE_URL=postgresql://app:${key}@db.prod-eu.internal:5432/app\n`,
+    });
+    const found = scanSecrets(dir);
+    const out = JSON.stringify(found);
+    expect((found.findings || found).length).toBe(4);
+    expect(out).not.toContain(key.slice(4, 30));
+    expect(out).not.toContain(short);
   });
 });
 
