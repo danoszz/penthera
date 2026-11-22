@@ -73,6 +73,17 @@ describe("A7: silencers are tied to the protected value (row 24)", () => {
   });
 });
 
+describe("the relay's no-loss gate (22 Nov): a client builder and a login URL are no check", () => {
+  for (const l of ["createSafeActionClient()", "getLoginUrl()"]) {
+    it(`a Server Action with ${l} is still reported`, () => expect(unchecked(`"use server";\nexport async function wipe(id) { ${l}; await db.post.delete({ where: { id } }); }\n`)).toEqual(["wipe"]));
+  }
+  it("a route that only builds a client or a login URL stays public", () => {
+    for (const l of ["const actionClient = createSafeActionClient();", "const loginUrl = getLoginUrl();"]) {
+      expect(routeRecord("/api/stripe", "app/api/stripe/route.ts", `export async function POST(req) { ${l} const event = await req.json(); }`, ["POST"]).auth, l).toContain("public");
+    }
+  });
+});
+
 describe("B6: route records read auth from code, with the shared reader", () => {
   const rec = (src) => routeRecord("/api/x", "app/api/x/route.ts", src, ["POST"]).auth;
   it("Clerk's auth(), Lucia's validateRequest() and a bare getUser() are user routes", () => {
