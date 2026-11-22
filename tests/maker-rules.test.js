@@ -71,20 +71,21 @@ describe("framework-advisory: lockfile readers", () => {
 describe("framework-advisory: findings", () => {
   it("reports an affected Next.js and a fixed one not, with the lockfile line", () => {
     const bad = frameworkAdvisoriesForRepo(repo({ "package-lock.json": npmLock({ next: "15.5.6" }), "app/page.tsx": "" }));
-    expect(bad.map((f) => [f.templateId, f.cve, f.severity, f.file])).toEqual([["framework-advisory", "CVE-2025-55182", "critical", "package-lock.json"]]);
+    // 15.5.6 is in CVE-2025-55182 and in the December 2025 follow-up (CVE-2025-55184).
+    expect(bad.map((f) => [f.templateId, f.cve, f.severity, f.file])).toEqual([["framework-advisory", "CVE-2025-55182", "critical", "package-lock.json"], ["framework-advisory", "CVE-2025-55184", "high", "package-lock.json"]]);
     expect(bad[0].line).toBeGreaterThan(1);
-    expect(frameworkAdvisoriesForRepo(repo({ "package-lock.json": npmLock({ next: "15.5.7" }) }))).toEqual([]);
+    expect(frameworkAdvisoriesForRepo(repo({ "package-lock.json": npmLock({ next: "15.5.9" }) }))).toEqual([]);
   });
   it("reports the middleware bypass high with a middleware file and low without", () => {
     const withMw = frameworkAdvisoriesForRepo(repo({ "package-lock.json": npmLock({ next: "14.2.24" }), "middleware.ts": "export function middleware() {}\n" }));
-    expect(withMw.map((f) => [f.cve, f.severity])).toEqual([["CVE-2025-29927", "high"]]);
+    expect(withMw.filter((f) => f.cve === "CVE-2025-29927").map((f) => [f.cve, f.severity])).toEqual([["CVE-2025-29927", "high"]]);
     const without = frameworkAdvisoriesForRepo(repo({ "package-lock.json": npmLock({ next: "14.2.24" }) }));
-    expect(without.map((f) => [f.cve, f.severity])).toEqual([["CVE-2025-29927", "low"]]);
-    expect(without[0].description).toMatch(/no a middleware file|not reachable here/);
+    expect(without.filter((f) => f.cve === "CVE-2025-29927").map((f) => [f.cve, f.severity])).toEqual([["CVE-2025-29927", "low"]]);
+    expect(without.find((f) => f.cve === "CVE-2025-29927").description).toMatch(/no a middleware file|not reachable here/);
   });
   it("reports every advisory a version is in, and every copy in the tree", () => {
     const found = frameworkAdvisoriesForRepo(repo({ "package-lock.json": npmLock({ next: "15.2.2", "react-server-dom-webpack": "19.2.0" }), "middleware.ts": "x" }));
-    expect(found.map((f) => `${f.cve}:${f.package}@${f.version}`).sort()).toEqual(["CVE-2025-29927:next@15.2.2", "CVE-2025-55182:next@15.2.2", "CVE-2025-55182:react-server-dom-webpack@19.2.0"]);
+    expect(found.map((f) => `${f.cve}:${f.package}@${f.version}`).sort()).toEqual(["CVE-2025-29927:next@15.2.2", "CVE-2025-55182:next@15.2.2", "CVE-2025-55182:react-server-dom-webpack@19.2.0", "CVE-2025-55184:next@15.2.2", "CVE-2025-55184:react-server-dom-webpack@19.2.0"]);
   });
   it("names a lockfile it cannot parse and does not pass it", () => {
     const refused = [];
@@ -92,8 +93,8 @@ describe("framework-advisory: findings", () => {
     expect(refused.map((e) => e.reason)).toEqual([expect.stringMatching(/could not be parsed/)]);
   });
   it("falls back to package.json pins only when there is no lockfile", () => {
-    expect(frameworkAdvisoriesForRepo(repo({ "package.json": '{"dependencies":{"next":"15.2.2"}}' })).map((f) => f.cve).sort()).toEqual(["CVE-2025-29927", "CVE-2025-55182"]);
-    expect(frameworkAdvisoriesForRepo(repo({ "package.json": '{"dependencies":{"next":"15.2.2"}}', "package-lock.json": npmLock({ next: "15.5.7" }) }))).toEqual([]);
+    expect(frameworkAdvisoriesForRepo(repo({ "package.json": '{"dependencies":{"next":"15.2.2"}}' })).map((f) => f.cve).sort()).toEqual(["CVE-2025-29927", "CVE-2025-55182", "CVE-2025-55184"]);
+    expect(frameworkAdvisoriesForRepo(repo({ "package.json": '{"dependencies":{"next":"15.2.2"}}', "package-lock.json": npmLock({ next: "15.5.9" }) }))).toEqual([]);
   });
   it("has an explain_finding entry", () => {
     const plan = buildActionPlan([{ templateId: "framework-advisory", severity: "critical", title: "x" }]);
@@ -247,7 +248,7 @@ describe("in a repo scan", () => {
       "app/page.tsx": "export default function P() { return null; }\n",
     }));
     expect(r.executedProbes).toEqual(expect.arrayContaining(["framework-advisories", "public-env", "server-actions"]));
-    expect(r.findings.map((f) => f.templateId).filter((t) => ["framework-advisory", "public-env-secret", "server-action-no-auth"].includes(t)).sort()).toEqual(["framework-advisory", "public-env-secret", "server-action-no-auth"]);
+    expect(r.findings.map((f) => f.templateId).filter((t) => ["framework-advisory", "public-env-secret", "server-action-no-auth"].includes(t)).sort()).toEqual(["framework-advisory", "framework-advisory", "public-env-secret", "server-action-no-auth"]);
     expect(exitCodeOf(r)).toBe(1);
   });
   it("marks the scan incomplete when a lockfile cannot be parsed", async () => {
@@ -257,7 +258,7 @@ describe("in a repo scan", () => {
   });
   it("is quiet on a clean app", async () => {
     const r = await scanRepo(repo({
-      "package-lock.json": npmLock({ next: "15.5.7", "react-server-dom-webpack": "19.2.1" }),
+      "package-lock.json": npmLock({ next: "15.5.9", "react-server-dom-webpack": "19.2.4" }),
       ".env.example": "NEXT_PUBLIC_SUPABASE_ANON_KEY=\nSUPABASE_SERVICE_ROLE_KEY=\n",
       "app/actions.ts": ACTION_FILES.authed,
       "app/page.tsx": "export default function P() { return null; }\n",
