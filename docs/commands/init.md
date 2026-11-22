@@ -157,7 +157,9 @@ penthera init --yes --dry-run
   written for you to review and commit yourself.
 - Write outside the project: reports, `.gitignore` and the workflow go under
   the project root (the git top level when there is one), the hook into the
-  repository's hooks folder.
+  repository's hooks folder. A repository at the filesystem root or in your home
+  folder, such as a dotfiles repo, is not the project: the wizard uses the folder
+  you run it in. A folder it can't write ends the run with one error line.
 - Contact anything but localhost, unless you turn offline mode off or confirm
   the running app.
 

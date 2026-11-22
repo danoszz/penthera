@@ -3,7 +3,7 @@
  * tests/fixtures/init/app (an Express app with a lockfile and agent config).
  */
 import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from "vitest";
-import { cpSync, existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync, symlinkSync } from "node:fs";
+import { chmodSync, cpSync, existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync, symlinkSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { execFileSync, spawn } from "node:child_process";
@@ -188,6 +188,19 @@ describe("penthera init (scripted stdin)", () => {
 });
 
 describe("penthera init --yes (smoke)", () => {
+  // Issue 341: a folder the wizard can't write ended in a stack trace (mkdir ENOENT/EACCES).
+  it.skipIf(process.platform === "win32" || process.getuid?.() === 0)("a folder it can't write: one clear error line, no stack trace", async () => {
+    chmodSync(dir, 0o555);
+    try {
+      const r = await wizard(["init", "--yes"]);
+      expect(r.code).toBe(1);
+      expect(r.stderr).toContain("could not create");
+      expect(r.stderr).toContain("Run penthera init in a folder you can write to");
+      expect(r.stderr).not.toContain("at runInit");
+    } finally {
+      chmodSync(dir, 0o755);
+    }
+  });
   it("accepts the safe defaults: checks, hook, workflow, .gitignore; never the URL, fix loop or dashboard", async () => {
     const r = await wizard(["init", "--yes"]);
     expect(r.code, r.stderr).toBe(0);

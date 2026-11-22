@@ -7,7 +7,8 @@ import { readRepoFile } from "../../lib/fs-safe.js";
 
 /** A file of the project: a regular file inside it, up to 1 MiB. */
 const readProjectFile = (root, path) => readRepoFile(path, { root, maxBytes: 1024 * 1024 });
-import { join } from "node:path";
+import { join, parse, resolve } from "node:path";
+import { homedir } from "node:os";
 import { createConnection } from "node:net";
 import { detectProjectFramework } from "../../lib/whitebox/frameworks.js";
 import { HOOK_MARKER } from "../../lib/hook/index.js";
@@ -102,12 +103,26 @@ function hasCode(root) {
 }
 
 /**
+ * The git work tree to treat as the project, or null. A repository at the filesystem root
+ * or in the home folder (a dotfiles repo) holds every folder below it, so an empty or new
+ * project inside it would get its reports, hook and workflows written there: `/reports`
+ * failed with ENOENT (issue 341). Such a tree counts only when the wizard runs in it.
+ */
+export function projectGitRoot(top, cwd, home = homedir()) {
+  if (!top) return null;
+  const t = resolve(top);
+  if (resolve(cwd) === t) return top;
+  if (t === parse(t).root || (home && t === resolve(home))) return null;
+  return top;
+}
+
+/**
  * Everything the wizard shows under "Found".
  * @param {string} cwd
  * @param {{ ports?: number[] }} [opts]
  */
 export async function detectProject(cwd, opts = {}) {
-  const top = gitRoot(cwd);
+  const top = projectGitRoot(gitRoot(cwd), cwd, opts.home ?? homedir());
   const root = top || cwd;
   const isGit = !!top;
   let clean = null;
