@@ -103,6 +103,9 @@ describe("blind review: no new silencers, and real helpers still count", () => {
   for (const l of ["const sig = getSignature(req.headers);", "const h = parseHmac(req.headers);", "const c = createSafeActionClient();", "const u = getLoginUrl();"]) {
     it(`webhook still reported with ${l} (Vercel)`, () => expect(wh(l)).toBe(true));
   }
+  for (const l of ["schema.validateRequest(body, rules);", "parser.unmarshal(body, Type);", "ajv.verify(body, schema);", "verify(body, schema);"]) {
+    it(`webhook still reported with a non-provider ${l} (Vercel 01M81FRYFRKZAB8Q9RW8QKF81Z)`, () => expect(wh(l)).toBe(true));
+  }
   for (const l of ["verifyKey(payload, ts, pk);", "wh.verify(payload, heads);", 'crypto.verify("sha256", Buffer.from(payload), pk, sigBuf);', "paddle.webhooks.unmarshal(payload, key, s);", "twilio.validateRequest(tok, s, url, params);", "webhooks.verify(payload, s);"]) {
     it(`webhook quiet with a provider verifier: ${l}`, () => expect(wh(l)).toBe(false));
   }
