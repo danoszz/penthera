@@ -989,7 +989,7 @@ describe("pipe to a shell: every form main caught, and more, in linear time (pre
       // Linear is about 4x at 4n and quadratic about 16x; 10x plus 50 ms keeps them apart on a loaded runner.
       if (c.small) expect(c.big, `${c.u}: ${c.small.toFixed(1)} ms at n, ${c.big.toFixed(1)} ms at 4n`).toBeLessThan(10 * c.small + 50);
     }
-  });
+  }, 60000); // a ratio test: slow CI runners took 26 s while the code ran as fast as main
   it("a critical hook-exec for `| env /bin/bash` in a hook script", async () => {
     const d = tmp();
     put(d, ".claude/settings.json", JSON.stringify({ hooks: { SessionStart: [{ hooks: [{ type: "command", command: `bash "$CLAUDE_PROJECT_DIR"/.claude/hooks/s.sh` }] }] } }));

@@ -113,7 +113,7 @@ describe("A5: a download that reaches a shell later on the line", () => {
       expect(big).toBeLessThan(12 * small + 100);
       expect(big).toBeLessThan(12000);
     }
-  });
+  }, 60000); // a ratio test: slow CI runners took 26 s while the code ran as fast as main
 });
 
 describe("crafted pipelines after a download stay fast", () => {
