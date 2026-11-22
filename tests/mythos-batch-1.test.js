@@ -7,6 +7,7 @@
  * Every snippet is inert text; nothing runs.
  */
 import { describe, it, expect } from "vitest";
+import { cpuMs } from "./fixtures/cpu-time.js";
 import { findSinks } from "../lib/whitebox/code-sinks.js";
 import { findExecPatterns } from "../lib/agents/hidden-content.js";
 import { missingCheckHits } from "../lib/whitebox/missing-checks.js";
@@ -14,7 +15,9 @@ import { readFileSync } from "node:fs";
 
 const CP = 'const { exec } = require("child_process");\n';
 const rules = (hits) => hits.map((h) => h.rule);
-const ms = (fn) => { const t = performance.now(); fn(); return performance.now() - t; };
+// CPU time, not wall clock (CONTRIBUTING: tests that stay reliable): a busy CI runner
+// took 26 s of wall time on a check whose code ran as fast as main.
+const ms = (fn) => cpuMs(fn);
 
 describe("A1: a call's arguments are read to its real close", () => {
   it("finds req.body after a 2,100-character comment inside exec(...)", () => {
