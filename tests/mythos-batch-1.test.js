@@ -139,6 +139,9 @@ describe("wrapped shells in later stages (Vercel 01M81EJ2X60G4EFCGC78143380)", (
   for (const t of [`${D} | cat | env -i sh`, `${D} | cat | env -S "sh -x"`, `${D} | tee f | nohup sh`, `${D} | cat | env A=1 B= bash`, `${D} | cat | sudo -E bash`, `${D} | cat | "sh"`, `${D} | cat | /usr/bin/env -i /bin/sh`, `${D} | cat | nice -n 10 sh`]) {
     it(t, () => expect(findExecPatterns(t).map((h) => h.rule)).toContain("curl-pipe-shell"));
   }
+  for (const f of ["env -u X sh", "env -C /tmp sh", "env --unset=X sh", "2>/dev/null sh", "</dev/null sh", "env -i sh 2>&1", "nohup env -i sh", "sudo -u root sh", "sudo -u root -E bash", "exec -a x sh", "nice -n 5 nohup sh", "env -- sh", "env -i PATH=/bin sh"]) {
+    it(`a later stage with options that take a value or redirections: ${f}`, () => expect(findExecPatterns(`${D} | cat | ${f}`).map((h) => h.rule)).toContain("curl-pipe-shell"));
+  }
   it("a wrapper running something else is not a shell", () => {
     for (const t of [`${D} | cat | env -i node x.js`, `${D} | cat | nohup python3 x.py`, `${D} | cat | ./install.sh`]) expect(findExecPatterns(t).map((h) => h.rule), t).not.toContain("curl-pipe-shell");
   });
