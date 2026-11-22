@@ -142,6 +142,12 @@ describe("wrapped shells in later stages (Vercel 01M81EJ2X60G4EFCGC78143380)", (
   for (const f of ["env -u X sh", "env -C /tmp sh", "env --unset=X sh", "2>/dev/null sh", "</dev/null sh", "env -i sh 2>&1", "nohup env -i sh", "sudo -u root sh", "sudo -u root -E bash", "exec -a x sh", "nice -n 5 nohup sh", "env -- sh", "env -i PATH=/bin sh"]) {
     it(`a later stage with options that take a value or redirections: ${f}`, () => expect(findExecPatterns(`${D} | cat | ${f}`).map((h) => h.rule)).toContain("curl-pipe-shell"));
   }
+  it("01M81JZEKWK9DVXH848JDVC3Q9: repeated wrapper and flag pairs ending in a non-shell word stay linear", () => {
+    for (const f of ["env -a ", "sudo -u ", "env -u x ", "nice -n ", "exec -a env "]) {
+      expect(ms(() => findExecPatterns(`${D} | cat | ` + f.repeat(30) + "x")), f).toBeLessThan(200);
+      expect(ms(() => findExecPatterns(`${D} | cat | ` + f.repeat(100000) + "x")), f).toBeLessThan(2000);
+    }
+  });
   it("a wrapper running something else is not a shell", () => {
     for (const t of [`${D} | cat | env -i node x.js`, `${D} | cat | nohup python3 x.py`, `${D} | cat | ./install.sh`]) expect(findExecPatterns(t).map((h) => h.rule), t).not.toContain("curl-pipe-shell");
   });
