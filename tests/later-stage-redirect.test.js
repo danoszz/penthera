@@ -1,7 +1,8 @@
 import { describe, it, expect } from "vitest";
+import { cpuMs } from "./fixtures/cpu-time.js";
 import { findExecPatterns } from "../lib/agents/hidden-content.js";
 
-const ms = (fn) => { fn(); let best = Infinity; for (let k = 0; k < 3; k++) { const t = process.hrtime.bigint(); fn(); best = Math.min(best, Number(process.hrtime.bigint() - t) / 1e6); } return best; };
+const ms = (fn) => { fn(); return cpuMs(fn, { runs: 3 }); };
 const rules = (t) => findExecPatterns(t).map((h) => h.rule);
 const linear = (gen, n) => {
   const small = Math.max(ms(() => findExecPatterns(gen(n))), 1);
