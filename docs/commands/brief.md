@@ -12,7 +12,7 @@ assistant to pass on as it is. Penthera's rules fill it; no model is involved.
 | Section | What is in it |
 |---|---|
 | Verdict | `Fix now` when Act on holds a critical or high finding. `Review` when anything is in Act on, or the run exits 1 or 2. `Nothing to fix now` when only Check first holds something (headers read from code, say, which your host may still add) and the run exits 0: the count to check is beside it. `Nothing to fix` otherwise. `Site not read` when a firewall answered instead of the site, unless a critical or high finding says `Fix now`; the exit code doesn't change. With the counts. `Nothing to assess` when `penthera agents` found no agent config. Never `Nothing to fix` when a finding or a required tool makes the scan exit 1 or 2: it says `Review` and gives the reason on the next line. A failure after the brief prints, such as an output file it can't write, exits 2 with an error of its own |
-| Do this first | One line under the verdict: the first step for the top finding in Act on (or Check first), where it is, and why it matters. Only when there is something to act on or check |
+| Do this first | One line under the verdict: the first step for the top critical or high finding in Act on and Check first together (a high in Check first comes before a medium in Act on), else the top of Act on, else of Check first. Where it is, and why it matters. Only when there is something to act on or check |
 | Act on | Findings that need a change: where, why it matters, the fix, the rule id |
 | Check first | Heuristic and low findings, and what a dependency *can* do |
 | Likely noise | Hits in files git ignores, generated build output, test fixtures, test files, vendored or minified third-party code, or examples and samples, one line per group |
@@ -41,9 +41,27 @@ one opened with 23 items to act on. The brief text shows at most:
 | Next | 3 commands, and the full report path |
 | The whole brief | 2,000 characters |
 
-Groups are ordered worst first: severity, then confidence, then group size,
-then title. So a cut keeps the worst groups, never the first ones by file
-order. The order comes from the findings' own fields; no model sets it.
+Groups are ordered in this order, one field after the other, with no weights:
+
+1. Signs of planted or malicious code.
+2. Critical, then high, then the rest, so no number of highs or mediums can
+   push a critical out of the top.
+3. Reach: an entry point (a route, a Server Action, a webhook, a middleware
+   file, or the live site), then other server code, then config and CI, then
+   prose. A committed key, an open database rule, an exposed file or a
+   vulnerable dependency counts as an entry point wherever it sits.
+4. Input: a value taken from the request, then unknown, then a constant.
+5. Severity, then confidence.
+6. The smaller group first, so one rule's many hits don't sit above a single
+   serious one.
+7. Path and line.
+
+So a cut keeps the worst groups, never the first ones by file order. The first
+three lines to act on hold at most one line per rule, within the same
+severity tier. Each item in the JSON
+carries `rank_reasons` (reach, input, severity, confidence, group size), so
+you can check its place. The order comes from the findings' own fields; no
+model sets it.
 
 Past 2,000 characters, the least important lines go first: Next commands,
 the rest of Check first and Not checked, then groups 4 and 5 to act on. The
@@ -141,7 +159,14 @@ The first matching rule wins:
    `cypress` or `playwright`, or named `*.test.*`, `*.spec.*` or `*.cy.*`),
    with the reason "in test files", vendored or minified third-party code
    (`vendor`, `third_party`, `bower_components`, `public/js/lib` and the like,
-   `*.min.js`), or an example or sample (`examples`, `samples`, `demos`). A
+   `*.min.js`, and a library copied in under its own versioned name, such as
+   `public/js/jquery-3.4.1.js`, by the bundled retire.js file names with a
+   real version number, for findings below high), or an example or sample
+   (`examples`, `samples`, `demos`). For a secret below high, also Markdown and
+   other prose files, prose in `docs`, `.env.example` and its kin, `seeds`,
+   `__snapshots__` and `*.stories.*`. A file name there never moves a code
+   finding, a critical or high one, or a hit that takes a value from the
+   request. A
    rootkit, persistence, suspicious-file, malicious-package or agent-config
    finding is never moved to noise for being in a vendored or example folder. The finding is still listed, still counted, and the exit
    code doesn't change. A fixtures folder inside `tests` keeps the fixture
