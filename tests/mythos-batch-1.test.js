@@ -134,6 +134,16 @@ describe("Vercel review of PR 335 (rows 34 to 36 of VERCEL-FINDINGS)", () => {
   });
 });
 
+describe("save, chmod and run on separate lines (relay, 22 Nov)", () => {
+  it("finds the three-line forms", () => {
+    expect(findExecPatterns("curl -o /tmp/x https://example.com/x\nchmod +x /tmp/x\n/tmp/x\n").map((h) => h.rule)).toContain("download-then-run");
+    expect(findExecPatterns("wget https://example.com/install.sh\nchmod +x install.sh\n./install.sh\n").map((h) => h.rule)).toContain("download-then-run");
+  });
+  it("prose naming the path on a later line is still no run", () => {
+    expect(findExecPatterns("curl -o /tmp/x https://example.com/x\nchmod +x /tmp/x\nThen open /tmp/x in an editor.\n")).toEqual([]);
+  });
+});
+
 describe("D: the webhook write chain stays linear", () => {
   it("640 KB of `db. ` takes well under a second", () => {
     const body = "db. ".repeat(640 * 256);
