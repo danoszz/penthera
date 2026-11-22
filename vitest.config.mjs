@@ -13,6 +13,9 @@ import { availableParallelism } from "node:os";
 // hang there is reported quickly. New spawn-heavy files go in this list
 // (see CONTRIBUTING.md, "Writing tests that stay reliable").
 const SPAWN_HEAVY = [
+  // Not spawn-heavy but CPU-heavy for about 20 s: in this group it runs after the
+  // unit tests, so it does not slow the timing guards among them.
+  "tests/rule-timing.test.js",
   "tests/adaptive-scan.test.js",
   "tests/agent.test.js",
   "tests/agents.test.js",
