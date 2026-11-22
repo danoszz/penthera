@@ -101,9 +101,13 @@ describe("A5: a download that reaches a shell later on the line", () => {
   });
 
   it("stays linear on 5 MB of downloads", () => {
+    // The doubling method (checklist row 15): 4x the input may cost about 4x the time, never 16x.
+    // An absolute limit alone failed on a loaded CI runner (3.7 s) while the growth stayed linear.
     for (const f of ["curl -o f ", "curl -o a && sh b; ", "curl x | ", "curl -o a x\n", "$(curl ", "a || "]) {
-      const text = f.repeat(Math.ceil(5e6 / f.length));
-      expect(ms(() => findExecPatterns(text))).toBeLessThan(3000);
+      const small = ms(() => findExecPatterns(f.repeat(Math.ceil(1.25e6 / f.length))));
+      const big = ms(() => findExecPatterns(f.repeat(Math.ceil(5e6 / f.length))));
+      expect(big).toBeLessThan(8 * small + 100);
+      expect(big).toBeLessThan(12000);
     }
   });
 });
