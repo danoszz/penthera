@@ -88,6 +88,16 @@ describe("Vercel review of PR 338", () => {
   });
 });
 
+describe("Vercel 01M81PPS3Q3GW2HR57T14PPTQT: action names are read without backtracking", () => {
+  it("a long $-separated name with blanks before the ( stays linear, in both forms, and is still an action", () => {
+    for (const n of [20000, 320000]) {
+      const name = "a$function$".repeat(n / 11);
+      expect(ms(() => findSinks('"use server";\n' + CP + `export async function ${name}   (cmd) { exec(cmd) }`))).toBeLessThan(1500);
+      expect(tainted('"use server";\n' + CP + `export const ${"a$b$".repeat(n / 4)}  =  async (cmd) => { exec(cmd) }`)).toBe(true);
+    }
+  });
+});
+
 describe("crafted input stays linear", () => {
   it("a file of `/*` and many `*//*` before the directive (CodeQL on PR 338)", () => {
     const src = "/*" + "*//*".repeat(1000) + '\n"use server";\n' + CP + "export async function run(cmd) { exec(cmd) }";
