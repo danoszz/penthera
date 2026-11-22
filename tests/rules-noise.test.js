@@ -147,9 +147,11 @@ describe("route RISK patterns: low hints skip comments, serious sinks never do",
 
 // ── 3. command-injection in a route stays critical ─────────────────────
 
+// Route files are scanned by the sink check too (Mythos A6): where it traces request
+// data, its finding stands in for the route's, at the same severity and "likely".
 describe("command-injection in a route stays critical: no fixed-text downgrade", () => {
   const routeFinding = (r) => r.findings.find((f) => f.source === "static-analysis" && f.pattern === "command-injection");
-  const failsRun = async (files) => { const r = await scanRepo(repo(files)); const f = routeFinding(r); expect(f).toMatchObject({ severity: "critical" }); expect(isSevere(f)).toBe(true); expect(f.confidence).toBeUndefined(); return f; };
+  const failsRun = async (files) => { const r = await scanRepo(repo(files)); const f = routeFinding(r); expect(f).toMatchObject({ severity: "critical" }); expect(isSevere(f)).toBe(true); expect([undefined, "likely"]).toContain(f.confidence); return f; };
   it("a route that runs only fixed text: still critical (a downgrade was bypassed three times)", async () => {
     await failsRun({ "app/api/version/route.ts": "import { execSync } from 'node:child_process';\nexport function GET() {\n  return Response.json({ sha: execSync('git rev-parse HEAD', { encoding: 'utf8' }).trim() });\n}\n" });
   });
