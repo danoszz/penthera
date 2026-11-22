@@ -99,6 +99,13 @@ describe("blind review: no new silencers, and real helpers still count", () => {
   for (const l of ["validateSchema(body);", "isAllowedEvent(body.type);", "ensureAccount(cust);", "messaging.getToken();", "if (!process.env.STRIPE_WEBHOOK_SECRET) throw new Error('x');", "console.log(process.env.STRIPE_WEBHOOK_SECRET);", "if (process.env.STRIPE_WEBHOOK_SECRET === undefined) throw new Error('x');", "const s = 'STRIPE_WEBHOOK_SECRET !== x';"]) {
     it(`webhook still reported with ${l}`, () => expect(wh(l)).toBe(true));
   }
+  // Vercel review of PR 336 (rows 37 and 38 of VERCEL-FINDINGS).
+  for (const l of ["const sig = getSignature(req.headers);", "const h = parseHmac(req.headers);", "const c = createSafeActionClient();", "const u = getLoginUrl();"]) {
+    it(`webhook still reported with ${l} (Vercel)`, () => expect(wh(l)).toBe(true));
+  }
+  for (const l of ["verifyKey(payload, ts, pk);", "wh.verify(payload, heads);", 'crypto.verify("sha256", Buffer.from(payload), pk, sigBuf);', "paddle.webhooks.unmarshal(payload, key, s);", "twilio.validateRequest(tok, s, url, params);", "webhooks.verify(payload, s);"]) {
+    it(`webhook quiet with a provider verifier: ${l}`, () => expect(wh(l)).toBe(false));
+  }
   it("webhook quiet with a signature verify that takes the secret", () => expect(wh("verifySignature(raw, sig, process.env.STRIPE_WEBHOOK_SECRET);")).toBe(false));
   it("jwt: Supabase's auth.getUser(t) verifies; verifyCaptchaToken does not", () => {
     expect(jwt("const u = await supabase.auth.getUser(t);")).toBe(false);
