@@ -73,6 +73,21 @@ describe("only real Server Actions: helpers, stray directives and strings are no
   it("the words in a string are no directive", () => expect(tainted('"use client";\n' + CP + 'const D = ["use client","use server"];\nexport async function run(cmd){ exec(cmd) }')).toBe(false));
 });
 
+describe("Vercel review of PR 338", () => {
+  it("01M81EXARANE7RZ654FWBJK5AY: any JavaScript whitespace before the directive", () => {
+    for (const ws of ["\v", "\f", "\u00a0", "\u2028", "\ufeff", "\u3000"]) {
+      expect(tainted(ws + '"use server";\n' + CP + "export async function run(cmd) { exec(cmd) }"), JSON.stringify(ws)).toBe(true);
+    }
+  });
+  it("01M81ESZCYAEMCJSCSNMECYFWW: actions nested in parameter defaults stay linear and mark the file incomplete", () => {
+    let s = "x";
+    for (let i = 0; i < 4000; i++) s = `async (a${i} = ${s}) => { 'use server' }`;
+    const incomplete = [];
+    expect(ms(() => findSinks('"use server";\n' + CP + "export const f = " + s + ";", { onIncomplete: (m) => incomplete.push(m) }))).toBeLessThan(1500);
+    expect(incomplete.join(" ")).toMatch(/Server Action parameters/);
+  });
+});
+
 describe("crafted input stays linear", () => {
   it("a file of `/*` and many `*//*` before the directive (CodeQL on PR 338)", () => {
     const src = "/*" + "*//*".repeat(1000) + '\n"use server";\n' + CP + "export async function run(cmd) { exec(cmd) }";
