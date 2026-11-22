@@ -100,16 +100,16 @@ describe("A5: a download that reaches a shell later on the line", () => {
     ]) expect(findExecPatterns(text)).toEqual([]);
   });
 
-  it("stays linear on 5 MB of downloads", () => {
+  it("stays linear on 3 MB of downloads", () => {
     // The doubling method (checklist row 15): 4x the input may cost about 4x the time, never 16x.
     // An absolute limit alone failed on a loaded CI runner (3.7 s) while the growth stayed linear.
     for (const f of ["curl -o f ", "curl -o a && sh b; ", "curl x | ", "curl -o a x\n", "$(curl ", "a || "]) {
-      // The small size takes the best of three (cheap); the big one runs once to stay inside CI's
-      // 20 s timeout. 4x the input may cost up to 12x: linear is ~4.5x, quadratic 16x. One sample
-      // of each flaked at 9.5x on a loaded Node 22 runner.
+      // 0.75 MB against 3 MB, the small size the best of three: 1.25 MB and 5 MB ran 31 s on a CI
+      // runner (timeout 20 s). 4x the input may cost up to 12x: linear is ~4.5x, quadratic 16x.
+      // One sample of each flaked at 9.5x on a loaded Node 22 runner.
       const t = (n) => { const s = f.repeat(Math.ceil(n / f.length)); return ms(() => findExecPatterns(s)); };
-      const small = Math.min(t(1.25e6), t(1.25e6), t(1.25e6));
-      const big = t(5e6);
+      const small = Math.min(t(7.5e5), t(7.5e5), t(7.5e5));
+      const big = t(3e6);
       expect(big).toBeLessThan(12 * small + 100);
       expect(big).toBeLessThan(12000);
     }
