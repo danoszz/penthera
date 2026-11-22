@@ -6,5 +6,6 @@ section: Fixed
   the start of a later stage; right after the download, only main's regex reads it, so
   every hit of that regex stays. The hits dropped are ones no shell runs (checked in
   bash, ksh, zsh and sh). A shell after a real pipe is still found, also behind
-  `2<| file` (Vercel 01M81W6NMFBR969DTHNXZAWCER).
+  `2<| file` and after zsh's number glob (`curl … <->|timeout 5 sh`)
+  (Vercel 01M81W6NMFBR969DTHNXZAWCER).
   docs: none, no command, flag or rule changes.

