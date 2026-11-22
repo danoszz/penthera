@@ -98,6 +98,17 @@ describe("Vercel 01M81PPS3Q3GW2HR57T14PPTQT: action names are read without backt
   });
 });
 
+describe("Vercel: action names with function in a parameter, and CRLF", () => {
+  const cases = {
+    "01M81RZZQFCM68A8X7NV94YPG9: an arrow parameter named functionInput": '"use server";\n' + CP + "const run = async functionInput => { exec(functionInput) };\nexport { run };",
+    "a type parameter named functionT": '"use server";\n' + CP + "const run = async <functionT,>(cmd: functionT) => { exec(cmd as any) };\nexport { run };",
+    "01M81RZQ16Z9XGZVZ2PQESBMAJ: CRLF after function": '"use server";\r\n' + CP + "async function\r\nrun(cmd) { exec(cmd) }\r\nexport { run };",
+    "CRLF in a const assignment": '"use server";\r\n' + CP + "export const run =\r\n  async (cmd) => { exec(cmd) };",
+    "a no-break space after function": '"use server";\n' + CP + "async function\u00a0run(cmd) { exec(cmd) }\nexport { run };",
+  };
+  for (const [name, src] of Object.entries(cases)) it(name, () => expect(tainted(src)).toBe(true));
+});
+
 describe("crafted input stays linear", () => {
   it("a file of `/*` and many `*//*` before the directive (CodeQL on PR 338)", () => {
     const src = "/*" + "*//*".repeat(1000) + '\n"use server";\n' + CP + "export async function run(cmd) { exec(cmd) }";
