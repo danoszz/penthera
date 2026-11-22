@@ -22,6 +22,7 @@ import { frameworkAdvisoriesForRepo } from "../lib/whitebox/framework-advisories
 import { scanPublicEnv } from "../lib/whitebox/public-env.js";
 import { scanServerActions } from "../lib/whitebox/server-actions.js";
 import { scanMissingChecks } from "../lib/whitebox/missing-checks.js";
+import { scanCronRoutes } from "../lib/whitebox/cron-routes.js";
 import { scanSessionAuth } from "../lib/whitebox/session-auth.js";
 import { buildCoverage } from "../lib/coverage.js";
 import { readRepoFile, isRefused } from "../lib/fs-safe.js";
@@ -244,6 +245,7 @@ export async function scanRepo(repoPath, opts = {}) {
   progress("Checking webhooks, tokens and client-chosen values...");
   const refusedChecks = [];
   for (const f of scanMissingChecks(repoPath, { refused: refusedChecks, ignoredDirs: ignored?.dirs })) result.findings.push(f);
+  for (const f of scanCronRoutes(repoPath, { refused: refusedChecks })) result.findings.push(f);
   nameRefused(refusedChecks);
   result.executedProbes.push("missing-checks");
   // ── Phase 1b6: Middleware without a session check, credentials in URLs,

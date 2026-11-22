@@ -18,7 +18,7 @@ This is a short list of headline claims, not every sentence in the docs.
 
 | Claim | Where | Held by | Limit |
 |---|---|---|---|
-| **132** readable rules | `README.md` | `tests/claims.test.js`: `README and site quote the same rule total` | Counts rules, not what they catch |
+| **135** readable rules | `README.md` | `tests/claims.test.js`: `README and site quote the same rule total` | Counts rules, not what they catch |
 | **6** read-only MCP tools | `README.md` | `tests/mcp-e2e.test.js`: `lists six read-only tools` | None |
 | **0** runtime dependencies | `README.md` | `tests/claims.test.js`: `package.json has no runtime dependencies` | The yaml parser ships inside the package, in `lib/vendor/yaml`, held to upstream by `tests/vendor-yaml.test.js` |
 | **0** requests past loopback in the benchmark | `README.md` | `tests/bench.test.js`: `stays above the CI floor and makes no non-loopback requests` | The bundled benchmark only |
