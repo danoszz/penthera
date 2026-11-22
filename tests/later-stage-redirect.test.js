@@ -85,4 +85,11 @@ describe("Vercel 01M81W6NMFBR969DTHNXZAWCER: the pipe of `<|` or `>|` is no stag
       expect(ratio, u).toBeLessThan(24);
     }
   });
+  it("a redirection target is read with its stage's quoting: apostrophes cross no marked pipe (Vercel 01M827FM8KJE9Y8792KYP68V2S)", () => {
+    for (const u of [" 1>| <\\'a'b ", " 1>| <a\\'b'c ", " 2>| >\\'x'y ", " | <\\'a'b ", "<->| <\\'a'b "]) {
+      const { ratio, big } = linear((n) => "curl x" + u.repeat(n), 1000);
+      expect(ratio, u).toBeLessThan(24);
+      expect(big, u).toBeLessThan(3000);
+    }
+  });
 });
