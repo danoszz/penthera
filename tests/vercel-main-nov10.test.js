@@ -11,6 +11,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, sep } from "node:path";
+import { cpuMs } from "./fixtures/cpu-time.js";
 import { sessionAuthHits } from "../lib/whitebox/session-auth.js";
 import { firstWrite, missingCheckHits, WEBHOOK_RULE } from "../lib/whitebox/missing-checks.js";
 import { diffScan, folderInTree } from "../src/cli/diff.js";
@@ -19,12 +20,8 @@ const temps = [];
 afterAll(() => { for (const d of temps) rmSync(d, { recursive: true, force: true }); });
 const tempDir = () => { const d = realpathSync(mkdtempSync(join(tmpdir(), "penthera-main-nov10-"))); temps.push(d); return d; };
 
-/** The fastest of three runs, in ms: one slow run on a busy machine does not decide the test. */
-const best = (fn) => {
-  let t = Infinity;
-  for (let i = 0; i < 3; i++) { const s = performance.now(); fn(); t = Math.min(t, performance.now() - s); }
-  return t;
-};
+/** CPU time of the fastest of three runs, in ms: load on the machine and one slow run do not decide the test. */
+const best = (fn) => cpuMs(fn, { runs: 3 });
 /** Linear work grows about 4x from n to 4n, quadratic about 16x. */
 function linear(run, n) {
   run(64);
