@@ -101,6 +101,29 @@ function handle(req, res) {
     return;
   }
 
+  // Dedicated JWT alg:none endpoint kept off crawler wordlists and OPENAPI.paths
+  // so request counts and default scans of "/" remain unchanged.
+  if (pathname === "/jwt-demo/alg-none") {
+    const auth = req.headers.authorization || "";
+    const match = /^Bearer\s+(\S+)$/i.exec(auth);
+    if (match) {
+      const parts = match[1].split(".");
+      if (parts.length === 3) {
+        try {
+          const header = JSON.parse(Buffer.from(parts[0], "base64url").toString("utf-8"));
+          if (header?.alg === "none") {
+            json(res, 200, { ok: true, user: "demo" });
+            return;
+          }
+        } catch {
+          // Malformed JWT header falls through to 401.
+        }
+      }
+    }
+    json(res, 401, { error: "unauthorized" });
+    return;
+  }
+
   if (pathname === "/") {
     html(res, 200, "<html><body>Penthera Mock API</body></html>");
     return;
