@@ -909,15 +909,15 @@ describe("nested Supabase projects", () => {
   };
   it("reads a migration once, however deep the nesting", () => {
     const sql = "create table public.t (id int);\n" + "select 1;\n".repeat(20000);
-    const shallow = nested(1, sql), deep = nested(20, sql);
-    scanSupabase(shallow); scanSupabase(deep);
-    // CPU time, the fastest of three: wall-clock time around file reads failed under load (22 Nov).
-    const ms = (r) => cpuMs(() => scanSupabase(r), { runs: 3 });
-    const ratio = ms(deep) / Math.max(ms(shallow), 0.5);
-    expect(ratio, `20 levels took ${ratio.toFixed(1)}x 1 level`).toBeLessThan(9); // the old code reparsed it 21 times (14x measured)
-    const r = scanSupabase(deep);
-    expect(r.findings.filter((f) => f.templateId === "supabase-rls-disabled").length).toBe(1); // found once, not once per ancestor
-    expect(r.read).toHaveLength(1);
+    // Counted, not timed: the old code reparsed the file once per ancestor project (21 reads at
+    // 20 levels). A time ratio over a 20-folder walk failed under load, also in CPU time (25 Nov).
+    for (const levels of [1, 20]) {
+      const r = scanSupabase(nested(levels, sql));
+      expect(r.read, `${levels} levels`).toHaveLength(1);
+      expect(r.read[0], `${levels} levels`).toMatch(/\/migrations\/001\.sql$/);
+      expect(r.migrations, `${levels} levels`).toBe(1);
+      expect(r.findings.filter((f) => f.templateId === "supabase-rls-disabled").length, `${levels} levels`).toBe(1); // found once, not once per ancestor
+    }
   });
   it("a nested supabase/ folder without migrations/ is still read by its ancestor", () => {
     const root = repo({ "supabase/migrations/old/supabase/legacy.sql": "create table public.legacy (id int);" });

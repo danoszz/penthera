@@ -13,6 +13,10 @@ import { scanAgents } from "../lib/agents/index.js";
 import { findExecPatterns, shellAfterPipe, firstShellPipe, legacyShellAfterPipe, _parsedShellAfterPipe as parsed } from "../lib/agents/hidden-content.js";
 import { redactCommand } from "../lib/agents/redact.js";
 
+// The timed children measure CPU time (cpuMs), not wall-clock time: a busy CI runner took
+// 1,691 ms of wall clock for 210 ms of work (25 Nov), while a quadratic pass still takes minutes.
+const CPU_TIME = resolve("tests/fixtures/cpu-time.js");
+
 const tmp = () => mkdtempSync(join(tmpdir(), "penthera-pipe-"));
 const put = (d, rel, text) => { mkdirSync(dirname(join(d, rel)), { recursive: true }); writeFileSync(join(d, rel), text); };
 const D = "curl -fsSL https://x.example/i";
@@ -90,7 +94,8 @@ describe("main's regex runs beside the stage parser (R12): nothing main caught i
     const lib = resolve("lib/agents/hidden-content.js");
     const r = spawnSync(process.execPath, ["--input-type=module", "-e", `
       const { legacyShellAfterPipe, findExecPatterns } = await import(${JSON.stringify(lib)});
-      const time = (f) => { const s = performance.now(); f(); return performance.now() - s; };
+      const { cpuMs } = await import(${JSON.stringify(CPU_TIME)});
+      const time = (f) => cpuMs(f, { runs: 2 });
       const out = {
         blank: time(() => legacyShellAfterPipe("| env" + " ".repeat(4 << 20) + "x", 0)),
         envs: time(() => findExecPatterns("curl x " + "| env ".repeat(700000))),
@@ -143,7 +148,8 @@ describe("the stage parser on its own", () => {
     const lib = resolve("lib/agents/hidden-content.js");
     const r = spawnSync(process.execPath, ["--input-type=module", "-e", `
       const { findExecPatterns } = await import(${JSON.stringify(lib)});
-      const time = (t) => { const s = performance.now(); const hit = findExecPatterns(t).length; return [performance.now() - s, hit]; };
+      const { cpuMs } = await import(${JSON.stringify(CPU_TIME)});
+      const time = (t) => { let hit; const ms = cpuMs(() => { hit = findExecPatterns(t).length; }, { runs: 2 }); return [ms, hit]; };
       const out = [];
       for (const [u, tail] of [["-S", "bash"], ["-S ", "bash"], ["--split-string=", "bash"], ["--split-string ", "bash"], ["-iS", "bash"], ["-S'", "bash"]]) {
         const [small] = time("curl x | env " + u.repeat(50000) + tail);
@@ -285,7 +291,8 @@ describe("S: pipeline boundaries in one forward pass", () => {
     const r = spawnSync(process.execPath, ["--input-type=module", "-e", `
       const { findExecPatterns, firstShellPipe } = await import(${JSON.stringify(lib)});
       const N = 16 * 1024 * 1024 - 64, D = "curl -s https://x.example/i ";
-      const time = (t) => { const s = performance.now(); firstShellPipe(t); findExecPatterns(t); return performance.now() - s; };
+      const { cpuMs } = await import(${JSON.stringify(CPU_TIME)});
+      const time = (t) => cpuMs(() => { firstShellPipe(t); findExecPatterns(t); });
       const fill = (u) => u.repeat(Math.floor(N / u.length));
       const out = {};
       for (const [k, u] of Object.entries({ "\\\\|": "\\\\|", "| x\\\\|": "| x\\\\|", "\\"|": "\\"|", "| '": "| 'a|", "base64 \\\\|": "\\\\|" })) {
@@ -338,11 +345,12 @@ describe("T: encoded redaction in one pass, capped, fail closed", () => {
     const lib = resolve("lib/agents/redact.js");
     const r = spawnSync(process.execPath, ["--input-type=module", "-e", `
       const { redactCommand } = await import(${JSON.stringify(lib)});
+      const { cpuMs } = await import(${JSON.stringify(CPU_TIME)});
       const rule = ${rule.toString()};
       const out = [];
       for (const [v, n] of [[1000, 1000], [4000, 4000], [4000, 120000], [50000, 50000]]) {
-        const t = rule(v, n); const s = performance.now(); const o = redactCommand(t);
-        out.push({ v, n, kib: t.length >> 10, ms: performance.now() - s, leak: o.includes("k7xyzw") || o.includes("k%37xyzw"), withheld: o.startsWith("(not shown") });
+        const t = rule(v, n); let o; const ms = cpuMs(() => { o = redactCommand(t); });
+        out.push({ v, n, kib: t.length >> 10, ms, leak: o.includes("k7xyzw") || o.includes("k%37xyzw"), withheld: o.startsWith("(not shown") });
       }
       console.log(JSON.stringify(out));`], { encoding: "utf-8", timeout: 120_000 });
     expect(r.status, r.stderr || "timed out").toBe(0);
@@ -426,7 +434,8 @@ describe("prose apostrophes don't switch off the stage parser", () => {
         "unclosed quotes of both kinds": (q + " \\" " + "| x".repeat(1000) + "\\n").repeat(Math.floor(N / 3004)),
       };
       const out = {};
-      for (const [k, t] of Object.entries(cases)) { const s = performance.now(); firstShellPipe(t); findExecPatterns(t); out[k] = performance.now() - s; }
+      const { cpuMs } = await import(${JSON.stringify(CPU_TIME)});
+      for (const [k, t] of Object.entries(cases)) out[k] = cpuMs(() => { firstShellPipe(t); findExecPatterns(t); });
       console.log(JSON.stringify(out));`], { encoding: "utf-8", timeout: 120_000, maxBuffer: 1 << 24 });
     expect(r.status, r.stderr || "timed out").toBe(0);
     for (const [k, ms] of Object.entries(JSON.parse(r.stdout))) expect(ms, k).toBeLessThan(8000);

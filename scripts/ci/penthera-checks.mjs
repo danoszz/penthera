@@ -13,8 +13,14 @@
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
+export const NAMES = { security: "Penthera: security", build: "Penthera: safe build" };
+const OWN_CHECKS = new Set(Object.values(NAMES));
+
 /** Which summary a job belongs to, by its workflow and job name. */
 export function groupOf(workflow, job) {
+  // Posted with the workflow token, our two checks are filed under another workflow's run
+  // (CodeQL) and come back as its jobs: counting them made "security" wait on itself for days.
+  if (OWN_CHECKS.has(job)) return null;
   if (/^(CodeQL|Dependency review|PR triage)$/.test(workflow)) return "security";
   if (workflow === "CI" && job === "scan") return "security";
   if (/^(CI|Install matrix)$/.test(workflow)) return "build";
@@ -35,7 +41,6 @@ export function table(jobs) {
   return ["| | Workflow | Job |", "|---|---|---|", ...rows].join("\n");
 }
 
-const NAMES = { security: "Penthera: security", build: "Penthera: safe build" };
 const ABOUT = {
   security: "Checked by Penthera on this commit: the fork PR triage, Penthera's scan of itself, the dependency capability diff and CodeQL.",
   build: "Built and tested safely: tests on Node 22 and 24, lint, provenance and docs gates, the install matrix from the packed tarball, and the site build.",
