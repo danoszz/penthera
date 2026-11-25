@@ -47,6 +47,28 @@ jobs:
       - name: Test suite
         run: npm test
 
+      # No finding the base branch reports may be gone or lower on this one: the rule
+      # corpus, with look-alike decoys, through both scanners (scripts/ci/findings-gate.mjs).
+      # The branch name reaches the shell as an environment variable, never as script text.
+      - name: Findings gate (nothing the base reports is lost)
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          git fetch --no-tags --depth=1 origin "+refs/heads/$BASE_REF:refs/remotes/origin/$BASE_REF"
+          npm run findings:gate
+
+      # npm test runs the timing check in its quick form. For the scanners this pull request
+      # changes, run the long form too: every rule word on its own, about a minute per scanner.
+      - name: Timing check, every word, for changed scanners
+        if: github.event_name == 'pull_request' && matrix.node-version == 22
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          changed=$(git diff --name-only "origin/$BASE_REF" HEAD -- lib | paste -sd, -)
+          if [ -z "$changed" ]; then echo "No scanner source changed."; exit 0; fi
+          PENTHERA_TIMING_FULL="$changed" npx vitest run tests/rule-timing.test.js
+
       - name: Versions are in sync
         run: |
           PKG=$(node -p "require('./package.json').version")

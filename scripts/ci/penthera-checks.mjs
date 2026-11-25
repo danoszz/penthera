@@ -13,8 +13,15 @@
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-/** Which summary a job belongs to, by its workflow and job name. */
-export function groupOf(workflow, job) {
+export const NAMES = { security: "Penthera: security", build: "Penthera: safe build" };
+const OWN_CHECKS = new Set(Object.values(NAMES));
+
+/** Which summary a job belongs to, by its workflow, job name and runner labels. */
+export function groupOf(workflow, job, labels = []) {
+  // Posted with the workflow token, our two checks are filed under another workflow's run
+  // (CodeQL) and come back as its jobs: counting them made "security" wait on itself for days.
+  // They have no runner labels; a real job that borrows the name keeps its labels and still counts.
+  if (OWN_CHECKS.has(job) && !labels?.length) return null;
   if (/^(CodeQL|Dependency review|PR triage)$/.test(workflow)) return "security";
   if (workflow === "CI" && job === "scan") return "security";
   if (/^(CI|Install matrix)$/.test(workflow)) return "build";
@@ -35,7 +42,6 @@ export function table(jobs) {
   return ["| | Workflow | Job |", "|---|---|---|", ...rows].join("\n");
 }
 
-const NAMES = { security: "Penthera: security", build: "Penthera: safe build" };
 const ABOUT = {
   security: "Checked by Penthera on this commit: the fork PR triage, Penthera's scan of itself, the dependency capability diff and CodeQL.",
   build: "Built and tested safely: tests on Node 22 and 24, lint, provenance and docs gates, the install matrix from the packed tarball, and the site build.",
@@ -59,7 +65,7 @@ async function main() {
     if (!/^(CI|Install matrix|CodeQL|Dependency review|PR triage)$/.test(run.name)) continue;
     const jobs = gh("api", `repos/${repo}/actions/runs/${run.id}/jobs?per_page=100`).jobs;
     for (const j of jobs) {
-      const g = groupOf(run.name, j.name);
+      const g = groupOf(run.name, j.name, j.labels);
       if (g) groups[g].push({ workflow: run.name, name: j.name, status: j.status, conclusion: j.conclusion });
     }
   }

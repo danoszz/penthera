@@ -134,6 +134,38 @@ bug in the test. Follow these rules:
 - **Keep pure tests out of slow hooks.** A `beforeEach` that creates a git repo
   belongs inside the `describe` that needs it, not at file level.
 
+### Two checks for changes to a rule
+
+Most security findings against Penthera's own code came from fixes to rules,
+and fell into two kinds. Each has a check.
+
+- **A crafted file makes a rule slow.** `tests/rule-timing.test.js` builds
+  input for every scanner from the scanner's own rule words (`db . db . db …`,
+  `http://?http://?…`) and fails when the work grows faster than the input. It
+  runs in `npm test`. After you rewrite a detector, also run the long form,
+  which tests every word on its own:
+
+  ```bash
+  npm run test:timing
+  ```
+
+  A new scanner that reads untrusted text gets a line in `SCANNERS` there.
+
+- **A real finding goes missing.** The findings gate scans the rule corpus
+  (`tests/corpus/`) with the base branch's scanner and with yours, and fails
+  when a finding the base reports is gone or lower on your branch. Every code
+  case also runs with each decoy in `tests/corpus/code-cases.js`: a harmless
+  line named like a check (`getLoginUrl()`, `getSignature(req.headers)`). CI
+  runs it on every pull request. Before you push:
+
+  ```bash
+  npm run findings:gate
+  ```
+
+  A new rule gets a case in the corpus. If the base was wrong to report
+  something, add the case, the rule and your reason to
+  `tests/corpus/findings-gate.allow.json`.
+
 To check a change against a loaded machine, run the suite repeatedly while busy
 loops hold every core:
 
