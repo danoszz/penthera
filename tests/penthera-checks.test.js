@@ -22,6 +22,9 @@ describe("Penthera checks", () => {
       for (const name of Object.values(NAMES)) expect(groupOf(workflow, name), `${workflow} / ${name}`).toBe(null);
     }
     expect(Object.values(NAMES)).toEqual(["Penthera: security", "Penthera: safe build"]);
+    // A real job that borrows the name runs on a runner, so it keeps its labels and still counts.
+    expect(groupOf("CI", "Penthera: security", ["ubuntu-latest"])).toBe("build");
+    expect(groupOf("CodeQL", "Penthera: safe build", ["ubuntu-latest"])).toBe("security");
     // The deadlock: CodeQL is done, and the only "jobs" still running are these checks themselves.
     const jobs = [
       { workflow: "CodeQL", name: "analyze", status: "completed", conclusion: "success" },
