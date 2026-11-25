@@ -7,6 +7,7 @@
  * Every snippet is inert text; nothing runs.
  */
 import { describe, it, expect } from "vitest";
+import { cpuMs } from "./fixtures/cpu-time.js";
 import { findSinks } from "../lib/whitebox/code-sinks.js";
 import { findExecPatterns } from "../lib/agents/hidden-content.js";
 import { missingCheckHits } from "../lib/whitebox/missing-checks.js";
@@ -14,7 +15,9 @@ import { readFileSync } from "node:fs";
 
 const CP = 'const { exec } = require("child_process");\n';
 const rules = (hits) => hits.map((h) => h.rule);
-const ms = (fn) => { const t = performance.now(); fn(); return performance.now() - t; };
+// CPU time, not wall clock (CONTRIBUTING: tests that stay reliable): a busy CI runner
+// took 26 s of wall time on a check whose code ran as fast as main.
+const ms = (fn) => cpuMs(fn);
 
 describe("A1: a call's arguments are read to its real close", () => {
   it("finds req.body after a 2,100-character comment inside exec(...)", () => {
@@ -100,16 +103,20 @@ describe("A5: a download that reaches a shell later on the line", () => {
     ]) expect(findExecPatterns(text)).toEqual([]);
   });
 
-  it("stays linear on 5 MB of downloads", () => {
+  it("stays linear on 3 MB of downloads", () => {
     // The doubling method (checklist row 15): 4x the input may cost about 4x the time, never 16x.
     // An absolute limit alone failed on a loaded CI runner (3.7 s) while the growth stayed linear.
     for (const f of ["curl -o f ", "curl -o a && sh b; ", "curl x | ", "curl -o a x\n", "$(curl ", "a || "]) {
-      const small = ms(() => findExecPatterns(f.repeat(Math.ceil(1.25e6 / f.length))));
-      const big = ms(() => findExecPatterns(f.repeat(Math.ceil(5e6 / f.length))));
-      expect(big).toBeLessThan(8 * small + 100);
+      // 0.75 MB against 3 MB, the small size the best of three: 1.25 MB and 5 MB ran 31 s on a CI
+      // runner (timeout 20 s). 4x the input may cost up to 12x: linear is ~4.5x, quadratic 16x.
+      // One sample of each flaked at 9.5x on a loaded Node 22 runner.
+      const t = (n) => { const s = f.repeat(Math.ceil(n / f.length)); return ms(() => findExecPatterns(s)); };
+      const small = Math.min(t(7.5e5), t(7.5e5), t(7.5e5));
+      const big = t(3e6);
+      expect(big).toBeLessThan(12 * small + 100);
       expect(big).toBeLessThan(12000);
     }
-  });
+  }, 60000); // a ratio test: slow CI runners took 26 s while the code ran as fast as main
 });
 
 describe("crafted pipelines after a download stay fast", () => {

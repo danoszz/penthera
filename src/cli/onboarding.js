@@ -627,7 +627,12 @@ export async function runInit(argv, { version = pkg.version } = {}) {
     out(`    ${"Summary".padEnd(13)} ${dim(`→ ${join(relDir, "summary.md")}, summary.json`)}`);
   } else {
     out(`  ${bold(`Running ${plural(checks.length, "check")}`)}  ${dim(ctx.offline ? "(offline)" : "(online)")}`);
-    mkdirSync(dir, { recursive: true });
+    // A folder that can't be made (read-only, no permission) ends the run with a clear line,
+    // not a stack trace (issue 341).
+    try { mkdirSync(dir, { recursive: true }); } catch (e) {
+      printError(`could not create ${dir}: ${e.code || e.message}. Run penthera init in a folder you can write to.`);
+      return 1;
+    }
     for (const id of checks) {
       const label = AREAS[id].label;
       const r = { id, label, command: hintCommand(AREAS[id].cmd(ctx)) };
@@ -730,12 +735,18 @@ export async function runInit(argv, { version = pkg.version } = {}) {
   if (found.reportsIgnored) skip(".gitignore: reports/ is already ignored");
   else if (isSymlink(inside(root, ".gitignore"))) skip(".gitignore: it is a symlink, left as is");
   else if (await yesNo("Add reports/ to .gitignore so scan output is never committed?", true)) {
+    let failed = null;
     if (!dry) {
       const gi = inside(root, ".gitignore");
-      const prev = existsSync(gi) ? readFileSync(gi, "utf-8") : "";
-      appendFileSync(gi, `${prev && !prev.endsWith("\n") ? "\n" : ""}${prev ? "\n" : ""}# Penthera scan reports\nreports/\n`);
+      // A folder that can't be written (read-only, no permission) skips this step with a
+      // reason instead of a stack trace (issue 341).
+      try {
+        const prev = existsSync(gi) ? readFileSync(gi, "utf-8") : "";
+        appendFileSync(gi, `${prev && !prev.endsWith("\n") ? "\n" : ""}${prev ? "\n" : ""}# Penthera scan reports\nreports/\n`);
+      } catch (e) { failed = e.code || e.message; }
     }
-    did(`${dry ? "add" : "Added"} reports/ to .gitignore`);
+    if (failed) skip(`.gitignore: could not write it (${failed}), left as is`);
+    else did(`${dry ? "add" : "Added"} reports/ to .gitignore`);
   }
 
   // Fix loop (never in --yes)

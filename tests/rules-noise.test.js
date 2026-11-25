@@ -10,6 +10,7 @@
  *   4. Rate-limit and timing-compare hints are low.
  */
 import { describe, it, expect, afterAll } from "vitest";
+import { cpuMs } from "./fixtures/cpu-time.js";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
@@ -122,7 +123,8 @@ describe("route RISK patterns: low hints skip comments, serious sinks never do",
   });
   it("the sink patterns stay linear on unterminated comments (blind review re-pass, 12 Nov)", () => {
     for (const unit of ["eval/*", "spawn/*", "eval//", "exec//"]) {
-      const ms = (n) => { const src = unit.repeat(n); riskPatterns(src); const t = process.hrtime.bigint(); riskPatterns(src); return Number(process.hrtime.bigint() - t) / 1e6; };
+      // Best of five, in CPU time: one wall-clock sample made the ratio flaky on CI (30.8 once, ~8 locally).
+      const ms = (n) => { const src = unit.repeat(n); riskPatterns(src); return cpuMs(() => riskPatterns(src), { runs: 5 }); };
       const small = Math.max(ms(8000), 0.5);
       expect(ms(64000) / small, unit).toBeLessThan(24);
     }
@@ -147,9 +149,11 @@ describe("route RISK patterns: low hints skip comments, serious sinks never do",
 
 // ── 3. command-injection in a route stays critical ─────────────────────
 
+// Route files are scanned by the sink check too (Mythos A6): where it traces request
+// data, its finding stands in for the route's, at the same severity and "likely".
 describe("command-injection in a route stays critical: no fixed-text downgrade", () => {
   const routeFinding = (r) => r.findings.find((f) => f.source === "static-analysis" && f.pattern === "command-injection");
-  const failsRun = async (files) => { const r = await scanRepo(repo(files)); const f = routeFinding(r); expect(f).toMatchObject({ severity: "critical" }); expect(isSevere(f)).toBe(true); expect(f.confidence).toBeUndefined(); return f; };
+  const failsRun = async (files) => { const r = await scanRepo(repo(files)); const f = routeFinding(r); expect(f).toMatchObject({ severity: "critical" }); expect(isSevere(f)).toBe(true); expect([undefined, "likely"]).toContain(f.confidence); return f; };
   it("a route that runs only fixed text: still critical (a downgrade was bypassed three times)", async () => {
     await failsRun({ "app/api/version/route.ts": "import { execSync } from 'node:child_process';\nexport function GET() {\n  return Response.json({ sha: execSync('git rev-parse HEAD', { encoding: 'utf8' }).trim() });\n}\n" });
   });

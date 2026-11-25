@@ -42,6 +42,9 @@ export const SECRET_CASES = [
   secret("Postman API key", "postman/env.js", `const key = "${"PM" + "AK-"}${gen("pm1", 24, HEX)}-${gen("pm2", 34, HEX)}";\n`),
   secret("Hardcoded password", "src/db.js", `export const db = { user: "app", ${"pass" + "word"}: "${gen("pw", 14)}" };\n`),
   // A short or spaced secret: the generic assignment rule needs 8 key-like characters, this one doesn't.
+  secret("Connection string password", ".env.production", `DATABASE_URL=${"postgres" + "ql"}://app:${gen("pg", 20)}@db.prod-eu.internal:5432/app\n`),
+  secret("Secret with a hardcoded fallback", "src/auth.ts", `const secret = process.env.JWT_SECRET || "${gen("fb", 16)}";\n`),
+  secret("JWT signed with a hardcoded key", "src/login.ts", `const t = jwt.sign({ id }, "${gen("jw", 24)}");\n`),
   secret("Hardcoded session secret", "src/server.js", `app.use(${"sess" + "ion"}({ resave: false, ${"sec" + "ret"}: "keyboard cat" }));\n`),
   secret("GCP/Firebase service account", "config/service-account.json", `{\n  "type": "service_account",\n  "private_key": "${pem("PRIVATE KEY").join("\\n")}\\n"\n}\n`),
   secret("Private key block", "deploy/id_rsa.pem", `${pem("RSA PRIVATE KEY").join("\n")}\n`),
