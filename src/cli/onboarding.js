@@ -267,7 +267,7 @@ export async function runScanWizard() {
  * The Action pin, by commit SHA: the newest tagged release (the one before, while a
  * release is prepared). Update after tagging: git rev-parse vX.Y.Z^{commit}.
  */
-export const ACTION_PIN = Object.freeze({ tag: "v2.3.2", sha: "f7dee0f4adef277e781cc0bd9c3902a2e6d1f4c4" });
+export const ACTION_PIN = Object.freeze({ tag: "v2.4.0", sha: "9b67e8dce0267e587deb5ccebd5ffa7a15235806" });
 /** The agents workflow runs this version with npx. */
 const RUNNING_VERSION = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf-8")).version;
 

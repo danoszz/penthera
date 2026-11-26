@@ -334,6 +334,13 @@ describe("init building blocks", () => {
     expect(portsFromEnv({ PENTHERA_INIT_PORTS: "" })).toEqual([]);
   });
 
+  it("the pin is the release commit the example workflow names, so the two cannot drift apart", () => {
+    // The pin stayed on 2.3.2 through the 2.4.0 release while the docs moved (final review of 2.5.0):
+    // `penthera init` then rewrote the example's newer pin back to the older release.
+    const example = readFileSync(join(import.meta.dirname, "..", "docs", "examples", "pr-dependency-review.yml"), "utf-8");
+    expect(example).toContain(`danoszz/penthera@${ACTION_PIN.sha} # ${ACTION_PIN.tag}`);
+  });
+
   it("workflowYaml pins the action to a full commit SHA and keeps the example's steps", () => {
     expect(ACTION_PIN.sha).toMatch(/^[0-9a-f]{40}$/);
     expect(ACTION_PIN.tag).toMatch(/^v\d+\.\d+\.\d+$/);
