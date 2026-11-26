@@ -19,12 +19,18 @@ const rank = (s) => RANK[s] ?? -1;
 // Supabase key findings carry value tags too (Vercel 01M72EX57HP1N9DR8ZWGTR9Z2K): compared like secrets.
 const isSecret = (f) => f.source === "secret-scan" || (f.source === "supabase-scan" && /^supabase-service-role-(exposed|committed)$/.test(f.templateId || ""));
 const isSink = (f) => f.source === "static-analysis" && f.category === "code-pattern" && !!f.pattern;
+// The rules that report one finding per file (Server Actions, tokens, cookies, client-chosen
+// values, ...): the finding names what it found, so a second case in the same file is new.
+const isPerFile = (f) => f.source === "static-analysis" && !!f.templateId && !!f.file;
 
 /**
  * What one finding holds beyond its key: for a secret, the masked value
  * reports show, how many lines hold it and the salted tags of every value it
  * holds (`valueTags`, lib/secret-tags.js); for an eval or exec sink, the
- * calls it lists (line numbers dropped, so an edit above them is no change).
+ * calls it lists (line numbers dropped, so an edit above them is no change);
+ * for a rule that reports once per file, the names it lists and how many
+ * lines it points at (final review of 2.5.0: a second Server Action without
+ * an auth check, added to a file that had one, was "unchanged").
  * One rule's secrets in one file, and one kind of sink in one file, are one
  * finding, so a second key or a second call would otherwise hide behind the
  * first (Vercel review, B03).
@@ -38,6 +44,18 @@ function sitesOf(f) {
   if (isSink(f)) {
     const calls = [...String(f.description || "").matchAll(/(?<![\w.$])([\w.$]+) on line \d+((?: \([^)]*\))?)/g)].map((m) => `${m[1]}${m[2]}`);
     return { count: Math.max(1, calls.length), values: calls };
+  }
+  if (isPerFile(f)) {
+    // The names the finding lists in backticks, and how many lines it points at ("line 4",
+    // "lines 4, 9 and 12", "and 3 more"). Line numbers themselves are dropped: an edit above
+    // them is no change.
+    const d = String(f.description || "");
+    const names = [...d.matchAll(/`([^`\n]{1,200})`/g)].map((m) => m[1]);
+    let count = 0;
+    for (const m of d.matchAll(/\blines? (\d{1,7}(?:(?:, | and )\d{1,7}){0,64})/g)) count += m[1].split(/\D+/).length;
+    const more = /\band (\d{1,7}) more\b/.exec(d);
+    if (more) count += Number(more[1]);
+    return { count: Math.max(1, count), values: names, tags: null };
   }
   return null;
 }

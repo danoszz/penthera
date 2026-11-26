@@ -26,7 +26,12 @@ A finding is new when the merge-base has no finding with the same identity,
 or its severity went up, or a secret or an eval or exec sink holds more than
 it did. It is the same comparison as
 [`--baseline`](scan.md#what---baseline-counts-as-new). A key moved to another
-line is not new. A second key in the same file is.
+line is not new. A second key in the same file is. The same goes for a rule that reports once per
+file, such as a Server Action without an auth check: a second case in that
+file is new. Three rules name one place per file, so a second case in
+the same file is the same finding: a webhook handler that verifies no
+signature, a password-reset token with no expiry, and an OAuth callback that
+checks no state. Run a full scan to see those.
 
 The current side is your working tree, so uncommitted changes count. A
 finding in a file git ignores (a local `.env`, say) is left out: it is on no

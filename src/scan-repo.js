@@ -28,6 +28,9 @@ import { buildCoverage } from "../lib/coverage.js";
 import { readRepoFile, isRefused } from "../lib/fs-safe.js";
 import { probeRepoDetailed, findingKey } from "../lib/fix/index.js";
 
+/** A Next.js App Router route file: every exported handler is a public entry point. */
+const NEXT_ROUTE_FILE = /(?:^|\/)api\/(?:.*\/)?route\.[cm]?[jt]s$/;
+
 /** Source and config files the route scan reads are capped at 5 MiB. */
 const SOURCE_MAX_BYTES = 5 * 1024 * 1024;
 
@@ -458,7 +461,13 @@ export async function scanRepo(repoPath, opts = {}) {
       const severity = sevMap[name] || "medium";
       // A sink finding stands in for the route's only if it says as much, or a real bug would lose its severity.
       if (sinks.has(key) && SEVERITIES.indexOf(sinks.get(key).severity) <= SEVERITIES.indexOf(severity)) {
-        perFile.set(key, { sink: sinks.get(key), routes: new Set([route.url]) });
+        const sink = sinks.get(key);
+        // Nor its confidence. The sink scan now reads App Router route files, which 2.4.0 left
+        // to this check alone, and it calls a sink whose input it cannot trace (a handler's
+        // `params`) a possible match. Every handler in such a file is an entry point, so the
+        // finding keeps the likely match the route check gave it (final review of 2.5.0).
+        if (NEXT_ROUTE_FILE.test(file) && sink.confidence === "potential") sink.confidence = "likely";
+        perFile.set(key, { sink, routes: new Set([route.url]) });
         continue;
       }
       const finding = {
